@@ -16197,7 +16197,7 @@ void Cmd_Music_f(gentity_t* ent) {
 
 qboolean Is_Char_Name_Valid(char charName[MAX_STRING_CHARS]) {
 
-	char forbiddenCharacters[MAX_STRING_CHARS] = " ?! $%^&*()-+=][{}#~';:/>.<,|";
+	char forbiddenCharacters[MAX_STRING_CHARS] = " ?!�$%^&*()-+=][{}#~';:/>.<,|";
 
 	for (int i = 0; i < strlen(charName); i++) {
 		for (int j = 0; j < strlen(forbiddenCharacters); j++) {
