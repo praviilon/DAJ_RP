@@ -9041,6 +9041,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/news <faction>: ^7Displays the news regarding the chosen faction (If left blank shows general news).\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player (If left blank updates lightsaber selected from menu).\n\
+^3/scale <playername/help> <size>: ^7Scales the character model (default is 100). Help lists in-game values compared to real life measurements.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
