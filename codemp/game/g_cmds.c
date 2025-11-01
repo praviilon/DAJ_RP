@@ -9018,15 +9018,15 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/entorigin: ^7Saves current location for entity spawning.\n\
 ^3/entundo: ^7Undos the last entity spawned. Only works once.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
-^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\"");
+^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits--------\n\
 ^3/createcredits: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
 ^3/spendcredits: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
-^3/givecredits <player name> <amount>: ^7gives credits to a player.\n\n\"" );
+^3/givecredits <player name> <amount>: ^7gives credits to a player.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
 ^3/allyremove <player name>: ^7Removes the player from allies.\n\
-^3/allylist: ^7Lists your allies.\n\n\"");
+^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
@@ -9037,8 +9037,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/drop: ^7Drops the current weapon of the player.If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name>: ^7Ignores chat of a player.\n\
 ^3/ignorelist: ^7Lists ignored players.\n\
-^3/jetpack: ^7Gives or removes jetpack from the player.\n\
-^3/maplist: ^7Lists the maps available in the server.\n\
+^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/news <faction>: ^7Displays the news regarding the chosen faction (If left blank shows general news).\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player (If left blank updates lightsaber selected from menu).\n\
 ^3/scale <playername/help> <size>: ^7Scales the character model (default is 100). Help lists in-game values compared to real life measurements.\n\
