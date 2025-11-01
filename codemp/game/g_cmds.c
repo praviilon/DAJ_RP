@@ -1974,45 +1974,6 @@ int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3
 	return charID;
 }
 
-// GalaxyRP (Alex): [Database] SELECT This method returns the character ID associated with the character name given, AND which belongs to the account the player is currently logged in with.
-saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char saber1Model[50] = "";
-	char saber1Color[2] = "";
-	char saber2Model[50] = "";
-	char saber2Color[2] = "";
-	saber_db_info_t saber_info = {"none", "none"};
-
-	rc = sqlite3_prepare(db, va("SELECT saberOneModel, saberOneColor, saberTwoColor, saberTwoModel FROM Characters WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return ;
-	}
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return ;
-	}
-	if (rc == SQLITE_ROW)
-	{
-
-		strcpy(saber1Model, sqlite3_column_text(stmt, 0));
-		strcpy(saber1Color, sqlite3_column_text(stmt, 1));
-		strcpy(saber2Color, sqlite3_column_text(stmt, 2));
-		strcpy(saber2Model, sqlite3_column_text(stmt, 3));
-
-		sqlite3_finalize(stmt);
-	}
-
-	strcpy(saber_info.saber1Model, saber1Model);
-	strcpy(saber_info.saber2Model, saber2Model);
-
-	return saber_info;
-}
-
 // GalaxyRP (Alex): [Database] UPDATE This method updated a characters table row with information contained within the entity with which it's called.
 void update_chars_table_row_with_current_values(gentity_t* ent) {
 	sqlite3* db;
@@ -2481,14 +2442,12 @@ void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
 
-	char update_character_query[1248] = "UPDATE Characters SET ModelScale='%i', NetName=\"%s\", ModelName='%s', saberOneModel='%s', saberTwoModel='%s' WHERE CharID='%i';";
+	char update_character_query[1248] = "UPDATE Characters SET ModelScale='%i', NetName=\"%s\", ModelName='%s' WHERE CharID='%i';";
 
 	run_db_query(va(update_character_query,
 		ent->client->ps.iModelScale,
 		ent->client->pers.netname,
 		modelName,
-		ent->client->pers.saber1,
-		ent->client->pers.saber2,
 		ent->client->pers.CharID
 	), db, zErrMsg, rc, stmt);
 
@@ -2520,7 +2479,7 @@ void update_current_character(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
 
-	char update_character_query[1300] = "UPDATE Characters SET Credits='%i', Level='%i', ModelScale='%i', Skillpoints='%i', Description=\"%s\", NetName=\"%s\", ModelName='%s' WHERE CharID='%i';\
+	char update_character_query[1248] = "UPDATE Characters SET Credits='%i', Level='%i', ModelScale='%i', Skillpoints='%i', Description=\"%s\", NetName=\"%s\", ModelName='%s' WHERE CharID='%i';\
 		UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i' WHERE CharID='%i';\
 		UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
 
@@ -2603,7 +2562,6 @@ void update_current_character(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc
 	return;
 }
 
-void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args);
 // GalaxyRP (Alex): [Database] This method changes the character used currently by the player. It reassigns skills, weapons, userinfo, and changes the default character associated with the account.
 void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	int numberOfChars = 0;
@@ -2666,25 +2624,9 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// GalaxyRP (Alex): [XP System] Grab XP value from database.
 		ent->client->pers.xp = sqlite3_column_int(stmt, 10);
 
-		char saber1Model[30];
-		char saber2Model[30];
-		int saber1Color;
-		int saber2Color;
-		strcpy(saber1Model, sqlite3_column_text(stmt, 11));
-		saber1Color = sqlite3_column_int(stmt, 12);
-		strcpy(saber2Model, sqlite3_column_text(stmt, 13));
-		saber2Color = sqlite3_column_int(stmt, 14);
-
-		int number_of_sabers = 1;
-
-		if (strcmp(saber2Model, "none") == 0) {
-			number_of_sabers = 1;
-		}
-		update_saber(ent, saber1Model, saber2Model, number_of_sabers + 1);
-
-		// GalaxyRP (Alex): [Database] Grab info from skills table. (column 15 is CharID, no need to grab that)
+		// GalaxyRP (Alex): [Database] Grab info from skills table. (column 11 is CharID, no need to grab that)
 		for (int i = 0; i < NUM_OF_SKILLS; i++) {
-			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 16);
+			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 12);
 		}
 
 		// GalaxyRP (Alex): [Database] Grab info from weapons table. (column 68 is CharID, no need to grab that)
@@ -2695,7 +2637,7 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// GalaxyRP (Alex): [Database] Apply the modelname and net name.
 		set_netname(ent, displayName);
 		set_model(ent, modelName);
-		//ent->client->saber[1].model
+
 		sqlite3_finalize(stmt);
 	}	
 
@@ -2750,11 +2692,11 @@ void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, s
 }
 
 // GalaxyRP (Alex): [Database] This method returns a list of character names readable by the UI.
-void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, char* CharString)
+char *select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt)
 {
-	char CharName[MAX_STRING_CHARS] = "";
-	int charLevel = 0;
-	//char CharString[MAX_STRING_CHARS] = "";
+	char CharName[MAX_STRING_CHARS];
+	int charLevel;
+	char CharString[MAX_STRING_CHARS];
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
 	rc = sqlite3_prepare(db, va("SELECT Name, Level FROM Characters WHERE AccountID='%i'", ent->client->sess.accountID), -1, &stmt, NULL);
@@ -2779,7 +2721,7 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 	}
 
 	sqlite3_finalize(stmt);
-	//return CharString;
+	return CharString;
 }
 
 // GalaxyRP (Alex): [Database] This method loads the account information, as well as the information related to the default character, and assigns it to the entity.
@@ -2838,29 +2780,13 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		// GalaxyRP (Alex): [XP System] Grab XP value from database.
 		ent->client->pers.xp = sqlite3_column_int(stmt, 16);
 
-		char saber1Model[30];
-		char saber2Model[30];
-		int saber1Color;
-		int saber2Color;
-		strcpy(saber1Model, sqlite3_column_text(stmt, 17));
-		saber1Color = sqlite3_column_int(stmt, 18);
-		strcpy(saber2Model, sqlite3_column_text(stmt, 19));
-		saber2Color = sqlite3_column_int(stmt, 20);
-
-		int number_of_sabers = 1;
-
-		if (strcmp(saber2Model, "") == 0) {
-			number_of_sabers = 1;
-		}
-		update_saber(ent, saber1Model, saber2Model, number_of_sabers + 1);
-
-		// GalaxyRP (Alex): [Database] Column 21 is a duplicate of CharID, no need to grab that.
+		// GalaxyRP (Alex): [Database] Column 17 is a duplicate of CharID, no need to grab that.
 		for (int i = 0; i < NUM_OF_SKILLS; i++) {
-			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 22);
+			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 18);
 		}
-		// GalaxyRP (Alex): [Database] Column 79 is a duplicate of CharID, no need to grab that.
+		// GalaxyRP (Alex): [Database] Column 75 is a duplicate of CharID, no need to grab that.
 		for (int i = 2; i < AMMO_MAX; i++) {
-			ent->client->ps.ammo[i] = sqlite3_column_int(stmt, i + 78);
+			ent->client->ps.ammo[i] = sqlite3_column_int(stmt, i + 74);
 		}
 
 		sqlite3_finalize(stmt);
@@ -3037,7 +2963,7 @@ void Cmd_Register_F(gentity_t * ent)
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonName[256] = { 0 };
 	int accountID = 0, i = 0;
 
@@ -3098,7 +3024,7 @@ void Cmd_Login_F(gentity_t * ent)
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
 	rc = sqlite3_open(DB_PATH, &db);
@@ -3398,7 +3324,7 @@ void Cmd_Inventory_f(gentity_t *ent) {
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
 	rc = sqlite3_open(DB_PATH, &db);
@@ -3439,7 +3365,7 @@ void Cmd_CreateItem_f(gentity_t *ent) {
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
 	rc = sqlite3_open(DB_PATH, &db);
@@ -3478,7 +3404,7 @@ void Cmd_TrashItem_f(gentity_t *ent) {
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
 	rc = sqlite3_open(DB_PATH, &db);
@@ -3529,7 +3455,7 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
 	rc = sqlite3_open(DB_PATH, &db);
@@ -8985,16 +8911,17 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/new [login] [password]: ^7creates a new account.\n\
 ^3/login [login] [password]: ^7loads the account.\n\
 ^3/logout: ^7logs out the account.\n\
-^3/changepassword <new password>: ^7changes the account password.\n\n\" ");
+^3/changepassword <new password>: ^7changes the account password.\n\
+^3/settings <number>: ^7Turns on or off account settings.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Character--------\n\
 ^3/attributes <description>: ^7Sets your character's description. Can be viewed by others with ^3\ex^7.\n\
 ^3/examine <player name>: ^7Displays someone's character description. (/ex can be used also)\n\
 ^3/char <new/use/delete (optional)> <character name (optional)>: ^7Creates/switches to/deletes a character. Run with no arguments to list your characters.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Admin Commands--------\n\
-^3/adminlist: ^7lists admin commands.\n\
+^3/adminlist: ^7lists admin commands and their premission status for current user.\n\
 ^3/adminup <player name> <command number>: ^7gives the player an admin command.\n\
 ^3/admindown <player name> <command number>: ^7removes an admin command from a player.\n\
-^3/music <path>: ^7Replaces the current map music with the song given.\n\
+^3/playmusic <path>: ^7Replaces the current map music with the song given for all players.\n\
 ^3/levelup <player name> <number of levels>(optional): ^7Levels the player up by one.\n\
 ^3/leveldown <player name> <number of levels>(optional): ^7Brings the player's level down by one.\n\
 ^3/givexp <player name>: ^7Gives the player one xp.\n\
@@ -9019,7 +8946,6 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits--------\n\
-^3/callseller: ^7calls the jawa seller.\n\
 ^3/createcredits: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
 ^3/spendcredits: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
 ^3/givecredits <player name> <amount>: ^7gives credits to a player.\n\n\"" );
@@ -9031,6 +8957,18 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
 ^3/anim <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
+^3/emote <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
+^3/playsound <channel> <path>: ^7Plays a sound on the map on a selected channel.\n\
+^3/order <action>: ^7Orders NPC to perform an action.\n\
+^3/datetime: ^7Shows current server date and time.\n\
+^3/drop: ^7Drops the current weapon of the player.If current weapon is melee, drops the selected Holdable Item from inventory.\n\
+^3/ignore <player name>: ^7Ignores chat of a player.\n\
+^3/ignorelist: ^7Lists ignored players.\n\
+^3/jetpack: ^7Gives or removes jetpack from the player.\n\
+^3/maplist: ^7Lists the maps available in the server.\n\
+^3/news <faction>: ^7Displays the news regarding the chosen faction (If left blank shows general news).\n\
+^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player (If left blank updates lightsaber selected from menu).\n\
+^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
 			else
@@ -13975,19 +13913,29 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 	trap->SendServerCommand(ent->s.number, va("print \"%s^7\n\"", ignored_players));
 }
 
-void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
+/*
+==================
+Cmd_Saber_f
+==================
+*/
+extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+extern qboolean G_SaberModelSetup(gentity_t *ent);
+void Cmd_Saber_f( gentity_t *ent ) {
+	char arg1[MAX_STRING_CHARS];
+	char arg2[MAX_STRING_CHARS];
+	int number_of_args = trap->Argc(), i = 0;
 	qboolean changedSaber = qfalse;
-	char userinfo[MAX_INFO_STRING] = { 0 }, * saber = NULL, * key = NULL, * value = NULL;
+	char userinfo[MAX_INFO_STRING] = {0}, *saber = NULL, *key = NULL, *value = NULL;
 
 	if (zyk_allow_saber_command.integer < 1)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"This command is not allowed in this server.\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"This command is not allowed in this server.\n\"" );
 		return;
 	}
 
 	if (zyk_allow_saber_command.integer > 1 && ent->client->ps.duelInProgress == qtrue)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in private duels.\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"Cannot use this command in private duels.\n\"" );
 		return;
 	}
 
@@ -13999,23 +13947,29 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 
 	if (zyk_allow_saber_command.integer > 1 && ent->client->sess.amrpgmode == 2 && ent->client->pers.guardian_mode > 0)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in boss battles.\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"Cannot use this command in boss battles.\n\"" );
 		return;
 	}
 
 	if (number_of_args == 1)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"Usage: /saber <saber1> <saber2>. Examples: /saber single_1, /saber single_1 single_1, /saber dual_1\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: /saber <saber1> <saber2>. Examples: /saber single_1, /saber single_1 single_1, /saber dual_1\n\"" );
 		return;
 	}
 
 	//first we want the userinfo so we can see if we should update this client's saber -rww
-	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
+	trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
+
+	// zyk: setting sabers for this player
+	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
 	saber = ent->client->pers.saber1;
-	value = G_NewString(saber1Model);
+	value = G_NewString(arg1);
 
-	Info_SetValueForKey(userinfo, "saber1", value);
+	if ( Q_stricmp( value, saber ) )
+	{
+		Info_SetValueForKey( userinfo, "saber1", value );
+	}
 
 	saber = ent->client->pers.saber2;
 
@@ -14025,96 +13979,82 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	}
 	else
 	{
-		value = G_NewString(saber2Model);
+		trap->Argv(2, arg2, sizeof(arg2));
+		value = G_NewString(arg2);
 	}
 
-	Info_SetValueForKey(userinfo, "saber2", value);
+	if ( Q_stricmp( value, saber ) )
+	{
+		Info_SetValueForKey( userinfo, "saber2", value );
+	}
 
-	trap->SetUserinfo(ent->s.number, userinfo);
+	trap->SetUserinfo( ent->s.number, userinfo );
 
 	//first we want the userinfo so we can see if we should update this client's saber -rww
-	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
+	trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
 
-	for (int i = 0; i < MAX_SABERS; i++)
+	for ( i=0; i<MAX_SABERS; i++ )
 	{
-		saber = (i & 1) ? ent->client->pers.saber2 : ent->client->pers.saber1;
-		value = Info_ValueForKey(userinfo, va("saber%i", i + 1));
-		if (saber && value &&
-			(Q_stricmp(value, saber) || !saber[0] || !ent->client->saber[0].model[0]))
+		saber = (i&1) ? ent->client->pers.saber2 : ent->client->pers.saber1;
+		value = Info_ValueForKey( userinfo, va( "saber%i", i+1 ) );
+		if ( saber && value &&
+			(Q_stricmp( value, saber ) || !saber[0] || !ent->client->saber[0].model[0]) )
 		{ //doesn't match up (or our saber is BS), we want to try setting it
-			if (G_SetSaber(ent, i, value, qfalse))
+			if ( G_SetSaber( ent, i, value, qfalse ) )
 				changedSaber = qtrue;
 
 			//Well, we still want to say they changed then (it means this is siege and we have some overrides)
-			else if (!saber[0] || !ent->client->saber[0].model[0])
+			else if ( !saber[0] || !ent->client->saber[0].model[0] )
 				changedSaber = qtrue;
 		}
 	}
 
-	if (changedSaber)
+	if ( changedSaber )
 	{ //make sure our new info is sent out to all the other clients, and give us a valid stance
-		if (!ClientUserinfoChanged(ent->s.number))
+		if ( !ClientUserinfoChanged( ent->s.number ) )
 			return;
 
 		//make sure the saber models are updated
-		G_SaberModelSetup(ent);
+		G_SaberModelSetup( ent );
 
-		for (int i = 0; i < MAX_SABERS; i++)
+		for ( i=0; i<MAX_SABERS; i++ )
 		{
-			saber = (i & 1) ? ent->client->pers.saber2 : ent->client->pers.saber1;
-			key = va("saber%d", i + 1);
-			value = Info_ValueForKey(userinfo, key);
-			if (Q_stricmp(value, saber))
+			saber = (i&1) ? ent->client->pers.saber2 : ent->client->pers.saber1;
+			key = va( "saber%d", i+1 );
+			value = Info_ValueForKey( userinfo, key );
+			if ( Q_stricmp( value, saber ) )
 			{// they don't match up, force the user info
-				Info_SetValueForKey(userinfo, key, saber);
-				trap->SetUserinfo(ent->s.number, userinfo);
+				Info_SetValueForKey( userinfo, key, saber );
+				trap->SetUserinfo( ent->s.number, userinfo );
 			}
 		}
 
-		if (ent->client->saber[0].model[0] && ent->client->saber[1].model[0])
+		if ( ent->client->saber[0].model[0] && ent->client->saber[1].model[0] )
 		{ //dual
 			ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = SS_DUAL;
 		}
-		else if ((ent->client->saber[0].saberFlags & SFL_TWO_HANDED))
+		else if ( (ent->client->saber[0].saberFlags&SFL_TWO_HANDED) )
 		{ //staff
 			ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = SS_STAFF;
 		}
 		else
 		{
-			ent->client->sess.saberLevel = Com_Clampi(SS_FAST, SS_STRONG, ent->client->sess.saberLevel);
+			ent->client->sess.saberLevel = Com_Clampi( SS_FAST, SS_STRONG, ent->client->sess.saberLevel );
 			ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel;
 
 			// limit our saber style to our force points allocated to saber offense
-			if (level.gametype != GT_SIEGE && ent->client->ps.fd.saberAnimLevel > ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE])
+			if ( level.gametype != GT_SIEGE && ent->client->ps.fd.saberAnimLevel > ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] )
 				ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel = ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE];
 		}
-		if (level.gametype != GT_SIEGE)
+		if ( level.gametype != GT_SIEGE )
 		{// let's just make sure the styles we chose are cool
-			if (!WP_SaberStyleValidForSaber(&ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, ent->client->ps.fd.saberAnimLevel))
+			if ( !WP_SaberStyleValidForSaber( &ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, ent->client->ps.fd.saberAnimLevel ) )
 			{
-				WP_UseFirstValidSaberStyle(&ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, &ent->client->ps.fd.saberAnimLevel);
+				WP_UseFirstValidSaberStyle( &ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, &ent->client->ps.fd.saberAnimLevel );
 				ent->client->ps.fd.saberAnimLevelBase = ent->client->saberCycleQueue = ent->client->ps.fd.saberAnimLevel;
 			}
 		}
 	}
-}
-
-/*
-==================
-Cmd_Saber_f
-==================
-*/
-extern qboolean duel_tournament_is_duelist(gentity_t *ent);
-extern qboolean G_SaberModelSetup(gentity_t *ent);
-void Cmd_Saber_f( gentity_t *ent ) {
-	char arg1[MAX_STRING_CHARS];
-	char arg2[MAX_STRING_CHARS];
-	int number_of_args = trap->Argc();
-
-	trap->Argv(1, arg1, sizeof(arg1));
-	trap->Argv(2, arg2, sizeof(arg2));
-
-	update_saber(ent, arg1, arg2, number_of_args);
 }
 
 qboolean zyk_can_deflect_shots(gentity_t *ent)
@@ -16185,7 +16125,7 @@ void Cmd_Music_f(gentity_t* ent) {
 
 qboolean Is_Char_Name_Valid(char charName[MAX_STRING_CHARS]) {
 
-	char forbiddenCharacters[MAX_STRING_CHARS] = " ?!�$%^&*()-+=][{}#~';:/>.<,|";
+	char forbiddenCharacters[MAX_STRING_CHARS] = " ?! $%^&*()-+=][{}#~';:/>.<,|";
 
 	for (int i = 0; i < strlen(charName); i++) {
 		for (int j = 0; j < strlen(forbiddenCharacters); j++) {
@@ -16316,53 +16256,16 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 	}
 }
 
-//GalaxyRP (Alex): [Training Saber] This method activates and deactivates the training saber, making it so that when active, you do very little damage.
-
-void Cmd_TrainingMode_f(gentity_t* ent) {
-	if (trap->Argc() != 1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training\n\"");
-		return;
-	}
-
-	ent->client->pers.training_mode = !ent->client->pers.training_mode;
-
-	char message[20] = "";
-
-	if (ent->client->pers.training_mode) {
-		strcpy(message, "^2ACTIVE");
-		//GalaxyRP (Alex): [Training Saber] Save old values and set the new ones to 0;
-		ent->client->pers.saber_stored_damage = ent->client->saber->damageScale;
-		ent->client->pers.saber2_stored_damage = ent->client->saber->damageScale2;
-		ent->client->saber->damageScale = 0;
-		ent->client->saber->damageScale2 = 0;
-	}
-	else {
-		strcpy(message, "^1INACTIVE");
-		ent->client->saber->damageScale = ent->client->pers.saber_stored_damage;
-		ent->client->saber->damageScale2 = ent->client->pers.saber2_stored_damage;
-	}
-
-	trap->SendServerCommand(ent->s.number, va("print \"Training saber is %s\n\"", message));
-
-	return;
-}
-
 void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	// zyk: sends info to the client-side menu if player has the client-side plugin
 	char userinfo[MAX_INFO_STRING];
 	char modelname[MAX_STRING_CHARS];
-	char saber1Model[MAX_STRING_CHARS];
-	char saber2Model[MAX_STRING_CHARS];
 	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 
-	//GalaxyRP (Alex): [User Info] We grab values from the current user info, so that we can set ui cvars based on that. Otherwise, when you use the ui, there's strange behavior.
+	//Alex: this is how u get the current model
 	Q_strncpyz(modelname, Info_ValueForKey(userinfo, "model"), sizeof(modelname));
-	Q_strncpyz(saber1Model, Info_ValueForKey(userinfo, "saber1"), sizeof(saber1Model));
-	Q_strncpyz(saber2Model, Info_ValueForKey(userinfo, "saber2"), sizeof(saber2Model));
-
 
 	if (Q_stricmp(ent->client->pers.guid, "NOGUID") == 0)
 	{
@@ -16380,7 +16283,7 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 
 		strcpy(content, "");
 
-		strcpy(content, va("%s%s~%s~%s~%s~%d~%d/%d~%d~%d~%s~", content, ent->client->pers.netname, modelname, saber1Model, saber2Model, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
+		strcpy(content, va("%s%s~%s~%d~%d/%d~%d~%d~%s~", content, ent->client->pers.netname, modelname, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
 
 		for (int i = 0; i < ARRAY_LEN(skills); i++) {
 			strcpy(content, va("%s%d/%d~", content, ent->client->pers.skill_levels[i], skills[i].max_level));
@@ -16409,7 +16312,6 @@ void Cmd_ZykChars_f(gentity_t* ent) {
 	char* zErrMsg = 0;
 	int rc;
 	sqlite3_stmt* stmt = 0;
-	char char_string[MAX_STRING_CHARS] = "";
 
 	rc = sqlite3_open(DB_PATH, &db);
 	if (rc != SQLITE_OK)
@@ -16418,12 +16320,7 @@ void Cmd_ZykChars_f(gentity_t* ent) {
 		sqlite3_close(db);
 		return;
 	}
-
-	select_character_list_for_ui(ent, db, zErrMsg, rc, stmt, char_string);
-
-	trap->SendServerCommand(ent->s.number, va("zykchars \"%s\"", char_string));
-	sqlite3_close(db);
-	return;
+	trap->SendServerCommand(ent->s.number, va("zykchars \"%s\"", select_character_list_for_ui(ent, db, zErrMsg, rc, stmt)));
 }
 
 /*
@@ -16585,7 +16482,6 @@ command_t commands[] = {
 	{ "tele",				Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "telemark",			Cmd_Telemark_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "teleport",			Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "training",			Cmd_TrainingMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "trashitem",			Cmd_TrashItem_f,			CMD_LOGGEDIN },
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 	{ "zykmod",				Cmd_GalaxyRpUi_f,			CMD_ALIVE | CMD_NOINTERMISSION },
