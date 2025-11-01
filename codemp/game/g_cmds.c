@@ -8921,7 +8921,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/adminlist: ^7lists admin commands and their premission status for current user.\n\
 ^3/adminup <player name> <command number>: ^7gives the player an admin command.\n\
 ^3/admindown <player name> <command number>: ^7removes an admin command from a player.\n\
-^3/playmusic <path>: ^7Replaces the current map music with the song given for all players.\n\
+^3/playmusic <path>: ^7Replaces the current map music for all players with the song given.\n\
 ^3/levelup <player name> <number of levels>(optional): ^7Levels the player up by one.\n\
 ^3/leveldown <player name> <number of levels>(optional): ^7Brings the player's level down by one.\n\
 ^3/givexp <player name>: ^7Gives the player one xp.\n\
