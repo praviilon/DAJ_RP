@@ -9030,8 +9030,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
-^3/anim <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
-^3/emote <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
+^3/anim ^7or ^3/emote <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
 ^3/playsound <channel> <path>: ^7Plays a sound on the map on a selected channel.\n\
 ^3/order <action>: ^7Orders NPC to perform an action.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
