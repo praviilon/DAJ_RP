@@ -9020,9 +9020,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits--------\n\
-^3/createcredits: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
-^3/spendcredits: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
-^3/givecredits <player name> <amount>: ^7gives credits to a player.\n\n\" ");
+^3/createcredits <player name> <amount>: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
+^3/spendcredits <amount>: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
+^3/givecredits <player name> <amount>: ^7transfers credits from you to a player.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
 ^3/allyremove <player name>: ^7Removes the player from allies.\n\
