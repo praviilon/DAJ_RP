@@ -9012,7 +9012,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Entity System--------\n\
 ^3/entlist <page>: ^7Displays entities present on the map.\n\
-^3/entadd <entity parameters>: ^7Adds an entity to the map.\n\
+^3/entadd <classname> <key> <value> <key> <value>: ^7Adds an entity to the map.\n\
 ^3/entsave <filename>: ^7Saves the current entities in a preset file. (use 'default' to load the preset as soon as the map changes)\n\
 ^3/entload <filename>: ^7Loads a preset of entities.\n\
 ^3/entorigin: ^7Saves current location for entity spawning.\n\
@@ -11916,13 +11916,14 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 	if ( number_of_args < 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify at least the entity class. Ex: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
+		trap->SendServerCommand( ent-g_entities, va("print \"Usage: ^3/entadd <classname> <key> <value> <key> <value>^7. You must specify at least the entity class.\n\
+			^7Example: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
 		return;
 	}
 
 	if ( number_of_args % 2 != 0)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments after the spawnflags, because they are key/value pairs\n\"") );
+		trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments after the classname, because they are key/value pairs\n\"") );
 		return;
 	}
 
