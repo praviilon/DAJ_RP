@@ -4,7 +4,7 @@
 cls
 echo OpenJK VS Project Generator
 echo ---------------------------
-echo Options available: 2013, 2015, 2017, 2019, 2022
+echo Options available: 2013, 2015, 2017, 2019, 2022, 2026
 set /p proj_option=Type your option: 
 
 if "%proj_option%" == "2013" ( 
@@ -17,6 +17,8 @@ if "%proj_option%" == "2013" (
 	set proj_ver="Visual Studio 16 2019"
 ) else if "%proj_option%" == "2022" ( 
 	set proj_ver="Visual Studio 17 2022"
+) else if "%proj_option%" == "2026" ( 
+	set proj_ver="Visual Studio 18 2026"
 ) else ( 
 	echo Invalid option!
 	pause
