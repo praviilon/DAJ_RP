@@ -12616,13 +12616,12 @@ void Cmd_RemovePickups_f(gentity_t* ent) {
 		target_ent = &g_entities[i];
 
 		if (is_entity_a_pickup(target_ent) == qtrue) {
-			trap->SendServerCommand(ent - g_entities, va("print \"%s with id %d removed.\n\"", target_ent->classname, i));
 			G_FreeEntity(target_ent);
 		}
 	}
-
+	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed.\n"));
+	
 	return;
-
 }
 
 /*
