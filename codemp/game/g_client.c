@@ -2392,7 +2392,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
-		sqlite3_stmt* stmt = 0;
+		sqlite3_stmt* stmt = NULL;
 
 		rc = sqlite3_open(DB_PATH, &db);
 		if (rc != SQLITE_OK)
@@ -2940,7 +2940,7 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
-		sqlite3_stmt* stmt;
+		sqlite3_stmt* stmt = NULL;
 
 		rc = sqlite3_open(DB_PATH, &db);
 		if (rc != SQLITE_OK)
@@ -3335,7 +3335,7 @@ void ClientSpawn(gentity_t *ent) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
-		sqlite3_stmt* stmt = 0;
+		sqlite3_stmt* stmt = NULL;
 
 		rc = sqlite3_open(DB_PATH, &db);
 		if (rc != SQLITE_OK)
@@ -4180,7 +4180,7 @@ void ClientSpawn(gentity_t *ent) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
-		sqlite3_stmt* stmt = 0;
+		sqlite3_stmt* stmt = NULL;
 
 		rc = sqlite3_open(DB_PATH, &db);
 		if (rc != SQLITE_OK)

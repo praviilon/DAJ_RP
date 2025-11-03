@@ -1175,7 +1175,7 @@ void Cmd_Scale_f( gentity_t *ent ) {
 	sqlite3* db;
 	char* zErrMsg = 0;
 	int rc;
-	sqlite3_stmt* stmt;
+	sqlite3_stmt* stmt = NULL;
 
 	rc = sqlite3_open(DB_PATH, &db);
 	if (rc != SQLITE_OK)
@@ -2926,7 +2926,7 @@ void update_current_character_and_account(gentity_t* ent) {
 	sqlite3* db;
 	char* zErrMsg = 0;
 	int rc;
-	sqlite3_stmt* stmt;
+	sqlite3_stmt* stmt = NULL;
 
 	rc = sqlite3_open(DB_PATH, &db);
 	if (rc != SQLITE_OK)
@@ -3037,7 +3037,7 @@ void Cmd_Register_F(gentity_t * ent)
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
-	sqlite3_stmt *stmt = 0;
+	sqlite3_stmt *stmt = NULL;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonName[256] = { 0 };
 	int accountID = 0, i = 0;
 
