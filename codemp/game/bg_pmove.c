@@ -11242,12 +11242,12 @@ void PmoveSingle (pmove_t *pmove) {
 	}
 
 
-	if ( pmove->cmd.buttons & BUTTON_TALK ) {
-		// keep the talk button set tho for when the cmd.serverTime > 66 msec
-		// and the same cmd is used multiple times in Pmove
-		pmove->cmd.buttons = BUTTON_TALK;
-		// original code blocking movement is removed
-	}
+if ( pmove->cmd.buttons & BUTTON_TALK ) {
+        // keep the talk button set tho for when the cmd.serverTime > 66 msec
+        // and the same cmd is used multiple times in Pmove
+        pmove->cmd.buttons &= (BUTTON_TALK|BUTTON_WALKING);
+        // original code blocking movement is removed
+    }
 
 	// clear all pmove local vars
 	memset (&pml, 0, sizeof(pml));

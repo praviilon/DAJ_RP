@@ -8985,16 +8985,17 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/new [login] [password]: ^7creates a new account.\n\
 ^3/login [login] [password]: ^7loads the account.\n\
 ^3/logout: ^7logs out the account.\n\
-^3/changepassword <new password>: ^7changes the account password.\n\n\" ");
+^3/changepassword <new password>: ^7changes the account password.\n\
+^3/settings <number>: ^7Turns on or off account settings.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Character--------\n\
 ^3/attributes <description>: ^7Sets your character's description. Can be viewed by others with ^3\ex^7.\n\
 ^3/examine <player name>: ^7Displays someone's character description. (/ex can be used also)\n\
 ^3/char <new/use/delete (optional)> <character name (optional)>: ^7Creates/switches to/deletes a character. Run with no arguments to list your characters.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Admin Commands--------\n\
-^3/adminlist: ^7lists admin commands.\n\
+^3/adminlist: ^7lists admin commands and their premission status for current user.\n\
 ^3/adminup <player name> <command number>: ^7gives the player an admin command.\n\
 ^3/admindown <player name> <command number>: ^7removes an admin command from a player.\n\
-^3/music <path>: ^7Replaces the current map music with the song given.\n\
+^3/playmusic <path>: ^7Replaces the current map music for all players with the song given.\n\
 ^3/levelup <player name> <number of levels>(optional): ^7Levels the player up by one.\n\
 ^3/leveldown <player name> <number of levels>(optional): ^7Brings the player's level down by one.\n\
 ^3/givexp <player name>: ^7Gives the player one xp.\n\
@@ -9011,26 +9012,37 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Entity System--------\n\
 ^3/entlist <page>: ^7Displays entities present on the map.\n\
-^3/entadd <entity parameters>: ^7Adds an entity to the map.\n\
+^3/entadd <classname> <key> <value> <key> <value>: ^7Adds an entity to the map.\n\
 ^3/entsave <filename>: ^7Saves the current entities in a preset file. (use 'default' to load the preset as soon as the map changes)\n\
 ^3/entload <filename>: ^7Loads a preset of entities.\n\
 ^3/entorigin: ^7Saves current location for entity spawning.\n\
 ^3/entundo: ^7Undos the last entity spawned. Only works once.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
-^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\"");
+^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits--------\n\
-^3/callseller: ^7calls the jawa seller.\n\
-^3/createcredits: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
-^3/spendcredits: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
-^3/givecredits <player name> <amount>: ^7gives credits to a player.\n\n\"" );
+^3/createcredits <player name> <amount>: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
+^3/spendcredits <amount>: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
+^3/givecredits <player name> <amount>: ^7transfers credits from you to a player.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
 ^3/allyremove <player name>: ^7Removes the player from allies.\n\
-^3/allylist: ^7Lists your allies.\n\n\"");
+^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
-^3/anim <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
+^3/anim ^7or ^3/emote <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
+^3/playsound <channel> <path>: ^7Plays a sound on the map on a selected channel.\n\
+^3/order <action>: ^7Orders NPC to perform an action.\n\
+^3/datetime: ^7Shows current server date and time.\n\
+^3/drop: ^7Drops the current weapon of the player.If current weapon is melee, drops the selected Holdable Item from inventory.\n\
+^3/ignore <player name>: ^7Ignores chat of a player.\n\
+^3/ignorelist: ^7Lists ignored players.\n\
+^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
+^3/news <faction>: ^7Displays the news regarding the chosen faction (If left blank shows general news).\n\
+^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player (If left blank updates lightsaber selected from menu).\n\
+^3/scale <playername/help> <size>: ^7Scales the character model (default is 100). Help lists in-game values compared to real life measurements.\n\
+^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
 			else
@@ -11904,13 +11916,14 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 	if ( number_of_args < 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify at least the entity class. Ex: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
+		trap->SendServerCommand( ent-g_entities, va("print \"Usage: ^3/entadd <classname> <key> <value> <key> <value>^7. You must specify at least the entity class.\n\
+			^7Example: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
 		return;
 	}
 
 	if ( number_of_args % 2 != 0)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments after the spawnflags, because they are key/value pairs\n\"") );
+		trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments after the classname, because they are key/value pairs\n\"") );
 		return;
 	}
 
