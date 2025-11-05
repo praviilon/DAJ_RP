@@ -8982,8 +8982,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 			else if (Q_stricmp( arg1, "commands" ) == 0)
 			{
 				trap->SendServerCommand(ent - g_entities, "print \"\n^2Commands\n\n\^3--------Account--------\n\
-^3/new [login] [password]: ^7Creates a new account.\n\
-^3/login [login] [password]: ^7Loads the account.\n\
+^3/new <login> <password>: ^7Creates a new account.\n\
+^3/login <login> <password>: ^7Loads the account.\n\
 ^3/logout: ^7Logs out the account.\n\
 ^3/changepassword <new password>: ^7Changes the account password.\n\
 ^3/settings <number (optional)>: ^7Turns on or off account settings. Run with no arguments to list your settings.\n\n\
@@ -13730,7 +13730,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/remapload <file name>: ^7Loads remaps from preset file.\n\
 ^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons).\n\
-^3/shaderlist: ^7Shows a list of all shaders in the map.\n\
+^3/shaderlist: ^7Lists all map shaders.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" " );
 }
