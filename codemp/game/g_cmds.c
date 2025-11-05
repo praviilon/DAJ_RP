@@ -1541,7 +1541,7 @@ void Cmd_Helpup_f(gentity_t* ent) {
 	char targetIndex[MAX_TOKEN_CHARS];
 
 	if (trap->Argc() < 2) {
-		trap->SendServerCommand(ent - g_entities, "print \"Usage: helpup <player>\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /helpup <player name or ID>\n\"");
 		return;
 	}
 
@@ -8982,66 +8982,77 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 			else if (Q_stricmp( arg1, "commands" ) == 0)
 			{
 				trap->SendServerCommand(ent - g_entities, "print \"\n^2Commands\n\n\^3--------Account--------\n\
-^3/new [login] [password]: ^7creates a new account.\n\
-^3/login [login] [password]: ^7loads the account.\n\
-^3/logout: ^7logs out the account.\n\
-^3/changepassword <new password>: ^7changes the account password.\n\
-^3/settings <number>: ^7Turns on or off account settings.\n\n\" ");
-				trap->SendServerCommand(ent - g_entities, "print \"^3--------Character--------\n\
+^3/new [login] [password]: ^7Creates a new account.\n\
+^3/login [login] [password]: ^7Loads the account.\n\
+^3/logout: ^7Logs out the account.\n\
+^3/changepassword <new password>: ^7Changes the account password.\n\
+^3/settings <number (optional)>: ^7Turns on or off account settings. Run with no arguments to list your settings.\n\n\
+^3--------Character--------\n\
 ^3/attributes <description>: ^7Sets your character's description. Can be viewed by others with ^3\ex^7.\n\
-^3/examine <player name>: ^7Displays someone's character description. (/ex can be used also)\n\
-^3/char <new/use/delete (optional)> <character name (optional)>: ^7Creates/switches to/deletes a character. Run with no arguments to list your characters.\n\n\" ");
+^3/examine <player name>: ^7Displays someone's character description. (^3/ex ^7can be used also)\n\
+^3/char <new/use/remove (optional)> <character name (optional)>: ^7Creates/switches to/deletes a character. Run with no arguments to list your characters.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Admin Commands--------\n\
-^3/adminlist: ^7lists admin commands and their premission status for current user.\n\
-^3/adminup <player name> <command number>: ^7gives the player an admin command.\n\
-^3/admindown <player name> <command number>: ^7removes an admin command from a player.\n\
+^3/adminlist <command ID (optional)>: ^7Lists admin commands and their availability for current player. If you pass a command ID as argument, shows info about it.\n\
+^3/adminlist show <player id or name>: ^7Shows admin commands of another player. ^1(only for Admins with Give Admin)\n\
+^3/adminup <player name> <command number>: ^7Gives the player an admin command.\n\
+^3/admindown <player name> <command number>: ^7Removes an admin command from the player.\n\
+^3/entitysystem: ^7Shows commands to manipulate entities and remap shaders. ^1(only for Admins with Entity System)\n\
 ^3/playmusic <path>: ^7Replaces the current map music for all players with the song given.\n\
-^3/levelup <player name> <number of levels>(optional): ^7Levels the player up by one.\n\
-^3/leveldown <player name> <number of levels>(optional): ^7Brings the player's level down by one.\n\
-^3/givexp <player name>: ^7Gives the player one xp.\n\
-^3/skillup <player name> <skill number> <number of levels>(optional): ^7upgrades a skill. Passing ^3all ^7as parameter upgrades all skills.\n\"");
-				trap->SendServerCommand(ent - g_entities, "print \"^3/skildown <player name> <skill number> <number of levels>(optional): ^7downgrades a skill.\n\
+^3/levelup <player name> <number of levels(optional)>: ^7Levels the player up by one.\n\
+^3/leveldown <player name> <number of levels(optional)>: ^7Brings the player's level down by one.\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/givexp <player name>: ^7Gives the player one xp.\n\
+^3/removexp <player name>: ^7Removes one xp from the player.\n\
+^3/skillup <player name> <skill number> <number of levels>(optional): ^7upgrades a skill. Passing ^3all ^7as parameter upgrades all skills.\n\
+^3/skilldown <player name> <skill number> <number of levels>(optional): ^7downgrades a skill.\n\
 ^3/god: ^7Makes you invincible.\n\
-^3/players <player name> <force/weapons/orther/ammo/items/stuff (optional)>: ^7Checks a player's abilities and stats.\n\
+^3/players <player name(optional)> <force/weapons/other/ammo/items/stuff(optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
-^3/teleport <player name (optional)>: ^7Teleport to the player. Use with no arguments to teleport to your telemark.\n\
-^3/silence <player name>: ^7Silences the player.\n\
+^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/silence <player name>: ^7Silences the player.\n\
 ^3/paralyze <player name>: ^7Paralyzes the player.\n\
-^3/clientprint <player name> <text>: ^7Prints text on the player's screen.\n\
+^3/admkick <player name>: ^7Kicks player from the server.\n\
+^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\
+^3/clientprint <player name> <text>: ^7Prints text on the player's screen. Use ^3-1 ^7argument to print for all players.\n\
 ^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
+^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
+^3/duelpause: ^7Pauses/resumes the Duel Tournament.\n\
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
-				trap->SendServerCommand(ent - g_entities, "print \"^3--------Entity System--------\n\
-^3/entlist <page>: ^7Displays entities present on the map.\n\
-^3/entadd <classname> <key> <value> <key> <value>: ^7Adds an entity to the map.\n\
-^3/entsave <filename>: ^7Saves the current entities in a preset file. (use 'default' to load the preset as soon as the map changes)\n\
-^3/entload <filename>: ^7Loads a preset of entities.\n\
-^3/entorigin: ^7Saves current location for entity spawning.\n\
-^3/entundo: ^7Undos the last entity spawned. Only works once.\n\
-^3/spawnplatform: ^7Spawns a platform where the player is.\n\
-^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" ");
-				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits--------\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
+^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
+^3/createitem <itemname>: ^7Creates an item with a given name. Items containing more than one word need " " around the argument. ^1(Admin only)\n\
+^3/trashitem <itemid>: ^7Deletes an item.\n\
+^3/giveitem <itemid> <playername>: ^7Transfers an item to the desired player.\n\n\
+^3--------News System--------\n\
+^3/news <channel> <number of entries (optional)>: ^7Displays the news in the chosen channel.\n\
+^3/newsadd <channel> <text>: ^7Adds the news to a channel. The text has to be enclosed in double quotes for it to register properly. ^1(Admin only)\n\
+^3/newsremove <news ID>: ^7Removes the news from a channel. ^1(Admin only)\n\n\" ");
+				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits and Trading--------\n\
 ^3/createcredits <player name> <amount>: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
-^3/spendcredits <amount>: ^7Deletes credits from your inventory and displays a message. (For paying NPCs)\n\
-^3/givecredits <player name> <amount>: ^7transfers credits from you to a player.\n\n\" ");
+^3/spendcredits <amount>: ^7Deletes credits from your inventory and displays a message (For paying NPCs).\n\
+^3/givecredits <player name> <amount>: ^7Transfers credits from you to a player.\n\
+^3/buy <merchandise ID>: ^7Exchanges credits for merchandise. Stuff bought from upgrades category is permanent.\n\
+^3/stuff <ammo/misc/upgrades or merchandise ID>: ^7Shows info about merchandise. Use category name to list available options or ID number to see stuff description.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
+^3/allychat <text>: ^7Chat with allies.\n\
 ^3/allyremove <player name>: ^7Removes the player from allies.\n\
 ^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
-^3/anim ^7or ^3/emote <id/word/list>: ^7Plays an animation by id or word. List is for listing all the available animations.\n\
-^3/playsound <channel> <path>: ^7Plays a sound on the map on a selected channel.\n\
+^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
+^3/playsound <channel> <path>: ^7Plays a sound on the map on selected channel.\n\
 ^3/order <action>: ^7Orders NPC to perform an action.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
-^3/drop: ^7Drops the current weapon of the player.If current weapon is melee, drops the selected Holdable Item from inventory.\n\
+^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name>: ^7Ignores chat of a player.\n\
 ^3/ignorelist: ^7Lists ignored players.\n\
 ^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
-^3/news <faction>: ^7Displays the news regarding the chosen faction (If left blank shows general news).\n\
-^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player (If left blank updates lightsaber selected from menu).\n\
-^3/scale <playername/help> <size>: ^7Scales the character model (default is 100). Help lists in-game values compared to real life measurements.\n\
+^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
+^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
+^3/getup: ^7Revives current player from downed state.\n\
+^3/helpup <player name>: ^7Revives another player from downed state.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
@@ -12758,7 +12769,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 
 		if (command_number == ADM_NPC)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/npc spawn <name> ^7to spawn a npc. Use ^3/npc spawn vehicle <name> to spawn a vehicle. Use ^3/npc kill all ^7to kill all npcs\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/npc spawn <name> ^7to spawn a npc. Use ^3/npc spawn vehicle <name> ^7to spawn a vehicle. Use ^3/npc kill all ^7to kill all npcs\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
 		{
@@ -12770,7 +12781,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_TELE)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nThis command can be ^3/teleport^7 or ^3/tele^7. Use ^3/teleport point ^7to mark a spot in map, then use ^3/teleport ^7to go there. Use ^3/teleport <player name or ID> ^7to teleport to a player. Use ^3/teleport <player name or ID> <player name or ID> ^7to teleport a player to another. Use ^3/teleport <x> <y> <z> ^7to teleport to coordinates. Use ^3/teleport <player name or ID> <x> <y> <z> ^7to teleport a player to coordinates\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nThis command can be ^3/teleport^7 or ^3/tele^7. Use ^3/telemark ^7to mark a spot in map, then use ^3/teleport ^7to go there. Use ^3/teleport <player name or ID> ^7to teleport to a player. Use ^3/teleport <player name or ID> <player name or ID> ^7to teleport a player to another. Use ^3/teleport <x> <y> <z> ^7to teleport to coordinates. Use ^3/teleport <player name or ID> <x> <y> <z> ^7to teleport a player to coordinates\n\n\"" );
 		}
 		else if (command_number == ADM_ADMPROTECT)
 		{
@@ -12786,11 +12797,11 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_CLIENTPRINT)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/clientprint <player name or ID, or -1 to show to all players> <message> ^7to print a message in the screen\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/clientprint <player name or ID, or -1 for all players> <message> ^7to print a message in the screen\n\n\"" );
 		}
 		else if (command_number == ADM_SHAKESCREEN)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/shakescreen ^7to shake people's screen.^7\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/shakescreen ^7to shake player's screen\n\n\"" );
 		}
 		else if (command_number == ADM_KICK)
 		{
@@ -12802,7 +12813,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_GIVE)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/give <player name or ID> <option> ^7to give stuff to a player. Option may be ^3guns ^7or ^3force ^7\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/give <player name or ID> <option> ^7to give guns or Force powers to a player who is not logged in. Option may be ^3guns ^7or ^3force ^7\n\n\"" );
 		}
 		else if (command_number == ADM_SCALE)
 		{
@@ -12814,11 +12825,55 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_DUELARENA)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/duelarena ^7to set or unset the Duel Tournament arena in this map. The arena is saved automatically. Also, use ^3/duelpause ^7to pause the tournament and use it again to resume it\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/duelarena ^7to set or unset the Duel Tournament arena in this map. The arena is saved automatically. Also, use ^3/duelpause ^7to pause/resume the tournament\n\n\"");
 		}
 		else if (command_number == ADM_CUSTOMQUEST)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/customquest ^7to see commands to manage Custom Quests\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nPlaceholder\n\n\"");
+		}
+		else if (command_number == ADM_CREATEITEM)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/CreateItem ^7to create an item with a given name. Items containing more than one word need " " around the argument\n\n\"");
+		}
+		else if (command_number == ADM_GOD)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/God ^7to make you invinsible\n\n\"");
+		}
+		else if (command_number == ADM_LEVELUP)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/levelup ^7or ^3/leveldown <player name> <number of levels(optional)> ^7to increase or decrease the level of a player respectively\n\n\"");
+		}
+		else if (command_number == ADM_SKILL)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/skillup ^7or ^3/skilldown <player name> <skill number> <number of levels>(optional) ^7to increase or decrease the skill levels of a player respectively\n\n\"");
+		}
+		else if (command_number == ADM_CREATECREDITS)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/createcredits <player name> <amount> ^7to create credits and place them to player's account\n\n\"");
+		}
+		else if (command_number == ADM_IGNORECHATDISTANCE)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nSee all chats on the server no matter the distance\n\n\"");
+		}
+		else if (command_number == ADM_XP)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/givexp ^7or ^3/removexp <player name> ^7to give or remove xp points respectively\n\n\"");
+		}
+		else if (command_number == ADM_UPDATENEWS)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/newsadd <channel> <text>: ^7to add the news to a channel. The text has to be enclosed in double quotes for it to register properly\n\n\"");
+		}
+		else if (command_number == ADM_REMOVENEWS)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/newsremove <news ID>: ^7to remove the news from a channel\n\n\"");
+		}
+		else if (command_number == ADM_MUSIC)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/playmusic <path>: ^7to replace the current map music for all players with the song given\n\n\"");
+		}
+		else if (command_number == ADM_GETUP)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/getup ^7and ^3/helpup <player name> ^7to revive yourself and other players from downed state\n\n\"");
 		}
 	}
 	else
@@ -13656,7 +13711,26 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 		return;
 	}
 
-	trap->SendServerCommand( ent-g_entities, va("print \"\n^3/entadd <classname> <spawnflags> <key value key value ...>: ^7adds a new entity in the map\n^3/entedit <entity id> [key value key value ... etc]: ^7shows entity info or edits fields\n^3/entnear: ^7lists entities in less than 200 map units or distance passed as argument\n^3/entlist <page number>: ^7lists all entities\n^3/entorigin: ^7sets this point as origin for new entities\n^3/entundo: ^7removes last added entity\n^3/entsave <filename>: ^7saves entities into a file. Use ^3default ^7name to make it load with the map\n^3/entload <filename>: ^7loads entities from a file\n^3/entremove <entity id>: ^7removes the entity from the map\n^3/entdeletefile <filename>: ^7removes a file created by /entsave\n^3/remap <shader> <new shader>: ^7remaps shaders in map\n^3/remaplist: ^7lists remapped shaders\n^3/remapsave <file name>: ^7saves remaps in a file. Use ^3default ^7name to make file load with the map\n^3/remapload <file name>: ^7loads remaps from file\n^3/remapdeletefile <file name>: ^7deletes a remap file\n\n\"") );
+	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
+		^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
+		^3/entedit <entity id> <key> <value> <key> <value>...: ^7Shows entity info or edits fields.\n\
+		^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
+		^3/entlist <page number>: ^7Lists all entities present on the map.\n\
+		^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
+		^3/entundo: ^7Removes last added entity. Only works once.\n\
+		^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
+		^3/entload <filename>: ^7Loads entities from a preset file.\n\
+		^3/entremove <entity id>: ^7Removes the entity from the map.\n\"");
+	trap->SendServerCommand( ent-g_entities, "print \"^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
+		^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
+		^3/remaplist: ^7Lists already remapped shaders in the map.\n\
+		^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
+		^3/remapload <file name>: ^7Loads remaps from preset file.\n\
+		^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
+		^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons).\n\
+		^3/shaderlist: ^7Shows a list of all shaders in the map.\n\
+		^3/spawnplatform: ^7Spawns a platform where the player is.\n\
+		^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" " );
 }
 
 /*
