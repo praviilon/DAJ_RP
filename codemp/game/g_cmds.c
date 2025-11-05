@@ -9011,6 +9011,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"^3/silence <player name>: ^7Silences the player.\n\
 ^3/paralyze <player name>: ^7Paralyzes the player.\n\
 ^3/admkick <player name>: ^7Kicks player from the server.\n\
+^3/killother <player name>: ^7Kills a player.\n\
 ^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\
 ^3/clientprint <player name> <text>: ^7Prints text on the player's screen. Use ^3-1 ^7argument to print for all players.\n\
 ^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
