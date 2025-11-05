@@ -8997,7 +8997,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/adminup <player name> <command number>: ^7Gives the player an admin command.\n\
 ^3/admindown <player name> <command number>: ^7Removes an admin command from the player.\n\
 ^3/entitysystem: ^7Shows commands to manipulate entities and remap shaders. ^1(only for Admins with Entity System)\n\
-^3/playmusic <path>: ^7Replaces the current map music for all players with the song given.\n\
+^3/playmusic <file path>: ^7Replaces the current map music for all players with the song given.\n\
 ^3/levelup <player name> <number of levels (optional)>: ^7Levels the player up by one.\n\
 ^3/leveldown <player name> <number of levels (optional)>: ^7Brings the player's level down by one.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/givexp <player name>: ^7Gives the player one xp.\n\
@@ -9024,7 +9024,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/trashitem <itemid>: ^7Deletes an item.\n\
 ^3/giveitem <itemid> <playername>: ^7Transfers an item to the desired player.\n\n\
 ^3--------News System--------\n\
-^3/news <channel> <number of entries (optional)>: ^7Displays the news in the chosen channel.\n\
+^3/news <channel> <number of entries (optional)>: ^7Displays the news of the chosen channel.\n\
 ^3/newsadd <channel> <text>: ^7Adds the news to a channel. The text has to be enclosed in double quotes for it to register properly. ^1(Admin only)\n\
 ^3/newsremove <news ID>: ^7Removes the news from a channel. ^1(Admin only)\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Credits and Trading--------\n\
@@ -9035,14 +9035,14 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/stuff <ammo/misc/upgrades or merchandise ID>: ^7Shows info about merchandise. Use category name to list available options or ID number to see stuff description.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
-^3/allychat <text>: ^7Chat with allies.\n\
-^3/allyremove <player name>: ^7Removes the player from allies.\n\
+^3/allychat <text>: ^7Sends message to your allies.\n\
+^3/allyremove <player name>: ^7Removes player from allies.\n\
 ^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
 ^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
-^3/playsound <channel> <path>: ^7Plays a sound on the map on selected channel.\n\
+^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
 ^3/order <action>: ^7Orders NPC to perform an action.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
