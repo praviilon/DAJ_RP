@@ -6356,7 +6356,7 @@ static void UI_RunMenuScript(char **args)
 					trap->Cvar_VariableStringBuffer("accLogin",zyk_login,sizeof(zyk_login));
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
 
-					trap->Cmd_ExecuteText( EXEC_APPEND, va("new %s %s\n", zyk_login, zyk_password) );
+					trap->Cmd_ExecuteText( EXEC_APPEND, va("new %s %s\n", "zyk_login", "zyk_password") );
 				}
 				else if (Q_stricmp( "login", arg ) == 0)
 				{ // zyk: login the account
@@ -6366,7 +6366,7 @@ static void UI_RunMenuScript(char **args)
 					trap->Cvar_VariableStringBuffer("accLogin",zyk_login,sizeof(zyk_login));
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
 
-					trap->Cmd_ExecuteText( EXEC_APPEND, va("login %s %s\n", zyk_login, zyk_password) );
+					trap->Cmd_ExecuteText( EXEC_APPEND, va("login %s %s\n", "zyk_login", "zyk_password") );
 				}
 				else if (Q_stricmp( "changepassword", arg ) == 0)
 				{ // zyk: change password of the account
@@ -6374,7 +6374,7 @@ static void UI_RunMenuScript(char **args)
 
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
 
-					trap->Cmd_ExecuteText( EXEC_APPEND, va("changepassword %s\n", zyk_password) );
+					trap->Cmd_ExecuteText( EXEC_APPEND, va("changepassword %s\n", "zyk_password") );
 				}
 				else if (strstr(arg, "actionchange"))
 				{ // zyk: sets the action (upgrade or downgrade)
