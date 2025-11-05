@@ -9053,6 +9053,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
 ^3/getup: ^7Revives current player from downed state.\n\
 ^3/helpup <player name>: ^7Revives another player from downed state.\n\
+^3/training: ^7Toggles training saber mode with reduced damage.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
@@ -15994,7 +15995,7 @@ void Cmd_UpdateNews_f(gentity_t *ent) {
 
 	if (trap->Argc() != 3)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"Usage: /news <channel> <news text>\n\"");
+		trap->SendServerCommand(ent->s.number, "print \"Usage: /newsadd <channel> <news text>\n\"");
 		return;
 	}
 	trap->Argv(1, arg1, sizeof(arg1));
