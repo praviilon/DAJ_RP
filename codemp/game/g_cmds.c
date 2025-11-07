@@ -9002,7 +9002,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/leveldown <player name> <number of levels (optional)>: ^7Brings the player's level down by one.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/givexp <player name>: ^7Gives the player one xp.\n\
 ^3/removexp <player name>: ^7Removes one xp from the player.\n\
-^3/skillup <player name> <skill number> <number of levels (optional)>: ^7upgrades a skill. Passing ^3all ^7as parameter upgrades all skills.\n\
+^3/skillup <player name> <skill number> <number of levels (optional)>: ^7upgrades a skill.\n\
 ^3/skilldown <player name> <skill number> <number of levels (optional)>: ^7downgrades a skill.\n\
 ^3/god: ^7Makes you invincible.\n\
 ^3/players <player name(optional)> <force/weapons/other/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
