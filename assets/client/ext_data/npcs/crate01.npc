@@ -6,6 +6,7 @@ crate01
 	playerTeam	TEAM_NEUTRAL
 	enemyTeam	TEAM_NEUTRAL
 	class		CLASS_STORMTROOPER
+	health			10000
 	dismemberProbHead	0
 	dismemberProbArms	0
 	dismemberProbLegs	0
