@@ -388,6 +388,9 @@ if(BuildMPEngine)
 	endif()
 
 	if(UseInternalSDL2)
+		# GalaxyRP fix: [libs] bumped bundled SDL2 2.0.12 -> 2.32.4, matching TaystJK. Its x64
+		# import libs are named with an x86_64 suffix (same convention as OpenAL32.x86_64.lib
+		# above), unlike the x86 ones -- split by pointer size, same as the OpenAL block.
 		if(CMAKE_SIZEOF_VOID_P EQUAL 4)
 			set(MPEngineLibraries
 				${MPEngineLibraries}
@@ -397,8 +400,8 @@ if(BuildMPEngine)
 		else()
 			set(MPEngineLibraries
 				${MPEngineLibraries}
-				${OpenJKLibDir}/SDL2/lib/x64/SDL2main.lib
-				${OpenJKLibDir}/SDL2/lib/x64/SDL2.lib
+				${OpenJKLibDir}/SDL2/lib/x64/SDL2main.x86_64.lib
+				${OpenJKLibDir}/SDL2/lib/x64/SDL2.x86_64.lib
 				)
 		endif()
 
@@ -575,13 +578,14 @@ if(BuildMPEngine)
 	if(WIN32)
 		add_executable(${MPEngine} WIN32 ${MPEngineFiles})
 		if(UseInternalSDL2)
+			# GalaxyRP fix: [libs] x64 SDL2.dll is now SDL2.x86_64.dll, see the link-libs split above.
 			if(CMAKE_SIZEOF_VOID_P EQUAL 4)
 				set(MPEngineExtraInstallFiles
 					${OpenJKLibDir}/SDL2/bin/x86/SDL2.dll
 					)
 			else()
 				set(MPEngineExtraInstallFiles
-					${OpenJKLibDir}/SDL2/bin/x64/SDL2.dll
+					${OpenJKLibDir}/SDL2/bin/x64/SDL2.x86_64.dll
 					)
 			endif()
 		endif()

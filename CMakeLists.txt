@@ -357,7 +357,9 @@ set(SharedCommonSafeFiles
 #
 #=============================================================================
 if(UseInternalJPEG)
-  add_subdirectory(lib/jpeg-9a)
+  # GalaxyRP fix: [libs] bumped bundled libjpeg 9a (2014) -> 9c (2018), matching TaystJK, for
+  # renderer-side JPEG texture/screenshot loading. Folder renamed accordingly.
+  add_subdirectory(lib/jpeg-9c)
 else()
   find_package(JPEG REQUIRED)
 endif()
