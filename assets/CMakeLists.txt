@@ -32,7 +32,11 @@ include(InstallZIP)
 add_zip_command(${TMPFILE} ${OUTFILE} DIR "${PK3PATH}" FILES "${PK3ASSETS}" )
 
 # Finish and cleanup
-add_custom_target(assets DEPENDS "${TMPFILE}")
+# GalaxyRP fix: [packaging] add ALL so this target (which builds the pk3) is included in the
+# default build ("Build Solution" in VS / plain `cmake --build .`) instead of requiring a
+# separate explicit `--target assets` build step before install -- previously this had to be
+# built by hand, which is easy to miss and leaves `cmake --install` failing to find the pk3.
+add_custom_target(assets ALL DEPENDS "${TMPFILE}")
 add_custom_command(TARGET assets POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove -f "${TMPFILE}"
 )
