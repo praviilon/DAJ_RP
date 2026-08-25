@@ -306,9 +306,35 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 // which removes the vast majority of the contention in the first place. WAL mode is a persistent
 // property of the database file (only needs to succeed once), but PRAGMA journal_mode is cheap
 // and idempotent, so it's simplest to just set it on every open.
+//
+// GalaxyRP fix: [Database] DB_PATH ("GalaxyRP/database/accounts.db") is a relative filesystem
+// path, and sqlite3_open() resolves it against the server process's actual OS working directory
+// -- NOT against fs_homepath/fs_basepath/fs_game, which the rest of the engine's virtual
+// filesystem uses. That only happened to work as long as the server was launched with its
+// working directory set to exactly the folder containing GalaxyRP (e.g. via galaxyrp_host.bat's
+// `cd..` before launching), and breaks silently with "unable to open database file" for any
+// other launch method (double-clicking the engine exe directly, a shortcut with a different
+// "Start in" folder, launching from an IDE, etc.) -- the working directory just isn't guaranteed
+// to be right. Resolve it against fs_homepath instead, which the engine already knows
+// authoritatively regardless of how it was launched, so the DB path no longer depends on the
+// process's working directory at all. Falls back to the old relative path if fs_homepath is
+// somehow empty, rather than failing outright.
 int RP_DB_Open(sqlite3 **db)
 {
-	int rc = sqlite3_open(DB_PATH, db);
+	char fsHomepath[MAX_OSPATH] = { 0 };
+	char dbPath[MAX_OSPATH * 2];
+
+	trap->Cvar_VariableStringBuffer("fs_homepath", fsHomepath, sizeof(fsHomepath));
+	if (fsHomepath[0])
+	{
+		Com_sprintf(dbPath, sizeof(dbPath), "%s/%s", fsHomepath, DB_PATH);
+	}
+	else
+	{
+		Q_strncpyz(dbPath, DB_PATH, sizeof(dbPath));
+	}
+
+	int rc = sqlite3_open(dbPath, db);
 	if (rc != SQLITE_OK)
 	{
 		return rc;
