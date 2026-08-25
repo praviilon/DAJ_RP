@@ -19,6 +19,17 @@ Global definitions
 
 #define DB_PATH							"GalaxyRP/database/accounts.db"
 
+// GalaxyRP fix: [Database] Centralised sqlite3_open() wrapper -- see definition in g_main.c for
+// why this exists (map-change "database is locked" errors). Every place in the game module that
+// used to call sqlite3_open(DB_PATH, &db) directly should call RP_DB_Open(&db) instead.
+// Forward-declared (rather than including sqlite3.h here) since this header is pulled in by
+// g_local.h for every game module file, and not all of them already include sqlite3.h themselves
+// before that happens; sqlite3 is just an opaque "typedef struct sqlite3 sqlite3;" in sqlite3.h,
+// so redeclaring it here is safe.
+typedef struct sqlite3 sqlite3;
+#define RP_DB_BUSY_TIMEOUT_MS			5000
+int RP_DB_Open(sqlite3 **db);
+
 #define NUM_OF_GUARDIANS				10 // zyk: number of Light Quest guardians to be defeated 
 #define NUM_OF_OBJECTIVES				10 // zyk: number of Dark Quest objectives
 #define NUM_OF_ETERNITY_QUEST_OBJ		11 // zyk: number of Eternity Quest objectives

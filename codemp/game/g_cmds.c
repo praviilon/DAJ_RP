@@ -1177,7 +1177,7 @@ void Cmd_Scale_f( gentity_t *ent ) {
 	int rc;
 	sqlite3_stmt* stmt = NULL;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -1769,7 +1769,7 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -1844,7 +1844,7 @@ void update_credits_value(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -1987,14 +1987,17 @@ saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, cha
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		return ;
+		// GalaxyRP fix: this is a non-void function (returns saber_db_info_t) -- a bare "return;"
+		// here is undefined behaviour (the caller reads whatever garbage was on the stack for the
+		// return value) instead of falling back to the safe "none"/"none" default declared above.
+		return saber_info;
 	}
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		return ;
+		return saber_info; // GalaxyRP fix: same as above -- return the safe default, not garbage.
 	}
 	if (rc == SQLITE_ROW)
 	{
@@ -2020,7 +2023,7 @@ void update_chars_table_row_with_current_values(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2125,7 +2128,7 @@ void update_skills_table_row_with_current_values(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2263,7 +2266,7 @@ void update_weapons_table_row_with_current_values(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2309,7 +2312,7 @@ void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2333,7 +2336,7 @@ void select_news_channels(gentity_t* ent) {
 	sqlite3_stmt* stmt = 0;
 	char channelName[MAX_STRING_CHARS];
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2393,7 +2396,7 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 	int newsID = 0;
 	int i = 1;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2448,7 +2451,7 @@ void delete_news_table_row_with_id(gentity_t* ent, int newsID) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2928,7 +2931,7 @@ void update_current_character_and_account(gentity_t* ent) {
 	int rc;
 	sqlite3_stmt* stmt = NULL;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3041,7 +3044,7 @@ void Cmd_Register_F(gentity_t * ent)
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonName[256] = { 0 };
 	int accountID = 0, i = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3101,7 +3104,7 @@ void Cmd_Login_F(gentity_t * ent)
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3178,7 +3181,7 @@ void Cmd_Char_f(gentity_t *ent) {
 	char command[MAX_STRING_CHARS];
 	char charName[MAX_STRING_CHARS];
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3401,7 +3404,7 @@ void Cmd_Inventory_f(gentity_t *ent) {
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3442,7 +3445,7 @@ void Cmd_CreateItem_f(gentity_t *ent) {
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3481,7 +3484,7 @@ void Cmd_TrashItem_f(gentity_t *ent) {
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3532,7 +3535,7 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3540,13 +3543,21 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 		return;
 	}
 
-	if (inventory_does_player_own_item(ent, item_id, db, zErrMsg, rc, &stmt) == qfalse) {
+	// GalaxyRP fix: this used to pass "&stmt" (sqlite3_stmt **) where the function expects a plain
+	// sqlite3_stmt * -- a type mismatch that happened to be harmless here (the incoming stmt value
+	// is overwritten before it's ever read), but is still wrong and worth cleaning up. Also, on the
+	// "player doesn't own this item" path this returned without calling sqlite3_close(db), leaking
+	// a database connection on every failed /giveitem attempt; closing it here fixes that leak too.
+	if (inventory_does_player_own_item(ent, item_id, db, zErrMsg, rc, stmt) == qfalse) {
+		sqlite3_close(db);
 		return;
 	}
 
 	inventory_transfer_item(ent, &g_entities[player_id], item_id, db, zErrMsg, rc, stmt);
 
 	trap->SendServerCommand(ent->s.number, va("print \"^2You've given an item to %s^2\n\"", &g_entities[player_id].client->pers.netname));
+
+	sqlite3_close(db); // GalaxyRP fix: this success path never closed the connection it opened above.
 
 	return;
 }
@@ -8897,6 +8908,13 @@ char *color_ability(skill_t skill) {
 	else if (strcmp(skill.alignment, "merc") == 0) {
 		return "^3";
 	}
+
+	// GalaxyRP fix: skills table has entries with alignment "none" (e.g. weapon/item/ammo skills),
+	// which none of the branches above handle. Falling off the end of a non-void function is
+	// undefined behaviour -- the caller (zyk_list_player_skills, via /skills or similar) would get
+	// back a garbage pointer and hand it to va()/strcpy() as a C string, which can crash the
+	// server. Return a plain color code for anything that isn't light/dark/neutral/merc instead.
+	return "^7";
 }
 
 char *add_spacing_for_columns(skill_t skill, char* message, int skill_id) {
@@ -13108,8 +13126,29 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 
 	//GalaxyRP (Alex): [Skill] Give them the Force Ability.
 	if (strcmp(skills[skill_id].category,"force") == 0 && skills[skill_id].value_internal != 0) {
-		ent->client->ps.fd.forcePowerLevel[skills[skill_id].value_internal] = ent->client->pers.skill_levels[skill_id];
-		
+		// GalaxyRP fix: Absorb, Protect and Lightning are capped at ps.fd.forcePowerLevel ==
+		// FORCE_LEVEL_3 in the DB-load path below (see the "loading Absorb/Protect/Lightning
+		// value" blocks a bit further down in this file) -- their levels 4 and 5 are meant to be
+		// applied purely as bonus effects keyed off pers.skill_levels[] directly (see e.g. the
+		// "Lightning level 4/5" damage bonus in ForceLightningDamage()), never by actually raising
+		// forcePowerLevel past 3. That's because the client renders Force Lightning's FX based on
+		// ps.activeForcePass, which is set to forcePowerLevel[FP_LIGHTNING] every time Lightning
+		// is activated (see WP_ForcePowerStart) -- and cg_players.c treats any activeForcePass
+		// above FORCE_LEVEL_3 as a *Drain* effect, not Lightning (this is the same encoding
+		// vanilla JKA uses for NPC dark side attacks). This code path (the immediate, in-place
+		// effect of a /skillup or /skilldown) didn't apply that cap, so upgrading Lightning to
+		// level 4 or 5 set forcePowerLevel[FP_LIGHTNING] to 4/5 unclamped, and the very next use
+		// of Force Lightning rendered as Force Drain until the next respawn re-ran the (correctly
+		// clamped) DB-load path and put it back to 3. Applying the same cap here keeps this path
+		// consistent with the DB-load path so the bug can't resurface after a skill change.
+		if ((skills[skill_id].value_internal == FP_ABSORB || skills[skill_id].value_internal == FP_PROTECT || skills[skill_id].value_internal == FP_LIGHTNING)
+			&& ent->client->pers.skill_levels[skill_id] >= 4) {
+			ent->client->ps.fd.forcePowerLevel[skills[skill_id].value_internal] = FORCE_LEVEL_3;
+		}
+		else {
+			ent->client->ps.fd.forcePowerLevel[skills[skill_id].value_internal] = ent->client->pers.skill_levels[skill_id];
+		}
+
 		if (upgrade) {
 			if (!(ent->client->ps.fd.forcePowersKnown & (1 << skills[skill_id].value_internal))) {
 				ent->client->ps.fd.forcePowersKnown |= (1 << skills[skill_id].value_internal);
@@ -14062,6 +14101,14 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 
 	trap->SendServerCommand(ent->s.number, va("print \"%s^7\n\"", ignored_players));
 }
+
+// GalaxyRP fix: these were only forward-declared further down in this file (right before
+// Cmd_Saber_f), *after* update_saber() below already calls both of them. That left the compiler
+// seeing an implicit (and wrong, int-returning) declaration at first use, which is a hard error
+// under any strict/C++ compilation (and silently wrong even where it's only a warning) -- moving
+// the declarations up here, before their first use, fixes it without touching the later ones.
+extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+extern qboolean G_SaberModelSetup(gentity_t *ent);
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
 	qboolean changedSaber = qfalse;
@@ -16499,7 +16546,7 @@ void Cmd_ZykChars_f(gentity_t* ent) {
 	sqlite3_stmt* stmt = 0;
 	char char_string[MAX_STRING_CHARS] = "";
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));

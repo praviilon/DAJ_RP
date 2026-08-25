@@ -1,5 +1,6 @@
-crate01
+toss_crate05
 {
+	fullName		"Really Awesome Crate (5)"
 	playerModel	crate01
 	weapon		WP_NONE
 	rank		captain
