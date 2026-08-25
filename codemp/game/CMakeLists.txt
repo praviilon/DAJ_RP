@@ -218,44 +218,12 @@ if(NOT MSVC)
 	set_target_properties(${MPGame} PROPERTIES PREFIX "")
 endif()
 
-if(MakeApplicationBundles AND BuildMPEngine)
-	install(TARGETS ${MPGame}
-		LIBRARY
-		DESTINATION "${JKAInstallDir}/${MPEngine}.app/Contents/MacOS/OpenJK"
-		COMPONENT ${JKAMPCoreComponent})
-	install(TARGETS ${MPGame}
-		LIBRARY
-		DESTINATION "${JKAInstallDir}/${MPEngine}.app/Contents/MacOS/base"
-		COMPONENT ${JKAMPCoreComponent})
-elseif(WIN32)
-	install(TARGETS ${MPGame}
-		RUNTIME
-		DESTINATION "${JKAInstallDir}/OpenJK"
-		COMPONENT ${JKAMPCoreComponent})
-	if (WIN64)
-		# Don't do this on 32-bit Windows to avoid overwriting
-		# vanilla JKA's DLLs
-		install(TARGETS ${MPGame}
-			RUNTIME
-			DESTINATION "${JKAInstallDir}/base"
-			COMPONENT ${JKAMPCoreComponent})
-	endif()
-else()
-	install(TARGETS ${MPGame}
-		LIBRARY
-		DESTINATION "${JKAInstallDir}/OpenJK"
-		COMPONENT ${JKAMPCoreComponent})
-	install(TARGETS ${MPGame}
-		LIBRARY
-		DESTINATION "${JKAInstallDir}/base"
-		COMPONENT ${JKAMPCoreComponent})
-endif()
-
-# GalaxyRP fix: [packaging] ship this module directly in the distributable "GalaxyRP" mod folder
-# (alongside the pk3 and assets/server content -- see assets/CMakeLists.txt), not only inside the
-# generic OpenJK/base destinations above. Filename is already architecture-suffixed
-# (jampgame${Architecture}...), so building for a different arch and installing again just adds
-# that arch's file next to the others rather than overwriting them.
+# GalaxyRP fix: [packaging] GalaxyRP is a standalone distributable, not a patch applied on top of
+# an OpenJK/base install -- removed the upstream OpenJK install() rules that used to also copy this
+# module into JediAcademy/OpenJK and JediAcademy/base (and, on macOS app bundles, into the .app's
+# OpenJK/base folders). Only the GalaxyRP destination below is used now. Filename is already
+# architecture-suffixed (jampgame${Architecture}...), so building for a different arch and
+# installing again just adds that arch's file next to the others rather than overwriting them.
 install(TARGETS ${MPGame}
 	RUNTIME
 	LIBRARY
