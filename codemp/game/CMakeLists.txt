@@ -251,6 +251,17 @@ else()
 		COMPONENT ${JKAMPCoreComponent})
 endif()
 
+# GalaxyRP fix: [packaging] ship this module directly in the distributable "GalaxyRP" mod folder
+# (alongside the pk3 and assets/server content -- see assets/CMakeLists.txt), not only inside the
+# generic OpenJK/base destinations above. Filename is already architecture-suffixed
+# (jampgame${Architecture}...), so building for a different arch and installing again just adds
+# that arch's file next to the others rather than overwriting them.
+install(TARGETS ${MPGame}
+	RUNTIME
+	LIBRARY
+	DESTINATION "${JKAInstallDir}/GalaxyRP"
+	COMPONENT ${JKAMPCoreComponent})
+
 set_target_properties(${MPGame} PROPERTIES COMPILE_DEFINITIONS "${MPGameDefines}")
 
 # Hide symbols not explicitly marked public.
