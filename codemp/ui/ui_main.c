@@ -10686,6 +10686,26 @@ static void UI_StartServerRefresh(qboolean full)
 }
 
 /*
+=================
+UI_CvarHelp
+
+GalaxyRP fix: [TaystJK] TaystJK's uiExport_t has a trailing CvarHelp field (reached from the
+engine's console cvar/command autocomplete, Cvar_DescriptionString()/Cmd_DescriptionString());
+without a matching field here a TaystJK-built engine reads past the end of this module's static
+uiExport_t object (see ui_public.h). This is a functional stub, NOT a port of JAPro's
+ui_xdocs.h/nm_xdocumentation.h cvar-help-text database (out of scope -- that's JAPro gameplay/UI
+content, not engine plumbing). Leaving helpBuffer untouched makes the engine fall back to the
+cvar's own ->description string (see Cvar_DescriptionString()), so this is safe and correct even
+though it doesn't provide GalaxyRP-specific long-form help text.
+=================
+*/
+static void UI_CvarHelp( const char *cvarName, qboolean enter, char *helpBuffer, size_t helpBufferSize ) {
+	// intentionally a no-op: no GalaxyRP-specific cvar help-text database exists (or is wanted --
+	// see comment above), so leave helpBuffer untouched and let the engine's own cvar description
+	// fallback handle it.
+}
+
+/*
 ============
 GetModuleAPI
 ============
@@ -10719,6 +10739,7 @@ Q_EXPORT uiExport_t* QDECL GetModuleAPI( int apiVersion, uiImport_t *import )
 	uie.ConsoleCommand		= UI_ConsoleCommand;
 	uie.DrawConnectScreen	= UI_DrawConnectScreen;
 	uie.MenuReset			= Menu_Reset;
+	uie.CvarHelp			= UI_CvarHelp;
 
 	return &uie;
 }

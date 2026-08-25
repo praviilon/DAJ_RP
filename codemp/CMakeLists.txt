@@ -360,14 +360,25 @@ if(BuildMPEngine)
 	endif()
 
 	# OpenAL (is optionally included for Windows)
-	if (MSVC AND NOT WIN64)
+	# GalaxyRP fix: [TaystJK multi-arch] this used to be "if (MSVC AND NOT WIN64)", which meant
+	# OpenAL was never linked at all on 64-bit MSVC builds. Now handles both 32- and 64-bit MSVC,
+	# selecting the matching prebuilt import lib, matching TaystJK.
+	if (MSVC)
 		if(UseInternalOpenAL)
-			# There's a libs/OpenAL32.lib
-			# (mrw) TODO Is this actually required on windows? It is loaded at runtime, should not be linked?
-			find_library(OpenALLibrary NAMES OpenAL32 PATHS ${OpenJKLibDir})
-			if(NOT OpenALLibrary)
-				message(FATAL_ERROR "UseInternalOpenAL enabled, but lib/OpenAL32.lib not found!")
-			endif(NOT OpenALLibrary)
+			if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+				# There's a libs/OpenAL32.lib
+				# (mrw) TODO Is this actually required on windows? It is loaded at runtime, should not be linked?
+				find_library(OpenALLibrary NAMES OpenAL32 PATHS ${OpenJKLibDir})
+				if(NOT OpenALLibrary)
+					message(FATAL_ERROR "UseInternalOpenAL enabled, but lib/OpenAL32.lib not found!")
+				endif(NOT OpenALLibrary)
+			else()
+				# There's a libs/OpenAL32.x86_64.lib
+				find_library(OpenALLibrary NAMES OpenAL32.x86_64 PATHS ${OpenJKLibDir})
+				if(NOT OpenALLibrary)
+					message(FATAL_ERROR "UseInternalOpenAL enabled, but lib/OpenAL32.x86_64.lib not found!")
+				endif(NOT OpenALLibrary)
+			endif()
 			set(MPEngineLibraries ${MPEngineLibraries} ${OpenALLibrary})
 		else(UseInternalOpenAL)
 			find_package(OpenAL REQUIRED)

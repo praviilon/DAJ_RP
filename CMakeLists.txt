@@ -103,7 +103,13 @@ if(WIN32)
 	endif()
 else()
 	set(X86 OFF)
-	if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
+	# GalaxyRP fix: [TaystJK multi-arch] arm64/aarch64 must be checked BEFORE the generic "^arm"
+	# match below, or a 64-bit ARM host (e.g. Apple Silicon, aarch64 Linux) falls into the "arm"
+	# (32-bit-implying) branch instead. Matches TaystJK's own detection logic.
+	if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+		set(Architecture "arm64")
+		add_definitions(-DPNG_ARM_NEON_OPT=0)
+	elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
 		set(Architecture "arm")
 	elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^i.86$")
 		set(X86 ON)
@@ -176,11 +182,15 @@ if(WIN64)
 endif()
 
 if (APPLE)
-	set(SharedDefines "MACOS_X")
+	# GalaxyRP fix: [TaystJK multi-arch] this used to be set(SharedDefines "MACOS_X") -- an
+	# unconditional overwrite (no ${SharedDefines} on the right-hand side) that silently discarded
+	# whatever WIN64 (or any earlier) define had already been appended above. Append instead.
+	set(SharedDefines ${SharedDefines} "MACOS_X")
 endif()
 
 if (NOT WIN32 AND NOT APPLE)
-	set(SharedDefines "ARCH_STRING=\"${Architecture}\"")
+	# GalaxyRP fix: [TaystJK multi-arch] same overwrite-vs-append bug as the APPLE branch above.
+	set(SharedDefines ${SharedDefines} "ARCH_STRING=\"${Architecture}\"")
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "BSD")
@@ -194,10 +204,14 @@ if(MSVC)
 	set(SharedDefines ${SharedDefines} "_SCL_SECURE_NO_WARNINGS")
 	set(SharedDefines ${SharedDefines} "_CRT_NONSTDC_NO_DEPRECATE")
 
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /arch:SSE2")
+	# GalaxyRP fix: [TaystJK multi-arch] /arch:SSE2 is a no-op-with-warning on x64 (SSE2 is the x64
+	# baseline already) and is invalid on an ARM64 MSVC target -- scope it to 32-bit x86 only,
+	# matching TaystJK.
+	if (Architecture STREQUAL "x86")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /arch:SSE2")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:SSE2")
+	endif()
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
-
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:SSE2")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 
 	# We don't try to control symbol visibility under MSVC.

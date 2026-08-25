@@ -1,0 +1,189 @@
+name: build
+
+# GalaxyRP addition: [TaystJK multi-arch] DAJ_RP previously had no CI at all. This workflow is
+# modeled directly on TaystJK's own .github/workflows/build.yml matrix (Windows x86/x86_64 via
+# MSVC, Linux x86/x86_64 via GCC, macOS x86_64/arm64 native), so every push/PR is actually built
+# for all of the platform/architecture combinations this port is meant to support -- something
+# that can't be fully verified from a single Linux sandbox. It additionally builds Linux arm64
+# (cross-compiled via the new cmake/Toolchains/linux-aarch64.cmake), which TaystJK's own CI does
+# not do (TaystJK's only "ARM" coverage is a native macOS Apple Silicon runner).
+#
+# Builds both the mod (jampgame/cgame/ui -- the GetModuleAPI-native modules meant to load into
+# TaystJK) and DAJ_RP's own MP engine/dedicated server/renderer (openjk/openjkded/rd-vanilla),
+# since this repository builds both.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  pull_request:
+    branches:
+      - develop
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+
+jobs:
+  msvc:
+    name: Windows ${{ matrix.arch }} ${{ matrix.build_type }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x86_64]
+        build_type: [Release]
+        include:
+          - arch: x86
+            platform: Win32
+          - arch: x86_64
+            platform: x64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create Build Environment
+        run: cmake -E make_directory ${{ github.workspace }}/build
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          cmake $GITHUB_WORKSPACE -A ${{ matrix.platform }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_INSTALL_PREFIX=bin \
+            -DBuildMPEngine=ON -DBuildMPRdVanilla=ON -DBuildMPDed=ON \
+            -DBuildMPGame=ON -DBuildMPCGame=ON -DBuildMPUI=ON
+
+      - name: Build
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --build . --config ${{ matrix.build_type }} -j $NUMBER_OF_PROCESSORS
+
+      - name: Install
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --install . --config ${{ matrix.build_type }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DAJ_RP-windows-${{ matrix.arch }}-${{ matrix.build_type }}
+          path: ${{ github.workspace }}/build/bin/JediAcademy
+          if-no-files-found: error
+
+  ubuntu:
+    name: Ubuntu ${{ matrix.arch }} ${{ matrix.build_type }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x86_64, arm64]
+        build_type: [Release]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create Build Environment
+        run: |
+          if [ ${{ matrix.arch }} == "x86" ]; then
+            sudo dpkg --add-architecture i386
+            sudo apt-get -qq update
+            sudo apt-get -y install gcc-multilib g++-multilib libgl1-mesa-dev:i386 libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libglib2.0-dev:i386 libjpeg-dev:i386 libpng-dev:i386 libcurl4-openssl-dev:i386 libsdl2-dev:i386
+          elif [ ${{ matrix.arch }} == "arm64" ]; then
+            sudo apt-get -qq update
+            sudo apt-get -y install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          else
+            sudo apt-get -qq update
+            sudo apt-get -y install libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxxf86vm-dev libglib2.0-dev libjpeg-dev libpng-dev libcurl4-openssl-dev zlib1g-dev libsdl2-dev
+          fi
+          cmake -E make_directory ${{ github.workspace }}/build
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          OPTIONS="-DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install"
+          OPTIONS+=" -DBuildMPGame=ON -DBuildMPCGame=ON -DBuildMPUI=ON"
+          if [ ${{ matrix.arch }} == "x86" ]; then
+            OPTIONS+=" -DCMAKE_TOOLCHAIN_FILE=cmake/Toolchains/linux-i686.cmake"
+            OPTIONS+=" -DBuildMPEngine=ON -DBuildMPRdVanilla=ON -DBuildMPDed=ON"
+          elif [ ${{ matrix.arch }} == "arm64" ]; then
+            OPTIONS+=" -DCMAKE_TOOLCHAIN_FILE=cmake/Toolchains/linux-aarch64.cmake"
+            # No arm64 system SDL2/OpenGL packages installed above (would need a foreign-arch
+            # apt setup) -- only cross-build the mod modules, which don't need them.
+            OPTIONS+=" -DBuildMPEngine=OFF -DBuildMPRdVanilla=OFF -DBuildMPDed=OFF"
+          else
+            OPTIONS+=" -DBuildMPEngine=ON -DBuildMPRdVanilla=ON -DBuildMPDed=ON"
+          fi
+          cmake $GITHUB_WORKSPACE $OPTIONS
+
+      - name: Build
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --build . -j $(nproc)
+
+      - name: Install
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --install .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DAJ_RP-linux-${{ matrix.arch }}-${{ matrix.build_type }}
+          path: ${{ github.workspace }}/install/JediAcademy
+          if-no-files-found: error
+
+  macos:
+    name: macOS ${{ matrix.arch }} ${{ matrix.build_type }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
+        build_type: [Release]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create Build Environment
+        run: |
+          brew install sdl2
+          cmake -E make_directory ${{ github.workspace }}/build
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          OPTIONS="-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }}"
+          OPTIONS+=" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install"
+          OPTIONS+=" -DBuildMPEngine=ON -DBuildMPRdVanilla=ON -DBuildMPDed=ON"
+          OPTIONS+=" -DBuildMPGame=ON -DBuildMPCGame=ON -DBuildMPUI=ON"
+          cmake $GITHUB_WORKSPACE $OPTIONS
+
+      - name: Build
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --build . -j $(getconf _NPROCESSORS_ONLN)
+
+      - name: Install
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: cmake --install .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DAJ_RP-macos-${{ matrix.arch }}-${{ matrix.build_type }}
+          path: ${{ github.workspace }}/install/JediAcademy
+          if-no-files-found: error
