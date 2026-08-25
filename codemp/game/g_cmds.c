@@ -2678,10 +2678,16 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		strcpy(saber2Model, sqlite3_column_text(stmt, 13));
 		saber2Color = sqlite3_column_int(stmt, 14);
 
+		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
+		// re-set to 1 (the "if" branch never set it to 2), so this always evaluated to 1 regardless
+		// of what saber2Model actually held. update_saber() treats number_of_args==2 (i.e.
+		// number_of_sabers==1) as "no second saber" and force-overwrites saber2 with "none" --
+		// so any saved dual/staff saber configuration was silently discarded and replaced with a
+		// single saber on every character load, even though the database still had the real value.
 		int number_of_sabers = 1;
 
-		if (strcmp(saber2Model, "none") == 0) {
-			number_of_sabers = 1;
+		if (strcmp(saber2Model, "none") != 0) {
+			number_of_sabers = 2;
 		}
 		update_saber(ent, saber1Model, saber2Model, number_of_sabers + 1);
 
@@ -2850,10 +2856,22 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		strcpy(saber2Model, sqlite3_column_text(stmt, 19));
 		saber2Color = sqlite3_column_int(stmt, 20);
 
+		// GalaxyRP fix: [gameplay] Same bug as select_player_character() above, plus this copy
+		// compared against "" instead of "none" -- saber2Model coming from the database is never
+		// really an empty string (the column's schema default is 'saber_1', and update_saber()
+		// always saves the literal string "none" for an unset second saber), so this "if" almost
+		// never matched either way. number_of_sabers was initialized to 1 and never explicitly set
+		// to 2, so it always evaluated to 1 regardless of what saber2Model actually held.
+		// update_saber() treats number_of_args==2 (number_of_sabers==1) as "no second saber" and
+		// force-overwrites saber2 with "none" -- so logging in (or respawning after a map change,
+		// which re-runs this same restore) silently discarded any saved dual/staff saber
+		// configuration and replaced it with a single saber, even though the database still had
+		// the real value. This is also why a fresh character (whose saberTwoModel column defaults
+		// to 'saber_1', not "none") never actually showed as dual-wielding on first login.
 		int number_of_sabers = 1;
 
-		if (strcmp(saber2Model, "") == 0) {
-			number_of_sabers = 1;
+		if (strcmp(saber2Model, "none") != 0) {
+			number_of_sabers = 2;
 		}
 		update_saber(ent, saber1Model, saber2Model, number_of_sabers + 1);
 
