@@ -214,13 +214,18 @@ qboolean admin_account_exists(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* 
 }
 
 //alex: creates an admin account with default values and highest admin authority possible
+// GalaxyRP fix: [gameplay] AdminLevel is a bitmask of the zyk_admin_t enum in rp_local.h
+// (ADM_NPC=0 .. ADM_GETUP=26, ADM_NUM_CMDS=27 total admin commands), so "every admin power" is
+// (1 << 27) - 1 = 134217727. The previous value (66846719) was missing bit 18 (ADM_LEVELUP,
+// "Upgrade Levels") and bit 26 (ADM_GETUP, "Instant Revive"), so the default admin account could
+// not use those two commands out of the box.
 void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt)
 {
 	int accountID = 1;
 	char comparisonName[256] = { 0 };
 	char char_name[10] = "admin";
 
-	char statement_account_entry_creation[200] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','66846719','0','admin')";
+	char statement_account_entry_creation[200] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','134217727','0','admin')";
 	char statement_account_id_select[100] = "SELECT AccountID FROM Accounts WHERE Username='admin'";
 	char statement_character_entry_creation[207] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i', '100', '1', '100', '%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
 	char statement_skill_entry_creation[1000] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements, Armor, Flamethrower, ShieldRegen, HealthRegen) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
