@@ -288,6 +288,48 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	return;
 }
 
+// GalaxyRP fix: [Database] "database is locked" (SQLITE_BUSY) fix. Every database access in the
+// game module opens its own short-lived sqlite3 connection to the same on-disk file via plain
+// sqlite3_open(), with no shared connection and no busy handler. SQLite's rollback-journal default
+// is to fail a write *immediately* with SQLITE_BUSY/SQLITE_LOCKED if another connection already
+// holds the write lock, instead of waiting. InitializeGalaxyRpTables() below runs a batch of
+// ALTER TABLE statements on every single map load (it's called unconditionally from G_InitGame),
+// at exactly the moment reconnecting clients are opening their own connections to read/save their
+// character row -- so map change routinely produced "database is locked" errors on whichever side
+// lost the race, which is why players could come back from a map change with no weapons/inventory
+// (their load query failed) until a /kill forced a retry once the lock had cleared.
+//
+// RP_DB_Open() is a drop-in replacement for sqlite3_open(DB_PATH, &db) that (1) sets a busy
+// timeout so a connection that does collide with another writer blocks and retries for up to
+// RP_DB_BUSY_TIMEOUT_MS instead of failing outright, and (2) switches the database to WAL
+// journal mode, where readers no longer block a writer and a writer no longer blocks readers --
+// which removes the vast majority of the contention in the first place. WAL mode is a persistent
+// property of the database file (only needs to succeed once), but PRAGMA journal_mode is cheap
+// and idempotent, so it's simplest to just set it on every open.
+int RP_DB_Open(sqlite3 **db)
+{
+	int rc = sqlite3_open(DB_PATH, db);
+	if (rc != SQLITE_OK)
+	{
+		return rc;
+	}
+
+	sqlite3_busy_timeout(*db, RP_DB_BUSY_TIMEOUT_MS);
+
+	char *walErrMsg = 0;
+	int walRc = sqlite3_exec(*db, "PRAGMA journal_mode=WAL;", 0, 0, &walErrMsg);
+	if (walRc != SQLITE_OK)
+	{
+		trap->Print("Warning: could not enable WAL journal mode on database: %s\n", walErrMsg ? walErrMsg : sqlite3_errmsg(*db));
+		if (walErrMsg)
+		{
+			sqlite3_free(walErrMsg);
+		}
+	}
+
+	return rc;
+}
+
 //alex: creates tables is they didn't exist, and admin account if it doesn't exist. This is the place to add things whenever the database structure changes (use UPDATE TABLE for further changes)
 void InitializeGalaxyRpTables(qboolean with_admin_account)
 {
@@ -296,7 +338,7 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_open(DB_PATH, &db);
+	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -490,7 +532,13 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	rc = sqlite3_exec(db, statement_saber_columns_alter, 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
-		if (strcmp(zErrMsg, "duplicate column name: HealthRegen") != 0) {
+		// GalaxyRP fix: this was comparing against "duplicate column name: HealthRegen" (copy-pasted
+		// from the block above) instead of the column this statement actually adds first
+		// ("saberOneModel"). Because the comparison never matched, every server (re)start after the
+		// saber columns had already been created printed a spurious "SQL error: duplicate column
+		// name: saberOneModel" and returned out of this function early, skipping the rest of
+		// InitializeGalaxyRpTables (including admin account setup) on every subsequent run.
+		if (strcmp(zErrMsg, "duplicate column name: saberOneModel") != 0) {
 			trap->Print("SQL error: %s\n", zErrMsg);
 			sqlite3_free(zErrMsg);
 			sqlite3_close(db);

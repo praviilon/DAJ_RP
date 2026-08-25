@@ -2394,7 +2394,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		int rc;
 		sqlite3_stmt* stmt = NULL;
 
-		rc = sqlite3_open(DB_PATH, &db);
+		rc = RP_DB_Open(&db);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -2942,7 +2942,7 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		int rc;
 		sqlite3_stmt* stmt = NULL;
 
-		rc = sqlite3_open(DB_PATH, &db);
+		rc = RP_DB_Open(&db);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -3331,13 +3331,25 @@ void ClientSpawn(gentity_t *ent) {
 	//first we want the userinfo so we can see if we should update this client's saber -rww
 	trap->GetUserinfo( index, userinfo, sizeof( userinfo ) );
 
-	if (ent->client->sess.loggedin) {
+	// GalaxyRP fix: only pull the saber from the database on the player's first spawn after
+	// logging in (i.e. before client->pers.saber1/2 have ever been populated). This used to run
+	// on *every* spawn (including a plain /kill respawn) and unconditionally clobbered the live
+	// userinfo saber1/saber2 keys with whatever was already stored in the database. Since those
+	// are the only values compared against client->pers.saber1/2 below to detect a saber change,
+	// a fresh saber choice picked in the UI (which only updates userinfo, not the DB) could never
+	// be detected for logged-in players -- they appeared permanently stuck on their last saved
+	// saber. Logged-out players didn't hit this branch at all, and /saber worked instantly
+	// because it calls G_SetSaber() directly. Restricting the DB read to the first spawn lets the
+	// normal userinfo-vs-pers comparison below (and the resulting DB save triggered from
+	// ClientUserinfoChanged) apply and persist saber changes made via the UI, same as it already
+	// does for logged-out players.
+	if (ent->client->sess.loggedin && (!VALIDSTRING(client->pers.saber1) || !VALIDSTRING(client->pers.saber2))) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
 		sqlite3_stmt* stmt = NULL;
 
-		rc = sqlite3_open(DB_PATH, &db);
+		rc = RP_DB_Open(&db);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
@@ -4182,7 +4194,7 @@ void ClientSpawn(gentity_t *ent) {
 		int rc;
 		sqlite3_stmt* stmt = NULL;
 
-		rc = sqlite3_open(DB_PATH, &db);
+		rc = RP_DB_Open(&db);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));

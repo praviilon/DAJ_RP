@@ -1821,8 +1821,13 @@ void ForceSeeing( gentity_t *self )
 
 	WP_ForcePowerStart( self, FP_SEE, 0 );
 
-	//G_Sound( self, CHAN_AUTO, G_SoundIndex("sound/weapons/force/see.wav") );
-	//G_Sound( self, TRACK_CHANNEL_5, seeLoopSound );
+	// GalaxyRP fix: these two calls were left commented out, so Force Sense played no sound at
+	// all on activation. seeLoopSound is already lazily initialized above (in the same pattern as
+	// speedLoopSound, rageLoopSound, absorbLoopSound and protectLoopSound, all of which *do* play
+	// here in their respective functions), so this just wires the activation sound back in to
+	// match every other hold-style force power.
+	G_Sound( self, CHAN_AUTO, G_SoundIndex("sound/weapons/force/see.wav") );
+	G_Sound( self, TRACK_CHANNEL_5, seeLoopSound );
 }
 
 void ForceProtect( gentity_t *self )
