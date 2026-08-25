@@ -224,10 +224,15 @@ endif()
 # OpenJK/base folders). Only the GalaxyRP destination below is used now. Filename is already
 # architecture-suffixed (jampgame${Architecture}...), so building for a different arch and
 # installing again just adds that arch's file next to the others rather than overwriting them.
+# GalaxyRP fix: [packaging] RUNTIME and LIBRARY each need their OWN "DESTINATION" -- in CMake's
+# install(TARGETS) syntax, a bare "RUNTIME LIBRARY DESTINATION x" only attaches DESTINATION to the
+# type keyword immediately before it (LIBRARY), leaving RUNTIME (the .dll on Windows) with no
+# destination of its own, silently falling back to the default "bin" install folder. That's why
+# this module worked correctly here on Linux (shared libs are LIBRARY artifacts) but the DLL kept
+# landing in install-x64/bin instead of GalaxyRP on Windows (DLLs are RUNTIME artifacts there).
 install(TARGETS ${MPGame}
-	RUNTIME
-	LIBRARY
-	DESTINATION "${JKAInstallDir}/GalaxyRP"
+	RUNTIME DESTINATION "${JKAInstallDir}/GalaxyRP"
+	LIBRARY DESTINATION "${JKAInstallDir}/GalaxyRP"
 	COMPONENT ${JKAMPCoreComponent})
 
 set_target_properties(${MPGame} PROPERTIES COMPILE_DEFINITIONS "${MPGameDefines}")
