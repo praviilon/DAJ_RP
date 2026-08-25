@@ -1,4 +1,6 @@
-# Galaxy RP Mod
+# Galaxy RP Mod - Dark Angels Fork
+
+The Dark Angels fork modernises the Galaxy RP mod, making it natively playable on the modern TaystJK engine, utilising the Rend2 or Vulkan renderers. It also introduces a 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
@@ -16,8 +18,7 @@ This mod will be geared towards the RP community mainly. It will have features t
 </div>
 
 # Information
-- Mod releases and download [here](https://github.com/alexnita3/GalaxyRP/releases)
-- Mod dcumentation and guides [here](https://www.galaxyrp.uk/)
+- Mod documentation and guides [here](https://www.galaxyrp.uk/)
 - Mod support **Discord** chat [here](https://discord.gg/aKnXckEFr5)
 
 # Features
@@ -57,11 +58,7 @@ The mod actually requires the only game-code files from the build project: `jamp
 * [Debugging guide](https://github.com/JACoders/OpenJK/wiki/Debugging)
 
 # Maintainers
-- Alex
-- JustJordyn
-- RepJunkie
-- TriForce
-- ZelZel
+- Pra Viilon
 
 # License
 **OpenJK** is licensed under GPLv2 as free software. You are free to use, modify and redistribute OpenJK following the terms in LICENSE.txt.
