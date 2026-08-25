@@ -41,6 +41,21 @@ add_custom_command(TARGET assets POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove -f "${TMPFILE}"
 )
 
+# GalaxyRP fix: [packaging] copy the server-side content (database/, duelarena/, textfiles/, the
+# .cfg/.html/.bat helper files) straight into the per-config build output
+# (${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>, e.g. build-x64/Release) as part of the plain
+# build, the same way the pk3 above already lands there via add_zip_command -- unlike assets/client
+# (zipped into the pk3), this content is just copied as loose files, not archived. jampgame/cgame/ui
+# already land in that same per-config folder automatically (that's the default MSVC/Ninja output
+# location), so the build output folder alone now already looks like a complete GalaxyRP folder
+# without requiring a separate `cmake --install` step -- install() below still assembles the full
+# JediAcademy/GalaxyRP tree for packaging/CI, this is additive, not a replacement for it.
+add_custom_command(TARGET assets POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_SOURCE_DIR}/assets/server" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
+	COMMENT "Copying GalaxyRP server-side content to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
+)
+
 # GalaxyRP fix: [packaging] assemble the actual distributable "GalaxyRP" mod folder -- the pk3
 # built above, plus the server-side content that ships alongside it (database/, duelarena/,
 # textfiles/, the .cfg/.html/.bat helper files) from assets/server. This is what previously had
