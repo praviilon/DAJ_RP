@@ -190,6 +190,11 @@ typedef struct listBoxDef_s {
 	int numColumns;
 	columnInfo_t columnInfo[MAX_LB_COLUMNS];
 	const char *doubleClick;
+	// GalaxyRP fix: [UI] added for the "rightClick" item keyword (see ItemParse_rightClick in
+	// ui_shared.c) -- lets a listbox item run a script on right-click instead of treating it the
+	// same as a left-click, matching the TaystJK engine's own bundled UI assets (e.g. the server
+	// browser's right-click context menu in joinserver.menu).
+	const char *rightClick;
 	qboolean notselectable;
 	//JLF MPMOVED
 	qboolean	scrollhidden;
