@@ -51,8 +51,16 @@ set /p option=[2] Type or paste an IP to connect:
 :: the "play locally" branch -- those are dedicated-server-only settings (server.cfg isn't even
 :: this mod's config filename, that's galaxyrp_server.cfg) that don't belong on a client launch
 :: and appear to have been copy-pasted here by mistake.
+:: GalaxyRP fix: [TaystJK] the TaystJK client (unlike the dedicated server) defaults fs_forcegame
+:: to "taystjk", which unconditionally overwrites fs_gamedir back to "taystjk" at the end of
+:: FS_Startup -- after fs_game GalaxyRP has already added GalaxyRP to the search path, but before
+:: the engine decides where to actually WRITE files. Game content still loads fine from GalaxyRP
+:: (it's on the search path), but screenshots, saved configs, and demos silently land in
+:: <fs_homepath>/taystjk/ instead of GalaxyRP/. Setting fs_forcegame explicitly to GalaxyRP here
+:: neutralizes that override (fs_forcegame ends up equal to fs_gamedir, so the override no-ops)
+:: and makes GalaxyRP the actual write target too.
 if "%option%" == "" (
-	start "" %jk_executable% +set fs_portable 1 +set fs_homepath . +set fs_game GalaxyRP
+	start "" %jk_executable% +set fs_portable 1 +set fs_homepath . +set fs_game GalaxyRP +set fs_forcegame GalaxyRP
 ) else (
-	start "" %jk_executable% +set fs_portable 1 +set fs_homepath . +set fs_game GalaxyRP +connect %option%
+	start "" %jk_executable% +set fs_portable 1 +set fs_homepath . +set fs_game GalaxyRP +set fs_forcegame GalaxyRP +connect %option%
 )
