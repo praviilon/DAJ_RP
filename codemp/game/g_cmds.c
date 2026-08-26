@@ -9053,6 +9053,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
 ^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
 ^3/duelpause: ^7Pauses/resumes the Duel Tournament.\n\
+^3/admmap <gametype number> <map name>: ^7Changes the server to a different map and gametype.\n\
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
 ^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
