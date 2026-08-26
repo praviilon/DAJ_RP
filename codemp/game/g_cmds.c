@@ -7617,11 +7617,12 @@ void zyk_load_common_settings(gentity_t *ent)
 void save_account(gentity_t *ent, qboolean save_char_file)
 {
 	// zyk: used to prevent account save in map change time or before loading account after changing map
-	// GalaxyRP fix: [Cvars] zyk_rp_mode was removed (the server is always considered to be in RP Mode
-	// now, which was its default value already), so the old "(zyk_rp_mode.integer != 1 || ...)" check
-	// simplifies to just checking whether saving while in RP Mode is allowed.
+	// GalaxyRP fix: [Cvars] zyk_rp_mode and zyk_allow_saving_in_rp_mode were both removed (the server is
+	// always considered to be in RP Mode, and saving during RP Mode was always allowed by default), so
+	// the old "(zyk_rp_mode.integer != 1 || zyk_allow_saving_in_rp_mode.integer == 1)" check simplifies
+	// away entirely -- any logged-in player (account mode or RPG mode) can now always be saved here.
 	if (level.voteExecuteTime < level.time && ent->client->pers.connected == CON_CONNECTED &&
-		(ent->client->sess.amrpgmode == 1 || (ent->client->sess.amrpgmode == 2 && zyk_allow_saving_in_rp_mode.integer == 1))
+		(ent->client->sess.amrpgmode == 1 || ent->client->sess.amrpgmode == 2)
 		)
 	{ // zyk: players can only save things if server is not at RP Mode or if it is allowed in config
 		if (save_char_file == qtrue)
