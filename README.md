@@ -1,6 +1,6 @@
 # Galaxy RP Mod - Dark Angels Fork
 
-The Dark Angels fork modernises the Galaxy RP mod, making it natively playable on the modern TaystJK engine, utilising the Rend2 or Vulkan renderers. It also introduces a 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
+Dark Angels fork modernises the Galaxy RP mod, making it natively playable on modern TaystJK engine, utilising its Rend2 or Vulkan renderers. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
