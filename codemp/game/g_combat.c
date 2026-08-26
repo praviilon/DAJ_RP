@@ -2759,7 +2759,11 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			trap->SendServerCommand(-1, va("chat \"^3Guardian Quest: ^7%s^7 receives ^31000 ^7credits for defeating the Guardian of Map\n\"", attacker->client->pers.netname));
 			level.guardian_quest = 0;
 			level.boss_battle_music_reset_timer = level.time + 1000;
-			level.guardian_quest_timer = level.time + zyk_guardian_quest_timer.integer;
+			// GalaxyRP fix: [Cvars] zyk_guardian_quest_timer was removed -- this whole block is already
+			// unreachable dead code (level.guardian_quest is only ever set nonzero inside
+			// Cmd_GuardianQuest_f, which short-circuits with an unconditional return before it can do
+			// so), so the old cvar default (0ms) is hardcoded here just to keep this compiling.
+			level.guardian_quest_timer = level.time;
 		}
 
 		if (attacker->client->pers.rpg_class == 2)

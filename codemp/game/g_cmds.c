@@ -7617,8 +7617,11 @@ void zyk_load_common_settings(gentity_t *ent)
 void save_account(gentity_t *ent, qboolean save_char_file)
 {
 	// zyk: used to prevent account save in map change time or before loading account after changing map
-	if (level.voteExecuteTime < level.time && ent->client->pers.connected == CON_CONNECTED && 
-		(ent->client->sess.amrpgmode == 1 || (ent->client->sess.amrpgmode == 2 && (zyk_rp_mode.integer != 1 || zyk_allow_saving_in_rp_mode.integer == 1)))
+	// GalaxyRP fix: [Cvars] zyk_rp_mode was removed (the server is always considered to be in RP Mode
+	// now, which was its default value already), so the old "(zyk_rp_mode.integer != 1 || ...)" check
+	// simplifies to just checking whether saving while in RP Mode is allowed.
+	if (level.voteExecuteTime < level.time && ent->client->pers.connected == CON_CONNECTED &&
+		(ent->client->sess.amrpgmode == 1 || (ent->client->sess.amrpgmode == 2 && zyk_allow_saving_in_rp_mode.integer == 1))
 		)
 	{ // zyk: players can only save things if server is not at RP Mode or if it is allowed in config
 		if (save_char_file == qtrue)
@@ -8625,7 +8628,11 @@ void choose_new_player(gentity_t *next_player)
 			}
 		}
 
-		next_player->client->pers.quest_afk_timer = level.time + zyk_quest_afk_timer.integer;
+		// GalaxyRP fix: [Cvars] zyk_quest_afk_timer was removed along with the rest of the general
+		// quest system (see the early return in quest_get_new_player) -- this function is unreachable
+		// dead code now, kept only so its historical logic still compiles; the old cvar default
+		// (300000ms) is hardcoded here since it can no longer be configured.
+		next_player->client->pers.quest_afk_timer = level.time + 300000;
 		next_player->client->pers.can_play_quest = 1;
 
 		do_scale(next_player, 100);
@@ -8642,11 +8649,14 @@ void quest_get_new_player(gentity_t *ent)
 
 	ent->client->pers.can_play_quest = 0;
 
-	if (zyk_allow_quests.integer != 1)
-		return;
-
-	if (zyk_rp_mode.integer == 1)
-		return;
+	// GalaxyRP fix: [Quests] the general (non-Guardian/Bounty) quest system is unused -- GalaxyRP's
+	// current gameplay is admin-driven RP and manual leveling rather than automated quests, and this
+	// system was already unreachable in practice by default (zyk_allow_quests defaulted to 0, and
+	// zyk_rp_mode defaulted to 1, which independently also blocked it). Both cvars have been removed;
+	// this short-circuit keeps this function's behavior identical to what every server already got
+	// under those defaults, matching the existing dead-code convention used for the Guardian/Bounty
+	// Quest commands elsewhere in this file.
+	return;
 
 	if (level.gametype != GT_FFA)
 	{ // zyk: quests can only be played at FFA gametype
@@ -11140,96 +11150,11 @@ void Cmd_BountyQuest_f( gentity_t *ent ) {
 	}
 }
 
-/*
-==================
-Cmd_PlayerMode_f
-==================
-*/
-void Cmd_PlayerMode_f( gentity_t *ent ) {
-	// zyk: cannot change mode if player is in Duel Tournament or Sniper Battle
-	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot change account mode while in a Duel Tournament\n\"");
-		return;
-	}
-
-	if (level.sniper_mode > 0 && level.sniper_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot change account mode while in a Sniper Battle\n\"");
-		return;
-	}
-
-	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot change account mode while in a Melee Battle\n\"");
-		return;
-	}
-
-	if (level.rpg_lms_mode > 0 && level.rpg_lms_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot change account mode while in a RPG LMS Battle\n\"");
-		return;
-	}
-
-	if (ent->client->sess.amrpgmode == 2)
-	{
-		ent->client->sess.amrpgmode = 1;
-	}
-	else if (zyk_allow_rpg_mode.integer > 0)
-	{
-		ent->client->sess.amrpgmode = 2;
-
-		// zyk: removing the /give stuff, which is not allowed to RPG players
-		ent->client->pers.player_statuses &= ~(1 << 12);
-		ent->client->pers.player_statuses &= ~(1 << 13);
-	}
-
-	save_account(ent, qfalse);
-
-	if (ent->client->sess.amrpgmode == 1)
-	{
-		ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
-
-		// zyk: setting default max hp and shield
-		ent->client->ps.stats[STAT_MAX_HEALTH] = 100;
-
-		if (ent->health > 100)
-			ent->health = 100;
-
-		if (ent->client->ps.stats[STAT_ARMOR] > 100)
-			ent->client->ps.stats[STAT_ARMOR] = 100;
-
-		// zyk: reset the force powers of this player
-		WP_InitForcePowers(ent);
-
-		if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0 &&
-			level.gametype != GT_JEDIMASTER && level.gametype != GT_SIEGE
-			)
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
-
-		if (level.gametype != GT_JEDIMASTER && level.gametype != GT_SIEGE)
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
-
-		zyk_load_common_settings(ent);
-
-		if (level.bounty_quest_choose_target == qfalse && level.bounty_quest_target_id == ent->s.number)
-		{ // zyk: if this player was the target, remove it so the bounty quest can get a new target
-			level.bounty_quest_choose_target = qtrue;
-			level.bounty_quest_target_id++;
-		}
-
-		trap->SendServerCommand( ent-g_entities, "print \"^7You are now in ^2Admin-Only mode^7.\n\"" );
-	}
-	else
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"^7You are now in ^2RPG mode^7.\n\"" );
-	}
-
-	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR && ent->client->sess.amrpgmode == 2)
-	{ // zyk: this command must kill the player if he is not in spectator mode to prevent exploits
-		G_Kill(ent);
-	}
-}
+// GalaxyRP fix: [Cvars] Cmd_PlayerMode_f (which read zyk_allow_rpg_mode, now removed) used to live
+// here. It was already fully orphaned before this change -- not registered in the commands[] dispatch
+// table, not commented out there either, and not prototyped or called from anywhere else in the
+// codebase -- so it has been deleted outright rather than short-circuited, per the same convention
+// used for other confirmed-unreachable code in this file.
 
 void zyk_spawn_race_line(int x, int y, int z, int yaw)
 {
@@ -13422,10 +13347,9 @@ void increase_level(gentity_t* ent, qboolean admin_rp_mode, int number_of_levels
 
 	strcpy(message, "");
 
-	if (admin_rp_mode == qfalse && zyk_rp_mode.integer == 1)
-	{ // zyk: in RP Mode, only admins can give levels to RPG players
-		return;
-	}
+	// GalaxyRP fix: [Cvars] this used to also check "admin_rp_mode == qfalse && zyk_rp_mode.integer == 1"
+	// here, but every call site in the codebase always passes admin_rp_mode = qtrue, so that check could
+	// never actually trigger even before zyk_rp_mode was removed -- it was already dead code.
 
 	for (int i = 1; i <= number_of_levels; i++) {
 		if (ent->client->pers.level < zyk_rpg_max_level.integer)
@@ -13490,11 +13414,9 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (zyk_rp_mode.integer != 1)
-	{
-		trap->SendServerCommand( ent-g_entities, va("print \"The server is not at RP Mode\n\"") );
-		return;
-	}
+	// GalaxyRP fix: [Cvars] this used to also require zyk_rp_mode.integer == 1 here ("The server is not
+	// at RP Mode"), but the server was always meant to be considered in RP Mode (that cvar's default),
+	// and it has been removed -- so leveling up is unconditionally allowed to admins with ADM_LEVELUP now.
 
 	if (g_entities[client_id].client->pers.level + number_of_levels > zyk_rpg_max_level.integer) {
 		int max_possible_value = zyk_rpg_max_level.integer - g_entities[client_id].client->pers.level;
@@ -13551,10 +13473,9 @@ void decrease_level(gentity_t* ent, qboolean admin_rp_mode, int number_of_levels
 
 	strcpy(message, "");
 
-	if (admin_rp_mode == qfalse && zyk_rp_mode.integer == 1)
-	{ // zyk: in RP Mode, only admins can give levels to RPG players
-		return;
-	}
+	// GalaxyRP fix: [Cvars] this used to also check "admin_rp_mode == qfalse && zyk_rp_mode.integer == 1"
+	// here, but every call site in the codebase always passes admin_rp_mode = qtrue, so that check could
+	// never actually trigger even before zyk_rp_mode was removed -- it was already dead code.
 
 	int final_level = ent->client->pers.level - number_of_levels;
 
@@ -13628,11 +13549,9 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 		return;
 	}
 
-	if (zyk_rp_mode.integer != 1)
-	{
-		trap->SendServerCommand(ent - g_entities, va("print \"The server is not at RP Mode\n\""));
-		return;
-	}
+	// GalaxyRP fix: [Cvars] this used to also require zyk_rp_mode.integer == 1 here ("The server is not
+	// at RP Mode"), but the server was always meant to be considered in RP Mode (that cvar's default),
+	// and it has been removed -- so leveling down is unconditionally allowed to admins with ADM_LEVELUP now.
 
 	if (g_entities[client_id].client->pers.level - number_of_levels < 1) {
 		int min_possible_value = g_entities[client_id].client->pers.level - 1;

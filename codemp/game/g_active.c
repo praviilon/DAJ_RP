@@ -1745,14 +1745,11 @@ void G_CheckClientIdle( gentity_t *ent, usercmd_t *ucmd )
 			ent->client->idleTime = level.time;
 		}
 
-		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.can_play_quest == 1 && 
-			(actionPressed || ucmd->forwardmove || ucmd->rightmove || ucmd->upmove ||
-			!G_StandingAnim(ent->client->ps.legsAnim) || (ent->client->ps.weaponstate != WEAPON_READY && ent->client->ps.weapon != WP_SABER) || 
-			(ent->client->ps.weaponTime > 0 && ent->client->ps.weapon == WP_SABER) || 
-			 ent->client->ps.weaponstate == WEAPON_CHARGING || ent->client->ps.weaponstate == WEAPON_CHARGING_ALT))
-		{ // zyk: in these situations, player in rpg is no longer afk
-			ent->client->pers.quest_afk_timer = level.time + zyk_quest_afk_timer.integer;
-		}
+		// GalaxyRP fix: [Cvars] this used to refresh pers.quest_afk_timer (via zyk_quest_afk_timer,
+		// now removed) whenever a player in the general quest system was active. That system is
+		// entirely disabled now (see the early return in quest_get_new_player) and can_play_quest can
+		// no longer become 1 anywhere in the codebase, so this block was dead in practice and has been
+		// removed.
 
 		if (brokeOut &&
 			(ent->client->ps.weaponstate == WEAPON_CHARGING || ent->client->ps.weaponstate == WEAPON_CHARGING_ALT))
