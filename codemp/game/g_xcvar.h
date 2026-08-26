@@ -358,6 +358,7 @@ XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH,		
 
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_pluginRequired,					"1",	RP_CVU_pluginRequired,	CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
+XCVAR_DEF( rp_loginRequired,					"0",	NULL,					CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( rp_downed_timer,						"30",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_downed_invulnerability_timer,		"10",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_allow_passive_regen,				"1",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)

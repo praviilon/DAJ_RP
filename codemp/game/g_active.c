@@ -876,6 +876,23 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 	client = ent->client;
 	client->timeResidual += msec;
 
+	// GalaxyRP: [rp_loginRequired] When enabled, players who are not logged into an account must
+	// stay in Spectator mode -- this catches both a freshly connected player who never logged in
+	// (sess.loggedin defaults to qfalse) and a player who /logout's while already playing, without
+	// needing a dedicated hook in Cmd_LogoutAccount_f, since this runs on every think for every
+	// non-spectator client. Adapted from the New Zyk mod's zyk_force_account_login (checked once
+	// per server frame in G_RunFrame there); here it's checked once per client think instead, which
+	// is this codebase's closest equivalent per-player periodic tick. Bots/NPCs are exempt since
+	// they never log into an account. This stacks safely with rp_pluginRequired: each cvar's
+	// enforcement is independent, so a player must satisfy both requirements (plugin present AND
+	// logged in) to stay off Spectator -- whichever one they fail keeps forcing them back.
+	if (rp_loginRequired.integer && !ent->NPC && !(ent->r.svFlags & SVF_BOT) &&
+		!client->sess.loggedin && client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		SetTeam(ent, "spectator");
+		return;
+	}
+
 	if (client->sess.amrpgmode == 2 && client->pers.unique_skill_duration < level.time)
 	{ // zyk: Unique Ability run out. Remove the flags
 		if (client->pers.player_statuses & (1 << 21))
