@@ -77,7 +77,11 @@ typedef enum {
 	ADM_SCALE,
 	ADM_PLAYERS,
 	ADM_DUELARENA,
-	ADM_CUSTOMQUEST,
+	// GalaxyRP fix: [Admin] this slot used to be ADM_CUSTOMQUEST, a leftover bit for a command
+	// that was removed from the mod. Repurposed for the /admmap map-change command (bit value
+	// stays 32768 -- 1 << 15 -- so existing accounts/configs that already granted this bit keep
+	// working, and the default admin account's full-permission bitmask already covers it).
+	ADM_CHANGEMAP,
 	ADM_CREATEITEM,
 	ADM_GOD,
 	ADM_LEVELUP,

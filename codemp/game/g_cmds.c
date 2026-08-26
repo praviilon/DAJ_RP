@@ -605,7 +605,7 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Scale",					ADM_SCALE				},
 	{ "Players",				ADM_PLAYERS				},
 	{ "Duel Arena",				ADM_DUELARENA			},
-	{ "Placeholder",			ADM_CUSTOMQUEST			},
+	{ "Change Map",				ADM_CHANGEMAP			},
 	{ "Create Item",			ADM_CREATEITEM			},
 	{ "God Mode",				ADM_GOD					},
 	{ "Level Give",				ADM_LEVELUP				},
@@ -12865,9 +12865,9 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/duelarena ^7to set or unset the Duel Tournament arena in this map. The arena is saved automatically. Also, use ^3/duelpause ^7to pause/resume the tournament\n\n\"");
 		}
-		else if (command_number == ADM_CUSTOMQUEST)
+		else if (command_number == ADM_CHANGEMAP)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nPlaceholder\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/admmap <gametype number> <map name> ^7to change the server to a different map and gametype\n\n\"");
 		}
 		else if (command_number == ADM_CREATEITEM)
 		{
@@ -13822,6 +13822,95 @@ void Cmd_AdmKick_f( gentity_t *ent ) {
 	}
 
 	trap->SendConsoleCommand( EXEC_APPEND, va( "kick %d\n", client_id) );
+}
+
+/*
+==================
+Cmd_AdmMap_f
+
+GalaxyRP fix: [Admin] new admin command, adapted from JAPro's "ammap" command (bundled with the
+TaystJK engine this mod now targets -- see https://github.com/taysta/TaystJK). Renamed "ammap" to
+"admmap" to match this mod's existing "adm*" admin command naming (admkick, adminup, etc). JAPro's
+version gates the command on its own two-rank, server-config-driven admin system
+(G_AdminAllowed(..., JAPRO_ACCOUNTFLAG_A_CHANGEMAP, ...)); GalaxyRP has no such ranks, so that
+check is replaced with this mod's per-account admin bit system (check_admin_command(ent,
+ADM_CHANGEMAP, ...)), using the previously-unused "Placeholder" bit (32768) freed up by a removed
+command. The gametype bound was also switched from JAPro's hardcoded '0'-'8' char check to this
+mod's own GT_MAX_GAME_TYPE, since the two projects' gametype lists don't necessarily match, and a
+message is now sent back to the admin when the requested map isn't found instead of silently doing
+nothing.
+==================
+*/
+void Cmd_AdmMap_f( gentity_t *ent ) {
+	char	gametype[8];
+	int		gtype = 0;
+	char	mapname[MAX_MAPNAMELENGTH];
+
+	if (!check_admin_command(ent, ADM_CHANGEMAP, qtrue))
+	{
+		return;
+	}
+
+	if ( trap->Argc() != 3 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: /admmap <gametype number> <map name>.\n\"" );
+		return;
+	}
+
+	trap->Argv( 1, gametype, sizeof( gametype ) );
+	trap->Argv( 2, mapname, sizeof( mapname ) );
+
+	if (strchr(mapname, ';') || strchr(mapname, '\r') || strchr(mapname, '\n'))
+	{ // zyk: block console command injection through the map name argument
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid map name.\n\"" );
+		return;
+	}
+
+	gtype = atoi(gametype);
+
+	if (gtype < 0 || gtype >= GT_MAX_GAME_TYPE)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Invalid gametype. Must be between 0 and %d.\n\"", GT_MAX_GAME_TYPE - 1) );
+		return;
+	}
+
+	{ // zyk: make sure the requested map actually exists before changing to it
+		char				unsortedMaps[4096];
+		char*				possibleMapName;
+		int					numMaps;
+		const unsigned int	MAX_MAPS = 512;
+		qboolean			found = qfalse;
+
+		numMaps = trap->FS_GetFileList( "maps", ".bsp", unsortedMaps, sizeof( unsortedMaps ) );
+		if (numMaps) {
+			int len, i;
+			if (numMaps > MAX_MAPS)
+				numMaps = MAX_MAPS;
+			possibleMapName = unsortedMaps;
+			for (i = 0; i < numMaps; i++) {
+				len = strlen(possibleMapName);
+				if (!Q_stricmp(possibleMapName + len - 4, ".bsp"))
+					possibleMapName[len-4] = '\0';
+				if (!Q_stricmp(mapname, possibleMapName)) {
+					found = qtrue;
+					break;
+				}
+				possibleMapName += len + 1;
+			}
+		}
+
+		if (!found)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Map \\\"%s\\\" not found.\n\"", mapname) );
+			return;
+		}
+	}
+
+	trap->SendServerCommand( -1, va("print \"^3Map change triggered by ^7%s\n\"", ent->client->pers.netname) );
+	G_LogPrintf( "Map change triggered by ^7%s\n", ent->client->pers.netname );
+
+	trap->SendConsoleCommand( EXEC_APPEND, va("g_gametype %i\n", gtype) );
+	trap->SendConsoleCommand( EXEC_APPEND, va("map %s\n", mapname) );
 }
 
 /*
@@ -16648,6 +16737,7 @@ command_t commands[] = {
 	{ "admindown",			Cmd_AdminDown_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "adminlist",			Cmd_AdminList_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "adminup",			Cmd_AdminUp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "admmap",				Cmd_AdmMap_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "anim",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "allyadd",			Cmd_AllyAdd_f,				CMD_NOINTERMISSION },
 	{ "allychat",			Cmd_AllyChat_f,				CMD_NOINTERMISSION },
