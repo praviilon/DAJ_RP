@@ -13866,6 +13866,15 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string (e.g. "dfd"
+	// would parse as gametype 0 / FFA instead of being rejected), so require the argument to
+	// actually be an integer first using this file's existing StringIsInteger() helper.
+	if (!StringIsInteger(gametype))
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Invalid gametype. Must be a number between 0 and %d.\n\"", GT_MAX_GAME_TYPE - 1) );
+		return;
+	}
+
 	gtype = atoi(gametype);
 
 	if (gtype < 0 || gtype >= GT_MAX_GAME_TYPE)
@@ -13901,7 +13910,14 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 
 		if (!found)
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Map \\\"%s\\\" not found.\n\"", mapname) );
+			// GalaxyRP fix: [Admin] this engine's console tokenizer (Cmd_TokenizeString2 in
+			// cmd.cpp) does not support backslash-escaped quotes inside a quoted string -- a
+			// literal \" here isn't an escaped quote, it's a backslash followed by the quote
+			// that closes the string early, cutting the printed message down to "Map \" and
+			// dropping everything after it. Use single quotes around the map name instead
+			// (same convention already used elsewhere in this file, e.g. the duel team
+			// validation message above) so the double-quoted print string stays intact.
+			trap->SendServerCommand( ent-g_entities, va("print \"Map '%s' not found.\n\"", mapname) );
 			return;
 		}
 	}
