@@ -365,18 +365,24 @@ else()
 endif()
 
 if(UseInternalZlib)
+  # GalaxyRP fix: [libs] bumped bundled zlib 1.2.8 -> 1.3.1, matching TaystJK. Our old 1.2.8
+  # predates the fix for CVE-2018-25032 (a deflate() memory-corruption bug under Z_FIXED).
   add_subdirectory(lib/zlib)
 else()
   find_package(ZLIB REQUIRED)
 endif()
 
 if(UseInternalPNG)
+  # GalaxyRP fix: [libs] bumped bundled libpng 1.6.16 -> 1.6.53, matching TaystJK. Same 1.6
+  # branch (API/ABI-compatible), just ~37 point releases of bug and security fixes we were
+  # missing.
   add_subdirectory(lib/libpng)
 else()
   find_package(PNG REQUIRED)
 endif()
 
-# Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR})
+# Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR}). Bundled alongside zlib's
+# release above; see lib/minizip/CMakeLists.txt for what our copy changes vs. stock minizip.
 add_subdirectory(lib/minizip)
 
 # Add projects
