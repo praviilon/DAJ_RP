@@ -3435,6 +3435,16 @@ void ClientSpawn(gentity_t *ent) {
 				ent->client->ps.fd.saberAnimLevelBase = ent->client->saberCycleQueue = ent->client->ps.fd.saberAnimLevel;
 			}
 		}
+
+		// GalaxyRP fix: [Saber] this block is a second, independent place (besides update_saber()
+		// in g_cmds.c) where G_SetSaber() can end up correcting/rejecting a saber -- e.g. a UI
+		// Apply that picked an invalid two-handed combo, only detected here on the player's next
+		// spawn/kill. Without this push the client's own local saber1/saber2 cvars (and thus its
+		// console echo and the saber-selection UI) never learned about the correction, same root
+		// cause as CG_SaberUpdate_f in cg_servercmds.c was added for. Scoped inside changedSaber
+		// (unlike update_saber()'s unconditional send) because ClientSpawn runs on every respawn,
+		// not just on an explicit player action -- nothing needs telling when nothing changed.
+		trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", ent->client->pers.saber1, ent->client->pers.saber2));
 	}
 
 	if (client->ps.fd.forceDoInit)
