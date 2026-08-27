@@ -2850,7 +2850,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	if (rp_pluginRequired.integer && !client->pers.clientPlugin)
 	{
 		char	pluginVersion[MAX_INFO_VALUE];
-		char	clientEternal[MAX_INFO_VALUE];
 		int		allowDownload = trap->Cvar_VariableIntegerValue("sv_allowDownload");
 
 		// Force to spectator mode
@@ -2862,38 +2861,39 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 
 		// Get info
 		Q_strncpyz(pluginVersion, Info_ValueForKey(userinfo, "rpmod_client"), sizeof(pluginVersion));
-		Q_strncpyz(clientEternal, Info_ValueForKey(userinfo, "cjp_client"), sizeof(clientEternal));
 
-		// Check for EternalJK2
-		if (!strcmp(clientEternal, "1.4JAPRO")) 
+		// GalaxyRP fix: [TaystJK] dropped the EternalJK/JAPro ("cjp_client" == "1.4JAPRO") detection
+		// and its "switch to OpenJK" warning -- this mod now runs natively on TaystJK (EternalJK's
+		// modern successor), so telling a player to install EternalJK-era OpenJK no longer applies.
+		// The real client-plugin presence/version check below (rpmod_client vs JK_VERSION) is
+		// unrelated to that and is kept as-is.
+
+		// Show center print message
+		if (!VALIDSTRINGCVAR(pluginVersion))
 		{
-			trap->SendServerCommand(clientNum, "cp \"You are using ^1EternalJK\nSome features may be ^3disabled^7\nPlease use OpenJK ^5https://builds.openjk.org\"");
-			trap->SendServerCommand(clientNum, "print \"You are running in ^3Server Side^7 mode only due ^1EternalJK^7 was detected\n\"");
-			G_LogPrintf("ClientPlugin: Player does not have any plugin (Using EternalJK)\n");
+			trap->SendServerCommand(clientNum, va("cp \"Please download\n^5%s^7 client plugin\nCheck the console or %s\"", JK_VERSION, (allowDownload ? "enable downloads in main menu" : "download from\n^2" JK_URL)));
+			// GalaxyRP fix: [Plugin] mirror the center print message to the console too (the
+			// EternalJK branch used to be the only place that did this) so the warning is still
+			// visible after the on-screen popup fades.
+			trap->SendServerCommand(clientNum, va("print \"^3You do not have the required client plugin installed. The server requires ^5%s^7.\n\"", JK_VERSION));
+			G_LogPrintf("ClientPlugin: Player does not have any plugin\n");
 		}
 		else
 		{
-			// Show center print message
-			if (!VALIDSTRINGCVAR(pluginVersion))
-			{
-				trap->SendServerCommand(clientNum, va("cp \"Please download\n^5%s^7 client plugin\nCheck the console or %s\"", JK_VERSION, (allowDownload ? "enable downloads in main menu" : "download from\n^2" JK_URL)));
-				G_LogPrintf("ClientPlugin: Player does not have any plugin\n");
-			}
-			else
-			{
-				trap->SendServerCommand(clientNum, va("cp \"Your client plugin is\n^3%s\nThe server version is ^5%s^7\nCheck the console or %s\"", pluginVersion, JK_VERSION, (allowDownload ? "enable downloads in main menu" : "download from\n^2" JK_URL)));
-				G_LogPrintf("ClientPlugin: Player is using '%s' instead '%s'\n", pluginVersion, JK_VERSION);
-			}
+			trap->SendServerCommand(clientNum, va("cp \"Your client plugin is\n^3%s\nThe server version is ^5%s^7\nCheck the console or %s\"", pluginVersion, JK_VERSION, (allowDownload ? "enable downloads in main menu" : "download from\n^2" JK_URL)));
+			// GalaxyRP fix: [Plugin] mirror the center print message to the console too (see above).
+			trap->SendServerCommand(clientNum, va("print \"^3Your client plugin is ^7%s^3, but the server requires ^5%s^7.\n\"", pluginVersion, JK_VERSION));
+			G_LogPrintf("ClientPlugin: Player is using '%s' instead '%s'\n", pluginVersion, JK_VERSION);
+		}
 
-			// Show console print message
-			if (allowDownload)
-			{
-				trap->SendServerCommand(clientNum, va("print \"Update your client plugin typing ^2/cl_allowdownload 1^7 in the console and reconnect\n\""));
-			}
-			else
-			{
-				trap->SendServerCommand(clientNum, va("print \"Download ^5%s^7 client plugin from ^2%s\n\"", JK_VERSION, JK_URL));
-			}
+		// Show console print message
+		if (allowDownload)
+		{
+			trap->SendServerCommand(clientNum, va("print \"Update your client plugin typing ^2/cl_allowdownload 1^7 in the console and reconnect\n\""));
+		}
+		else
+		{
+			trap->SendServerCommand(clientNum, va("print \"Download ^5%s^7 client plugin from ^2%s\n\"", JK_VERSION, JK_URL));
 		}
 	}
 
