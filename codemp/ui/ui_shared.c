@@ -2822,6 +2822,15 @@ void Item_ListBox_MouseEnter(itemDef_t *item, float x, float y)
 {
 	rectDef_t r;
 	listBoxDef_t *listPtr = item->typeData.listbox;
+	// GalaxyRP fix: [UI] listPtr->endPos is a scrollbar/draw-loop bookkeeping value, not a
+	// reliable "last valid index" -- when a feeder has fewer items than the listbox has visible
+	// rows for (e.g. only 5 saber hilts in a box tall enough for 6), the draw loop runs it off the
+	// end of count without ever hitting its "ran out of room" break, leaving endPos == count
+	// instead of count - 1. Clicking in that leftover empty row then clamped cursorPos to endPos
+	// (== count), one past the last real item, which downstream code (e.g. the saber-hilt "select"
+	// script handlers in ui_main.c) trusted as a valid index. Clamp against the feeder's own count
+	// instead, same as the keyboard up/down handling in Item_ListBox_HandleKey below already does.
+	int count = DC->feederCount(item->special);
 
 	item->window.flags &= ~(WINDOW_LB_LEFTARROW | WINDOW_LB_RIGHTARROW | WINDOW_LB_THUMB | WINDOW_LB_PGUP | WINDOW_LB_PGDN);
 	item->window.flags |= Item_ListBox_OverLB(item, x, y);
@@ -2840,9 +2849,9 @@ void Item_ListBox_MouseEnter(itemDef_t *item, float x, float y)
 				if (Rect_ContainsPoint(&r, x, y))
 				{
 					listPtr->cursorPos =  (int)((x - r.x) / listPtr->elementWidth)  + listPtr->startPos;
-					if (listPtr->cursorPos >= listPtr->endPos)
+					if (listPtr->cursorPos >= count)
 					{
-						listPtr->cursorPos = listPtr->endPos;
+						listPtr->cursorPos = (count > 0) ? count - 1 : 0;
 					}
 				}
 			}
@@ -2872,18 +2881,18 @@ void Item_ListBox_MouseEnter(itemDef_t *item, float x, float y)
 				column = (int)((x - r.x) / listPtr->elementWidth);
 
 				listPtr->cursorPos = (row * rowLength)+column  + listPtr->startPos;
-				if (listPtr->cursorPos >= listPtr->endPos)
+				if (listPtr->cursorPos >= count)
 				{
-					listPtr->cursorPos = listPtr->endPos;
+					listPtr->cursorPos = (count > 0) ? count - 1 : 0;
 				}
 			}
 			// single column
 			else
 			{
 				listPtr->cursorPos =  (int)((y - 2 - r.y) / listPtr->elementHeight)  + listPtr->startPos;
-				if (listPtr->cursorPos > listPtr->endPos)
+				if (listPtr->cursorPos >= count)
 				{
-                    listPtr->cursorPos = listPtr->endPos;
+					listPtr->cursorPos = (count > 0) ? count - 1 : 0;
 				}
 			}
 		}

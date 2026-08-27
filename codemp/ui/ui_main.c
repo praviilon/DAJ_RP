@@ -6908,7 +6908,13 @@ static void UI_RunMenuScript(char **args)
 				item = (itemDef_t *) Menu_FindItemByName((menuDef_t *) menu, "hiltbut_staves");
 				if (item)
 				{
-					if (saberSingleHiltInfo[item->cursorPos])
+					// GalaxyRP fix: [UI] this checked saberSingleHiltInfo[] (the single-saber hilt
+					// list) as its "is this a real entry" guard while reading the staff-saber hilt
+					// name from the separate saberStaffHiltInfo[] array -- the two lists can have
+					// different populated lengths, so an index valid in one could be NULL/unset in
+					// the other, letting a bogus staff hilt name through (or wrongly rejecting a
+					// valid one). Guard against the same array we actually read from.
+					if (saberStaffHiltInfo[item->cursorPos])
 					{
 						trap->Cvar_Set( "ui_saber", saberStaffHiltInfo[item->cursorPos] );
 					}
