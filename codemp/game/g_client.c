@@ -2169,6 +2169,16 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 			Q_strncpyz( client->pers.netname, oldname, sizeof( client->pers.netname ) );
 			Q_strncpyz( client->pers.netname_nocolor, oldname, sizeof( client->pers.netname_nocolor ) );
 			Q_StripColor( client->pers.netname_nocolor );
+
+			// GalaxyRP fix: [Name] this rejection reverts the SERVER's copy of the name back to
+			// oldname via trap->SetUserinfo above, but the client that just tried to rename is the
+			// one whose own local "name" cvar still holds the rejected new name -- nothing here
+			// told it to revert too, so its own console/display kept showing the rejected name
+			// while the server (and everyone else) had already reverted to oldname. Same root
+			// cause and same fix as CG_NameUpdate_f in cg_servercmds.c (used by set_netname() in
+			// g_cmds.c for the database-driven case); this is the other place a name change can be
+			// silently overridden -- the anti-spam cooldown on an organic, player-typed rename.
+			trap->SendServerCommand( clientNum, va( "supdatename \"%s\"\n", oldname ) );
 		}
 		else {
 			trap->SendServerCommand( -1, va( "print \"%s" S_COLOR_WHITE " %s %s\n\"", oldname, G_GetStringEdString( "MP_SVGAME", "PLRENAME" ), client->pers.netname ) );

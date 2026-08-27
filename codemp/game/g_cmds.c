@@ -1605,6 +1605,14 @@ void set_model(gentity_t* ent, char modelName[MAX_STRING_CHARS])
 	trap->SetUserinfo(clientNum, userinfo);
 	ClientUserinfoChanged(clientNum);
 
+	// GalaxyRP fix: [Model] trap->SetUserinfo above only updates the SERVER's cached copy of this
+	// client's userinfo -- "model" is a CVAR_USERINFO cvar whose real, authoritative value lives
+	// on the CLIENT, so nothing here told the client itself to update its own local cvar. See
+	// CG_ModelUpdate_f in cg_servercmds.c for the full explanation (same root cause, and same fix,
+	// as CG_SaberUpdate_f). Nothing between trap->SetUserinfo and here validates or rewrites the
+	// "model" key, so modelName is still the exact value the client needs pushed.
+	trap->SendServerCommand(clientNum, va("supdatemodel \"%s\"\n", modelName));
+
 	return;
 }
 
@@ -1622,6 +1630,15 @@ void set_netname(gentity_t* ent, char netName[MAX_STRING_CHARS])
 	Info_SetValueForKey(userinfo, "name", netName);
 	trap->SetUserinfo(clientNum, userinfo);
 	ClientUserinfoChanged(clientNum);
+
+	// GalaxyRP fix: [Name] same root cause as the "model" push above -- trap->SetUserinfo only
+	// updates the SERVER's cached copy, never the client's own local "name" cvar. See
+	// CG_NameUpdate_f in cg_servercmds.c. Pushing ent->client->pers.netname rather than the raw
+	// netName parameter, since ClientUserinfoChanged() above runs the name through
+	// ClientCleanName() (length/character/color sanitizing) before settling on the final value --
+	// pers.netname is that final, authoritative result, same principle as update_saber() pushing
+	// pers.saber1/2 rather than the raw requested saber.
+	trap->SendServerCommand(clientNum, va("supdatename \"%s\"\n", ent->client->pers.netname));
 
 	return;
 }

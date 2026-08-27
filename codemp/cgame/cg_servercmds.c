@@ -1627,6 +1627,40 @@ static qboolean dark_quest_collected_notes(int dark_quest_progress)
 	}
 }
 
+// GalaxyRP fix: [Model/Name] same root cause and same fix shape as CG_SaberUpdate_f below --
+// set_model()/set_netname() in g_cmds.c force a player's model/name from the database (on login,
+// character load, or character switch) by writing the SERVER's cached copy of that client's
+// userinfo via trap->SetUserinfo(), which never reaches the client's own local "model"/"name"
+// cvars. Those are the same cvars the in-game console echoes and that the customization menu
+// (UI_GetCharacterCvars/UI_UpdateCharacterCvars for model, ui_GetName/ui_SetName for name in
+// ui_main.c) seeds its "current selection" from and re-sends verbatim on Apply -- so a logged-in
+// player whose model/name was just restored from the database would still see (and could
+// silently re-send) their stale pre-login value the moment they opened that menu, undoing the
+// restore. A pre-existing "zykmod" server command already pushes several of these values to the
+// client, but only when the client's own plugin happens to request it (not guaranteed to happen
+// right away, or at all without the plugin), and even then it targets "ui_saber"/"ui_saber2"
+// rather than the raw "saber1"/"saber2"/"model"/"name" cvars for the saber case. These two
+// commands push the correction directly and unconditionally, the same way supdatesaber does.
+static void CG_ModelUpdate_f(void)
+{
+	if (trap->Cmd_Argc() < 2)
+	{
+		return;
+	}
+
+	trap->Cvar_Set("model", CG_Argv(1));
+}
+
+static void CG_NameUpdate_f(void)
+{
+	if (trap->Cmd_Argc() < 2)
+	{
+		return;
+	}
+
+	trap->Cvar_Set("name", CG_Argv(1));
+}
+
 // GalaxyRP fix: [Saber] the server can change a player's saber1/saber2 out from under them --
 // on login/character load (restoring the character's saved saber from the database) or by
 // silently rejecting/correcting an invalid combo typed at the /saber console command (e.g. two
@@ -1806,6 +1840,8 @@ static serverCommand_t	commands[] = {
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },
 	{ "spc",				CG_SiegeProfileMenu_f },
+	{ "supdatemodel",		CG_ModelUpdate_f },
+	{ "supdatename",		CG_NameUpdate_f },
 	{ "supdatesaber",		CG_SaberUpdate_f },
 	{ "sxd",				CG_ParseSiegeExtendedData },
 	{ "tchat",				CG_Chat_f },
