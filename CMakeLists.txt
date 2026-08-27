@@ -204,6 +204,12 @@ if(MSVC)
 	set(SharedDefines ${SharedDefines} "_SCL_SECURE_NO_WARNINGS")
 	set(SharedDefines ${SharedDefines} "_CRT_NONSTDC_NO_DEPRECATE")
 
+	# GalaxyRP fix: [TaystJK parity] /EHsc enables standard C++ exception unwind semantics --
+	# without it, MSVC emits C4530 ("C++ exception handler used, but unwind semantics are not
+	# enabled") for any code using try/catch or STL operations that can throw. TaystJK's own
+	# CMakeLists.txt sets this; DAJ_RP's did not.
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /EHsc")
+
 	# GalaxyRP fix: [TaystJK multi-arch] /arch:SSE2 is a no-op-with-warning on x64 (SSE2 is the x64
 	# baseline already) and is invalid on an ARM64 MSVC target -- scope it to 32-bit x86 only,
 	# matching TaystJK.
@@ -213,6 +219,13 @@ if(MSVC)
 	endif()
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+
+	# GalaxyRP fix: [TaystJK parity] Suppress warnings TaystJK's own build already suppresses:
+	# 4244 = 'conversion' conversion from 'type1' to 'type2', possible loss of data
+	# 4996 = 'function': was declared deprecated
+	# 4267 = 'var' : conversion from 'size_t' to 'type', possible loss of data
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4244 /wd4996 /wd4267")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4244 /wd4996 /wd4267")
 
 	# We don't try to control symbol visibility under MSVC.
 	set(OPENJK_VISIBILITY_FLAGS "")

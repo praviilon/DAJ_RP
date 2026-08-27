@@ -32,7 +32,11 @@ on:
 jobs:
   msvc:
     name: Windows ${{ matrix.arch }} ${{ matrix.build_type }}
-    runs-on: windows-2022
+    # GalaxyRP fix: [runner currency] windows-2022 only ever exercises the VS2022 toolset, even
+    # though CreateVisualStudioProjects.bat already supports the VS2026 generator. windows-2025
+    # (Windows Server 2025 + VS2026, GA in Actions since mid-2026) is what windows-latest now
+    # points to -- pin it explicitly so CI actually builds with the current toolset.
+    runs-on: windows-2025
     strategy:
       fail-fast: false
       matrix:
@@ -45,7 +49,7 @@ jobs:
             platform: x64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -73,7 +77,7 @@ jobs:
         shell: bash
         run: cmake --install . --config ${{ matrix.build_type }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}
           path: ${{ github.workspace }}/build/bin/JediAcademy/GalaxyRP
@@ -81,7 +85,10 @@ jobs:
 
   ubuntu:
     name: Ubuntu ${{ matrix.arch }} ${{ matrix.build_type }}
-    runs-on: ubuntu-22.04
+    # GalaxyRP fix: [runner currency] ubuntu-22.04 begins its GitHub Actions deprecation on
+    # 2026-09-17 and is fully unsupported by 2027-04-17 (actions/runner-images#14254). GitHub only
+    # maintains the latest two stable Ubuntu LTS images, so move to ubuntu-24.04 now.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -89,7 +96,7 @@ jobs:
         build_type: [Release]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -113,6 +120,15 @@ jobs:
           OPTIONS="-DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install"
           OPTIONS+=" -DBuildMPEngine=OFF -DBuildMPRdVanilla=OFF -DBuildMPDed=OFF"
           OPTIONS+=" -DBuildMPGame=ON -DBuildMPCGame=ON -DBuildMPUI=ON"
+          # GalaxyRP fix: [CI configure failure] the root CMakeLists.txt's find_package(JPEG/ZLIB/PNG
+          # REQUIRED) calls run unconditionally, even for this gamecode-only configure -- so the x86
+          # and arm64 cross-compiles (which have no matching -dev packages installed above) fail with
+          # "Could NOT find JPEG". Build from our own bundled/vendored sources instead of relying on
+          # find_package finding a system copy; verified locally (native x86_64 and i686 cross-build)
+          # and matches the failure seen in live CI run 33105699123 (arm64 and x86 jobs both failed
+          # with this exact error; x86_64 passed only because the native ubuntu-22.04 image happens to
+          # ship these -dev packages preinstalled).
+          OPTIONS+=" -DUseInternalZlib=ON -DUseInternalPNG=ON -DUseInternalJPEG=ON"
           if [ ${{ matrix.arch }} == "x86" ]; then
             OPTIONS+=" -DCMAKE_TOOLCHAIN_FILE=cmake/Toolchains/linux-i686.cmake"
           elif [ ${{ matrix.arch }} == "arm64" ]; then
@@ -130,7 +146,7 @@ jobs:
         shell: bash
         run: cmake --install .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}
           path: ${{ github.workspace }}/install/JediAcademy/GalaxyRP
@@ -138,7 +154,9 @@ jobs:
 
   macos:
     name: macOS ${{ matrix.arch }} ${{ matrix.build_type }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    # GalaxyRP fix: [runner currency] macos-15/macos-15-intel are one version behind the now-GA
+    # macos-26 ("Tahoe") images. Bump to keep pace with the latest two supported OS versions.
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-26-intel' }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,7 +164,7 @@ jobs:
         build_type: [Release]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -162,6 +180,11 @@ jobs:
           OPTIONS+=" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install"
           OPTIONS+=" -DBuildMPEngine=OFF -DBuildMPRdVanilla=OFF -DBuildMPDed=OFF"
           OPTIONS+=" -DBuildMPGame=ON -DBuildMPCGame=ON -DBuildMPUI=ON"
+          # GalaxyRP fix: [CI configure failure] macOS never installs libjpeg/libpng/zlib dev
+          # packages at all, so find_package(JPEG/ZLIB/PNG REQUIRED) in the root CMakeLists.txt
+          # always failed here too (confirmed in live CI run 33105699123, both macOS jobs failed).
+          # Build from our own bundled/vendored sources instead -- same fix as the ubuntu job.
+          OPTIONS+=" -DUseInternalZlib=ON -DUseInternalPNG=ON -DUseInternalJPEG=ON"
           cmake $GITHUB_WORKSPACE $OPTIONS
 
       - name: Build
@@ -174,7 +197,7 @@ jobs:
         shell: bash
         run: cmake --install .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}
           path: ${{ github.workspace }}/install/JediAcademy/GalaxyRP
