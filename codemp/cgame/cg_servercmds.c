@@ -1627,6 +1627,29 @@ static qboolean dark_quest_collected_notes(int dark_quest_progress)
 	}
 }
 
+// GalaxyRP fix: [Saber] the server can change a player's saber1/saber2 out from under them --
+// on login/character load (restoring the character's saved saber from the database) or by
+// silently rejecting/correcting an invalid combo typed at the /saber console command (e.g. two
+// two-handed sabers at once) -- via update_saber() in g_cmds.c on the server side. That function
+// already updates the SERVER's own cached copy of this client's userinfo, but "saber1"/"saber2"
+// are CVAR_USERINFO cvars whose real, authoritative value lives on the CLIENT: nothing tells the
+// client itself to update its own local cvars, so the in-game console still echoes the stale
+// value, and the saber-selection menu (which seeds its "current selection" from these same local
+// cvars, see UI_SaberInitPage/UI_SaberDoneMenu below) shows and re-sends the stale choice too,
+// making the UI appear stuck for a logged-in player. update_saber() now sends this command with
+// the final, authoritative saber1/saber2 strings any time it changes them, so cgame can push the
+// correction into the client's own local cvars directly.
+static void CG_SaberUpdate_f(void)
+{
+	if (trap->Cmd_Argc() < 3)
+	{
+		return;
+	}
+
+	trap->Cvar_Set("saber1", CG_Argv(1));
+	trap->Cvar_Set("saber2", CG_Argv(2));
+}
+
 static void CG_ZykChars(void)
 {
 	char arg[1024] = { 0 };
@@ -1783,6 +1806,7 @@ static serverCommand_t	commands[] = {
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },
 	{ "spc",				CG_SiegeProfileMenu_f },
+	{ "supdatesaber",		CG_SaberUpdate_f },
 	{ "sxd",				CG_ParseSiegeExtendedData },
 	{ "tchat",				CG_Chat_f },
 	{ "tinfo",				CG_ParseTeamInfo },

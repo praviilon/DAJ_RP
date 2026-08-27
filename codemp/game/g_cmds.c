@@ -14276,6 +14276,15 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 			}
 		}
 	}
+
+	// GalaxyRP fix: [Saber] push the final, authoritative saber1/saber2 down to the client's own
+	// local cvars -- see CG_SaberUpdate_f in cg_servercmds.c for why this is needed (in short:
+	// trap->SetUserinfo above only updates the SERVER's cached copy of this client's userinfo, it
+	// never tells the client itself, so its own console/UI kept showing whatever it last sent,
+	// including after a DB-driven login restore or a rejected/corrected invalid saber combo).
+	// Sent unconditionally (not just when changedSaber) so a no-op /saber call (already matching)
+	// or a login restore that leaves saber1/saber2 unchanged still keeps the client in sync.
+	trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", ent->client->pers.saber1, ent->client->pers.saber2));
 }
 
 /*

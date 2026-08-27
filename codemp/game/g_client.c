@@ -2820,6 +2820,49 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	if ( ent->ghoul2 && ent->client )
 		ent->client->renderInfo.lastG2 = NULL; //update the renderinfo bolts next update.
 
+	// GalaxyRP fix: [Account] moved this account/character DB reload here from the very end of
+	// ClientBegin (where it used to run *after* ClientSpawn() below already ran) so that
+	// pers.skill_levels[]/inventory/saber/model are loaded from the database *before* ClientSpawn
+	// grants starting weapons and equipment from them. On a map change (not a full reconnect) pers
+	// is wiped fresh for the new map, so previously the very first spawn always used blank/zeroed
+	// skill data -- the reload happened too late to help it, and only a manual /kill (which calls
+	// ClientSpawn a second time, by which point the reload had already completed) picked up the
+	// correct loadout. The original "server doesn't like loading the db while it's changing maps"
+	// concern this was worked around for doesn't appear to apply to the DB read itself (this exact
+	// SQLite call already ran unconditionally within ClientBegin before this fix, just later) --
+	// the explicit initialize_rpg_skills() call below is being restored for the same reason New
+	// Zyk mod's equivalent load_account() call in ClientBegin is immediately followed by its own
+	// initialize_rpg_skills() call there too, rather than relying solely on ClientSpawn's copy
+	// (which doesn't run at all for a player kept in Spectator by the checks just below).
+	if (ent->client->sess.amrpgmode > 0)
+	{
+		// zyk: if the target goes to spec or something, then the server must choose another target
+		if (level.bounty_quest_choose_target == qfalse && level.bounty_quest_target_id == (ent - g_entities))
+			level.bounty_quest_choose_target = qtrue;
+
+		// zyk: load account again
+		ent->client->sess.loggedin = qtrue;
+
+		sqlite3* db;
+		char* zErrMsg = 0;
+		int rc;
+		sqlite3_stmt* stmt = NULL;
+
+		rc = RP_DB_Open(&db);
+		if (rc != SQLITE_OK)
+		{
+			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
+			sqlite3_close(db);
+			return;
+		}
+
+		select_account_and_default_character_data(ent, ent->client->sess.filename, db, zErrMsg, rc, stmt);
+
+		sqlite3_close(db);
+
+		initialize_rpg_skills(ent);
+	}
+
 	if ( (level.gametype == GT_POWERDUEL && client->sess.sessionTeam != TEAM_SPECTATOR && client->sess.duelTeam == DUELTEAM_FREE) ||
 		level.load_entities_timer != 0)
 	{ // zyk: keep player as spectator if entities are not placed yet
@@ -2922,40 +2965,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	ent->client->pers.training_mode = qfalse;
 	ent->client->pers.saber_stored_damage = 0;
 	ent->client->pers.saber2_stored_damage = 0;
-
-	if (ent->client->sess.amrpgmode > 0)
-	{
-		// zyk: if the target goes to spec or something, then the server must choose another target
-		if (level.bounty_quest_choose_target == qfalse && level.bounty_quest_target_id == (ent - g_entities))
-			level.bounty_quest_choose_target = qtrue;
-
-		// zyk: load account again
-
-		//ent->client->sess.accountID = -1;
-		ent->client->sess.loggedin = qtrue;
-		//ent->client->sess.amrpgmode = 0;
-
-		//TODO: find a way to bring this back in (server doesn't like loading the db while it's changing maps)
-
-		sqlite3* db;
-		char* zErrMsg = 0;
-		int rc;
-		sqlite3_stmt* stmt = NULL;
-
-		rc = RP_DB_Open(&db);
-		if (rc != SQLITE_OK)
-		{
-			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
-			sqlite3_close(db);
-			return;
-		}
-
-		select_account_and_default_character_data(ent, ent->client->sess.filename, db, zErrMsg, rc, stmt);
-
-		sqlite3_close(db);
-
-		//initialize_rpg_skills(ent);
-	}
 }
 
 static qboolean AllForceDisabled(int force)
