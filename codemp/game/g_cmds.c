@@ -2856,6 +2856,40 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		strcpy(saber2Model, sqlite3_column_text(stmt, 19));
 		saber2Color = sqlite3_column_int(stmt, 20);
 
+		// GalaxyRP fix: [Account] apply the loaded account/character fields to ent->client, and mark
+		// the session logged in, here -- before update_saber() below -- instead of after it (which
+		// is where this block, and the sess.loggedin assignment, used to sit). update_saber() can
+		// trigger a database save via ClientUserinfoChanged() (see the "supdatesaber" fix above)
+		// whenever the saber it's asked to set differs from what pers.saber1/2 already holds, which
+		// is normally true on every login. That save is gated on sess.loggedin being true, and the
+		// row it writes to is chosen by ent->client->pers.CharID -- both of which used to only be
+		// set much further down, after update_saber() had already run and returned. loggedin being
+		// false there meant the save was always silently skipped -- harmless only by coincidence,
+		// since the data being "saved" was the same data just read from this very row a few lines
+		// above, so there was nothing new to persist. Had that save instead been allowed to fire
+		// with the old ordering, it would have written using whatever CharID/model-scale happened
+		// to already be sitting in pers/ps from before this login -- a real, silent write to the
+		// wrong character's row. Moving CharID/scale (and loggedin) ahead of update_saber() means
+		// any save it triggers always targets this row with this row's own data. set_netname() and
+		// set_model() below (unchanged, still after this block) each trigger their own save the
+		// same way; by the time set_model() runs last, every field involved -- CharID, scale,
+		// netname, saber1/2, model -- is already correct, so whatever transient state an earlier
+		// save in this sequence wrote is simply overwritten before the function returns.
+		ent->client->sess.accountID = accountID;
+		ent->client->pers.player_settings = player_settings;
+		ent->client->pers.bitvalue = adminLevel;
+		strcpy(ent->client->pers.password, password);
+		strcpy(ent->client->sess.filename, username);
+		ent->client->pers.CharID = charID;
+		ent->client->pers.credits = credits;
+		ent->client->pers.level = level;
+		do_scale(ent, modelScale);
+		strcpy(ent->client->sess.rpgchar, name);
+		ent->client->pers.skillpoints = skillpoints;
+		strcpy(ent->client->pers.description, description);
+
+		ent->client->sess.loggedin = qtrue;
+
 		// GalaxyRP fix: [gameplay] Same bug as select_player_character() above, plus this copy
 		// compared against "" instead of "none" -- saber2Model coming from the database is never
 		// really an empty string (the column's schema default is 'saber_1', and update_saber()
@@ -2887,23 +2921,10 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		sqlite3_finalize(stmt);
 	}
 
-	ent->client->sess.accountID = accountID;
-	ent->client->pers.player_settings = player_settings;
-	ent->client->pers.bitvalue = adminLevel;
-	strcpy(ent->client->pers.password, password);
-	strcpy(ent->client->sess.filename, username);
-	ent->client->pers.CharID = charID;
-	ent->client->pers.credits = credits;
-	ent->client->pers.level = level;
-	do_scale(ent, modelScale);
-	strcpy(ent->client->sess.rpgchar, name);
-	ent->client->pers.skillpoints = skillpoints;
-	strcpy(ent->client->pers.description, description);
 	set_netname(ent, netName);
 	set_model(ent, modelName);
 
 	ent->client->sess.amrpgmode = 2;
-	ent->client->sess.loggedin = qtrue;
 
 	return;
 }
