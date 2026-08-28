@@ -2420,9 +2420,20 @@ void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zEr
 	}
 	if (rc == SQLITE_ROW)
 	{
-		for (int i = 2; i < AMMO_MAX; i++) {
-			ent->client->ps.ammo[i] = sqlite3_column_int(stmt, i - 1);
-		}
+		// GalaxyRP fix: [gameplay] this used to be a contiguous loop (ps.ammo[i] = column(i - 1))
+		// that assumed the ammo_t enum maps 1:1 onto this table's 7 ammo columns. It doesn't --
+		// AMMO_EMPLACED sits between AMMO_ROCKETS and AMMO_THERMAL in the enum but the Weapons
+		// table has no AmmoEmplaced column at all (the save path already skips it), so every
+		// column from AmmoThermal onward was landing one enum slot early, and the final iteration
+		// (AMMO_DETPACK) read past the last real column. Read each column explicitly instead,
+		// mirroring the explicit list the save path uses.
+		ent->client->ps.ammo[AMMO_BLASTER] = sqlite3_column_int(stmt, 1);
+		ent->client->ps.ammo[AMMO_POWERCELL] = sqlite3_column_int(stmt, 2);
+		ent->client->ps.ammo[AMMO_METAL_BOLTS] = sqlite3_column_int(stmt, 3);
+		ent->client->ps.ammo[AMMO_ROCKETS] = sqlite3_column_int(stmt, 4);
+		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 5);
+		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 6);
+		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 7);
 
 		sqlite3_finalize(stmt);
 		return;
@@ -2957,10 +2968,25 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 16);
 		}
 
-		// GalaxyRP (Alex): [Database] Grab info from weapons table. (column 68 is CharID, no need to grab that)
-		for (int i = 2; i < AMMO_MAX; i++) {
-			ent->client->ps.ammo[i] = sqlite3_column_int(stmt, i + 71);
-		}
+		// GalaxyRP fix: [gameplay] this used to be a contiguous loop (ps.ammo[i] = column(i + 71))
+		// that assumed the ammo_t enum maps 1:1 onto the Weapons table's columns, and the "+71"
+		// base offset was stale (the comment above still says "column 68 is CharID" -- it's
+		// actually column 76 now). Both were wrong: (1) AMMO_EMPLACED sits between AMMO_ROCKETS
+		// and AMMO_THERMAL in the enum but has no column in Weapons at all (the save path already
+		// skips it), so a contiguous read can never line up past that gap; (2) Armor, Flamethrower,
+		// ShieldRegen and HealthRegen were added to Skills after this offset was written, shifting
+		// every column after them -- including all of Weapons -- eight places to the right. The net
+		// effect was this loop silently reading Skills.Flamethrower, Skills.ShieldRegen,
+		// Skills.HealthRegen and Weapons' own CharID column into ps.ammo instead of actual ammo
+		// counts. Read each Weapons ammo column explicitly instead, mirroring the explicit list the
+		// save path already uses -- verified against the live schema via a standalone harness.
+		ent->client->ps.ammo[AMMO_BLASTER] = sqlite3_column_int(stmt, 77);
+		ent->client->ps.ammo[AMMO_POWERCELL] = sqlite3_column_int(stmt, 78);
+		ent->client->ps.ammo[AMMO_METAL_BOLTS] = sqlite3_column_int(stmt, 79);
+		ent->client->ps.ammo[AMMO_ROCKETS] = sqlite3_column_int(stmt, 80);
+		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 81);
+		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 82);
+		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 83);
 
 		// GalaxyRP (Alex): [Database] Apply the modelname and net name.
 		set_netname(ent, displayName);
@@ -3194,10 +3220,20 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		for (int i = 0; i < NUM_OF_SKILLS; i++) {
 			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 22);
 		}
-		// GalaxyRP (Alex): [Database] Column 79 is a duplicate of CharID, no need to grab that.
-		for (int i = 2; i < AMMO_MAX; i++) {
-			ent->client->ps.ammo[i] = sqlite3_column_int(stmt, i + 78);
-		}
+		// GalaxyRP fix: [gameplay] same bug as select_player_character() above (this function's
+		// version of the loop used a "+78" base, with the comment claiming Weapons.CharID sits at
+		// column 79 -- it's actually column 82 now that this query also joins in Accounts). Same
+		// two causes: AMMO_EMPLACED has no Weapons column at all, and Skills gained four columns
+		// (Armor, Flamethrower, ShieldRegen, HealthRegen) after this offset was written. Read each
+		// Weapons ammo column explicitly instead, mirroring the explicit list the save path uses --
+		// verified against the live schema via a standalone harness.
+		ent->client->ps.ammo[AMMO_BLASTER] = sqlite3_column_int(stmt, 83);
+		ent->client->ps.ammo[AMMO_POWERCELL] = sqlite3_column_int(stmt, 84);
+		ent->client->ps.ammo[AMMO_METAL_BOLTS] = sqlite3_column_int(stmt, 85);
+		ent->client->ps.ammo[AMMO_ROCKETS] = sqlite3_column_int(stmt, 86);
+		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 87);
+		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 88);
+		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 89);
 
 		sqlite3_finalize(stmt);
 	}
