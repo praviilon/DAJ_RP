@@ -506,11 +506,17 @@ void print_table_horizontal_line(gentity_t *ent) {
 	return;
 }
 
-int get_max_spaces_right(char text[MAX_STRING_CHARS]) {
+// GalaxyRP fix: [cleanup] const for the same reason as print_row() below, which is this
+// function's only caller and needs to pass its own (now-const) text parameter through.
+int get_max_spaces_right(const char text[MAX_STRING_CHARS]) {
 	return 33 - strlen(text);
 }
 
-void print_row(gentity_t *ent, char text[MAX_STRING_CHARS]) {
+// GalaxyRP fix: [cleanup] both callers (below) pass a const char* -- anim_headers is itself
+// declared const, and animation_name is a const char* struct field -- which MSVC's C4090 flagged
+// as a const-qualifier mismatch against this parameter. This function only reads text (strlen via
+// strcat, never writes through it), so const is the correct, no-behavior-change fix.
+void print_row(gentity_t *ent, const char text[MAX_STRING_CHARS]) {
 	char emote_row[MAX_STRING_CHARS] = " ";
 
 	strcat(emote_row, "^9|| ^3");
@@ -528,7 +534,9 @@ void print_row(gentity_t *ent, char text[MAX_STRING_CHARS]) {
 	return;
 }
 
-void print_heading_text_row(gentity_t *ent, char header_text[MAX_STRING_CHARS]) {
+// GalaxyRP fix: [cleanup] const for the same reason as print_row() above -- this only reads
+// header_text, and its only caller (print_header() below) needs to pass it through as const.
+void print_heading_text_row(gentity_t *ent, const char header_text[MAX_STRING_CHARS]) {
 	//34 characters left for space and text
 	int length = strlen(header_text);
 
@@ -578,7 +586,8 @@ void print_heading_text_row(gentity_t *ent, char header_text[MAX_STRING_CHARS]) 
 	return;
 }
 
-void print_header(gentity_t *ent, char text[MAX_STRING_CHARS]) {
+// GalaxyRP fix: [cleanup] const for the same reason as print_row() above.
+void print_header(gentity_t *ent, const char text[MAX_STRING_CHARS]) {
 	print_table_horizontal_line(ent);
 	print_heading_text_row(ent, text);
 	print_table_horizontal_line(ent);
@@ -1567,8 +1576,8 @@ void Cmd_Helpup_f(gentity_t* ent) {
 }
 
 void Cmd_Getup_f(gentity_t* ent) {
-	char otherindex[MAX_TOKEN_CHARS];
-
+	// GalaxyRP fix: [cleanup] removed an unused 'char otherindex[MAX_TOKEN_CHARS]' local (never
+	// read anywhere in this function).
 	if (trap->Argc() < 1) {
 		trap->SendServerCommand(ent - g_entities, "print \"Usage: /getup\n\"");
 		return;
@@ -3283,7 +3292,25 @@ void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqli
 	}
 	sqlite3_finalize(stmt);
 
-	char create_new_character_query[900] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0');\
+	// GalaxyRP fix: [correctness] this buffer was sized at 900 bytes, but the two INSERT
+	// statements it initializes (Skills, then Weapons) actually need 1081 bytes including the
+	// terminating NUL -- confirmed by measuring the literal below. 900 predates the Armor,
+	// Flamethrower, ShieldRegen and HealthRegen columns that were later added to Skills (the same
+	// schema change behind the ammo-restore column-offset bug fixed earlier); the array size was
+	// never revisited when the column list grew to match. MSVC flagged this (C4045, "array bounds
+	// overflow") and silently truncates the initializer to fit -- with the buffer completely full
+	// of literal content and no room left for a NUL terminator. That buffer is then handed straight
+	// to run_db_query() -> sqlite3_exec(), which requires a NUL-terminated C string: without one,
+	// it reads past the end of this stack array until it happens to find a zero byte elsewhere on
+	// the stack, and executes whatever garbage text it finds appended to the truncated, syntactically
+	// broken SQL. In practice this means every /char new likely failed to insert that character's
+	// Skills and Weapons rows (a syntax error caught and logged by run_db_query(), not crashed on),
+	// leaving a Characters row with no matching Skills/Weapons rows -- which the INNER JOINs in
+	// select_player_character()/select_account_and_default_character_data() require, so the new
+	// character could never actually be loaded. Sized to 1100 (matching the same margin already
+	// used by the near-identical-size update_character_query[1100] elsewhere in this file) rather
+	// than the exact 1081 needed, so it isn't this fragile again the next time a column is added.
+	char create_new_character_query[1100] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0');\
 		INSERT INTO Weapons(AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('0', '0', '0', '0', '0', '0', '0');";
 
 	run_db_query(create_new_character_query, db, zErrMsg, rc, stmt);
@@ -3943,7 +3970,11 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 		return;
 	}
 
-	if (Distance(ent->client->ps.origin, &g_entities[player_id].client->ps.origin) > 1000) {
+	// GalaxyRP fix: [cleanup] dropped the stray & -- g_entities[player_id].client->ps.origin
+	// is already a vec3_t (decays to float*); &... instead produced a pointer-to-array
+	// (float(*)[3]), which MSVC flagged (C4047/C4024) as a type mismatch against Distance()'s
+	// const float* parameter. Numerically identical address either way, so purely cosmetic.
+	if (Distance(ent->client->ps.origin, g_entities[player_id].client->ps.origin) > 1000) {
 		trap->SendServerCommand(ent->s.number, "print \"You are too far away from that person.\n\"");
 		return;
 	}
@@ -9432,7 +9463,11 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 			}
 			else if (Q_stricmp( arg1, "commands" ) == 0)
 			{
-				trap->SendServerCommand(ent - g_entities, "print \"\n^2Commands\n\n\^3--------Account--------\n\
+				// GalaxyRP fix: [cleanup] dropped a stray backslash before the ^3 colour code below --
+				// "\^" isn't a real C escape sequence (MSVC C4129), and every compiler already just
+				// discards the backslash and keeps the literal ^3, so this is a no-op for the text
+				// actually produced -- just spelled correctly now.
+			trap->SendServerCommand(ent - g_entities, "print \"\n^2Commands\n\n^3--------Account--------\n\
 ^3/new <login> <password>: ^7Creates a new account.\n\
 ^3/login <login> <password>: ^7Loads the account.\n\
 ^3/logout: ^7Logs out the account.\n\
@@ -13100,7 +13135,8 @@ void Cmd_Silence_f( gentity_t *ent ) {
 void zyk_show_admin_commands(gentity_t *ent, gentity_t *target_ent)
 {
 	char message[1024];
-	char message_content[ADM_NUM_CMDS + 1][80];
+	// GalaxyRP fix: [cleanup] removed an unused 'char message_content[ADM_NUM_CMDS + 1][80]' local
+	// (never read anywhere in this function).
 	int i = 0;
 	strcpy(message,"");
 
@@ -16673,7 +16709,8 @@ void Cmd_Examine_f(gentity_t *ent) {
 		return;
 	}
 
-	if (Distance(ent->client->ps.origin, &g_entities[player_id].client->ps.origin) > 1000) {
+	// GalaxyRP fix: [cleanup] see the identical fix/comment where this same line appears above.
+	if (Distance(ent->client->ps.origin, g_entities[player_id].client->ps.origin) > 1000) {
 		trap->SendServerCommand(ent->s.number, "print \"You are too far away from that person.\n\"");
 		return;
 	}
@@ -16681,7 +16718,10 @@ void Cmd_Examine_f(gentity_t *ent) {
 	if (trap->Argc())
 	{
 
-		description_display_beginning(ent, &g_entities[player_id].client->pers.netname);
+		// GalaxyRP fix: [cleanup] same "extra &" pattern as the Distance() calls above --
+		// pers.netname is already a char[]; MSVC flagged the pointer-to-array this produced
+		// (C4047/C4024) against description_display_beginning()'s char* parameter.
+		description_display_beginning(ent, g_entities[player_id].client->pers.netname);
 		trap->SendServerCommand(ent->s.number, va("print \"%s\n\"", &g_entities[player_id].client->pers.description));
 		description_display_end(ent);
 
