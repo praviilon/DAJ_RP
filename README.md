@@ -1,6 +1,6 @@
 # Galaxy RP Mod - Dark Angels Fork
 
-Dark Angels fork modernises the Galaxy RP mod, making it natively playable on modern TaystJK engine, utilising its Rend2 or Vulkan renderers. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
+Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
@@ -9,11 +9,11 @@ Dark Angels fork modernises the Galaxy RP mod, making it natively playable on mo
 This project is a fork of **Zyk Mod**, which is itself a fork of [OpenJK](https://github.com/JACoders/OpenJK). The aim is to improve on the work Zyk has done and move the project into a different direction: Player Roleplaying as opposed to an "RPG" game.
 This mod will be geared towards the RP community mainly. It will have features to prevent common occurences such as "spec-hiding", "Mary-sues" and more! It will also contain features that help player immersion.
 
-[![version](https://img.shields.io/github/v/release/alexnita3/GalaxyRP?label=Current%20Version&color=brightgreen)](https://github.com/alexnita3/GalaxyRP/releases)
+[![version](https://img.shields.io/github/v/release/praviilon/DAJ_RP?label=Current%20Version&color=brightgreen)](https://github.com/praviilon/DAJ_RP/releases)
 [![discord](https://img.shields.io/badge/Discord-Join-blueviolet.svg?logo=discord&style=flat&logoColor=white)](https://discord.gg/aKnXckEFr5)
-[![issues](https://img.shields.io/github/issues/alexnita3/GalaxyRP.svg?label=Issues%20%26%20Requests&color=red)](https://github.com/alexnita3/GalaxyRP/issues)
+[![issues](https://img.shields.io/github/issues/praviilon/DAJ_RP.svg?label=Issues%20%26%20Requests&color=red)](https://github.com/praviilon/DAJ_RP/issues)
 [![guides](https://img.shields.io/badge/GalaxyRP-Website-blue.svg)](https://www.galaxyrp.uk/)
-[![license](https://img.shields.io/github/license/alexnita3/GalaxyRP.svg?label=License&color=yellow)](#license)
+[![license](https://img.shields.io/github/license/praviilon/DAJ_RP.svg?label=License&color=yellow)](#license)
 
 </div>
 
