@@ -52,8 +52,8 @@ static qhandle_t blueSaberGlowShader;
 static qhandle_t blueSaberCoreShader;
 static qhandle_t purpleSaberGlowShader;
 static qhandle_t purpleSaberCoreShader;
-// GalaxyRP: [Saber RGB] the greyscale, tintable pair -- see assets/client/shaders/rgbsaber.shader
-// and the matching cgs.media handles in cg_local.h.
+// GalaxyRP: [Saber RGB] the greyscale, tintable pair -- ported from JAPro/TaystJK, see
+// assets/client/shaders/sbRGB.shader and the matching cgs.media handles in cg_local.h.
 static qhandle_t rgbSaberGlowShader;
 static qhandle_t rgbSaberCoreShader;
 
@@ -71,8 +71,10 @@ void UI_CacheSaberGlowGraphics( void )
 	blueSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/blue_line" );
 	purpleSaberGlowShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_glow" );
 	purpleSaberCoreShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_line" );
-	rgbSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/rgb_glow" );	// GalaxyRP: [Saber RGB]
-	rgbSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/rgb_line" );
+	// GalaxyRP: [Saber RGB] ported from JAPro/TaystJK's own RGB saber assets (see cg_main.c's
+	// registration of the same pair for why only the "1" variant is used).
+	rgbSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow1" );
+	rgbSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore1" );
 }
 
 qboolean UI_SaberModelForSaber( const char *saberName, char *saberModel )
@@ -387,6 +389,12 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	radiusStart = radius/3.0f;
 	saber.radius = (radiusStart + Q_flrand(-1.0f, 1.0f) * radiusRange)*radiusmult;
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
+
+	// GalaxyRP: [Saber RGB] always white, including for SABER_RGB -- matching JAPro/TaystJK's own
+	// RGBcore1.jpg, which is itself a plain white blade texture (see cg_main.c's registration
+	// comment). This used to be an implicit carry-over of the glow pass's shaderRGBA above (never
+	// reset between the two AddRefEntityToScene calls); make it explicit instead.
+	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 	trap->R_AddRefEntityToScene( &saber );
 }

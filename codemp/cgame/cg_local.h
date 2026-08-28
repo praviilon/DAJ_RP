@@ -1181,10 +1181,11 @@ typedef struct cgMedia_s {
 	qhandle_t	purpleSaberGlowShader;
 	qhandle_t	purpleSaberCoreShader;
 	// GalaxyRP: [Saber RGB] the six shaders above are each baked to one fixed colour, so none of
-	// them can carry a custom one. These two are the same artwork drawn in neutral greyscale with
-	// "rgbGen vertex", which makes the renderer multiply them by the per-entity shaderRGBA the
-	// blade is submitted with -- that is what lets one shader draw any colour. See
-	// assets/client/shaders/rgbsaber.shader.
+	// them can carry a custom one. These two -- ported from JAPro/TaystJK's own RGB saber assets,
+	// see assets/client/shaders/sbRGB.shader -- use "rgbGen vertex" on the glow instead, which
+	// makes the renderer multiply it by the per-entity shaderRGBA the blade is submitted with --
+	// that is what lets one glow shader draw any colour. The core shader is not tinted; see the
+	// tint comment in CG_DoSaber() (cg_players.c).
 	qhandle_t	rgbSaberGlowShader;
 	qhandle_t	rgbSaberCoreShader;
 	qhandle_t	saberBlurShader;

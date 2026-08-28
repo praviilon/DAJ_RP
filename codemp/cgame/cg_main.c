@@ -638,11 +638,18 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.blueSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/blue_line" );
 	cgs.media.purpleSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_glow" );
 	cgs.media.purpleSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_line" );
-	// GalaxyRP: [Saber RGB] tintable counterparts of the six fixed-colour shaders above, shipped in
-	// our own pk3 (assets/client/shaders/rgbsaber.shader). Registered unconditionally alongside them
-	// so a custom-coloured blade never has to register a shader mid-frame.
-	cgs.media.rgbSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/rgb_glow" );
-	cgs.media.rgbSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/rgb_line" );
+	// GalaxyRP: [Saber RGB] tintable glow shader, ported from JAPro/TaystJK's own RGB saber assets
+	// (assets/client/shaders/sbRGB.shader) rather than our earlier hand-generated ones. Only the
+	// "1" variant is wired up -- RGBglow2-5/RGBcore2-5/RGBtrail2-4 in that file back JAPro's
+	// FLAME/ELEC blade styles, which TaystJK itself ships disabled (_SHITTYLINEFX) and DAJ_RP does
+	// not implement; see the reserved SABER_FLAME1/ELEC1/FLAME2/ELEC2 ordinals in q_shared.h.
+	// Registered unconditionally alongside the six fixed-colour shaders so a custom-coloured blade
+	// never has to register a shader mid-frame.
+	cgs.media.rgbSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow1" );
+	// GalaxyRP: [Saber RGB] the core/blade pass is drawn at a fixed white shaderRGBA in CG_DoSaber
+	// regardless of colour (see the tint comment there) -- RGBcore1.jpg is itself a plain white
+	// blade texture, matching how JAPro/TaystJK render it. Only the glow halo carries the tint.
+	cgs.media.rgbSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore1" );
 	cgs.media.saberBlurShader			= trap->R_RegisterShader( "gfx/effects/sabers/saberBlur" );
 	cgs.media.swordTrailShader			= trap->R_RegisterShader( "gfx/effects/sabers/swordTrail" );
 

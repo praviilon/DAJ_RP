@@ -6391,9 +6391,11 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	float radiusmult;
 	float radiusRange;
 	float radiusStart;
-	// GalaxyRP: [Saber RGB] the per-entity tint the blade is drawn with. Full white leaves the six
-	// pre-coloured palette shaders looking exactly as they always have (white is the identity for
-	// the multiply the renderer applies), so this stays a no-op for every colour but SABER_RGB.
+	// GalaxyRP: [Saber RGB] the glow halo's tint. Full white leaves the six pre-coloured palette
+	// glow shaders looking exactly as they always have (white is the identity for the multiply the
+	// renderer applies), so this stays a no-op for every colour but SABER_RGB. Only the glow pass
+	// uses this -- the core/blade pass below is always drawn white, matching JAPro/TaystJK: their
+	// RGBcore1.jpg is itself a plain white blade texture, tinted glow around a white-hot core.
 	byte		tint[3] = { 0xff, 0xff, 0xff };
 
 	color = CG_ClampSaberColor( color );
@@ -6522,10 +6524,8 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
 
 	saber.shaderTexCoord[0] = saber.shaderTexCoord[1] = 1.0f;
-	saber.shaderRGBA[0] = tint[0];	// GalaxyRP: [Saber RGB] see the glow pass above
-	saber.shaderRGBA[1] = tint[1];
-	saber.shaderRGBA[2] = tint[2];
-	saber.shaderRGBA[3] = 0xff;
+	// GalaxyRP: [Saber RGB] always white, including for SABER_RGB -- see the tint comment above.
+	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 	trap->R_AddRefEntityToScene( &saber );
 }
