@@ -14334,7 +14334,7 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 				if (player->client->sess.amrpgmode > 0)
 				{
-					if (player->client->pers.bitvalue > 0)
+					if (player->client->pers.bitvalue != 0)
 						strcpy(content, va("%s^3(admin)",content));
 					else
 						strcpy(content, va("%s^3(logged)",content));

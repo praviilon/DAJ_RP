@@ -80,7 +80,14 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}
-          path: ${{ github.workspace }}/build/bin/JediAcademy/GalaxyRP
+          # GalaxyRP fix: [CI packaging] upload-artifact zips the CONTENTS of `path` at the zip's
+          # root, not the directory itself -- pointing straight at .../GalaxyRP produced a zip
+          # whose root was the mod's files directly, with no wrapping folder. JediAcademy/ only
+          # ever contains GalaxyRP/ for this build (BuildMPEngine/MPRdVanilla/MPDed are OFF, so
+          # nothing else installs under JediAcademy), so pointing one level up gives a zip with a
+          # single top-level "GalaxyRP" folder containing everything, matching how it's organized
+          # on disk.
+          path: ${{ github.workspace }}/build/bin/JediAcademy
           if-no-files-found: error
 
   ubuntu:
@@ -149,7 +156,11 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}
-          path: ${{ github.workspace }}/install/JediAcademy/GalaxyRP
+          # GalaxyRP fix: [CI packaging] see the matching comment in the msvc job -- pointing one
+          # level up (at JediAcademy, whose only content here is GalaxyRP/) makes upload-artifact
+          # zip a single top-level "GalaxyRP" folder instead of the mod's files sitting at the zip
+          # root.
+          path: ${{ github.workspace }}/install/JediAcademy
           if-no-files-found: error
 
   macos:
@@ -200,5 +211,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}
-          path: ${{ github.workspace }}/install/JediAcademy/GalaxyRP
+          # GalaxyRP fix: [CI packaging] see the matching comment in the msvc job -- pointing one
+          # level up (at JediAcademy, whose only content here is GalaxyRP/) makes upload-artifact
+          # zip a single top-level "GalaxyRP" folder instead of the mod's files sitting at the zip
+          # root.
+          path: ${{ github.workspace }}/install/JediAcademy
           if-no-files-found: error
