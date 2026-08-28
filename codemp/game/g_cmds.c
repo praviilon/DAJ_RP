@@ -1780,11 +1780,20 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	// (the two values a player directly controls via /new) were spliced straight into the INSERT
 	// text via va("...%s...%s..."). A quote in either value could inject arbitrary SQL. Prepare/bind/
 	// step directly instead so the values can never be interpreted as SQL syntax.
-	// GalaxyRP fix: [Database] PlayerSettings was hardcoded as the literal '0' here instead of being
-	// bound like every other column -- harmless on this specific INSERT (a brand new account's
-	// pers.player_settings is always still 0 at this point), but see the UPDATE sites below for why
-	// this same pattern is a real bug elsewhere. Binding it here too for consistency.
-	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, ?, ?)", -1, &stmt, NULL);
+	// GalaxyRP fix: [Database] PlayerSettings kept as an explicit literal 0 here rather than bound --
+	// a first pass at this fix bound ent->client->pers.player_settings instead, on the reasoning that
+	// "a brand new account's player_settings is always still 0 at this point". That's wrong: /new
+	// (this function's caller) has no guard requiring the connection be logged out first, and
+	// /logout doesn't clear pers.player_settings the way it already clears pers.bitvalue -- so a
+	// player who is logged into account A, runs /logout, then /new B, still has account A's settings
+	// bitmask sitting in pers.player_settings when this INSERT runs, and binding it would seed the
+	// brand new account B with a stranger's (well, their own other account's) settings. A new account
+	// has no settings history to inherit; 0 is unconditionally correct here regardless of what this
+	// connection was doing before. See the UPDATE sites below (update_accounts_table_row_with_current_values()
+	// and update_current_character_and_account()) for the actual PlayerSettings-never-saved bug --
+	// those bind the real value because they update an EXISTING row for the CURRENTLY logged-in
+	// player, where pers.player_settings is guaranteed current.
+	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, '0', ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1794,8 +1803,7 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
-	sqlite3_bind_int(stmt, 4, ent->client->pers.player_settings);
-	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 4, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -9062,6 +9070,15 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	}
 
 	ent->client->pers.bitvalue = 0;
+
+	// GalaxyRP fix: [Account] pers.player_settings (the /settings bitmask) was never reset here,
+	// unlike pers.bitvalue right above it -- so it kept whatever this account's settings were in
+	// memory after logout. Harmless on its own (nothing reads player_settings while amrpgmode != 2),
+	// but insert_accounts_table_row() had briefly bound this same field for a newly /new-created
+	// account, which would have leaked a leftover value across accounts in the same connection.
+	// Reset it here too for the same reason bitvalue is reset, and so pers.player_settings is always
+	// trustworthy as "this connection's currently logged-in account's settings, or 0".
+	ent->client->pers.player_settings = 0;
 
 	// zyk: initializing mind control attributes used in RPG mode
 	ent->client->pers.being_mind_controlled = -1;
