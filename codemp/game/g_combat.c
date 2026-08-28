@@ -5703,18 +5703,6 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		) // zyk: grip cant be absorbed by shields
 		check_shield = 0;
 
-	// GalaxyRP fix: lava/slime damage was being absorbed by the RPG shield system like any other
-	// attack (check_shield defaulted to 1 for it, same as a blaster bolt). Since shields regenerate
-	// over time (ShieldRegen skill / STAT_ARMOR regen), a player with a decent amount of shield
-	// charge could stand in lava indefinitely while it kept absorbing each 30/60/90 damage tick,
-	// making it look like they were immune to fire -- until their shields ran out faster than they
-	// regenerated, at which point health started dropping and it looked like the damage had come
-	// back. That's the "sometimes swim in lava with no damage, then after a while it starts
-	// working" behaviour. Environmental lava/slime damage bypassing shields (like Force Grip
-	// already does above) matches how it reads to players and makes the damage consistent instead
-	// of depending on how much shield charge happens to be banked at the time.
-	if (mod == MOD_LAVA || mod == MOD_SLIME)
-		check_shield = 0;
 
 	if (targ && targ->client && targ->client->NPC_class == CLASS_VEHICLE //ion-cannon has disabled this ship's shields, take damage on hull!
 		&& targ->m_pVehicle
