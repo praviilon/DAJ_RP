@@ -1685,9 +1685,12 @@ void insert_inv_table_row(gentity_t* ent, char* item_to_add, sqlite3* db, char* 
 
 // GalaxyRP (Alex): [Database] SELECT This method selects a row form the accounts table, and assigns the values to the entity.
 void select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char select_account_row_query[79] = "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username='%s'";
-
-	rc = sqlite3_prepare(db, va(select_account_row_query, username), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] this used to build the query text via va("...Username='%s'", username)
+	// -- splicing the raw username straight into the SQL string. A username containing a single quote
+	// (the SQL string delimiter) could break out of the literal and inject arbitrary SQL, executed
+	// with this game server's full database privileges -- reachable via /new (Cmd_Register_F). Bind
+	// the value as a parameter instead, so it can never be interpreted as SQL syntax.
+	rc = sqlite3_prepare(db, "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1695,6 +1698,7 @@ void select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, char
 		sqlite3_close(db);
 		return;
 	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -1717,9 +1721,10 @@ void select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, char
 // GalaxyRP (Alex): [Database] SELECT This method selects the id of an account going by the username provided. Usernames should be unique.
 int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	int accountID;
-	char select_account_id_query[51] = "SELECT AccountID FROM Accounts WHERE Username='%s'";
 
-	rc = sqlite3_prepare(db, va(select_account_id_query, username), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] same va("...%s...")-into-SQL-text issue as select_accounts_table_row()
+	// above -- bind username as a parameter instead of splicing it into the query text.
+	rc = sqlite3_prepare(db, "SELECT AccountID FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1727,6 +1732,7 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 		sqlite3_close(db);
 		return -1;
 	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -1746,25 +1752,51 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 
 // GalaxyRP (Alex): [Database] INSERT This method inserts a new row into the accounts table, using the username and password provided, and default values for everything else.
 void insert_accounts_table_row(gentity_t* ent, char* username, char* password, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char insert_new_entry_to_accounts_table[195] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('%s','%s','%i','0','%s')";
-	run_db_query(va(insert_new_entry_to_accounts_table, username, password, rp_default_account_permissions.integer, username), db, zErrMsg, rc, stmt);
+	// GalaxyRP fix: [security] this used to go through run_db_query(), which executes a fully
+	// pre-formatted SQL string via sqlite3_exec() with no parameter binding -- username and password
+	// (the two values a player directly controls via /new) were spliced straight into the INSERT
+	// text via va("...%s...%s..."). A quote in either value could inject arbitrary SQL. Prepare/bind/
+	// step directly instead so the values can never be interpreted as SQL syntax.
+	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, '0', ?)", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return;
+	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
+	sqlite3_bind_text(stmt, 4, username, -1, SQLITE_TRANSIENT);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	sqlite3_finalize(stmt);
 
 	return;
 }
 
 // GalaxyRP (Alex): [Database] SELECT This method returns the number of accounts with one specific username. Useful for checking if a username is unique.
 int select_number_of_accounts_with_username(gentity_t* ent, char* username, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char select_username_query[57] = "SELECT count(Username) FROM Accounts WHERE Username='%s'";
-
 	int numberOfAccounts = 0;
 
-	rc = sqlite3_prepare(db, va(select_username_query, username), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] this used to build the query text via va("...Username='%s'", username)
+	// -- i.e. splicing the raw username straight into the SQL string. A username containing a single
+	// quote (the SQL string delimiter) could break out of the literal and inject arbitrary SQL (e.g.
+	// `' OR '1'='1`), executed with this game server's full database privileges. This is the very
+	// first query both /login and /new run against attacker-supplied input, so it's reachable
+	// unauthenticated. Bind the value as a parameter instead, so it can never be interpreted as SQL
+	// syntax regardless of content.
+	rc = sqlite3_prepare(db, "SELECT count(Username) FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return 1;
 	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -1800,14 +1832,28 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 		return;
 	}
 	
-	char update_account_query[110] = "UPDATE Accounts SET PlayerSettings='0', AdminLevel='%i', DefaultChar='%s', Password='%s' WHERE AccountID='%i'";
-
-	run_db_query(va(update_account_query,
-		ent->client->pers.bitvalue,
-		ent->client->sess.rpgchar,
-		ent->client->pers.password,
-		ent->client->sess.accountID
-	), db, zErrMsg, rc, stmt);
+	// GalaxyRP fix: [security] this used to go through run_db_query() with the password (and
+	// character name) spliced straight into the UPDATE text via va("...%s..."). This is the query
+	// /changepassword ultimately writes through, so a password containing a quote could inject
+	// arbitrary SQL. Bind every value as a parameter instead.
+	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings='0', AdminLevel=?, DefaultChar=?, Password=? WHERE AccountID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		sqlite3_close(db);
+		return;
+	}
+	sqlite3_bind_int(stmt, 1, ent->client->pers.bitvalue);
+	sqlite3_bind_text(stmt, 2, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 3, ent->client->pers.password, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 4, ent->client->sess.accountID);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	sqlite3_finalize(stmt);
 
 	sqlite3_close(db);
 
@@ -1816,16 +1862,35 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 
 // GalaxyRP (Alex): [Database] UPDATE This method updated a accounts table row with information contained within the entity with which it's called. (NEEDS A CHAR NAME AND FOR THE USER TO BE LOGGED IN)
 void update_accounts_table_row_with_default_char(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char update_default_char_query[58] = "UPDATE Accounts SET DefaultChar='%s' WHERE AccountID='%i'";
-	run_db_query(va(update_default_char_query, character_name, ent->client->sess.accountID), db, zErrMsg, rc, stmt);
+	// GalaxyRP fix: [security] same run_db_query()-with-va()-splice issue as
+	// update_accounts_table_row_with_current_values() above -- bind character_name instead. Reachable
+	// via /new (Cmd_Register_F -> select_player_character -> here) with the new account's own
+	// username used as the character name.
+	rc = sqlite3_prepare(db, "UPDATE Accounts SET DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return;
+	}
+	sqlite3_bind_text(stmt, 1, character_name, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 2, ent->client->sess.accountID);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	sqlite3_finalize(stmt);
 
 	return;
 }
 
 qboolean is_password_correct(gentity_t* ent, char* username, char* password, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char select_password_query[58] = "SELECT Password FROM Accounts WHERE Username='%s'";
-	
-	rc = sqlite3_prepare(db, va(select_password_query, username), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] same va("...%s...")-into-SQL-text issue as
+	// select_number_of_accounts_with_username() above -- bind username instead. Reachable via /login
+	// with the account's own password compared afterward in C via strcmp(), never itself placed into
+	// SQL text here.
+	rc = sqlite3_prepare(db, "SELECT Password FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1833,6 +1898,7 @@ qboolean is_password_correct(gentity_t* ent, char* username, char* password, sql
 		sqlite3_close(db);
 		return qfalse;
 	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -1888,8 +1954,24 @@ void update_credits_value(gentity_t* ent) {
 
 // GalaxyRP (Alex): [Database] INSERT This method inserts a new row in the character table, with default values. ASSUMES PLAYER IS ALREADY LOGGED IN.
 void insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char insert_new_entry_to_char_table[203] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i','100','1','100','%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
-	run_db_query(va(insert_new_entry_to_char_table, ent->client->sess.accountID, character_name), db, zErrMsg, rc, stmt);
+	// GalaxyRP fix: [security] this used to go through run_db_query() with the character name
+	// spliced straight into the INSERT text via va("...%s..."). Reachable via /new, using the new
+	// account's own username as its first character's name. Prepare/bind/step directly instead.
+	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return;
+	}
+	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
+	sqlite3_bind_text(stmt, 2, character_name, -1, SQLITE_TRANSIENT);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	sqlite3_finalize(stmt);
 
 	return;
 }
@@ -1941,14 +2023,19 @@ void select_chars_table_row_from_char_name(gentity_t* ent, char* character_name,
 // GalaxyRP (Alex): [Database] SELECT This method returns the number of characters that exist with one name. (Useful for preventing duplicates)
 int select_number_of_characters_with_name(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
-	char select_char_count_query[72] = "SELECT count(CharID) FROM Characters WHERE AccountID='%i' AND Name='%s'";
-	rc = sqlite3_prepare(db, va(select_char_count_query, ent->client->sess.accountID, character_name), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] this used to build the query text via va("...Name='%s'", character_name)
+	// -- splicing the raw character name straight into the SQL string. Reachable via /new
+	// (Cmd_Register_F, using the new account's own username as its first character's name) and via
+	// /char new <name>. Bind the value as a parameter instead.
+	rc = sqlite3_prepare(db, "SELECT count(CharID) FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return 0;
 	}
+	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
+	sqlite3_bind_text(stmt, 2, character_name, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -2652,21 +2739,27 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	}
 
 	// GalaxyRP (Alex): [Database] Select all info from all character related tables.
+	// GalaxyRP fix: [security] this used to build the query text via
+	// va("...Name = '%s'...", character_name, accountID) -- splicing the raw character name straight
+	// into the SQL string. Reachable via /new (using the new account's own username as its first
+	// character's name) and via /char use <name>. Bind both values as parameters instead.
 	char select_character_query[202] = "SELECT *\
 		FROM Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
 		INNER JOIN Weapons\
 		ON Weapons.CharID = Characters.CharID\
-		WHERE Characters.Name = '%s' AND Characters.AccountID = %i";
+		WHERE Characters.Name = ? AND Characters.AccountID = ?";
 
-	rc = sqlite3_prepare(db, va(select_character_query, character_name, ent->client->sess.accountID), -1, &stmt, NULL);
+	rc = sqlite3_prepare(db, select_character_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
+	sqlite3_bind_text(stmt, 1, character_name, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 2, ent->client->sess.accountID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -2821,22 +2914,26 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 	char password[256], name[256], description[MAX_STRING_CHARS], netName[MAX_STRING_CHARS], modelName[MAX_STRING_CHARS];
 	int accountID, player_settings, adminLevel, charID, credits, level, modelScale, skillpoints;
 
+	// GalaxyRP fix: [security] this used to build the query text via
+	// va("...Username = '%s'...Username = '%s'...", username, username) -- splicing the raw username
+	// straight into the SQL string, twice. This is the main query /login runs once the password has
+	// already been verified. Bind both placeholders as parameters instead.
 	char select_account_table_row[356] = "SELECT *\
 		FROM Accounts, Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
 		INNER JOIN Weapons\
 		ON Weapons.CharID = Characters.CharID\
-		WHERE Accounts.Username = '%s' AND Characters.CharID = (\
+		WHERE Accounts.Username = ? AND Characters.CharID = (\
 			SELECT CharID\
 			FROM Characters\
 			Where Characters.Name = (\
 				SELECT DefaultChar\
 				FROM Accounts\
-				WHERE Accounts.Username = '%s')\
+				WHERE Accounts.Username = ?)\
 			)";
 
-	rc = sqlite3_prepare(db, va(select_account_table_row, username, username), -1, &stmt, NULL);
+	rc = sqlite3_prepare(db, select_account_table_row, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2844,6 +2941,8 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		sqlite3_close(db);
 		return;
 	}
+	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
