@@ -2,12 +2,12 @@
 
 
 
-## [3.8.0] - TaystJK port and stability pass
+## [3.8.0]
 
 All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from.
 
 ### Added
-- Native TaystJK engine support: builds and runs directly on TaystJK (EternalJK's modern successor) instead of requiring OpenJK, with the old EternalJK/JAPro detection and "switch to OpenJK" warning removed.
+- Native TaystJK engine support: builds and runs directly on TaystJK (EternalJK's modern successor) instead of OpenJK, with the old EternalJK/JAPro detection and "switch to OpenJK" warning removed.
 - Multi-platform CI and build support: Windows (x86/x86_64), Linux (x86/x86_64/arm64), and macOS (x86_64/Apple Silicon), including a missing arm64 branch in the platform-detection headers and updated bundled SDL2 (2.0.12 -> 2.32.4).
 - `rp_loginRequired` cvar: optionally forces any player who isn't logged into an account to stay in Spectator.
 - `/admmap <gametype> <map>` admin command to change map and gametype together, gated by a repurposed admin bit.
@@ -15,14 +15,15 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - Client-side sync commands (`supdatemodel`, `supdatename`, `supdatesaber`): push server-corrected model/name/saber values back to the client's own cvars so the console and menus no longer show stale values after a database-driven login, character switch, or rejected saber choice.
 - UI right-click context menus and integer-valued sliders (`cvarInt`/`ITEM_TYPE_INTSLIDER`, used by the saber RGB color sliders) and the `accept` menu script keyword, all ported from TaystJK's UI code so its bundled menus parse and work correctly.
 - `/help` output rewritten to reflect the current command list, including several commands that existed but were undocumented.
+- RGB lightsaber colors, persisted per character. Shaders and textures are courtesy of JAPro/TaystJK.
 
 ### Changed
 - Default admin account's `AdminLevel` is now `-1` (all bits) instead of a hardcoded bitmask, so it automatically gains any admin command added in the future.
-- The server is now always treated as being in RP Mode: the `zyk_rp_mode` cvar and the mode-switching `/mode`-style dead code tied to it were removed, along with several other unused quest/RPG cvars (`zyk_allow_quests`, `zyk_allow_rpg_mode`, `zyk_allow_saving_in_rp_mode`, `zyk_quest_afk_timer`, `zyk_guardian_quest_timer`, and about a dozen more class/quest toggle cvars that no longer did anything).
+- The server is now always treated as being in RP Mode: the `zyk_rp_mode` cvar and the mode-switching `/mode`-style dead code tied to it were removed, along with several other unused quest/RPG cvars.
 - Command usage messages made consistent with their actual names (`/new`, `/spendcredits`, `/newsadd`, `/helpup`, etc., which had drifted from earlier renames).
 - Saber color slider dragging now snaps to whole numbers instead of floats.
-- Distributable packaging: the mod's game/cgame/ui modules now install only into their own `GalaxyRP` folder rather than also being copied into generic `OpenJK`/`base` folders, matching how GalaxyRP is actually distributed.
-- CI build artifacts now zip with a top-level `GalaxyRP` folder wrapping their contents, instead of the mod's files sitting directly at the zip root.
+- Distributable packaging: the mod's game/cgame/ui modules now install only into their own `GalaxyRP` folder, matching how GalaxyRP is actually distributed.
+- CI build artifacts now zip with a top-level `GalaxyRP` folder wrapping their contents.
 
 ### Fixed
 - **Account/character persistence**: database access now goes through a shared open helper that enables SQLite WAL mode and a busy-retry timeout, fixing intermittent "database is locked" errors on map change that could leave a returning player with no weapons or inventory until a manual respawn. The database path is also now resolved against the engine's home path instead of the process's working directory, so it no longer depends on how the server was launched.
@@ -30,7 +31,6 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - **Saber switching**: a logged-in player's saber choice made through the UI was never detected as changed (the client's live selection was unconditionally overwritten by the database value on every spawn), leaving the saber selection menu stuck; the database read is now scoped to first spawn only.
 - Model, name, and saber changes made via the client console or menu could silently revert or fail to reflect on the client's own screen for logged-in players, since server-side corrections never reached the client's local cvars — fixed via the new sync commands above.
 - First spawn after a map change used blank skill/inventory data because the account/character reload happened after starting equipment was already granted; reload now happens first.
-- Lava/slime damage was being absorbed by the RPG shield system like a normal attack, making it look inconsistent (sometimes no damage, then damage resuming once shields ran dry); it now bypasses shields like Force Grip already did.
 - Force Sense played no activation sound at all (the sound calls were left commented out).
 - Upgrading Absorb/Protect/Lightning to skill level 4 or 5 could make Force Lightning render as Force Drain until the next respawn, due to a missing cap that the database-load path already applied; the immediate skill-up/down path now applies the same cap.
 - A UI listbox click on an empty row past the last real item could select an out-of-range index, and the staff-saber hilt list was validated against the wrong array; both fixed.
@@ -39,6 +39,9 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - A copy-paste bug in the saber-columns database migration compared against the wrong error string, printing a spurious SQL error and skipping the rest of table initialization (including admin account setup) on every server restart after the first.
 - A cosmetic string-mismatch bug where `/players` could show a fully-admin account as "(logged)" instead of "(admin)".
 - Minor: fixed a missing closing quote in the `/removepickups` confirmation message, a stack buffer overflow risk from unbounded saber-model name copies, an indentation inconsistency, and a saber-style-switch debounce that wasn't actually debouncing anything.
+- `Accounts.PlayerSettings` (the `/settings` bitmask) was hardcoded to `0` on every save instead of being bound, so every `/settings` toggle was silently reset to off on the very next save and came back off on the player's next login; it's now actually persisted.
+- Ammo counts on character load were reading the wrong database columns (an enum/schema-offset mismatch that grew worse as the Skills table gained columns over time), so ammo restored on relogin or character switch could be wrong.
+- A stack buffer overflow in `create_new_character()`: its query buffer was sized before the Armor/Flamethrower/ShieldRegen/HealthRegen skill columns existed, so the SQL text it holds was being silently truncated with no NUL terminator, in practice causing `/char new` to run garbage SQL and fail to create the new character's Skills/Weapons rows.
 
 ### Security
 - Fixed a real SQL injection vulnerability in the `/login`, `/new`, and `/changepassword` account commands, and applied the same parameterized-query treatment across the rest of the database layer (item names, chat/news text, character saves, and related queries) as a broader hardening pass.
