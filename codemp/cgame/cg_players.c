@@ -416,27 +416,31 @@ void ParseAnimationEvtBlock(const char* aeb_filename, animevent_t* animEvents, a
 			{
 				break;
 			}
-			if (stricmp(token, "CHAN_VOICE_ATTEN") == 0)
+			// GalaxyRP fix: [macOS/Clang build failure] stricmp is an MSVC CRT extension, not
+			// declared on Linux/macOS -- use the codebase's own portable Q_stricmp instead (same
+			// fix applied to all 12 occurrences of this sound-channel-name comparison in this file,
+			// across both parse blocks).
+			if (Q_stricmp(token, "CHAN_VOICE_ATTEN") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE_ATTEN;
 			}
-			else if (stricmp(token, "CHAN_VOICE_GLOBAL") == 0)
+			else if (Q_stricmp(token, "CHAN_VOICE_GLOBAL") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE_GLOBAL;
 			}
-			else if (stricmp(token, "CHAN_ANNOUNCER") == 0)
+			else if (Q_stricmp(token, "CHAN_ANNOUNCER") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_ANNOUNCER;
 			}
-			else if (stricmp(token, "CHAN_BODY") == 0)
+			else if (Q_stricmp(token, "CHAN_BODY") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_BODY;
 			}
-			else if (stricmp(token, "CHAN_WEAPON") == 0)
+			else if (Q_stricmp(token, "CHAN_WEAPON") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_WEAPON;
 			}
-			else if (stricmp(token, "CHAN_VOICE") == 0)
+			else if (Q_stricmp(token, "CHAN_VOICE") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE;
 			}
@@ -592,27 +596,31 @@ void ParseAnimationEvtBlock(const char* aeb_filename, animevent_t* animEvents, a
 			{
 				break;
 			}
-			if (stricmp(token, "CHAN_VOICE_ATTEN") == 0)
+			// GalaxyRP fix: [macOS/Clang build failure] stricmp is an MSVC CRT extension, not
+			// declared on Linux/macOS -- use the codebase's own portable Q_stricmp instead (same
+			// fix applied to all 12 occurrences of this sound-channel-name comparison in this file,
+			// across both parse blocks).
+			if (Q_stricmp(token, "CHAN_VOICE_ATTEN") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE_ATTEN;
 			}
-			else if (stricmp(token, "CHAN_VOICE_GLOBAL") == 0)
+			else if (Q_stricmp(token, "CHAN_VOICE_GLOBAL") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE_GLOBAL;
 			}
-			else if (stricmp(token, "CHAN_ANNOUNCER") == 0)
+			else if (Q_stricmp(token, "CHAN_ANNOUNCER") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_ANNOUNCER;
 			}
-			else if (stricmp(token, "CHAN_BODY") == 0)
+			else if (Q_stricmp(token, "CHAN_BODY") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_BODY;
 			}
-			else if (stricmp(token, "CHAN_WEAPON") == 0)
+			else if (Q_stricmp(token, "CHAN_WEAPON") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_WEAPON;
 			}
-			else if (stricmp(token, "CHAN_VOICE") == 0)
+			else if (Q_stricmp(token, "CHAN_VOICE") == 0)
 			{
 				animEvents[curAnimEvent].eventData[AED_SOUNDCHANNEL] = CHAN_VOICE;
 			}
@@ -2054,11 +2062,17 @@ void CG_LoadClientInfo( clientInfo_t *ci ) {
 	}
 
 	//GalaxyRP (Alex): [Model Customization] Here is where the model config file is loaded.
-	FILE* testFile_;
-	char buffer[2048];
-	testFile_ = fopen(va("base/models/players/%s/player.cfg", ci->modelName), "r");
+	// GalaxyRP fix: [macOS/Clang build failure + real bug] fread() returns a size_t byte/item
+	// count, not a FILE*; assigning its result back into testFile_ overwrote the open file handle
+	// with a small integer (0 or 1), which Clang correctly rejects as a hard error on macOS
+	// (-Wint-conversion). Beyond the compile error, this also leaked the file descriptor on every
+	// player model load, since the (corrupted) handle was never fclose()'d. Keep fopen/fread as
+	// separate statements and close the handle once we're done with it.
+	FILE* testFile_ = fopen(va("base/models/players/%s/player.cfg", ci->modelName), "r");
 	if (testFile_ != NULL) {
-		testFile_ = fread(buffer, sizeof(buffer), 1, testFile_);
+		char buffer[2048];
+		fread(buffer, sizeof(buffer), 1, testFile_);
+		fclose(testFile_);
 	}
 
 	ci->newAnims = qfalse;
@@ -3632,12 +3646,18 @@ void CG_PlayerAnimEvents( int animFileIndex, int eventFileIndex, qboolean torso,
 				break;
 				//[AMBIENTEV]
 			case AEV_AMBIENT:
-				CG_Printf("ERROR: CG_PlayerAnimEvents() tried to play a AEV_AMBIENT as a keyframed sound.\n");
+				// GalaxyRP fix: [macOS/Clang build failure] CG_Printf is the internal
+				// implementation behind the trap->Print function pointer (cg_syscalls.c) and isn't
+				// declared in any header this file includes; every other error log in this file
+				// (and the rest of cgame) goes through trap->Print instead. On Linux/GCC the
+				// missing declaration was only a warning; Clang rejects it as a hard error on
+				// macOS (-Wimplicit-function-declaration).
+				trap->Print("ERROR: CG_PlayerAnimEvents() tried to play a AEV_AMBIENT as a keyframed sound.\n");
 				break;
 				//[/AMBIENTEV]
 			default:
 				//[ANIMEVENTS]
-				CG_Printf("ERROR: No eventType for animevent in CG_PlayerAnimEvents().\n");
+				trap->Print("ERROR: No eventType for animevent in CG_PlayerAnimEvents().\n");
 				//[/ANIMEVENTS]
 				//doEvent = qfalse;//implicit
 				break;

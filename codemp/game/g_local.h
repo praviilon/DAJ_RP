@@ -1762,6 +1762,11 @@ void Cmd_SaberAttackCycle_f(gentity_t *ent);
 int G_ItemUsable(playerState_t *ps, int forcedUse);
 void Cmd_ToggleSaber_f(gentity_t *ent);
 void Cmd_EngageDuel_f(gentity_t *ent);
+// GalaxyRP fix: [macOS/Clang build failure] used from g_combat.c with no visible declaration
+// there (g_svcmds.c already carries its own local "extern int ClientNumberFromString(...)" for
+// the same reason). On Linux/GCC this was only a warning; Clang rejects it as a hard error on
+// macOS (-Wimplicit-function-declaration).
+int ClientNumberFromString( gentity_t *to, const char *s, qboolean allowconnecting );
 
 //
 // g_items.c

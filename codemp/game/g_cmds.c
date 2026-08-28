@@ -636,7 +636,10 @@ void show_animation_list(gentity_t* ent, int beginning_index, int end_index) {
 		print_header(ent, anim_headers[i]);
 		for (int j = 0; j < MAX_WORDED_EMOTES; j++) {
 			//alex: if animation is in that category
-			if (stricmp(animations[j].animation_category, anim_headers[i]) == 0) {
+			// GalaxyRP fix: [macOS/Clang build failure] stricmp is an MSVC CRT extension, not
+			// declared on Linux/macOS -- use the codebase's own portable Q_stricmp (already used
+			// elsewhere in this file), matching what every other case-insensitive compare here does.
+			if (Q_stricmp(animations[j].animation_category, anim_headers[i]) == 0) {
 				print_row(ent, animations[j].animation_name);
 			}
 		}
@@ -1271,7 +1274,10 @@ void Cmd_Noclip_f( gentity_t *ent ) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot noClip while downed!\n\"");
 		trap->SendServerCommand(ent - g_entities, "cp \"^1You cannot noClip while downed!\n\"");
 
-		return qfalse;
+		// GalaxyRP fix: [macOS/Clang build failure] Cmd_Noclip_f is declared void -- every other
+		// early-out in this function correctly uses a bare "return;"; this one alone returned a
+		// value, which Clang rejects as a hard error (-Wreturn-mismatch) on macOS.
+		return;
 	}
 
 	if (ent->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
@@ -7674,7 +7680,10 @@ void save_account(gentity_t *ent, qboolean save_char_file)
 	}
 }
 
-int roll_dice(max_value) {
+// GalaxyRP fix: [macOS/Clang build failure] old K&R-style declaration left max_value with no
+// type, defaulting to int under pre-C99 rules ("implicit int"). ISO C99 and later, and Clang by
+// default, reject this as a hard error (-Wimplicit-int). Give it its always-intended type.
+int roll_dice(int max_value) {
 	int result = rand() % (max_value + 1);
 	while (result == 0) {
 		result = rand() % (max_value + 1);

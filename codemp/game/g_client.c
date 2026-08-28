@@ -2409,7 +2409,15 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		{
 			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
 			sqlite3_close(db);
-			return;
+			// GalaxyRP fix: [macOS/Clang build failure] this was a bare "return;" inside
+			// qboolean ClientUserinfoChanged(), which every caller treats as pass/fail for the
+			// userinfo change itself (e.g. ClientConnect() drops the client with "Failed userinfo
+			// validation" if this returns falsy). The userinfo change already succeeded by this
+			// point -- only the character DB save failed, which is already logged above -- so this
+			// must report success (qtrue), not fail validation. On Linux/GCC the missing return
+			// value was only a warning and happened to leave qtrue in the return register by luck;
+			// Clang on macOS correctly rejects it as a hard error (-Wreturn-mismatch).
+			return qtrue;
 		}
 
 		update_current_character_name_and_model(ent, db, zErrMsg, rc, stmt);
