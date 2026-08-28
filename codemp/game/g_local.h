@@ -1297,6 +1297,10 @@ struct gclient_s {
 
 	int			lastGenCmd;
 	int			lastGenCmdTime;
+	// GalaxyRP fix: [gameplay] dedicated debounce timestamp for the SABERATTACKCYCLE handling in
+	// PlayerThink_Real() -- see the comment at its use site in g_active.c for why it can't share
+	// lastGenCmdTime with the generic (300ms) generic_cmd debounce below.
+	int			lastSaberAttackCycleTime;
 
 	struct force {
 		int		regenDebounce;

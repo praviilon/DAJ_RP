@@ -2696,9 +2696,13 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		char saber2Model[30];
 		int saber1Color;
 		int saber2Color;
-		strcpy(saber1Model, sqlite3_column_text(stmt, 11));
+		// GalaxyRP fix: [security] strcpy() into these fixed 30-byte stack buffers had no length
+		// check against the value read from the Characters table -- a saber-model name of 30+
+		// characters in the database (whether from a corrupted row or a maliciously edited one)
+		// would overflow the buffer. Q_strncpyz() bounds the copy to the destination's size instead.
+		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 11), sizeof(saber1Model));
 		saber1Color = sqlite3_column_int(stmt, 12);
-		strcpy(saber2Model, sqlite3_column_text(stmt, 13));
+		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 13), sizeof(saber2Model));
 		saber2Color = sqlite3_column_int(stmt, 14);
 
 		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
@@ -2786,7 +2790,6 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 {
 	char CharName[MAX_STRING_CHARS] = "";
 	int charLevel = 0;
-	//char CharString[MAX_STRING_CHARS] = "";
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
 	rc = sqlite3_prepare(db, va("SELECT Name, Level FROM Characters WHERE AccountID='%i'", ent->client->sess.accountID), -1, &stmt, NULL);
@@ -2811,7 +2814,6 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 	}
 
 	sqlite3_finalize(stmt);
-	//return CharString;
 }
 
 // GalaxyRP (Alex): [Database] This method loads the account information, as well as the information related to the default character, and assigns it to the entity.
@@ -2874,9 +2876,11 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		char saber2Model[30];
 		int saber1Color;
 		int saber2Color;
-		strcpy(saber1Model, sqlite3_column_text(stmt, 17));
+		// GalaxyRP fix: [security] same fixed-size stack-buffer overflow as select_player_character()
+		// above -- bound the copy to the destination's size instead of trusting the DB value's length.
+		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 17), sizeof(saber1Model));
 		saber1Color = sqlite3_column_int(stmt, 18);
-		strcpy(saber2Model, sqlite3_column_text(stmt, 19));
+		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 19), sizeof(saber2Model));
 		saber2Color = sqlite3_column_int(stmt, 20);
 
 		// GalaxyRP fix: [Account] apply the loaded account/character fields to ent->client, and mark
@@ -12655,7 +12659,7 @@ void Cmd_RemovePickups_f(gentity_t* ent) {
 			G_FreeEntity(target_ent);
 		}
 	}
-	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed.\n"));
+	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed.\n\""));
 	
 	return;
 }

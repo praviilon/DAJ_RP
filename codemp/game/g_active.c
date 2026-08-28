@@ -3762,13 +3762,23 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	//GalaxyRP (Alex): [Combat] This is purely for switching saber styles. The delay between switching should be 190 ms.
+	// GalaxyRP fix: [gameplay] this used to gate on `ent->client->lastGenCmdTime - 110 < level.time`,
+	// reusing the shared lastGenCmdTime field that the generic_cmd debounce block below (~line 4212)
+	// resets to `level.time + 300` every time IT fires -- which, for a held-down SABERATTACKCYCLE
+	// input, only happens roughly every 300ms. In between those resets lastGenCmdTime stays fixed,
+	// so the old condition went true 190ms into that 300ms window and then stayed true for every
+	// single frame afterward (not just once), causing Cmd_SaberAttackCycle_f() to fire on every
+	// server frame for the remaining ~110ms instead of once every ~190ms as the comment above
+	// promises. Track this debounce with its own dedicated timestamp instead of borrowing one that
+	// belongs to unrelated commands, so a fire here always waits a genuine 190ms before firing again.
 	if (pmove.cmd.generic_cmd &&
-		(pmove.cmd.generic_cmd != ent->client->lastGenCmd || ent->client->lastGenCmdTime - 110 < level.time))
+		(pmove.cmd.generic_cmd != ent->client->lastGenCmd || ent->client->lastSaberAttackCycleTime < level.time))
 	{
 		switch (pmove.cmd.generic_cmd)
 		{
 			case GENCMD_SABERATTACKCYCLE:
 				Cmd_SaberAttackCycle_f(ent);
+				ent->client->lastSaberAttackCycleTime = level.time + 190;
 				break;
 		}
 	}

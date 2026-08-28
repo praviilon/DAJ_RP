@@ -5910,6 +5910,24 @@ void UI_UpdateSiegeStatusIcons( void ) {
 	}
 }
 
+// GalaxyRP fix: [security] the account command handlers below build a "cmd \"login\" \"password\"\n"
+// string for trap->Cmd_ExecuteText out of raw cvar values, wrapping each in quotes but never
+// escaping them. The engine's own tokenizer (Cmd_TokenizeString2 in qcommon/cmd.cpp) explicitly
+// does NOT support \" escaping -- a quoted token simply ends at the next '"' it sees -- so a
+// login or password containing a '"' closes that argument early and lets the rest of the string
+// be parsed as additional command text/arguments (e.g. a password of `x" ; kick "somebody`).
+// Since the wire format offers no way to embed a literal quote, strip quotes from the value
+// in place before it's ever placed inside the quoted argument.
+static void UI_SanitizeAccountArg( char *str ) {
+	char *d = str;
+	for ( char *s = str; *s; s++ ) {
+		if ( *s != '"' ) {
+			*d++ = *s;
+		}
+	}
+	*d = '\0';
+}
+
 static void UI_RunMenuScript(char **args)
 {
 	const char *name, *name2;
@@ -6355,6 +6373,8 @@ static void UI_RunMenuScript(char **args)
 
 					trap->Cvar_VariableStringBuffer("accLogin",zyk_login,sizeof(zyk_login));
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
+					UI_SanitizeAccountArg(zyk_login);
+					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("new \"%s\" \"%s\"\n", zyk_login, zyk_password) );
 				}
@@ -6365,6 +6385,8 @@ static void UI_RunMenuScript(char **args)
 
 					trap->Cvar_VariableStringBuffer("accLogin",zyk_login,sizeof(zyk_login));
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
+					UI_SanitizeAccountArg(zyk_login);
+					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("login \"%s\" \"%s\"\n", zyk_login, zyk_password) );
 				}
@@ -6373,6 +6395,7 @@ static void UI_RunMenuScript(char **args)
 					char zyk_password[512];
 
 					trap->Cvar_VariableStringBuffer("accPassword",zyk_password,sizeof(zyk_password));
+					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("changepassword \"%s\"\n", zyk_password) );
 				}
