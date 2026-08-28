@@ -1,15 +1,17 @@
 # Changelog. Dark Angels Fork
 
-All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from. Old changelog is deprecated.
+
 
 ## [3.8.0] - TaystJK port and stability pass
+
+All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from.
 
 ### Added
 - Native TaystJK engine support: builds and runs directly on TaystJK (EternalJK's modern successor) instead of requiring OpenJK, with the old EternalJK/JAPro detection and "switch to OpenJK" warning removed.
 - Multi-platform CI and build support: Windows (x86/x86_64), Linux (x86/x86_64/arm64), and macOS (x86_64/Apple Silicon), including a missing arm64 branch in the platform-detection headers and updated bundled SDL2 (2.0.12 -> 2.32.4).
 - `rp_loginRequired` cvar: optionally forces any player who isn't logged into an account to stay in Spectator.
-- `/admmap <gametype> <map>` admin command to change map and gametype together (adapted from JAPro's `ammap`), gated by a repurposed admin bit.
-- `/training` command: toggles a reduced-damage training saber mode.
+- `/admmap <gametype> <map>` admin command to change map and gametype together, gated by a repurposed admin bit.
+- `/training` command: toggles a reduced-damage training saber mode. This one is courtesy of Alex.
 - Client-side sync commands (`supdatemodel`, `supdatename`, `supdatesaber`): push server-corrected model/name/saber values back to the client's own cvars so the console and menus no longer show stale values after a database-driven login, character switch, or rejected saber choice.
 - UI right-click context menus and integer-valued sliders (`cvarInt`/`ITEM_TYPE_INTSLIDER`, used by the saber RGB color sliders) and the `accept` menu script keyword, all ported from TaystJK's UI code so its bundled menus parse and work correctly.
 - `/help` output rewritten to reflect the current command list, including several commands that existed but were undocumented.
