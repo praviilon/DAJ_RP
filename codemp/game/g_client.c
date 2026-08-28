@@ -4126,10 +4126,10 @@ void ClientSpawn(gentity_t *ent) {
 		zyk_add_guns(ent);
 	}
 
-	if (ent->client->sess.amrpgmode == 1)
-	{ // zyk: loading Admin-Only settings
-		zyk_load_common_settings(ent);
-	}
+	// GalaxyRP fix: [Account] this amrpgmode == 1 branch was unreachable dead code -- amrpgmode has
+	// not been assignable as 1 anywhere in the codebase since commit 5d35b28b8 (2022) made login
+	// always set it to 2, and for that == 2 case zyk_load_common_settings() is already called via
+	// initialize_rpg_skills() a few lines above, so nothing here was actually missing.
 
 	if (ent->client->pers.player_statuses & (1 << 4))
 	{ // zyk: player is scaled, set the scale factor

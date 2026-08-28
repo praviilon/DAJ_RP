@@ -8015,17 +8015,19 @@ void zyk_load_common_settings(gentity_t *ent)
 	{ // zyk: Single Saber
 		ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel = ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE];
 
-		if (ent->client->pers.player_settings & (1 << 26) && 
-			((ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 2) || 
-			 (ent->client->sess.amrpgmode == 1 && ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))))
+		// GalaxyRP fix: [Account] amrpgmode == 1 ("account mode", as opposed to == 2 for RPG mode)
+		// hasn't been assignable anywhere in the codebase since commit 5d35b28b8 (2022) made login
+		// always set amrpgmode = 2 "kept for backwards compatibility" -- so the amrpgmode == 1 half
+		// of each of these OR-conditions could never be true and is being dropped as dead code.
+		if (ent->client->pers.player_settings & (1 << 26) &&
+			ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 2)
 		{
 			// ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel = SS_MEDIUM;
 			// ent->client->saberCycleQueue = ent->client->ps.fd.saberAnimLevel;
 			ent->client->ps.fd.saberAnimLevel = SS_MEDIUM;
 		}
-		else if (ent->client->pers.player_settings & (1 << 27) && 
-				((ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 3) || 
-				 (ent->client->sess.amrpgmode == 1 && ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))))
+		else if (ent->client->pers.player_settings & (1 << 27) &&
+				ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 3)
 		{
 			ent->client->ps.fd.saberAnimLevel = SS_STRONG;
 		}
@@ -8037,8 +8039,7 @@ void zyk_load_common_settings(gentity_t *ent)
 		{
 			ent->client->ps.fd.saberAnimLevel = SS_TAVION;
 		}
-		else if (((ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 1) || 
-				  (ent->client->sess.amrpgmode == 1 && ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))))
+		else if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 1)
 		{
 			ent->client->ps.fd.saberAnimLevel = SS_FAST;
 		}
@@ -8052,9 +8053,11 @@ void save_account(gentity_t *ent, qboolean save_char_file)
 	// GalaxyRP fix: [Cvars] zyk_rp_mode and zyk_allow_saving_in_rp_mode were both removed (the server is
 	// always considered to be in RP Mode, and saving during RP Mode was always allowed by default), so
 	// the old "(zyk_rp_mode.integer != 1 || zyk_allow_saving_in_rp_mode.integer == 1)" check simplifies
-	// away entirely -- any logged-in player (account mode or RPG mode) can now always be saved here.
+	// away entirely -- any logged-in player can now always be saved here.
+	// GalaxyRP fix: [Account] the amrpgmode == 1 half of this OR is separately dead -- see the comment
+	// above the saber anim level selection earlier in this file for why amrpgmode can no longer be 1.
 	if (level.voteExecuteTime < level.time && ent->client->pers.connected == CON_CONNECTED &&
-		(ent->client->sess.amrpgmode == 1 || ent->client->sess.amrpgmode == 2)
+		ent->client->sess.amrpgmode == 2
 		)
 	{ // zyk: players can only save things if server is not at RP Mode or if it is allowed in config
 		if (save_char_file == qtrue)
