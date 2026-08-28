@@ -182,6 +182,11 @@ saber_colors_t TranslateSaberColor( const char *name ) {
 		return SABER_BLUE;
 	if ( !Q_stricmp( name, "purple" ) )
 		return SABER_PURPLE;
+	// GalaxyRP: [Saber RGB] "rgb" selects the player's own custom colour instead of one of the six
+	// fixed palette entries. The colour itself lives in cp_sbRGB1/cp_sbRGB2 (client) and in
+	// pers.saberRGB[] (server) -- this enum value only says "use it".
+	if ( !Q_stricmp( name, "rgb" ) )
+		return SABER_RGB;
 	if ( !Q_stricmp( name, "random" ) )
 		return (saber_colors_t)Q_irand( SABER_ORANGE, SABER_PURPLE );
 
@@ -195,8 +200,15 @@ const char *SaberColorToString( saber_colors_t color ) {
 	if ( color == SABER_GREEN )		return "green";
 	if ( color == SABER_BLUE )		return "blue";
 	if ( color == SABER_PURPLE )	return "purple";
+	if ( color == SABER_RGB )		return "rgb";	// GalaxyRP: [Saber RGB]
 
-	return NULL;
+	// GalaxyRP fix: [Saber] this used to return NULL for anything outside the palette, and its only
+	// caller (UI_GetSaberCvars in ui_main.c) feeds the result straight into trap->Cvar_Set() -- so
+	// an out-of-range "color1"/"color2" value reached Cvar_Set() as a NULL string pointer. That was
+	// unreachable while the enum only had six entries and the cvar was always one of them, but it
+	// is reachable now that clients can legitimately hold other values, so fall back to the same
+	// colour TranslateSaberColor() defaults to instead.
+	return "blue";
 }
 
 saber_styles_t TranslateSaberStyle( const char *name ) {

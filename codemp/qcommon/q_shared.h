@@ -358,8 +358,38 @@ typedef enum
 	SABER_GREEN,
 	SABER_BLUE,
 	SABER_PURPLE,
-	NUM_SABER_COLORS
+	// GalaxyRP: [Saber RGB] everything from here on extends the original six-colour palette.
+	// SABER_RGB means "this blade uses the player's own custom colour"; the colour itself travels
+	// separately, as a packed 24-bit integer in the "c3"/"c4" clientinfo configstring keys -- see
+	// ClientUserinfoChanged() (g_client.c) and CG_NewClientInfo() (cg_players.c).
+	//
+	// The ordinals below deliberately match TaystJK/JAPro's own saber_colors_t exactly, so a
+	// TaystJK client rendering sabers with its own cgame (rather than ours) still reads the same
+	// values off the wire and shows our players the right colour. SABER_FLAME1..SABER_BLACK exist
+	// only to keep that numbering aligned -- we do not offer them, and any of them arriving from a
+	// client is folded back to a base colour by CG_ClampSaberColor().
+	SABER_RGB,
+	SABER_FLAME1,	// reserved (TaystJK/JAPro wire compatibility) -- not implemented here
+	SABER_ELEC1,	// reserved
+	SABER_FLAME2,	// reserved
+	SABER_ELEC2,	// reserved
+	SABER_BLACK,	// reserved
+	NUM_SABER_COLORS,
+
+	// The classic palette that a .sab file's "saberColor" keyword (including "random") may select
+	// from. Kept separate from NUM_SABER_COLORS so extending the enum above never silently widens
+	// the range of colours a randomly-coloured saber can roll.
+	NUM_SABER_BASE_COLORS = SABER_PURPLE + 1
 } saber_colors_t;
+
+// GalaxyRP: [Saber RGB] helpers for the packed 24-bit saber colour carried by the "c3"/"c4"
+// clientinfo keys, the cp_sbRGB1/cp_sbRGB2 userinfo cvars, and the database columns. The layout is
+// r | (g<<8) | (b<<16), matching TaystJK/JAPro so the value is interchangeable with theirs.
+#define SABERRGB_PACK(r,g,b)	( ((r)&0xFF) | (((g)&0xFF)<<8) | (((b)&0xFF)<<16) )
+#define SABERRGB_R(v)			( (v) & 0xFF )
+#define SABERRGB_G(v)			( ((v)>>8) & 0xFF )
+#define SABERRGB_B(v)			( ((v)>>16) & 0xFF )
+#define SABERRGB_MASK			0x00FFFFFF
 
 typedef enum
 {

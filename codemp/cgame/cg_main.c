@@ -638,6 +638,11 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.blueSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/blue_line" );
 	cgs.media.purpleSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_glow" );
 	cgs.media.purpleSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_line" );
+	// GalaxyRP: [Saber RGB] tintable counterparts of the six fixed-colour shaders above, shipped in
+	// our own pk3 (assets/client/shaders/rgbsaber.shader). Registered unconditionally alongside them
+	// so a custom-coloured blade never has to register a shader mid-frame.
+	cgs.media.rgbSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/rgb_glow" );
+	cgs.media.rgbSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/rgb_line" );
 	cgs.media.saberBlurShader			= trap->R_RegisterShader( "gfx/effects/sabers/saberBlur" );
 	cgs.media.swordTrailShader			= trap->R_RegisterShader( "gfx/effects/sabers/swordTrail" );
 

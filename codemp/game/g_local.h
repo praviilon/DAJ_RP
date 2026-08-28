@@ -573,6 +573,13 @@ typedef struct clientPersistant_s {
 
 	char		saber1[MAX_QPATH], saber2[MAX_QPATH];
 
+	// GalaxyRP: [Saber RGB] the server-authoritative custom blade colour for each saber slot,
+	// stored as a packed 24-bit r|g<<8|b<<16 value, or 0 for "no custom colour, use the ordinary
+	// palette entry the client asked for". Set by /sabercolor, by an RGB-capable client's
+	// cp_sbRGB1/cp_sbRGB2 userinfo cvars, or restored from the character's database row on login;
+	// published to every other client through the "c3"/"c4" clientinfo configstring keys.
+	int			saberRGB[2];
+
 	int			vote, teamvote; // 0 = none, 1 = yes, 2 = no
 
 	char		guid[33];
@@ -1766,6 +1773,9 @@ void Cmd_SaberAttackCycle_f(gentity_t *ent);
 int G_ItemUsable(playerState_t *ps, int forcedUse);
 void Cmd_ToggleSaber_f(gentity_t *ent);
 void Cmd_EngageDuel_f(gentity_t *ent);
+// GalaxyRP: [Saber RGB] republish a player's custom blade colours (configstring + database save)
+// and push the authoritative values back down to their own client cvars.
+void update_saber_colors(gentity_t *ent);
 // GalaxyRP fix: [macOS/Clang build failure] used from g_combat.c with no visible declaration
 // there (g_svcmds.c already carries its own local "extern int ClientNumberFromString(...)" for
 // the same reason). On Linux/GCC this was only a warning; Clang rejects it as a hard error on
@@ -1809,6 +1819,19 @@ void SaveRegisteredItems( void );
 //
 // g_utils.c
 //
+// GalaxyRP: [Saber RGB] the Characters.saberOneColor/saberTwoColor database columns predate this
+// feature: a previous author added them (INTEGER DEFAULT 1) and a read path, but never a write
+// path, so every existing row still holds the untouched schema default. We reuse those columns
+// rather than adding new ones, because both character-load queries are "SELECT *" over a JOIN and
+// read their results by hard-coded positional index -- appending a column to Characters would
+// silently shift every Skills/Weapons index after it. To keep a real colour from ever being
+// confused with the legacy default, a stored value is tagged with this bit; anything without it
+// (0, or the old default of 1) means "no custom colour set".
+#define SABERRGB_SET	( 1 << 24 )
+
+// Parses a packed saber colour as sent by a client (cp_sbRGB1/cp_sbRGB2) or read from the
+// database, and clamps it to something safe to hand on to the renderer. Returns 0 for "unset".
+int		G_ParseSaberRGB( const char *str );
 void	RPMod_StringEscape(char *in, char *out, int outSize);
 int		G_ModelIndex( const char *name );
 int		G_SoundIndex( const char *name );

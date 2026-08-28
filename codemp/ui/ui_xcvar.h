@@ -112,6 +112,22 @@ XCVAR_DEF( ui_saber2,						"none",					NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber2_color,					"yellow",				NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber_color,					"yellow",				NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber_type,					"single",				NULL,				CVAR_ROM|CVAR_INTERNAL )
+// GalaxyRP: [Saber RGB] the saber menu's three colour sliders per blade. These are what the menu's
+// ITEM_TYPE_INTSLIDER items bind to; UI_UpdateSaberCvars() packs them into cp_sbRGB1/cp_sbRGB2 on
+// Apply, and UI_GetSaberCvars() unpacks them back when the menu is opened. Names match
+// TaystJK/JAPro's so their saber menu, if a player is using a client that has it, drives ours too.
+XCVAR_DEF( ui_sab1_r,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_sab1_g,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_sab1_b,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_sab2_r,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_sab2_g,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_sab2_b,						"255",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// The packed values the sliders above feed into. Registered here as well as in cg_xcvar.h because
+// the saber menu is reachable from the main menu, with no cgame loaded to have registered them --
+// and a cvar first created by a plain Cvar_Set would not carry CVAR_USERINFO, so the server would
+// never see the colour at all. See the matching comment in cg_xcvar.h.
+XCVAR_DEF( cp_sbRGB1,						"0",					NULL,				CVAR_ARCHIVE|CVAR_USERINFO )
+XCVAR_DEF( cp_sbRGB2,						"0",					NULL,				CVAR_ARCHIVE|CVAR_USERINFO )
 XCVAR_DEF( ui_scoreAccuracy,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_scoreAssists,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_scoreBase,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )

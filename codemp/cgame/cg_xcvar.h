@@ -151,6 +151,16 @@ XCVAR_DEF( cl_paused,							"0",					NULL,					CVAR_ROM )
 XCVAR_DEF( com_buildScript,						"0",					NULL,					CVAR_NONE )
 XCVAR_DEF( com_cameraMode,						"0",					NULL,					CVAR_CHEAT )
 XCVAR_DEF( com_optvehtrace,						"0",					NULL,					CVAR_NONE )
+// GalaxyRP: [Saber RGB] the client's custom blade colours, packed 24-bit (r | g<<8 | b<<16), one
+// per saber slot. CVAR_USERINFO is what makes this work at all: the engine folds userinfo cvars
+// into the userinfo string it sends the server automatically, so setting these is all it takes for
+// ClientUserinfoChanged() to see the change -- no custom netcode on either side. CVAR_ARCHIVE
+// keeps the choice across restarts. The names deliberately match TaystJK/JAPro's, so an RGB-capable
+// client that already sets them is understood as-is. Also registered in ui_xcvar.h, because the
+// saber menu can be opened from the main menu before cgame is loaded at all, and a cvar first
+// created there by a plain Cvar_Set would not otherwise carry these flags.
+XCVAR_DEF( cp_sbRGB1,							"0",					NULL,					CVAR_ARCHIVE|CVAR_USERINFO )
+XCVAR_DEF( cp_sbRGB2,							"0",					NULL,					CVAR_ARCHIVE|CVAR_USERINFO )
 XCVAR_DEF( debugBB,								"0",					NULL,					CVAR_NONE )
 XCVAR_DEF( forcepowers,							DEFAULT_FORCEPOWERS,	NULL,					CVAR_USERINFO|CVAR_ARCHIVE )
 XCVAR_DEF( g_synchronousClients,				"0",					NULL,					CVAR_SYSTEMINFO )

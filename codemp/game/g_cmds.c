@@ -2112,12 +2112,17 @@ int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3
 // GalaxyRP (Alex): [Database] SELECT This method returns the character ID associated with the character name given, AND which belongs to the account the player is currently logged in with.
 saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	char saber1Model[50] = "";
-	char saber1Color[2] = "";
 	char saber2Model[50] = "";
-	char saber2Color[2] = "";
 	saber_db_info_t saber_info = {"none", "none"};
 
-	rc = sqlite3_prepare(db, va("SELECT saberOneModel, saberOneColor, saberTwoColor, saberTwoModel FROM Characters WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
+	// GalaxyRP fix: [security] this used to also SELECT saberOneColor/saberTwoColor and strcpy() the
+	// results into two-byte stack buffers -- safe only for as long as those columns held nothing but
+	// the untouched single-digit schema default. They now hold real packed colour values (up to eight
+	// digits, see g_local.h), which would have overflowed both buffers on every call. Nothing in this
+	// function ever read either value -- it returns saber models only -- so the columns are simply no
+	// longer selected; the blade colours are restored by select_player_character() and
+	// select_account_and_default_character_data(), which read them into pers.saberRGB[] properly.
+	rc = sqlite3_prepare(db, va("SELECT saberOneModel, saberTwoModel FROM Characters WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2137,10 +2142,11 @@ saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, cha
 	if (rc == SQLITE_ROW)
 	{
 
-		strcpy(saber1Model, sqlite3_column_text(stmt, 0));
-		strcpy(saber1Color, sqlite3_column_text(stmt, 1));
-		strcpy(saber2Color, sqlite3_column_text(stmt, 2));
-		strcpy(saber2Model, sqlite3_column_text(stmt, 3));
+		// GalaxyRP fix: [security] bound both copies to their destination the same way the two
+		// character-load paths already do -- a saber-model name of 50+ characters in the database
+		// would otherwise overflow these stack buffers.
+		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 0), sizeof(saber1Model));
+		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 1), sizeof(saber2Model));
 
 		sqlite3_finalize(stmt);
 	}
@@ -2681,7 +2687,13 @@ void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* 
 	// va("...\"%s\"...'%s'..."). This runs on ClientUserinfoChanged() -- i.e. every time a player
 	// changes their name or model -- making it a frequently-reachable, unauthenticated injection
 	// point. Bind every value as a parameter instead.
-	rc = sqlite3_prepare(db, "UPDATE Characters SET ModelScale=?, NetName=?, ModelName=?, saberOneModel=?, saberTwoModel=? WHERE CharID=?", -1, &stmt, NULL);
+	// GalaxyRP: [Saber RGB] saberOneColor/saberTwoColor join the saber models here -- this function
+	// already runs on every userinfo change, which is exactly when a colour can have changed (see
+	// update_saber_colors() in this file, which routes every colour change through
+	// ClientUserinfoChanged for precisely this reason). A set colour is tagged with SABERRGB_SET so
+	// it can never be mistaken for the legacy schema default these columns still hold on every
+	// pre-existing character row; 0 means "no custom colour". See g_local.h for the full rationale.
+	rc = sqlite3_prepare(db, "UPDATE Characters SET ModelScale=?, NetName=?, ModelName=?, saberOneModel=?, saberTwoModel=?, saberOneColor=?, saberTwoColor=? WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2693,7 +2705,9 @@ void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* 
 	sqlite3_bind_text(stmt, 3, modelName, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 4, ent->client->pers.saber1, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 5, ent->client->pers.saber2, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_int(stmt, 6, ent->client->pers.CharID);
+	sqlite3_bind_int(stmt, 6, ent->client->pers.saberRGB[0] ? (SABERRGB_SET | ent->client->pers.saberRGB[0]) : 0);
+	sqlite3_bind_int(stmt, 7, ent->client->pers.saberRGB[1] ? (SABERRGB_SET | ent->client->pers.saberRGB[1]) : 0);
+	sqlite3_bind_int(stmt, 8, ent->client->pers.CharID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -2916,6 +2930,15 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 13), sizeof(saber2Model));
 		saber2Color = sqlite3_column_int(stmt, 14);
 
+		// GalaxyRP: [Saber RGB] restore the character's custom blade colours. These two columns were
+		// read into unused locals before this feature existed -- they now actually mean something.
+		// Applied here, ahead of update_saber() below, for the same reason the block further down in
+		// select_account_and_default_character_data() is: update_saber() can trigger a character save
+		// through ClientUserinfoChanged(), and that save writes pers.saberRGB[] straight back to this
+		// row -- so it has to already hold this row's values, not the previous character's.
+		ent->client->pers.saberRGB[0] = (saber1Color & SABERRGB_SET) ? (saber1Color & SABERRGB_MASK) : 0;
+		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
+
 		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
 		// re-set to 1 (the "if" branch never set it to 2), so this always evaluated to 1 regardless
 		// of what saber2Model actually held. update_saber() treats number_of_args==2 (i.e.
@@ -2944,7 +2967,14 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		set_model(ent, modelName);
 		//ent->client->saber[1].model
 		sqlite3_finalize(stmt);
-	}	
+
+		// GalaxyRP: [Saber RGB] republish the restored blade colours and push them into the player's
+		// own cvars, so their console and saber menu show what was actually loaded rather than
+		// whatever the client last sent (which the menu would otherwise re-send verbatim on its next
+		// Apply, undoing the restore). Inside the row block, next to the set_netname()/set_model()
+		// calls it mirrors -- with no row there is no character to have restored a colour from.
+		update_saber_colors(ent);
+	}
 
 	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
@@ -3132,6 +3162,13 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		ent->client->pers.skillpoints = skillpoints;
 		strcpy(ent->client->pers.description, description);
 
+		// GalaxyRP: [Saber RGB] restore this character's custom blade colours. Part of this same
+		// pre-update_saber() block for exactly the reason spelled out above: the character save that
+		// update_saber() can trigger writes pers.saberRGB[] back to whichever row pers.CharID names,
+		// so both have to be this character's before it runs.
+		ent->client->pers.saberRGB[0] = (saber1Color & SABERRGB_SET) ? (saber1Color & SABERRGB_MASK) : 0;
+		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
+
 		ent->client->sess.loggedin = qtrue;
 
 		// GalaxyRP fix: [gameplay] Same bug as select_player_character() above, plus this copy
@@ -3167,6 +3204,10 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 
 	set_netname(ent, netName);
 	set_model(ent, modelName);
+
+	// GalaxyRP: [Saber RGB] same as select_player_character() -- republish the restored colours and
+	// push them into the client's own cvars so its console and saber menu agree with the server.
+	update_saber_colors(ent);
 
 	ent->client->sess.amrpgmode = 2;
 
@@ -14632,6 +14673,119 @@ void Cmd_Saber_f( gentity_t *ent ) {
 	update_saber(ent, arg1, arg2, number_of_args);
 }
 
+/*
+==================
+GalaxyRP: [Saber RGB] custom blade colours
+
+pers.saberRGB[] is the authoritative copy of a player's custom blade colours (see g_local.h). Three
+different things can change it -- the /sabercolor command below, an RGB-capable client's own saber
+menu writing its cp_sbRGB1/cp_sbRGB2 userinfo cvars, and a database restore on login -- and after
+any of them the same three things have to happen, which is what update_saber_colors() below does:
+
+  1. the "c3"/"c4" clientinfo configstring keys have to be rebuilt so everyone else's cgame sees
+     the new colour, and the character's database row has to be updated. Both fall out of a single
+     ClientUserinfoChanged() call: it republishes the configstring from pers.saberRGB[], and it
+     already saves the character on every userinfo change (see update_current_character_name_and_model).
+  2. the player's own cp_sbRGB1/cp_sbRGB2 and color1/color2 cvars have to be corrected, because
+     those live on the CLIENT and the server cannot write them directly. Exactly the same problem
+     -- and the same fix -- as saber models and the "supdatesaber" command: without this, a colour
+     the server chose (restored from the database, or set by /sabercolor) would be invisible to the
+     client's own console and saber menu, and the menu would happily re-send its stale value on the
+     next Apply and undo the change.
+==================
+*/
+void update_saber_colors( gentity_t *ent ) {
+	if ( !ent || !ent->client )
+		return;
+
+	// Rebuild the clientinfo configstring (publishing c1..c4) and save the character.
+	ClientUserinfoChanged( ent->s.number );
+
+	// Push the authoritative values into the client's own cvars. Sent unconditionally, the same way
+	// supdatesaber is, so a login restore that happens to leave the colour unchanged still leaves
+	// the client's menu holding the right value rather than whatever it last sent.
+	trap->SendServerCommand( ent - g_entities, va( "supdatesabercolor %i %i\n",
+		ent->client->pers.saberRGB[0], ent->client->pers.saberRGB[1] ) );
+}
+
+// Reads one 0-255 colour channel from a /sabercolor argument.
+static int SaberColorArg( int argNum ) {
+	char arg[MAX_TOKEN_CHARS];
+
+	trap->Argv( argNum, arg, sizeof( arg ) );
+
+	return Com_Clampi( 0, 255, atoi( arg ) );
+}
+
+/*
+==================
+Cmd_SaberColor_f
+
+  /sabercolor                          -- show the current colours and the usage
+  /sabercolor off                      -- go back to the ordinary six-colour palette
+  /sabercolor <r> <g> <b>              -- set both blades
+  /sabercolor <r> <g> <b> <r> <g> <b>  -- set each blade separately
+==================
+*/
+void Cmd_SaberColor_f( gentity_t *ent ) {
+	int argc = trap->Argc();
+	int rgb[2] = { 0, 0 };
+	char arg1[MAX_TOKEN_CHARS];
+
+	if ( argc == 2 ) {
+		trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+		if ( !Q_stricmp( arg1, "off" ) || !Q_stricmp( arg1, "none" ) ) {
+			ent->client->pers.saberRGB[0] = ent->client->pers.saberRGB[1] = 0;
+			update_saber_colors( ent );
+			trap->SendServerCommand( ent - g_entities,
+				"print \"Custom saber colour cleared -- back to your selected palette colour.\n\"" );
+			return;
+		}
+	}
+
+	if ( argc != 4 && argc != 7 ) {
+		int i;
+
+		trap->SendServerCommand( ent - g_entities,
+			"print \"Usage: ^5/sabercolor <red> <green> <blue>^7 (0-255 each, both blades)\n"
+			"       ^5/sabercolor <r> <g> <b> <r> <g> <b>^7 (first blade, then second)\n"
+			"       ^5/sabercolor off^7 (return to your selected palette colour)\n\"" );
+
+		for ( i = 0; i < 2; i++ ) {
+			if ( ent->client->pers.saberRGB[i] ) {
+				trap->SendServerCommand( ent - g_entities, va( "print \"Saber %i is currently %i %i %i.\n\"",
+					i + 1,
+					SABERRGB_R( ent->client->pers.saberRGB[i] ),
+					SABERRGB_G( ent->client->pers.saberRGB[i] ),
+					SABERRGB_B( ent->client->pers.saberRGB[i] ) ) );
+			}
+		}
+		return;
+	}
+
+	rgb[0] = SABERRGB_PACK( SaberColorArg( 1 ), SaberColorArg( 2 ), SaberColorArg( 3 ) );
+	rgb[1] = ( argc == 7 )
+		? SABERRGB_PACK( SaberColorArg( 4 ), SaberColorArg( 5 ), SaberColorArg( 6 ) )
+		: rgb[0];
+
+	// A packed value of zero is how "no custom colour" is stored, so pure black is the one colour
+	// this encoding cannot represent -- say so plainly rather than silently doing nothing, or
+	// silently turning the request into /sabercolor off.
+	if ( !rgb[0] || !rgb[1] ) {
+		trap->SendServerCommand( ent - g_entities,
+			"print \"A pure black blade cannot be set (use ^5/sabercolor off^7 to clear a colour).\n\"" );
+		return;
+	}
+
+	ent->client->pers.saberRGB[0] = rgb[0];
+	ent->client->pers.saberRGB[1] = rgb[1];
+	update_saber_colors( ent );
+
+	trap->SendServerCommand( ent - g_entities, va( "print \"Saber colour set to %i %i %i.\n\"",
+		SABERRGB_R( rgb[0] ), SABERRGB_G( rgb[0] ), SABERRGB_B( rgb[0] ) ) );
+}
+
 qboolean zyk_can_deflect_shots(gentity_t *ent)
 {
 	if (ent->client && ent->client->sess.amrpgmode == 2 &&
@@ -16989,6 +17143,7 @@ command_t commands[] = {
 	{ "levelshot",			Cmd_LevelShot_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 	{ "maplist",			Cmd_MapList_f,				CMD_NOINTERMISSION },
 	{ "saber",				Cmd_Saber_f,				CMD_NOINTERMISSION },
+	{ "sabercolor",			Cmd_SaberColor_f,			CMD_NOINTERMISSION },	// GalaxyRP: [Saber RGB]
 	{ "say",				Cmd_Say_f,					0 },
 	{ "say_team",			Cmd_SayTeam_f,				0 },
 	{ "score",				Cmd_Score_f,				0 },

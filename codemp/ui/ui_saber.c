@@ -52,6 +52,10 @@ static qhandle_t blueSaberGlowShader;
 static qhandle_t blueSaberCoreShader;
 static qhandle_t purpleSaberGlowShader;
 static qhandle_t purpleSaberCoreShader;
+// GalaxyRP: [Saber RGB] the greyscale, tintable pair -- see assets/client/shaders/rgbsaber.shader
+// and the matching cgs.media handles in cg_local.h.
+static qhandle_t rgbSaberGlowShader;
+static qhandle_t rgbSaberCoreShader;
 
 void UI_CacheSaberGlowGraphics( void )
 {//FIXME: these get fucked by vid_restarts
@@ -67,6 +71,8 @@ void UI_CacheSaberGlowGraphics( void )
 	blueSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/blue_line" );
 	purpleSaberGlowShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_glow" );
 	purpleSaberCoreShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_line" );
+	rgbSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/rgb_glow" );	// GalaxyRP: [Saber RGB]
+	rgbSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/rgb_line" );
 }
 
 qboolean UI_SaberModelForSaber( const char *saberName, char *saberModel )
@@ -241,10 +247,16 @@ void UI_SaberLoadParms( void )
 	WP_SaberLoadParms();
 }
 
-void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color )
+// GalaxyRP: [Saber RGB] "secondSaber" says which blade's slider cvars to read when the colour is
+// SABER_RGB, so the menu preview shows the same colour the player will actually carry in-game.
+void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, qboolean secondSaber )
 {
 	vec3_t		mid, rgb={1,1,1};
 	qhandle_t	blade = 0, glow = 0;
+	// GalaxyRP: [Saber RGB] full white leaves the six pre-coloured shaders exactly as they were --
+	// white is the identity for the multiply the renderer applies -- so this is a no-op except for
+	// SABER_RGB, which is the only case that fills it in with something else.
+	byte		tint[3] = { 0xff, 0xff, 0xff };
 	refEntity_t saber;
 	float radiusmult;
 	float radiusRange;
@@ -291,7 +303,44 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 			blade = purpleSaberCoreShader;
 			VectorSet( rgb, 0.9f, 0.2f, 1.0f );
 			break;
+		// GalaxyRP: [Saber RGB] read the player's live slider values rather than a fixed colour, so
+		// dragging a slider updates the preview immediately instead of only on Apply.
+		case SABER_RGB:
+		{
+			int i;
+			int channel[3];
+
+			glow = rgbSaberGlowShader;
+			blade = rgbSaberCoreShader;
+
+			channel[0] = (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_r" : "ui_sab1_r" );
+			channel[1] = (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_g" : "ui_sab1_g" );
+			channel[2] = (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_b" : "ui_sab1_b" );
+
+			for ( i = 0; i < 3; i++ )
+			{
+				tint[i] = (byte)Com_Clampi( 0, 255, channel[i] );
+				rgb[i] = tint[i] / 255.0f;
+			}
+
+			// GalaxyRP: [Saber RGB] all three sliders at zero would multiply the blade by black and
+			// draw nothing, leaving the player staring at an apparently broken preview. Show the
+			// darkest colour that can actually be sent instead -- the same nudge
+			// UI_PackSaberRGBCvar() applies when it packs the value for real.
+			if ( !tint[0] && !tint[1] && !tint[2] )
+			{
+				tint[0] = tint[1] = tint[2] = 1;
+				VectorSet( rgb, 1.0f / 255.0f, 1.0f / 255.0f, 1.0f / 255.0f );
+			}
+			break;
+		}
 		default:
+			// GalaxyRP: [Saber RGB] the enum now carries ordinals we reserve but do not draw (see
+			// saber_colors_t in q_shared.h). Falling through with blade/glow still 0 would submit a
+			// refEntity with no shader, so land on the same blue everything else defaults to.
+			glow = blueSaberGlowShader;
+			blade = blueSaberCoreShader;
+			VectorSet( rgb, 0.2f, 0.4f, 1.0f );
 			break;
 	}
 
@@ -322,7 +371,10 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	VectorCopy( dir, saber.axis[0] );
 	saber.reType = RT_SABER_GLOW;
 	saber.customShader = glow;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	saber.shaderRGBA[0] = tint[0];	// GalaxyRP: [Saber RGB] white unless a custom colour is in play
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
 	//saber.renderfx = rfx;
 
 	trap->R_AddRefEntityToScene( &saber );
@@ -572,7 +624,10 @@ void UI_SaberDrawBlade( itemDef_t *item, char *saberName, int saberModel, saberT
 		return;
 	}
 
-	UI_DoSaber( bladeOrigin, axis[0], bladeLength, bladeLength, bladeRadius, bladeColor );
+	// GalaxyRP: [Saber RGB] same test the blade-colour cvar was chosen with further up, so the
+	// preview reads the slider set belonging to the blade actually being drawn.
+	UI_DoSaber( bladeOrigin, axis[0], bladeLength, bladeLength, bladeRadius, bladeColor,
+		(qboolean)!((item->flags&ITF_ISSABER) && saberModel < 2) );
 }
 
 void UI_GetSaberForMenu( char *saber, int saberNum )

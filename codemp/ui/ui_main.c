@@ -5253,12 +5253,49 @@ void UI_UpdateSiegeObjectiveGraphics( void )
 
 saber_colors_t TranslateSaberColor( const char *name );
 
+/*
+GalaxyRP: [Saber RGB] pack one blade's three menu sliders into the userinfo cvar the server reads.
+
+The colour only travels when that blade is actually set to "rgb"; otherwise the cvar is cleared to
+0, which is how "no custom colour, just use the palette entry in color1/color2" is spelled
+everywhere else in this feature (see G_ParseSaberRGB in g_utils.c and pers.saberRGB[] in g_local.h).
+Sending one packed value rather than three separate cvars keeps us byte-compatible with
+TaystJK/JAPro, whose cp_sbRGB1/cp_sbRGB2 use exactly this layout.
+*/
+static void UI_PackSaberRGBCvar( qboolean secondSaber )
+{
+	const char *colorCvar = secondSaber ? "ui_saber2_color" : "ui_saber_color";
+	const char *destCvar = secondSaber ? "cp_sbRGB2" : "cp_sbRGB1";
+	int r, g, b;
+
+	if ( Q_stricmp( UI_Cvar_VariableString( colorCvar ), "rgb" ) ) {
+		trap->Cvar_Set( destCvar, "0" );
+		return;
+	}
+
+	r = Com_Clampi( 0, 255, (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_r" : "ui_sab1_r" ) );
+	g = Com_Clampi( 0, 255, (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_g" : "ui_sab1_g" ) );
+	b = Com_Clampi( 0, 255, (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_b" : "ui_sab1_b" ) );
+
+	// A packed 0 is the "unset" marker, so a fully black blade cannot be expressed. Nudge it to the
+	// darkest colour that can be, rather than silently turning the choice into "no custom colour".
+	if ( !SABERRGB_PACK( r, g, b ) )
+		r = g = b = 1;
+
+	trap->Cvar_Set( destCvar, va( "%i", SABERRGB_PACK( r, g, b ) ) );
+}
+
 static void UI_UpdateSaberCvars ( void )
 {
 	saber_colors_t colorI;
 
 	trap->Cvar_Set ( "saber1", UI_Cvar_VariableString ( "ui_saber" ) );
 	trap->Cvar_Set ( "saber2", UI_Cvar_VariableString ( "ui_saber2" ) );
+
+	// GalaxyRP: [Saber RGB] pack before the color1/color2 writes below, so the colour is already in
+	// place by the time the palette slot flips to SABER_RGB and the engine ships the new userinfo.
+	UI_PackSaberRGBCvar( qfalse );
+	UI_PackSaberRGBCvar( qtrue );
 
 	colorI = TranslateSaberColor( UI_Cvar_VariableString ( "ui_saber_color" ) );
 	trap->Cvar_Set ( "color1", va("%d",colorI));
@@ -5421,9 +5458,29 @@ static void UI_UpdateSaberHilt( qboolean secondSaber )
 
 static void UI_UpdateSaberColor( qboolean secondSaber )
 {
+	// GalaxyRP: [Saber RGB] the menu re-runs this whenever the colour selection changes, which is
+	// also the moment the sliders' packed value has to be refreshed -- otherwise switching a blade
+	// to "rgb" would leave cp_sbRGB1/cp_sbRGB2 holding the 0 written the last time it was on a
+	// palette colour, and the blade would come out as its fallback colour until the next Apply.
+	UI_PackSaberRGBCvar( secondSaber );
 }
 
 const char *SaberColorToString( saber_colors_t color );
+
+// GalaxyRP: [Saber RGB] unpack one blade's stored colour back into the menu's three sliders, so
+// re-opening the saber menu shows the colour actually in use -- including one the server restored
+// from the database on login and pushed down with "supdatesabercolor" (see cg_servercmds.c).
+static void UI_UnpackSaberRGBCvar( qboolean secondSaber )
+{
+	int packed = (int)trap->Cvar_VariableValue( secondSaber ? "cp_sbRGB2" : "cp_sbRGB1" );
+
+	if ( !packed )
+		return;	// no custom colour set for this blade -- leave the sliders where the player left them
+
+	trap->Cvar_Set( secondSaber ? "ui_sab2_r" : "ui_sab1_r", va( "%i", SABERRGB_R( packed ) ) );
+	trap->Cvar_Set( secondSaber ? "ui_sab2_g" : "ui_sab1_g", va( "%i", SABERRGB_G( packed ) ) );
+	trap->Cvar_Set( secondSaber ? "ui_sab2_b" : "ui_sab1_b", va( "%i", SABERRGB_B( packed ) ) );
+}
 
 static void UI_GetSaberCvars ( void )
 {
@@ -5436,6 +5493,12 @@ static void UI_GetSaberCvars ( void )
 
 	trap->Cvar_Set ( "ui_saber_color", UI_Cvar_VariableString ( "g_saber_color" ) );
 	trap->Cvar_Set ( "ui_saber2_color", UI_Cvar_VariableString ( "g_saber2_color" ) );
+
+	// GalaxyRP: [Saber RGB] SaberColorToString() above already resolves a color1/color2 of SABER_RGB
+	// to the string "rgb", so ui_saber_color is correct by this point -- this just refills the
+	// sliders behind it.
+	UI_UnpackSaberRGBCvar( qfalse );
+	UI_UnpackSaberRGBCvar( qtrue );
 }
 
 extern qboolean ItemParse_model_g2anim_go( itemDef_t *item, const char *animName );

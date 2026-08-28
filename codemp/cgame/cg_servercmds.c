@@ -1684,6 +1684,48 @@ static void CG_SaberUpdate_f(void)
 	trap->Cvar_Set("saber2", CG_Argv(2));
 }
 
+// GalaxyRP: [Saber RGB] the colour counterpart of CG_SaberUpdate_f above, and needed for the same
+// reason: pers.saberRGB[] on the server is authoritative, but the cvars the player's own console
+// and saber menu read (cp_sbRGB1/cp_sbRGB2, and the color1/color2 that select RGB mode in the first
+// place) live on the CLIENT, where the server cannot write them. update_saber_colors() in g_cmds.c
+// sends this after every colour change -- a /sabercolor, or a database restore on login -- so the
+// menu shows what is actually in effect instead of re-sending its stale value on the next Apply.
+//
+// Note this deliberately writes color1/color2 as well: without it a restored colour would be
+// published by the server (every other player would see it) while the owner's own client still
+// thought it was using an ordinary palette colour.
+static void CG_SaberColorUpdate_f(void)
+{
+	int i;
+
+	if (trap->Cmd_Argc() < 3)
+	{
+		return;
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		int packed = atoi(CG_Argv(i + 1));
+
+		trap->Cvar_Set(i ? "cp_sbRGB2" : "cp_sbRGB1", va("%i", packed));
+
+		// Only claim the RGB palette slot when there is actually a colour to show. Clearing a colour
+		// leaves color1/color2 alone so the player falls back to whatever they had chosen before.
+		if (packed)
+		{
+			trap->Cvar_Set(i ? "color2" : "color1", va("%i", SABER_RGB));
+			trap->Cvar_Set(i ? "ui_saber2_color" : "ui_saber_color", "rgb");
+			trap->Cvar_Set(i ? "g_saber2_color" : "g_saber_color", "rgb");
+		}
+
+		// Keep the menu's own slider cvars in step too, so re-opening it shows the real colour
+		// rather than snapping back to whatever the sliders were last dragged to.
+		trap->Cvar_Set(i ? "ui_sab2_r" : "ui_sab1_r", va("%i", SABERRGB_R(packed)));
+		trap->Cvar_Set(i ? "ui_sab2_g" : "ui_sab1_g", va("%i", SABERRGB_G(packed)));
+		trap->Cvar_Set(i ? "ui_sab2_b" : "ui_sab1_b", va("%i", SABERRGB_B(packed)));
+	}
+}
+
 static void CG_ZykChars(void)
 {
 	char arg[1024] = { 0 };
@@ -1843,6 +1885,7 @@ static serverCommand_t	commands[] = {
 	{ "supdatemodel",		CG_ModelUpdate_f },
 	{ "supdatename",		CG_NameUpdate_f },
 	{ "supdatesaber",		CG_SaberUpdate_f },
+	{ "supdatesabercolor",	CG_SaberColorUpdate_f },	// GalaxyRP: [Saber RGB]
 	{ "sxd",				CG_ParseSiegeExtendedData },
 	{ "tchat",				CG_Chat_f },
 	{ "tinfo",				CG_ParseTeamInfo },

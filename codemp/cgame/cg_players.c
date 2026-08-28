@@ -2522,6 +2522,20 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized ) {
 
 	newInfo.icolor2 = atoi(v);
 
+	// GalaxyRP: [Saber RGB] the custom blade colours that go with an icolor of SABER_RGB, sent as
+	// packed 24-bit integers by ClientUserinfoChanged(). Absent (an ordinary palette colour, or a
+	// server that predates this feature) simply leaves them zeroed, which nothing reads because the
+	// icolor above will not be SABER_RGB either.
+	{
+		int packed;
+
+		packed = atoi( Info_ValueForKey( configstring, "c3" ) );
+		VectorSet( newInfo.rgb1, SABERRGB_R( packed ), SABERRGB_G( packed ), SABERRGB_B( packed ) );
+
+		packed = atoi( Info_ValueForKey( configstring, "c4" ) );
+		VectorSet( newInfo.rgb2, SABERRGB_R( packed ), SABERRGB_G( packed ), SABERRGB_B( packed ) );
+	}
+
 	// bot skill
 	v = Info_ValueForKey( configstring, "skill" );
 	// players have -1 skill so you can determine the bots from the scoreboard code
@@ -6193,10 +6207,67 @@ int CG_LightVerts( vec3_t normal, int numVerts, polyVert_t *verts )
 	return qtrue;
 }
 
-static void CG_RGBForSaberColor( saber_colors_t color, vec3_t rgb )
+/*
+GalaxyRP: [Saber RGB] a colour value arriving from another client is whatever that client put in
+its color1/color2 cvar -- an arbitrary integer, not necessarily one of ours. Fold anything we do
+not draw ourselves back onto a colour we do, so an out-of-range value can never index past the end
+of a switch's worth of shaders or leave a blade drawn with an uninitialised handle.
+
+SABER_FLAME1..SABER_BLACK are the ordinals we reserve for TaystJK/JAPro wire compatibility but do
+not implement (see saber_colors_t in q_shared.h); they collapse onto SABER_RGB, which renders the
+player's actual custom colour rather than an arbitrary palette entry -- the closest thing we have
+to what they asked for. Anything else falls back to blue, matching TranslateSaberColor().
+*/
+static saber_colors_t CG_ClampSaberColor( int color )
+{
+	if ( color >= SABER_RGB && color < NUM_SABER_COLORS )
+		return SABER_RGB;
+
+	if ( color < 0 || color >= NUM_SABER_BASE_COLORS )
+		return SABER_BLUE;
+
+	return (saber_colors_t)color;
+}
+
+/*
+GalaxyRP: [Saber RGB] does this blade actually have a custom colour to draw?
+
+SABER_RGB can arrive without one. A client can send c1=SABER_RGB with an empty c3; a .npc or siege
+class file can name "rgb" as a saber colour for an NPC, which has no player colour behind it at
+all; and reserved ordinals fold onto SABER_RGB in CG_ClampSaberColor above. In every one of those
+cases the colour resolves to 0,0,0 -- and a saber tinted pure black is invisible, which is both a
+rendering bug and, historically, something people deliberately abused. Zero is already the "unset"
+marker on the wire and in the database, so treat it as unset here too and let the caller fall back
+to an ordinary palette colour.
+*/
+static qboolean CG_HasCustomSaberColor( const clientInfo_t *ci, int bnum )
+{
+	const float *rgb;
+
+	if ( !ci )
+		return qfalse;
+
+	rgb = bnum ? ci->rgb2 : ci->rgb1;
+
+	return (qboolean)( rgb[0] > 0.0f || rgb[1] > 0.0f || rgb[2] > 0.0f );
+}
+
+// GalaxyRP: [Saber RGB] "ci" supplies the custom colour behind SABER_RGB and "bnum" picks which of
+// the player's two saber slots it comes from. Both may be omitted (NULL) by callers with no client
+// context, in which case SABER_RGB degrades to the default blue -- see CG_DoSaberLight.
+static void CG_RGBForSaberColor( saber_colors_t color, vec3_t rgb, const clientInfo_t *ci, int bnum )
 {
 	switch( color )
 	{
+		case SABER_RGB:
+			if ( CG_HasCustomSaberColor( ci, bnum ) )
+			{
+				// Stored 0-255 by CG_NewClientInfo; the dlight and tint paths both want 0-1 here.
+				VectorScale( bnum ? ci->rgb2 : ci->rgb1, 1.0f / 255.0f, rgb );
+				break;
+			}
+			VectorSet( rgb, 0.2f, 0.4f, 1.0f );
+			break;
 		case SABER_RED:
 			VectorSet( rgb, 1.0f, 0.2f, 0.2f );
 			break;
@@ -6241,8 +6312,11 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 	{
 		if ( saber->blade[i].length >= 0.5f )
 		{
-			//FIXME: make RGB sabers
-			CG_RGBForSaberColor( saber->blade[i].color, rgbs[i] );
+			// GalaxyRP: [Saber RGB] no client context is passed here on purpose. This dlight is
+			// driven by the blade colour baked into the .sab definition, not by the colour the
+			// player picked (that is CG_DoSaber's own light, further down) -- so a custom colour
+			// never reaches this field, and there is nothing here for it to select.
+			CG_RGBForSaberColor( CG_ClampSaberColor( saber->blade[i].color ), rgbs[i], NULL, 0 );
 			lengths[i] = saber->blade[i].length;
 			if ( saber->blade[i].length*2.0f > diameter )
 			{
@@ -6306,7 +6380,10 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 	}
 }
 
-void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int rfx, qboolean doLight )
+// GalaxyRP: [Saber RGB] "ci"/"bnum" identify whose blade this is, so a SABER_RGB colour can be
+// resolved to that player's own custom colour. Callers with no client context may pass NULL/0, in
+// which case SABER_RGB falls back to the default blue rather than tinting with stale data.
+void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int rfx, qboolean doLight, const clientInfo_t *ci, int bnum )
 {
 	vec3_t		mid;
 	qhandle_t	blade = 0, glow = 0;
@@ -6314,6 +6391,18 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	float radiusmult;
 	float radiusRange;
 	float radiusStart;
+	// GalaxyRP: [Saber RGB] the per-entity tint the blade is drawn with. Full white leaves the six
+	// pre-coloured palette shaders looking exactly as they always have (white is the identity for
+	// the multiply the renderer applies), so this stays a no-op for every colour but SABER_RGB.
+	byte		tint[3] = { 0xff, 0xff, 0xff };
+
+	color = CG_ClampSaberColor( color );
+
+	// GalaxyRP: [Saber RGB] a blade can claim SABER_RGB with no colour behind it (an NPC whose .npc
+	// file names "rgb", a client sending c1 without c3). Drop back to a palette colour rather than
+	// selecting the tintable shaders and multiplying them by black, which draws nothing at all.
+	if ( color == SABER_RGB && !CG_HasCustomSaberColor( ci, bnum ) )
+		color = SABER_BLUE;
 
 	if ( length < 0.5f )
 	{
@@ -6350,6 +6439,21 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 			glow = cgs.media.purpleSaberGlowShader;
 			blade = cgs.media.purpleSaberCoreShader;
 			break;
+		// GalaxyRP: [Saber RGB] the greyscale, tintable pair. Unlike the six above, these carry no
+		// colour of their own -- the shaderRGBA set on the refEntity below supplies it.
+		case SABER_RGB:
+		{
+			int i;
+			vec3_t custom;
+
+			glow = cgs.media.rgbSaberGlowShader;
+			blade = cgs.media.rgbSaberCoreShader;
+
+			CG_RGBForSaberColor( SABER_RGB, custom, ci, bnum );
+			for ( i = 0; i < 3; i++ )
+				tint[i] = (byte)Com_Clampi( 0, 255, (int)(custom[i] * 255.0f) );
+			break;
+		}
 		default:
 			glow = cgs.media.blueSaberGlowShader;
 			blade = cgs.media.blueSaberCoreShader;
@@ -6359,7 +6463,7 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	if (doLight)
 	{	// always add a light because sabers cast a nice glow before they slice you in half!!  or something...
 		vec3_t rgb={1,1,1};
-		CG_RGBForSaberColor( color, rgb );
+		CG_RGBForSaberColor( color, rgb, ci, bnum );
 		trap->R_AddLightToScene( mid, (length*1.4f) + (Q_flrand(0.0f, 1.0f)*3.0f), rgb[0], rgb[1], rgb[2] );
 	}
 
@@ -6395,7 +6499,12 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	VectorCopy( dir, saber.axis[0] );
 	saber.reType = RT_SABER_GLOW;
 	saber.customShader = glow;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	// GalaxyRP: [Saber RGB] "tint" is full white for every palette colour, so this is byte-for-byte
+	// the 0xff,0xff,0xff,0xff this line always wrote unless a custom colour is in play.
+	saber.shaderRGBA[0] = tint[0];
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
 	saber.renderfx = rfx;
 
 	trap->R_AddRefEntityToScene( &saber );
@@ -6413,7 +6522,10 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
 
 	saber.shaderTexCoord[0] = saber.shaderTexCoord[1] = 1.0f;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	saber.shaderRGBA[0] = tint[0];	// GalaxyRP: [Saber RGB] see the glow pass above
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
 
 	trap->R_AddRefEntityToScene( &saber );
 }
@@ -7477,8 +7589,11 @@ JustDoIt:
 	//	will get rendered properly in a mirror...not sure if this is necessary??
 	//CG_DoSaber( org_, axis_[0], saberLen, client->saber[saberNum].blade[bladeNum].lengthMax, client->saber[saberNum].blade[bladeNum].radius,
 	//	scolor, renderfx, (qboolean)(saberNum==0&&bladeNum==0) );
+	// GalaxyRP: [Saber RGB] "client" and "saberNum" let CG_DoSaber resolve a SABER_RGB scolor to
+	// this player's own custom colour (clientInfo_t::rgb1/rgb2, filled in by CG_NewClientInfo).
 	CG_DoSaber( org_, axis_[0], saberLen, client->saber[saberNum].blade[bladeNum].lengthMax, client->saber[saberNum].blade[bladeNum].radius,
-		scolor, renderfx, (qboolean)(client->saber[saberNum].numBlades < 3 && !(client->saber[saberNum].saberFlags2&SFL2_NO_DLIGHT)) );
+		scolor, renderfx, (qboolean)(client->saber[saberNum].numBlades < 3 && !(client->saber[saberNum].saberFlags2&SFL2_NO_DLIGHT)),
+		client, saberNum );
 }
 
 int CG_IsMindTricked(int trickIndex1, int trickIndex2, int trickIndex3, int trickIndex4, int client)

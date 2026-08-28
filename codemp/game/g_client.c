@@ -2333,6 +2333,35 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	Q_strncpyz( color1, Info_ValueForKey( userinfo, "color1" ), sizeof( color1 ) );
 	Q_strncpyz( color2, Info_ValueForKey( userinfo, "color2" ), sizeof( color2 ) );
 
+	// GalaxyRP: [Saber RGB] custom blade colours. cp_sbRGB1/cp_sbRGB2 are CVAR_USERINFO cvars that
+	// an RGB-capable client (ours, or a TaystJK/JAPro one) sets from its saber menu, so they arrive
+	// here automatically along with the rest of the userinfo -- but the server keeps the
+	// authoritative copy in pers.saberRGB[], because the same colour can also be set by /sabercolor
+	// and restored from the character's database row on login, neither of which the client's own
+	// cvar knows about. A client without RGB support sends nothing at all, so an absent or zero
+	// value is treated as "no opinion" and deliberately does NOT clear a colour set by either of
+	// those other two routes -- otherwise every ordinary userinfo change (a name or model edit)
+	// would wipe it straight back out again.
+	{
+		int i;
+		static const char *sbRGBKey[2] = { "cp_sbRGB1", "cp_sbRGB2" };
+
+		for ( i = 0; i < 2; i++ ) {
+			int fromClient = G_ParseSaberRGB( Info_ValueForKey( userinfo, sbRGBKey[i] ) );
+
+			if ( fromClient )
+				client->pers.saberRGB[i] = fromClient;
+		}
+
+		// A blade with a custom colour always reports SABER_RGB as its palette entry, whatever the
+		// client's own color1/color2 happen to say -- that is the flag every other client's cgame
+		// keys off to read "c3"/"c4" instead of using one of the six fixed palette colours.
+		if ( client->pers.saberRGB[0] )
+			Q_strncpyz( color1, va( "%i", SABER_RGB ), sizeof( color1 ) );
+		if ( client->pers.saberRGB[1] )
+			Q_strncpyz( color2, va( "%i", SABER_RGB ), sizeof( color2 ) );
+	}
+
 	// gender hints
 	s = Info_ValueForKey( userinfo, "sex" );
 	if ( !Q_stricmp( s, "female" ) )
@@ -2356,6 +2385,10 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	Q_strcat( buf, sizeof( buf ), va( "st2\\%s\\", client->pers.saber2 ) );
 	Q_strcat( buf, sizeof( buf ), va( "c1\\%s\\", color1 ) );
 	Q_strcat( buf, sizeof( buf ), va( "c2\\%s\\", color2 ) );
+	// GalaxyRP: [Saber RGB] the packed custom colour behind a SABER_RGB c1/c2 above. Key names
+	// match TaystJK/JAPro's so a TaystJK client rendering with its own cgame reads them too.
+	Q_strcat( buf, sizeof( buf ), va( "c3\\%i\\", client->pers.saberRGB[0] ) );
+	Q_strcat( buf, sizeof( buf ), va( "c4\\%i\\", client->pers.saberRGB[1] ) );
 	Q_strcat( buf, sizeof( buf ), va( "hc\\%i\\", client->pers.maxHealth ) );
 	if ( ent->r.svFlags & SVF_BOT )
 		Q_strcat( buf, sizeof( buf ), va( "skill\\%s\\", Info_ValueForKey( userinfo, "skill" ) ) );

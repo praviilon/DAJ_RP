@@ -76,6 +76,44 @@ model / sound configstring indexes
 
 /*
 =====================================================================
+GalaxyRP: [Saber RGB] Parse a packed 24-bit saber colour.
+
+The value arrives either from a client's cp_sbRGB1/cp_sbRGB2 userinfo cvar (freely settable by the
+player, so entirely untrusted) or from the character's database row, and ends up driving a render
+tint on every other player's machine -- so it is masked down to the three channels it is allowed to
+occupy here rather than anywhere further downstream. Returns 0 for "no custom colour", which is
+also what an absent, empty, malformed or negative value degrades to.
+
+Note that 0 is not merely the "unset" marker but also the only unrepresentable colour: pure black
+would pack to 0 as well. That is deliberate -- a black blade is invisible against a dark map and
+was historically used to cheat -- so /sabercolor rejects it up front rather than silently turning
+the request into "no custom colour".
+=====================================================================
+*/
+int G_ParseSaberRGB( const char *str ) {
+	int packed, i;
+
+	if ( !str || !str[0] )
+		return 0;
+
+	// The largest value this can legitimately be is SABERRGB_MASK, eight digits. Reject anything
+	// longer (or not a plain decimal number) up front rather than handing it to atoi(), whose
+	// behaviour on a value too large for an int is undefined -- and this string comes straight off
+	// the wire from a client that is free to put anything it likes in it.
+	for ( i = 0; str[i]; i++ ) {
+		if ( str[i] < '0' || str[i] > '9' || i >= 8 )
+			return 0;
+	}
+
+	packed = atoi( str );
+	if ( packed <= 0 )
+		return 0;
+
+	return packed & SABERRGB_MASK;
+}
+
+/*
+=====================================================================
 Cleans the given string from newlines and such
 =====================================================================
 */

@@ -224,6 +224,12 @@ typedef struct clientInfo_s {
 	int				icolor1;
 	int				icolor2;
 
+	// GalaxyRP: [Saber RGB] the custom blade colour behind an icolor of SABER_RGB, unpacked from the
+	// "c3"/"c4" clientinfo keys into 0-255 components (see CG_NewClientInfo). Only meaningful when
+	// the matching icolor is SABER_RGB -- otherwise the fixed palette shader supplies the colour.
+	vec3_t			rgb1;
+	vec3_t			rgb2;
+
 	int				score;			// updated by score servercmds
 	int				location;		// location index for team mode
 	int				health;			// you only get this info about your teammates
@@ -1174,6 +1180,13 @@ typedef struct cgMedia_s {
 	qhandle_t	blueSaberCoreShader;
 	qhandle_t	purpleSaberGlowShader;
 	qhandle_t	purpleSaberCoreShader;
+	// GalaxyRP: [Saber RGB] the six shaders above are each baked to one fixed colour, so none of
+	// them can carry a custom one. These two are the same artwork drawn in neutral greyscale with
+	// "rgbGen vertex", which makes the renderer multiply them by the per-entity shaderRGBA the
+	// blade is submitted with -- that is what lets one shader draw any colour. See
+	// assets/client/shaders/rgbsaber.shader.
+	qhandle_t	rgbSaberGlowShader;
+	qhandle_t	rgbSaberCoreShader;
 	qhandle_t	saberBlurShader;
 	qhandle_t	swordTrailShader;
 
