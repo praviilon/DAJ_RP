@@ -1780,7 +1780,11 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	// (the two values a player directly controls via /new) were spliced straight into the INSERT
 	// text via va("...%s...%s..."). A quote in either value could inject arbitrary SQL. Prepare/bind/
 	// step directly instead so the values can never be interpreted as SQL syntax.
-	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, '0', ?)", -1, &stmt, NULL);
+	// GalaxyRP fix: [Database] PlayerSettings was hardcoded as the literal '0' here instead of being
+	// bound like every other column -- harmless on this specific INSERT (a brand new account's
+	// pers.player_settings is always still 0 at this point), but see the UPDATE sites below for why
+	// this same pattern is a real bug elsewhere. Binding it here too for consistency.
+	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, ?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1790,7 +1794,8 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
-	sqlite3_bind_text(stmt, 4, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 4, ent->client->pers.player_settings);
+	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -1859,7 +1864,12 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 	// character name) spliced straight into the UPDATE text via va("...%s..."). This is the query
 	// /changepassword ultimately writes through, so a password containing a quote could inject
 	// arbitrary SQL. Bind every value as a parameter instead.
-	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings='0', AdminLevel=?, DefaultChar=?, Password=? WHERE AccountID=?", -1, &stmt, NULL);
+	// GalaxyRP fix: [Database] PlayerSettings was hardcoded as the literal '0' instead of being
+	// bound, on every single write to this table -- since this function is what /settings' toggle
+	// commands ultimately save through (via save_account(ent, qfalse)), every settings change was
+	// silently reset back to 0 in the DB on the very next save, and came back off on the player's
+	// next login. Bind the player's actual in-memory bitmask instead.
+	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=?, Password=? WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1867,10 +1877,11 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 		sqlite3_close(db);
 		return;
 	}
-	sqlite3_bind_int(stmt, 1, ent->client->pers.bitvalue);
-	sqlite3_bind_text(stmt, 2, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_text(stmt, 3, ent->client->pers.password, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_int(stmt, 4, ent->client->sess.accountID);
+	sqlite3_bind_int(stmt, 1, ent->client->pers.player_settings);
+	sqlite3_bind_int(stmt, 2, ent->client->pers.bitvalue);
+	sqlite3_bind_text(stmt, 3, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 4, ent->client->pers.password, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 5, ent->client->sess.accountID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -1995,56 +2006,6 @@ void insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* db, c
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 	}
 	sqlite3_finalize(stmt);
-
-	return;
-}
-
-// GalaxyRP (Alex): [Database] SELECT This method grabs all the values from a characters table row (needs a character name passed on), and assigns them to the entity.
-void select_chars_table_row_from_char_name(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	// GalaxyRP fix: [security] this used to build the query text via va("...Name='%s'", character_name)
-	// -- splicing the raw character name straight into the SQL string. Currently unreachable (no
-	// command calls this function today), but fixed for consistency/safety with the rest of the DB
-	// layer in case it's wired up later.
-	rc = sqlite3_prepare(db, "SELECT CharID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
-	sqlite3_bind_text(stmt, 2, character_name, -1, SQLITE_TRANSIENT);
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	if (rc == SQLITE_ROW)
-	{
-		char displayName[MAX_INFO_STRING], modelName[MAX_STRING_CHARS];
-
-		ent->client->pers.CharID = sqlite3_column_int(stmt, 0);
-		ent->client->pers.credits = sqlite3_column_int(stmt, 1);
-		ent->client->pers.level = sqlite3_column_int(stmt, 2);
-		do_scale(ent, sqlite3_column_int(stmt, 3));
-		strcpy(ent->client->sess.rpgchar, character_name);
-		ent->client->pers.skillpoints = sqlite3_column_int(stmt, 5);
-		strcpy(ent->client->pers.description, sqlite3_column_text(stmt, 6));
-		strcpy(displayName, sqlite3_column_text(stmt, 7));
-		strcpy(modelName, sqlite3_column_text(stmt, 8));
-
-		set_netname(ent, displayName);
-		set_model(ent, modelName);
-
-		// GalaxyRP (Alex): [XP System] Grab XP value from database.
-		ent->client->pers.xp = sqlite3_column_int(stmt, 9);
-
-		sqlite3_finalize(stmt);
-
-		return;
-	}
 
 	return;
 }
@@ -2268,37 +2229,6 @@ void delete_chars_table_row_with_name(gentity_t* ent, char* charName, sqlite3* d
 void insert_skills_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	char insert_new_entry_to_skills_table[919] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
 	run_db_query(insert_new_entry_to_skills_table, db, zErrMsg, rc, stmt);
-
-	return;
-}
-
-// GalaxyRP (Alex): [Database] SELECT This method grabs all the values from a skills table row (ASSUMES THE PLAYERS IS ALREADY LOGGED IN), and assigns them to the entity.
-void select_skills_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	rc = sqlite3_prepare(db, va("SELECT * FROM Skills WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	if (rc == SQLITE_ROW)
-	{
-		for (int i = 0; i < NUM_OF_SKILLS; i++) {
-			ent->client->pers.skill_levels[i] = sqlite3_column_int(stmt, i + 1);
-		}
-
-		sqlite3_finalize(stmt);
-
-		return;
-
-	}
 
 	return;
 }
@@ -2750,118 +2680,6 @@ void update_current_character_scale(gentity_t* ent, sqlite3* db, char* zErrMsg, 
 
 	run_db_query(va(update_character_query,
 		ent->client->ps.iModelScale,
-		ent->client->pers.CharID
-	), db, zErrMsg, rc, stmt);
-
-	return;
-}
-
-void update_current_character(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char userinfo[MAX_INFO_STRING], modelName[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
-
-	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
-	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
-
-	// GalaxyRP fix: [security] this used to go through run_db_query() as one combined
-	// Characters+Skills+Weapons UPDATE, with the player's description, netname, and model name
-	// spliced straight into the Characters portion via va("...\"%s\"..."). sqlite3_bind_*() only
-	// binds a single prepared statement, so the Characters UPDATE (the only one of the three with
-	// string values) is split out and prepared/bound/stepped on its own; the Skills and Weapons
-	// UPDATEs are all-integer and unaffected, so they stay combined via run_db_query() below,
-	// unchanged. Currently unreachable (no command calls this function today -- the live save path
-	// is update_current_character_and_account()), but fixed for consistency/safety with the rest of
-	// the DB layer in case it's wired up later.
-	rc = sqlite3_prepare(db, "UPDATE Characters SET Credits=?, Level=?, ModelScale=?, Skillpoints=?, Description=?, NetName=?, ModelName=? WHERE CharID=?", -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	sqlite3_bind_int(stmt, 1, ent->client->pers.credits);
-	sqlite3_bind_int(stmt, 2, ent->client->pers.level);
-	sqlite3_bind_int(stmt, 3, ent->client->ps.iModelScale);
-	sqlite3_bind_int(stmt, 4, ent->client->pers.skillpoints);
-	sqlite3_bind_text(stmt, 5, ent->client->pers.description, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_text(stmt, 6, ent->client->pers.netname, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_text(stmt, 7, modelName, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_int(stmt, 8, ent->client->pers.CharID);
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-	}
-	sqlite3_finalize(stmt);
-
-	char update_character_query[1100] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i' WHERE CharID='%i';\
-		UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
-
-	run_db_query(va(update_character_query,
-		ent->client->pers.skill_levels[0],	//Jump
-		ent->client->pers.skill_levels[1],	//Push
-		ent->client->pers.skill_levels[2],	//Pull
-		ent->client->pers.skill_levels[3],	//Speed
-		ent->client->pers.skill_levels[4],	//Sense
-		ent->client->pers.skill_levels[5],	//SaberAttack
-		ent->client->pers.skill_levels[6],	//SaberDefense
-		ent->client->pers.skill_levels[7],	//SaberThrow
-		ent->client->pers.skill_levels[8],	//Absorb
-		ent->client->pers.skill_levels[9],	//Heal
-		ent->client->pers.skill_levels[10],	//Protect
-		ent->client->pers.skill_levels[11],	//MindTrick
-		ent->client->pers.skill_levels[12],	//TeamHeal
-		ent->client->pers.skill_levels[13],	//Lightning
-		ent->client->pers.skill_levels[14],	//Grip
-		ent->client->pers.skill_levels[15],	//Drain
-		ent->client->pers.skill_levels[16],	//Rage
-		ent->client->pers.skill_levels[17],	//TeamEnergize
-		ent->client->pers.skill_levels[18],	//StunBaton
-		ent->client->pers.skill_levels[19],	//BlasterPistol
-		ent->client->pers.skill_levels[20],	//BlasterRifle
-		ent->client->pers.skill_levels[21],	//Disruptor
-		ent->client->pers.skill_levels[22],	//Bowcaster
-		ent->client->pers.skill_levels[23],	//Repeater
-		ent->client->pers.skill_levels[24],	//DEMP2
-		ent->client->pers.skill_levels[25],	//Flechette
-		ent->client->pers.skill_levels[26],	//RocketLauncher
-		ent->client->pers.skill_levels[27],	//ConcussionRifle
-		ent->client->pers.skill_levels[28],	//BryarPistol
-		ent->client->pers.skill_levels[29],	//Melee
-		ent->client->pers.skill_levels[30],	//MaxShield
-		ent->client->pers.skill_levels[31],	//ShieldStrength
-		ent->client->pers.skill_levels[32],	//HealthStrength
-		ent->client->pers.skill_levels[33],	//DrainShield
-		ent->client->pers.skill_levels[34],	//Jetpack
-		ent->client->pers.skill_levels[35],	//SenseHealth
-		ent->client->pers.skill_levels[36],	//ShieldHeal
-		ent->client->pers.skill_levels[37],	//TeamShieldHeal
-		ent->client->pers.skill_levels[38],	//UniqueSkill
-		ent->client->pers.skill_levels[39],	//BlasterPack
-		ent->client->pers.skill_levels[40],	//PowerCell
-		ent->client->pers.skill_levels[41],	//MetalBolts
-		ent->client->pers.skill_levels[42],	//Rockets
-		ent->client->pers.skill_levels[43],	//Thermals
-		ent->client->pers.skill_levels[44],	//TripMines
-		ent->client->pers.skill_levels[45],	//Detpacks
-		ent->client->pers.skill_levels[46],	//Binoculars
-		ent->client->pers.skill_levels[47],	//BactaCanister
-		ent->client->pers.skill_levels[48],	//SentryGun
-		ent->client->pers.skill_levels[49],	//SeekerDrone
-		ent->client->pers.skill_levels[50],	//Eweb
-		ent->client->pers.skill_levels[51],	//BigBacta
-		ent->client->pers.skill_levels[52],	//ForceField
-		ent->client->pers.skill_levels[53],	//CloakItem
-		ent->client->pers.skill_levels[54],	//ForcePower
-		ent->client->pers.skill_levels[55], //Improvements
-		ent->client->pers.CharID,
-		ent->client->ps.ammo[AMMO_BLASTER],
-		ent->client->ps.ammo[AMMO_POWERCELL],
-		ent->client->ps.ammo[AMMO_METAL_BOLTS],
-		ent->client->ps.ammo[AMMO_ROCKETS],
-		ent->client->ps.ammo[AMMO_THERMAL],
-		ent->client->ps.ammo[AMMO_TRIPMINE],
-		ent->client->ps.ammo[AMMO_DETPACK],
 		ent->client->pers.CharID
 	), db, zErrMsg, rc, stmt);
 
@@ -3387,7 +3205,11 @@ void update_current_character_and_account(gentity_t* ent) {
 	}
 	sqlite3_finalize(stmt);
 
-	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings='0', AdminLevel=?, DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
+	// GalaxyRP fix: [Database] same PlayerSettings-hardcoded-to-'0' bug as
+	// update_accounts_table_row_with_current_values() above -- this is the other write site
+	// (save_account(ent, qtrue), the RPG-char save path) that was silently resetting a logged-in
+	// player's /settings toggles back to 0 in the DB. Bind the real value instead.
+	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3395,9 +3217,10 @@ void update_current_character_and_account(gentity_t* ent) {
 		sqlite3_close(db);
 		return;
 	}
-	sqlite3_bind_int(stmt, 1, ent->client->pers.bitvalue);
-	sqlite3_bind_text(stmt, 2, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_int(stmt, 3, ent->client->sess.accountID);
+	sqlite3_bind_int(stmt, 1, ent->client->pers.player_settings);
+	sqlite3_bind_int(stmt, 2, ent->client->pers.bitvalue);
+	sqlite3_bind_text(stmt, 3, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 4, ent->client->sess.accountID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -3405,7 +3228,13 @@ void update_current_character_and_account(gentity_t* ent) {
 	}
 	sqlite3_finalize(stmt);
 
-	char update_character_query[1100] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i' WHERE CharID='%i';\
+	// GalaxyRP fix: [Database] this query used to stop at Improvements, silently omitting the
+	// Armor/Flamethrower/ShieldRegen/HealthRegen skill columns that update_skills_query() elsewhere
+	// in this file already saves in full -- not an active data-loss bug (those 4 skills can only
+	// change via /rpmodeup and /rpmodedown, which always call update_skills_table_row_with_current_values()
+	// immediately afterward and save all 60 columns themselves), but this save path should still
+	// write a complete, self-consistent row rather than relying on another function to cover the gap.
+	char update_character_query[1200] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i', Armor='%i', Flamethrower='%i', ShieldRegen='%i', HealthRegen='%i' WHERE CharID='%i';\
 		UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
 
 	run_db_query(va(update_character_query,
@@ -3465,6 +3294,10 @@ void update_current_character_and_account(gentity_t* ent) {
 		ent->client->pers.skill_levels[53],	//CloakItem
 		ent->client->pers.skill_levels[54],	//ForcePower
 		ent->client->pers.skill_levels[55], //Improvements
+		ent->client->pers.skill_levels[56], //Armor
+		ent->client->pers.skill_levels[57], //Flamethrower
+		ent->client->pers.skill_levels[58], //Shield Regen
+		ent->client->pers.skill_levels[59], //Health Regen
 		ent->client->pers.CharID,
 		ent->client->ps.ammo[AMMO_BLASTER],
 		ent->client->ps.ammo[AMMO_POWERCELL],

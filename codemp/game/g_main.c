@@ -229,6 +229,10 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	char comparisonName[256] = { 0 };
 	char char_name[10] = "admin";
 
+	// GalaxyRP fix: [Database] PlayerSettings='0' here is intentionally left as a literal, unlike the
+	// same column in g_cmds.c's UPDATE sites -- this is a one-time bootstrap of a brand new admin
+	// account with no gentity_t/pers.player_settings to bind at all, so 0 (no custom settings) is
+	// simply the correct starting value, not an instance of the same bug.
 	char statement_account_entry_creation[200] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','-1','0','admin')";
 	char statement_account_id_select[100] = "SELECT AccountID FROM Accounts WHERE Username='admin'";
 	char statement_character_entry_creation[207] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i', '100', '1', '100', '%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
@@ -394,10 +398,24 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	char statement_flamethrower_column_alter[110] = "ALTER TABLE Skills ADD COLUMN Flamethrower INTEGER DEFAULT 0";
 	char statement_shieldregen_columns_alter[110] = "ALTER TABLE Skills ADD COLUMN ShieldRegen INTEGER DEFAULT 0";
 	char statement_heathregen_columns_alter[110] = "ALTER TABLE Skills ADD COLUMN HealthRegen INTEGER DEFAULT 0";
-	char statement_saber_columns_alter[310] = "ALTER TABLE Characters ADD COLUMN saberOneModel TEXT DEFAULT 'saber_1';\
+	// GalaxyRP fix: [Database] wrapped in an explicit BEGIN/COMMIT so the four ADD COLUMNs apply
+	// atomically -- previously they ran as four separate auto-committed statements within one
+	// sqlite3_exec() call, so a server crash at the exact instant between two of them could in
+	// principle leave the migration half-applied (only some of the four columns added), and the
+	// guard below -- which only re-checks whether the *first* column already exists -- would then
+	// treat that partial state as "already fully migrated" and never add the rest.
+	// GalaxyRP fix: [Database] buffer bumped 310 -> 400 -- the added "BEGIN;"/"COMMIT;" lines are two
+	// more backslash-newline-spliced continuation lines, and (like every other line here) the tab
+	// indentation on each continuation line is itself part of the literal string content, not just
+	// source formatting -- true content is 347 bytes plus the NUL terminator, so 310 would silently
+	// truncate this string with no space left for the terminator (see create_new_character_query's
+	// near-identical bug, fixed earlier this engagement, for what that failure mode looks like).
+	char statement_saber_columns_alter[400] = "BEGIN;\
+												ALTER TABLE Characters ADD COLUMN saberOneModel TEXT DEFAULT 'saber_1';\
 												ALTER TABLE Characters ADD COLUMN saberOneColor INTEGER DEFAULT 1;\
 												ALTER TABLE Characters ADD COLUMN saberTwoModel TEXT DEFAULT 'saber_1';\
-												ALTER TABLE Characters ADD COLUMN saberTwoColor INTEGER DEFAULT 1";
+												ALTER TABLE Characters ADD COLUMN saberTwoColor INTEGER DEFAULT 1;\
+												COMMIT;";
 
 	//Alex: Create Account Table
 	trap->Print("Initializing Account table.\n");
@@ -580,6 +598,15 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 			return;
 		}
 		else {
+			// GalaxyRP fix: [Database] the BEGIN above already opened a transaction on db before the
+			// first ALTER failed, and sqlite3_exec() stops at the first failing statement without
+			// ever reaching the COMMIT -- so db is left mid-transaction here. Everything else in this
+			// function (admin_account_exists()/create_admin_account() below, and every other DB call
+			// on this same connection for the rest of the process) would silently run inside that
+			// same never-committed transaction and vanish when db is eventually closed. Roll it back
+			// explicitly so the connection is back in its normal autocommit state; there is nothing
+			// to lose here since this failed attempt never got past its first (rejected) statement.
+			sqlite3_exec(db, "ROLLBACK;", 0, 0, 0);
 			trap->Print("Saber columns already exists, nothing to do here.\n");
 		}
 	}
