@@ -584,8 +584,8 @@
 			decoration
 		}
 
-//---> Return-to-hilt-selection button -- despite the "Apply" label (kept for visual consistency
-// with TaystJK's own reference), this does not commit anything to the server: it just swaps the
+//---> Return-to-hilt-selection button -- labeled "Close" rather than TaystJK's original "Apply"
+// (which was misleading here): this does not commit anything to the server, it just swaps the
 // RGB panel back out for the hilt-selection widgets and refreshes the live preview from whatever
 // the sliders/blade-style control currently hold. The real commit happens only when the screen's
 // main Apply button (applycurrent, at the bottom) is pressed -- see its own comment below.
@@ -594,8 +594,8 @@
 		{
 			name				rgbsetupapply
 			group				rgbcolormenu
-			text				"Apply"
-			descText			"Close rgb settings menu"
+			text				"Close"
+			descText			"Return to hilt selection -- does not apply changes by itself"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
 			rect				200 160 100 24
