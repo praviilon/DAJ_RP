@@ -2769,8 +2769,14 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	}
 
 	if (ent->item->giType == IT_POWERUP &&
-		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK))
-	{
+		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK) &&
+		other->client->sess.loggedin == qfalse)
+	{ // GalaxyRP: [Force Enlightenment] logged-in players can no longer change their Force alignment
+	  // through traditional means (no /forcealign, no picking a new side at spawn -- see the RPG
+	  // account/character system), so they would otherwise be permanently locked out of whichever
+	  // Enlightenment pickup doesn't match the alignment they picked once, long ago. Restrict this
+	  // side check to logged-out players, who can still freely change alignment and so still get the
+	  // vanilla behavior; a logged-in player can pick up either color.
 		if (ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{
 			if (other->client->ps.fd.forceSide != FORCE_LIGHTSIDE)
