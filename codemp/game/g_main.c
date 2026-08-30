@@ -2376,11 +2376,39 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 G_ShutdownGame
 =================
 */
+// GalaxyRP: [Account] forward-declared so G_ShutdownGame (below) can flush every still-connected
+// player's currently active character before this level's game module is torn down -- same pattern
+// used for the ClientDisconnect fix in g_client.c, whose comment goes into the full history.
+extern void save_account(gentity_t *ent, qboolean save_char_file);
 void G_ShutdownGame( int restart ) {
 	int i = 0;
 	gentity_t *ent;
 
 //	trap->Print ("==== ShutdownGame ====\n");
+
+	// GalaxyRP: [Account] G_ShutdownGame runs on every level change -- a server-console /map, this
+	// mod's own /admmap, map rotation, a vote, or a full server shutdown -- and never called
+	// save_account() for anyone. The engine's own G_WriteSessionData() call further down persists a
+	// player's team/spectator state and *which* account/character they were using (via session
+	// cvars), but none of their actual RPG progress (credits, skill points, XP, saber colours,
+	// etc.) -- those live in ent->client->pers, which is wiped fresh for the new level. Worse,
+	// ClientBegin() on the new level unconditionally reloads every RPG-mode player's account and
+	// default character straight from the database to restore their loadout before they spawn -- so
+	// without a save here, a level change didn't just risk losing unsaved progress, it *guaranteed*
+	// overwriting it with whatever the database already had, for every RPG-mode player on the server
+	// at once, on every single level change. Flush everyone here, first, before any of the cleanup
+	// below runs (none of it touches pers/sess, but this keeps the same save-before-teardown
+	// ordering used in ClientDisconnect). save_account() itself is a no-op for anyone not actually in
+	// RPG mode (sess.amrpgmode != 2), so this is harmless for spectators, bots, and logged-out
+	// players.
+	for (i = 0; i < level.maxclients; i++) {
+		ent = &g_entities[i];
+
+		if (ent->client) {
+			save_account(ent, qtrue);
+		}
+	}
+	i = 0;
 
 	G_CleanAllFakeClients(); //get rid of dynamically allocated fake client structs.
 

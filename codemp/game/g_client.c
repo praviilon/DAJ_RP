@@ -2709,7 +2709,10 @@ and on transition between teams, but doesn't happen on respawns
 extern qboolean	gSiegeRoundBegun;
 extern qboolean	gSiegeRoundEnded;
 extern qboolean g_dontPenalizeTeam; //g_cmds.c
-extern void select_account_and_default_character_data(gentity_t* ent, char username[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
+// GalaxyRP fix: [security] kept in sync with the real definition in g_cmds.c -- see the comment
+// there for why this is declared char[32] (matching sess.filename below) rather than
+// char[MAX_STRING_CHARS].
+extern void select_account_and_default_character_data(gentity_t* ent, char username[32], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
 extern void initialize_rpg_skills(gentity_t *ent);
 void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin);
 void ClientBegin( int clientNum, qboolean allowTeamReset ) {
@@ -4358,6 +4361,10 @@ void G_ClearTeamVote( gentity_t *ent, int team ) {
 }
 
 extern void try_finishing_race();
+// GalaxyRP: [Account] forward-declared so ClientDisconnect (below) can flush the currently active
+// character before this client's slot is torn down -- same pattern already used in g_cmds.c for
+// Cmd_Char_f, whose own comment goes into the full history of why this matters.
+extern void save_account(gentity_t *ent, qboolean save_char_file);
 void ClientDisconnect( int clientNum ) {
 	gentity_t	*ent;
 	gentity_t	*tent;
@@ -4371,6 +4378,19 @@ void ClientDisconnect( int clientNum ) {
 	if ( !ent->client || ent->client->pers.connected == CON_DISCONNECTED ) {
 		return;
 	}
+
+	// GalaxyRP: [Account] this is the server-side handler for every kind of disconnect -- a
+	// voluntary /quit or /disconnect, a /reconnect (which drops and reconnects to the same server,
+	// running through this exact same path), a connection timeout, or a kick/ban -- and it never
+	// called save_account() before. Whatever RPG progress this player had made since the last
+	// incidental save trigger (a purchase, a /settings toggle, a race win, a /char switch, etc. --
+	// there is no periodic autosave in this codebase) was silently discarded the moment their slot
+	// was reused: ClientConnect() unconditionally memset()s the whole client struct on the very
+	// next connection into this slot. Called here, first, while pers.connected is still
+	// CON_CONNECTED and every pers/sess field this player actually has is still intact -- save_account()
+	// itself is a no-op unless sess.amrpgmode == 2, so this is harmless for anyone not actually in
+	// RPG mode.
+	save_account(ent, qtrue);
 
 	i = 0;
 

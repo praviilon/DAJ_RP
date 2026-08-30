@@ -2937,7 +2937,18 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 }
 
 // GalaxyRP (Alex): [Database] This method loads the account information, as well as the information related to the default character, and assigns it to the entity.
-void select_account_and_default_character_data(gentity_t* ent, char username[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+// GalaxyRP fix: [security] the username parameter used to be declared "char username[MAX_STRING_CHARS]"
+// (1024) -- purely documentation in C (a parameter array decays to a pointer regardless of the size
+// written here), but misleading enough that a previous fix bounded an internal copy to match one
+// caller's real buffer size (Cmd_Login_F's own local char username[256]) without accounting for the
+// other real caller, ClientBegin() (g_client.c), which passes ent->client->sess.filename directly --
+// a genuinely fixed 32-byte buffer (g_local.h). GCC's -Wstringop-overflow caught the mismatch once
+// that internal copy carried an explicit size to check the declared 1024 against each call site's
+// real argument size. Declaring the true minimum safe size (32) here instead -- this value is always
+// eventually copied into that same 32-byte sess.filename field regardless of which caller reached
+// here -- keeps the signature honest and clears the warning for both callers at once. Keep this in
+// sync with the matching extern declaration in g_client.c if it ever changes.
+void select_account_and_default_character_data(gentity_t* ent, char username[32], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	char password[256], name[256], description[MAX_STRING_CHARS], netName[MAX_STRING_CHARS], modelName[MAX_STRING_CHARS];
 	int accountID, player_settings, adminLevel, charID, credits, level, modelScale, skillpoints;
 
@@ -2990,12 +3001,17 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		// database right now, and this restore runs on every /login for as long as that row exists.
 		// GalaxyRP fix note: this function's own signature declares "char username[MAX_STRING_CHARS]",
 		// but a parameter array decays to a plain pointer -- sizeof(username) here would silently give
-		// the pointer's size (8), not 1024, and the declared 1024 doesn't reflect reality either: the
-		// only caller, Cmd_Login_F, actually passes its own local char username[256]. Bounding to 256
-		// explicitly (matching that real, only caller) rather than trusting either the misleading
-		// parameter type or a sizeof() that would have been wrong anyway.
+		// the pointer's size (8), not 1024, and the declared 1024 doesn't reflect reality either. This
+		// used to bound the copy to 256, matching Cmd_Login_F's own local char username[256] -- but
+		// that's not this function's only caller: ClientBegin() (g_client.c) also calls this, passing
+		// ent->client->sess.filename directly, a genuinely fixed 32-byte buffer (g_local.h). 256 was
+		// safe for the first caller and a guaranteed overflow for the second -- caught by GCC's
+		// -Wstringop-overflow once this copy carried an explicit size for it to check against the real
+		// argument size at that call site. Bound to sizeof(ent->client->sess.filename) (32) instead:
+		// the true minimum safe size across every real caller, since this value is ultimately copied
+		// into that same 32-byte field a few lines below regardless of which caller reached here.
 		Q_strncpyz(password, sqlite3_column_text(stmt, 3), sizeof(password));
-		Q_strncpyz(username, sqlite3_column_text(stmt, 4), 256);
+		Q_strncpyz(username, sqlite3_column_text(stmt, 4), sizeof(ent->client->sess.filename));
 		charID = sqlite3_column_int(stmt, 7);
 		credits = sqlite3_column_int(stmt, 8);
 		level = sqlite3_column_int(stmt, 9);
