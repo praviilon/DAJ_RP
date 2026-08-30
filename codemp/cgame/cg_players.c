@@ -6222,18 +6222,21 @@ its color1/color2 cvar -- an arbitrary integer, not necessarily one of ours. Fol
 not draw ourselves back onto a colour we do, so an out-of-range value can never index past the end
 of a switch's worth of shaders or leave a blade drawn with an uninitialised handle.
 
-Deliberately simple: any in-range value (0..NUM_SABER_COLORS-1) passes through unchanged -- including
-SABER_RGB and the four blade-style/black ordinals, all of which we now actually draw (see
-CG_RGBForSaberColor and CG_DoSaber below) -- and anything outside that range clamps to SABER_RED, no
-modulo cycling (unlike TaystJK's own ClampSaberColor, which wraps out-of-range values back into the
-palette via "% NUM_SABER_COLORS"; deliberately not replicated here, kept simple instead).
+Any in-range value (0..NUM_SABER_COLORS-1) passes through unchanged -- including SABER_RGB and the
+four blade-style/black ordinals, all of which we now actually draw (see CG_RGBForSaberColor and
+CG_DoSaber below). Anything >= NUM_SABER_COLORS cycles back into the palette via "% NUM_SABER_COLORS",
+matching TaystJK's own ClampSaberColor -- an earlier version of this function clamped such values to
+SABER_RED instead, but that left color1/2 stuck once pushed out of range while /sabercolor's own
+no-args status print kept walking the palette from the start, which read as inconsistent in practice.
+A negative value still clamps to SABER_RED (TaystJK's version has no such guard, but there's no reason
+to drop one that's already correct here).
 */
 static saber_colors_t CG_ClampSaberColor( int color )
 {
-	if ( color < 0 || color >= NUM_SABER_COLORS )
+	if ( color < 0 )
 		return SABER_RED;
 
-	return (saber_colors_t)color;
+	return (saber_colors_t)(color % NUM_SABER_COLORS);
 }
 
 /*

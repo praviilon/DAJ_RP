@@ -9399,6 +9399,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
+^3/sabercolor <1|2> <r g b>/<color name>: ^7Sets the RGB or a preset color of saber 1 or 2. Run with no arguments to see current colors.\n\
+^3/saberblade <1|2> <type>: ^7Sets the RGB blade style (classic/flame1/electric1/flame2/electric2) of saber 1 or 2.\n\
 ^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
 ^3/getup: ^7Revives current player from downed state.\n\
 ^3/helpup <player name>: ^7Revives another player from downed state.\n\
