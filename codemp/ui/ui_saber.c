@@ -331,10 +331,9 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 		// GalaxyRP: [Saber RGB] read the player's live slider values rather than a fixed colour, so
 		// dragging a slider updates the preview immediately instead of only on Apply. All five
 		// RGB-family ordinals share this same slider-reading/tint code, only the glow/core shader
-		// pair differs -- see the switch below. (In practice ui_saber_color only ever carries "rgb"
-		// today -- SaberColorToString has no distinct string yet for the four blade-style ordinals --
-		// so FLAME1/ELEC1/FLAME2/ELEC2 aren't reachable from this menu until a later UI pass adds
-		// them; handled here anyway so that pass is a pure UI change with no rendering work left.)
+		// pair differs -- see the switch below. ui_saber_color reaches here as "rgb".."rgb5", set by
+		// the saber menu's "Line:" blade-style switcher (an ITEM_TYPE_MULTI bound directly to this
+		// cvar) or by clicking a saber's RGB palette icon (always "rgb", the classic style).
 		case SABER_RGB:
 		case SABER_FLAME1:
 		case SABER_ELEC1:

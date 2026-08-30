@@ -5266,9 +5266,14 @@ static void UI_PackSaberRGBCvar( qboolean secondSaber )
 {
 	const char *colorCvar = secondSaber ? "ui_saber2_color" : "ui_saber_color";
 	const char *destCvar = secondSaber ? "cp_sbRGB2" : "cp_sbRGB1";
+	saber_colors_t colorI = TranslateSaberColor( UI_Cvar_VariableString( colorCvar ) );
 	int r, g, b;
 
-	if ( Q_stricmp( UI_Cvar_VariableString( colorCvar ), "rgb" ) ) {
+	// GalaxyRP: [Saber RGB] the packed colour travels for the whole RGB family -- classic plus the
+	// four alternate blade styles the menu's "Line:" switcher can select ("rgb".."rgb5") -- not just
+	// the literal string "rgb". This used to compare the cvar string against "rgb" exactly, which
+	// cleared the packed colour back to 0 the instant a player picked any of the other four styles.
+	if ( colorI < SABER_RGB || colorI > SABER_ELEC2 ) {
 		trap->Cvar_Set( destCvar, "0" );
 		return;
 	}

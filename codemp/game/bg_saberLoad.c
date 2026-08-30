@@ -184,9 +184,22 @@ saber_colors_t TranslateSaberColor( const char *name ) {
 		return SABER_PURPLE;
 	// GalaxyRP: [Saber RGB] "rgb" selects the player's own custom colour instead of one of the six
 	// fixed palette entries. The colour itself lives in cp_sbRGB1/cp_sbRGB2 (client) and in
-	// pers.saberRGB[] (server) -- this enum value only says "use it".
+	// pers.saberRGB[] (server) -- this enum value only says "use it". "rgb2".."rgb5" select the same
+	// custom colour rendered with one of the four alternate blade-style shaders (flame1/electric1/
+	// flame2/electric2, also reachable via /saberblade) -- this is exactly the value set TaystJK/
+	// JAPro's own "Line:" blade-style control (rgbbladecolor_CoreStyle1/2 in ingame_saber.menu, an
+	// ITEM_TYPE_MULTI bound to this same cvar) cycles through, so its selection round-trips here
+	// unchanged both for our own client and for a TaystJK-family one.
 	if ( !Q_stricmp( name, "rgb" ) )
 		return SABER_RGB;
+	if ( !Q_stricmp( name, "rgb2" ) )
+		return SABER_FLAME1;
+	if ( !Q_stricmp( name, "rgb3" ) )
+		return SABER_ELEC1;
+	if ( !Q_stricmp( name, "rgb4" ) )
+		return SABER_FLAME2;
+	if ( !Q_stricmp( name, "rgb5" ) )
+		return SABER_ELEC2;
 	// GalaxyRP: [Saber RGB] "black" selects the fixed black-blade shader (SABER_BLACK) -- unlike
 	// "rgb" this is not a custom colour, it's its own entry in the palette.
 	if ( !Q_stricmp( name, "black" ) )
@@ -204,13 +217,15 @@ const char *SaberColorToString( saber_colors_t color ) {
 	if ( color == SABER_GREEN )		return "green";
 	if ( color == SABER_BLUE )		return "blue";
 	if ( color == SABER_PURPLE )	return "purple";
-	// GalaxyRP: [Saber RGB] SABER_RGB and the four blade-style variants (FLAME1/ELEC1/FLAME2/ELEC2)
-	// all share this one string -- there is no distinct dropdown/menu string for the blade-style
-	// variants yet (that's a UI-pass addition), so the customization menu's live preview shows any
-	// of the five as plain classic RGB until that lands. The blade style itself is unaffected --
-	// this string only feeds the menu preview cvar, not rendering.
-	if ( color >= SABER_RGB && color <= SABER_ELEC2 )
-		return "rgb";	// GalaxyRP: [Saber RGB]
+	// GalaxyRP: [Saber RGB] each of the five RGB-family blade styles gets its own distinct string
+	// (mirroring the "rgb".."rgb5" values TranslateSaberColor() recognises above), so the menu's
+	// blade-style switcher correctly preselects whichever style is actually active when the saber
+	// menu is (re)opened -- e.g. a saber left on "Flame" shows "Flame" again, not "Normal".
+	if ( color == SABER_RGB )		return "rgb";	// GalaxyRP: [Saber RGB]
+	if ( color == SABER_FLAME1 )	return "rgb2";	// GalaxyRP: [Saber RGB]
+	if ( color == SABER_ELEC1 )		return "rgb3";	// GalaxyRP: [Saber RGB]
+	if ( color == SABER_FLAME2 )	return "rgb4";	// GalaxyRP: [Saber RGB]
+	if ( color == SABER_ELEC2 )		return "rgb5";	// GalaxyRP: [Saber RGB]
 	if ( color == SABER_BLACK )		return "black";	// GalaxyRP: [Saber RGB]
 
 	// GalaxyRP fix: [Saber] this used to return NULL for anything outside the palette, and its only
