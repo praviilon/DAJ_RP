@@ -683,9 +683,14 @@ typedef struct clientPersistant_s {
 	char password[32]; // zyk: account password
 
 	//GalaxyRP (Alex): [Training Saber] Values for training saber.
+	// GalaxyRP: [Training Saber fix] one stored damageScale/damageScale2 pair per saber slot
+	// (index 0 = saber1, index 1 = saber2) so /training covers a player's second saber, not just
+	// their primary one. Declared as float to exactly match saberInfo_t::damageScale/damageScale2
+	// (bg_public.h) -- these used to be int, which silently truncated any fractional damage scale
+	// on store and reapplied the wrong value on restore.
 	qboolean training_mode;
-	int saber_stored_damage;
-	int saber2_stored_damage;
+	float training_stored_damageScale[MAX_SABERS];
+	float training_stored_damageScale2[MAX_SABERS];
 
 	// zyk: turn on or off features of this player in his account file. It is a bit value attribute
 	// Possible bit values are:

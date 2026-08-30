@@ -3034,9 +3034,14 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	ent->client->sess.weapon_recharge_timer = 0;
 
 	//GalaxyRP (Alex): [Training Saber] Initialise values for training saber.
+	// GalaxyRP: [Training Saber fix] reset covers both saber slots now -- see the matching
+	// comment on training_stored_damageScale/2 in g_local.h.
 	ent->client->pers.training_mode = qfalse;
-	ent->client->pers.saber_stored_damage = 0;
-	ent->client->pers.saber2_stored_damage = 0;
+	for (i = 0; i < MAX_SABERS; i++)
+	{
+		ent->client->pers.training_stored_damageScale[i] = 0;
+		ent->client->pers.training_stored_damageScale2[i] = 0;
+	}
 }
 
 static qboolean AllForceDisabled(int force)

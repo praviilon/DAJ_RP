@@ -9492,7 +9492,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
 ^3/getup: ^7Revives current player from downed state.\n\
 ^3/helpup <player name>: ^7Revives another player from downed state.\n\
-^3/training: ^7Toggles training saber mode with reduced damage.\n\
+^3/training <on|off>: ^7Turns training saber mode (near-zero damage) on or off.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
 			}
@@ -17195,32 +17195,74 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 
 //GalaxyRP (Alex): [Training Saber] This method activates and deactivates the training saber, making it so that when active, you do very little damage.
 
+// GalaxyRP: [Training Saber fix] rewritten from a single no-argument toggle to explicit
+// "/training on" / "/training off" verbs. The old toggle couldn't tell "turn on" from "turn off"
+// apart from its own stored state, so if that state and the live saber values ever drifted --
+// e.g. from picking a new saber while training was active, which resets damageScale/damageScale2
+// back to that saber's own defaults without training_mode being told -- the next toggle would
+// silently do the wrong thing (store the already-zeroed value as "original", or leave full damage
+// live while claiming to be active). Explicit on/off can't cross those states the same way: "on"
+// while already on and "off" while already off are both harmless no-ops that don't touch anything
+// live, and turning it on is the point where the player is warned about the exact conditions that
+// deactivate it, rather than needing to be told after the fact.
 void Cmd_TrainingMode_f(gentity_t* ent) {
-	if (trap->Argc() != 1)
+	char arg[MAX_TOKEN_CHARS];
+	int i;
+
+	if (trap->Argc() != 2)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training\n\"");
+		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training <on|off>\n\"");
 		return;
 	}
 
-	ent->client->pers.training_mode = !ent->client->pers.training_mode;
+	trap->Argv(1, arg, sizeof(arg));
 
-	char message[20] = "";
+	if (!Q_stricmp(arg, "on"))
+	{
+		if (ent->client->pers.training_mode)
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Training saber is already ^2ACTIVE\n\"");
+			return;
+		}
 
-	if (ent->client->pers.training_mode) {
-		strcpy(message, "^2ACTIVE");
-		//GalaxyRP (Alex): [Training Saber] Save old values and set the new ones to 0;
-		ent->client->pers.saber_stored_damage = ent->client->saber->damageScale;
-		ent->client->pers.saber2_stored_damage = ent->client->saber->damageScale2;
-		ent->client->saber->damageScale = 0;
-		ent->client->saber->damageScale2 = 0;
+		// GalaxyRP: [Training Saber fix] cover both saber slots (saber1 and saber2), not just the
+		// primary one -- previously only ent->client->saber[0] (equivalent to the old
+		// ent->client->saber-> shorthand) was touched, so a player's second, independently-wielded
+		// saber kept dealing full damage the whole time training mode was "active".
+		for (i = 0; i < MAX_SABERS; i++)
+		{
+			ent->client->pers.training_stored_damageScale[i] = ent->client->saber[i].damageScale;
+			ent->client->pers.training_stored_damageScale2[i] = ent->client->saber[i].damageScale2;
+			ent->client->saber[i].damageScale = 0;
+			ent->client->saber[i].damageScale2 = 0;
+		}
+
+		ent->client->pers.training_mode = qtrue;
+
+		trap->SendServerCommand(ent->s.number, "print \"Training saber is ^2ACTIVE^7. Warning: changing your saber or rejoining the game (reconnecting, or a map change) will turn this off.\n\"");
 	}
-	else {
-		strcpy(message, "^1INACTIVE");
-		ent->client->saber->damageScale = ent->client->pers.saber_stored_damage;
-		ent->client->saber->damageScale2 = ent->client->pers.saber2_stored_damage;
-	}
+	else if (!Q_stricmp(arg, "off"))
+	{
+		if (!ent->client->pers.training_mode)
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Training saber is already ^1INACTIVE\n\"");
+			return;
+		}
 
-	trap->SendServerCommand(ent->s.number, va("print \"Training saber is %s\n\"", message));
+		for (i = 0; i < MAX_SABERS; i++)
+		{
+			ent->client->saber[i].damageScale = ent->client->pers.training_stored_damageScale[i];
+			ent->client->saber[i].damageScale2 = ent->client->pers.training_stored_damageScale2[i];
+		}
+
+		ent->client->pers.training_mode = qfalse;
+
+		trap->SendServerCommand(ent->s.number, "print \"Training saber is ^1INACTIVE\n\"");
+	}
+	else
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training <on|off>\n\"");
+	}
 
 	return;
 }
