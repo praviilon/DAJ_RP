@@ -5993,12 +5993,13 @@ void UI_UpdateSiegeStatusIcons( void ) {
 	}
 }
 
-// GalaxyRP fix: [security] the account command handlers below build a "cmd \"login\" \"password\"\n"
-// string for trap->Cmd_ExecuteText out of raw cvar values, wrapping each in quotes but never
-// escaping them. The engine's own tokenizer (Cmd_TokenizeString2 in qcommon/cmd.cpp) explicitly
-// does NOT support \" escaping -- a quoted token simply ends at the next '"' it sees -- so a
-// login or password containing a '"' closes that argument early and lets the rest of the string
-// be parsed as additional command text/arguments (e.g. a password of `x" ; kick "somebody`).
+// GalaxyRP fix: [security] the account command handlers below (and, further down, the character
+// use/delete/new handlers) build a "cmd \"login\" \"password\"\n" style string for
+// trap->Cmd_ExecuteText out of raw cvar values, wrapping each in quotes but never escaping them.
+// The engine's own tokenizer (Cmd_TokenizeString2 in qcommon/cmd.cpp) explicitly does NOT support
+// \" escaping -- a quoted token simply ends at the next '"' it sees -- so a login, password, or
+// character name containing a '"' closes that argument early and lets the rest of the string be
+// parsed as additional command text/arguments (e.g. a password of `x" ; kick "somebody`).
 // Since the wire format offers no way to embed a literal quote, strip quotes from the value
 // in place before it's ever placed inside the quoted argument.
 static void UI_SanitizeAccountArg( char *str ) {
@@ -6542,6 +6543,15 @@ static void UI_RunMenuScript(char **args)
 				int zyk_size = 0;
 
 				trap->Cvar_VariableStringBuffer(va("ui_zyk_rpg_char_%s", arg), zyk_char, sizeof(zyk_char));
+				// GalaxyRP fix: [security] same quote-injection issue UI_SanitizeAccountArg documents
+				// above for the login/password/changepassword handlers -- this builds a quoted
+				// "char use \"%s\"\n" string from a raw value and hands it to Cmd_ExecuteText, so an
+				// embedded '"' closes the argument early and lets the rest be parsed as additional
+				// command text. zyk_char here comes from this client's own stored per-slot character
+				// name cvar rather than a text field, but that cvar isn't guaranteed quote-free (e.g. a
+				// character created before the matching zykcharnew fix below, or set directly via
+				// /set), so sanitize it here too rather than trusting the source.
+				UI_SanitizeAccountArg(zyk_char);
 
 				trap->Cmd_ExecuteText(EXEC_APPEND, va("char use \"%s\"\n", zyk_char));
 			}
@@ -6557,7 +6567,10 @@ static void UI_RunMenuScript(char **args)
 				int zyk_size = 0;
 
 				trap->Cvar_VariableStringBuffer(va("ui_zyk_rpg_char_%s", arg), zyk_char, sizeof(zyk_char));
-				
+				// GalaxyRP fix: [security] see the matching comment in zykcharuse just above -- same
+				// quote-injection issue, same fix.
+				UI_SanitizeAccountArg(zyk_char);
+
 				trap->Cmd_ExecuteText(EXEC_APPEND, va("char delete \"%s\"\n", zyk_char));
 				trap->Cvar_Set(va("ui_zyk_rpg_char_%s", arg), "");
 			}
@@ -6567,6 +6580,15 @@ static void UI_RunMenuScript(char **args)
 			char zyk_char[512];
 
 			trap->Cvar_VariableStringBuffer("zykCharName", zyk_char, sizeof(zyk_char));
+			// GalaxyRP fix: [security] the "new" character name typed into charEntry (ingame_galaxyrp.menu)
+			// is free-form UI text, not a tokenized command argument -- exactly the same shape of value
+			// accLogin/accPassword are, and this handler builds a quoted "char new \"%s\"\n" string from
+			// it the same way, but never called UI_SanitizeAccountArg (defined above for the account
+			// handlers) on it. An embedded '"' closes that argument early and lets the rest of the
+			// string be parsed as additional command text once Cmd_ExecuteText re-tokenizes it -- the
+			// exact bug UI_SanitizeAccountArg exists to prevent. Strip it here too, before it's ever
+			// placed inside the quoted argument.
+			UI_SanitizeAccountArg(zyk_char);
 
 			trap->Cmd_ExecuteText(EXEC_APPEND, va("char new \"%s\"\n", zyk_char));
 		}
