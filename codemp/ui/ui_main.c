@@ -3081,7 +3081,19 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 		}
 */		drawRank = uiForcePowersRank[findex];
 
-		UI_DrawForceStars(&rect, scale, color, textStyle, findex, drawRank, 0, NUM_FORCE_POWER_LEVELS-1);
+		// GalaxyRP: [Force UI level cap] ingame_playerforce.menu is the logged-out-only, vanilla-style
+		// force config screen. NUM_FORCE_POWER_LEVELS is 6 (0-5) mod-wide to support admin-granted
+		// bonus levels 4/5 for logged-in RPG players, but that grant is applied through a completely
+		// separate path (see pers.skill_levels / siege class force levels in w_force.c) -- it never
+		// goes through this menu's point-buy UI or the "forcepowers" cvar string it writes. That
+		// string is re-legalized server-side by BG_LegalizedForcePowers (bg_misc.c), whose digit
+		// parser only accepts '0'-'3' per power and silently truncates the whole rest of the list
+		// the moment it hits a '4' or '5' -- which is exactly what was wiping the player's force
+		// powers on Apply. Capping the drawn stars (here) and the click ceiling
+		// (UI_ForcePowerRank_HandleKey below) at FORCE_LEVEL_3 restores the vanilla 3-level
+		// look/behavior for this screen without touching the shared NUM_FORCE_POWER_LEVELS constant,
+		// so the logged-in admin-grant system is unaffected.
+		UI_DrawForceStars(&rect, scale, color, textStyle, findex, drawRank, 0, FORCE_LEVEL_3);
 		break;
     case UI_EFFECTS:
       break;
@@ -4232,7 +4244,9 @@ static qboolean UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, 
 	case UI_FORCE_RANK_SABERTHROW:
 		findex = (ownerDraw - UI_FORCE_RANK)-1;
 		//this will give us the index as long as UI_FORCE_RANK is always one below the first force rank index
-		return UI_ForcePowerRank_HandleKey(flags, special, key, uiForcePowersRank[findex], 0, NUM_FORCE_POWER_LEVELS-1, ownerDraw);
+		// GalaxyRP: [Force UI level cap] capped at FORCE_LEVEL_3 to match the star cap above -- see the
+		// comment there for why levels 4/5 must never be reachable through this menu's click handler.
+		return UI_ForcePowerRank_HandleKey(flags, special, key, uiForcePowersRank[findex], 0, FORCE_LEVEL_3, ownerDraw);
 		break;
     case UI_EFFECTS:
       break;
