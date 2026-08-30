@@ -5043,11 +5043,11 @@ void Cmd_NPC_f( gentity_t *ent )
 					return;
 				}
 
-				if (thisent->client && level.guardian_quest > 0 && level.guardian_quest == thisent->s.number)
-				{
-					trap->SendServerCommand( ent-g_entities, "print \"NPC team cannot be used in the Guardian of Map.\n\"" );
-					return;
-				}
+				// GalaxyRP fix: [Quests] a "NPC team cannot be used in the Guardian of Map" guard,
+				// gated on level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only
+				// setter) was deleted as unreachable dead code (see the GalaxyRP fix comment in
+				// g_cmds.c), and level.guardian_quest has been removed along with it, so this guard is
+				// removed too.
 
 				if (Q_stricmp(cmd2,"player") == 0)
 				{

@@ -2905,9 +2905,10 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	// (which doesn't run at all for a player kept in Spectator by the checks just below).
 	if (ent->client->sess.amrpgmode > 0)
 	{
-		// zyk: if the target goes to spec or something, then the server must choose another target
-		if (level.bounty_quest_choose_target == qfalse && level.bounty_quest_target_id == (ent - g_entities))
-			level.bounty_quest_choose_target = qtrue;
+		// GalaxyRP fix: [Quests] a "if the target goes to spec or something, choose another target"
+		// guard used to live here. Cmd_BountyQuest_f (the only setter of level.bounty_quest_choose_target/
+		// target_id) was deleted as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c),
+		// and those level fields have been removed along with it, so this guard is removed too.
 
 		// zyk: load account again
 		ent->client->sess.loggedin = qtrue;
@@ -3389,7 +3390,6 @@ Initializes all non-persistant parts of playerState
 */
 extern saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
 extern qboolean WP_HasForcePowers( const playerState_t *ps );
-extern void quest_get_new_player(gentity_t *ent);
 extern void clean_guardians(gentity_t *ent);
 extern void zyk_add_force_powers( gentity_t *ent );
 extern void zyk_add_guns( gentity_t *ent );
@@ -4141,8 +4141,8 @@ void ClientSpawn(gentity_t *ent) {
 
 		initialize_rpg_skills(ent);
 
-		// zyk: getting the player who can play a quest in this map
-		quest_get_new_player(ent);
+		// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see the
+		// GalaxyRP fix comment on its old location in g_cmds.c).
 	}
 	else if (ent->client->pers.player_statuses & (1 << 12))
 	{ // zyk: player received force powers from admin
@@ -4558,7 +4558,8 @@ void ClientDisconnect( int clientNum ) {
 	{
 		clean_guardians(ent);
 		level.boss_battle_music_reset_timer = level.time + 1000;
-		quest_get_new_player(ent);
+		// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see the
+		// GalaxyRP fix comment on its old location in g_cmds.c).
 	}
 
 	trap->UnlinkEntity ((sharedEntity_t *)ent);
@@ -4585,9 +4586,9 @@ void ClientDisconnect( int clientNum ) {
 		ent->client->pers.being_mind_controlled = -1;
 	}
 
-	// zyk: if this was the target player, sets qtrue to choose another target
-	if (level.bounty_quest_choose_target == qfalse && level.bounty_quest_target_id == (ent-g_entities))
-		level.bounty_quest_choose_target = qtrue;
+	// GalaxyRP fix: [Quests] a "if this was the target player, choose another target" guard used to
+	// live here -- removed for the same reason as the equivalent guard in ClientBegin above
+	// (level.bounty_quest_choose_target/target_id no longer exist).
 
 	ent->client->pers.bitvalue = 0;
 	ent->client->pers.player_statuses = 0;

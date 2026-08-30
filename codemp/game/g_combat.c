@@ -2117,7 +2117,6 @@ extern qboolean g_endPDuel;
 extern qboolean g_noPDuelCheck;
 extern void saberReactivate(gentity_t *saberent, gentity_t *saberOwner);
 extern void saberBackToOwner(gentity_t *saberent);
-extern void quest_get_new_player(gentity_t *ent);
 extern void try_finishing_race();
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
 extern void remove_credits(gentity_t *ent, int credits);
@@ -2284,7 +2283,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		{ // zyk: failed mission
 			zyk_text_message(quest_player, "universe/mission_16_guardians/mission_16_guardians_fail", qtrue, qfalse, quest_player->client->pers.netname);
 
-			quest_get_new_player(quest_player);
+			// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see
+			// the GalaxyRP fix comment on its old location in g_cmds.c) -- this call is gone, the rest
+			// of this dead-but-compiling block is left as-is.
 		}
 		else
 		{
@@ -2336,9 +2337,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 			zyk_text_message(player_ent, "universe/mission_2/mission_2_artifact_guardian_fail", qtrue, qfalse);
 			player_ent->client->pers.universe_quest_artifact_holder_id = -1;
 
-			// zyk: fixed bug in which a boss battle would kill this npc and pass quest turn
-			if (player_ent->client->pers.guardian_mode == 0)
-				quest_get_new_player(player_ent);
+			// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see
+			// the GalaxyRP fix comment on its old location in g_cmds.c) -- the call this comment used
+			// to sit next to is gone, the rest of this dead-but-compiling block is left as-is.
 		}
 	}
 	
@@ -2752,51 +2753,25 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			attacker->client->pers.credits_modifier = self->client->pers.credits_modifier;
 		}
 
-		if (level.guardian_quest > 0 && self->NPC && self->s.number == level.guardian_quest)
-		{ // zyk: if player defeated the map guardian npc
-			attacker->client->pers.score_modifier = 2;
-			attacker->client->pers.credits_modifier = 990;
-			trap->SendServerCommand(-1, va("chat \"^3Guardian Quest: ^7%s^7 receives ^31000 ^7credits for defeating the Guardian of Map\n\"", attacker->client->pers.netname));
-			level.guardian_quest = 0;
-			level.boss_battle_music_reset_timer = level.time + 1000;
-			// GalaxyRP fix: [Cvars] zyk_guardian_quest_timer was removed -- this whole block is already
-			// unreachable dead code (level.guardian_quest is only ever set nonzero inside
-			// Cmd_GuardianQuest_f, which short-circuits with an unconditional return before it can do
-			// so), so the old cvar default (0ms) is hardcoded here just to keep this compiling.
-			level.guardian_quest_timer = level.time;
-		}
+		// GalaxyRP fix: [Quests] a "player defeated the map guardian npc" score/credit bonus block used
+		// to live here, gated on level.guardian_quest. Cmd_GuardianQuest_f (its only setter) was deleted
+		// as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and level.guardian_quest/
+		// level.guardian_quest_timer have been removed along with it, so this block is removed too.
 
 		if (attacker->client->pers.rpg_class == 2)
 		{ // zyk: Bounty Hunter class receives more credits
 			attacker->client->pers.credits_modifier += 5 * (attacker->client->pers.skill_levels[55] + 1);
 		}
 
-		// zyk: Bounty Quest manager
-		if (level.bounty_quest_choose_target == qfalse && attacker != self && self->client->sess.amrpgmode == 2)
-		{
-			if (level.bounty_quest_target_id == (attacker - g_entities))
-			{ // zyk: attacker was the target, so the attacker receives bonus credits
-				int bonus_credits = self->client->pers.level * 2;
-
-				attacker->client->pers.credits_modifier += bonus_credits;
-				trap->SendServerCommand(-1, va("chat \"^3Bounty Quest: ^7%s ^7was defeated by the target player, ^3%d ^7bonus credits\n\"", self->client->pers.netname, bonus_credits));
-			}
-			else if (level.bounty_quest_target_id == (self - g_entities))
-			{ // zyk: target player was defeated. Gives the reward to the attacker
-				attacker->client->pers.credits_modifier += (self->client->pers.level * 15);
-				level.bounty_quest_choose_target = qtrue;
-				level.bounty_quest_target_id++;
-				trap->SendServerCommand(-1, va("chat \"^3Bounty Quest: ^7%s^7 receives ^3%d ^7bonus credits\n\"", attacker->client->pers.netname, (self->client->pers.level * 15)));
-			}
-		}
+		// GalaxyRP fix: [Quests] the "Bounty Quest manager" credit-bonus block used to live here.
+		// Cmd_BountyQuest_f (its only setter for level.bounty_quest_choose_target/target_id) was
+		// deleted as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and those level
+		// fields have been removed along with it, so this block is removed too.
 	}
 
-	if (level.guardian_quest > 0 && self->NPC && self->s.number == level.guardian_quest)
-	{ // zyk: map guardian npc defeated by a non-rpg player
-		trap->SendServerCommand(-1, va("chat \"^3Guardian Quest: ^7Map Guardian not defeated by rpg player\n\""));
-		level.guardian_quest = 0;
-		level.boss_battle_music_reset_timer = level.time + 1000;
-	}
+	// GalaxyRP fix: [Quests] a "map guardian npc defeated by a non-rpg player" notification block
+	// used to live here, gated on level.guardian_quest -- removed for the same reason as the block
+	// above.
 
 	// check for an almost capture
 	CheckAlmostCapture( self, attacker );

@@ -1764,9 +1764,10 @@ void G_CheckClientIdle( gentity_t *ent, usercmd_t *ucmd )
 
 		// GalaxyRP fix: [Cvars] this used to refresh pers.quest_afk_timer (via zyk_quest_afk_timer,
 		// now removed) whenever a player in the general quest system was active. That system is
-		// entirely disabled now (see the early return in quest_get_new_player) and can_play_quest can
-		// no longer become 1 anywhere in the codebase, so this block was dead in practice and has been
-		// removed.
+		// entirely disabled now (quest_get_new_player, its sole entry point, was deleted as
+		// unreachable dead code -- see the GalaxyRP fix comment on its old location in g_cmds.c) and
+		// can_play_quest can no longer become 1 anywhere in the codebase, so this block was dead in
+		// practice and has been removed.
 
 		if (brokeOut &&
 			(ent->client->ps.weaponstate == WEAPON_CHARGING || ent->client->ps.weaponstate == WEAPON_CHARGING_ALT))

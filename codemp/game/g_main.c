@@ -1146,22 +1146,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.custom_quest_map = -1;
 	level.zyk_custom_quest_effect_id = -1;
 
-	// zyk: initializing quest_note_id value
-	level.quest_note_id = -1;
-	level.universe_quest_note_id = -1;
-
 	// zyk: initializing quest_effect_id value
 	level.quest_effect_id = -1;
 
 	level.chaos_portal_id = -1;
-
-	// zyk: initializing bounty_quest_target_id value
-	level.bounty_quest_target_id = 0;
-	level.bounty_quest_choose_target = qtrue;
-
-	// zyk: initializing guardian quest values
-	level.guardian_quest = 0;
-	level.initial_map_guardian_weapons = 0;
 
 	level.boss_battle_music_reset_timer = 0;
 
@@ -1169,8 +1157,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	level.server_empty_change_map_timer = 0;
 	level.num_fully_connected_clients = 0;
-
-	level.guardian_quest_timer = 0;
 
 	// zyk: initializing Duel Tournament variables
 	level.duel_tournament_mode = 0;
@@ -1252,12 +1238,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		{
 			level.ignored_players[zyk_iterator][0] = 0;
 			level.ignored_players[zyk_iterator][1] = 0;
-		}
-
-		// zyk: initializing quest_crystal_id value
-		for (zyk_iterator = 0; zyk_iterator < 3; zyk_iterator++)
-		{
-			level.quest_crystal_id[zyk_iterator] = -1;
 		}
 
 		for (zyk_iterator = 0; zyk_iterator < MAX_CUSTOM_QUESTS; zyk_iterator++)
@@ -7882,234 +7862,14 @@ void zyk_print_custom_quest_info(gentity_t *ent)
 	}
 }
 
-// zyk: tests if player already finished the Revelations mission of Universe Quest
-void first_second_act_objective(gentity_t *ent)
-{
-	int i = 0;
-	int count = 0;
-
-	for (i = 1; i < 3; i++)
-	{
-		if (ent->client->pers.universe_quest_counter & (1 << i))
-			count++;
-	}
-
-	if (count == 2)
-	{
-		ent->client->pers.universe_quest_progress = 9;
-
-		if (ent->client->pers.universe_quest_counter & (1 << 29))
-		{ // zyk: if player is in Challenge Mode, do not remove this bit value
-			ent->client->pers.universe_quest_counter = 0;
-			ent->client->pers.universe_quest_counter |= (1 << 29);
-		}
-		else
-		{
-			ent->client->pers.universe_quest_counter = 0;
-		}
-	}
-}
-
-// zyk: spawns the prison door in first Universe Quest mission
-void zyk_spawn_catwalk_prison(int x, int y, int z, int pitch, int yaw)
-{
-	gentity_t *door_ent = &g_entities[109];
-	qboolean door_catwalk_ok = qfalse;
-	qboolean prison_key_ok = qfalse;
-	gentity_t *new_ent = NULL;
-	int i = 0;
-
-	if (door_ent && Q_stricmp(door_ent->classname, "func_static") == 0)
-	{ // zyk: removes the map last door
-		G_FreeEntity(door_ent);
-	}
-
-	for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
-	{
-		door_ent = &g_entities[i];
-
-		if (door_ent && Q_stricmp(door_ent->targetname, "zyk_sage_prison") == 0)
-		{
-			door_catwalk_ok = qtrue;
-		}
-
-		if (door_ent && door_ent->spawnflags & 131072)
-		{
-			prison_key_ok = qtrue;
-		}
-	}
-
-	// zyk: spawning the catwalk door
-	if (door_catwalk_ok == qfalse)
-	{
-		new_ent = G_Spawn();
-
-		zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-		zyk_set_entity_field(new_ent, "spawnflags", "65537");
-		zyk_set_entity_field(new_ent, "origin", va("%d %d %d", x, y, z));
-
-		zyk_set_entity_field(new_ent, "angles", va("%d %d 0", pitch, yaw));
-
-		zyk_set_entity_field(new_ent, "mins", "-8 -64 -64");
-		zyk_set_entity_field(new_ent, "maxs", "8 64 64");
-
-		zyk_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
-
-		zyk_set_entity_field(new_ent, "targetname", "zyk_sage_prison");
-
-		zyk_spawn_entity(new_ent);
-	}
-
-	// zyk: spawning the key
-	if (prison_key_ok == qfalse)
-	{
-		new_ent = G_Spawn();
-
-		zyk_set_entity_field(new_ent, "classname", "weapon_stun_baton");
-		zyk_set_entity_field(new_ent, "spawnflags", "131072");
-		zyk_set_entity_field(new_ent, "origin", "-2149 5087 -2759");
-
-		zyk_spawn_entity(new_ent);
-	}
-}
-
-// zyk: spawns reborns in first Universe Quest mission
-void zyk_spawn_quest_reborns()
-{
-	Zyk_NPC_SpawnType("quest_reborn_blue", -2205, 5008, -2758, 179);
-	Zyk_NPC_SpawnType("quest_reborn_blue", -2205, 5175, -2758, 179);
-	Zyk_NPC_SpawnType("quest_reborn_blue", -2255, 5008, -2758, 179);
-	Zyk_NPC_SpawnType("quest_reborn_blue", -2255, 5175, -2758, 179);
-
-	Zyk_NPC_SpawnType("quest_reborn", -3204, 2630, -2982, -90);
-	Zyk_NPC_SpawnType("quest_reborn", -3311, 2630, -2982, -90);
-	Zyk_NPC_SpawnType("quest_reborn_blue", -3080, 2687, -2965, -90);
-
-	Zyk_NPC_SpawnType("quest_reborn", -2569, 1316, -2246, -90);
-	Zyk_NPC_SpawnType("quest_reborn_blue", -2619, 1316, -2246, -90);
-	Zyk_NPC_SpawnType("quest_reborn", -2669, 1316, -2246, -90);
-
-	Zyk_NPC_SpawnType("quest_reborn_blue", -4545, 3162, -2758, -90);
-	Zyk_NPC_SpawnType("quest_reborn", -4590, 3162, -2758, -90);
-	Zyk_NPC_SpawnType("quest_reborn", -4490, 3162, -2758, -90);
-
-	Zyk_NPC_SpawnType("quest_reborn_blue", 1700, -10, -3130, 179);
-	Zyk_NPC_SpawnType("quest_reborn_blue", 1700, -50, -3130, 179);
-}
-
-// zyk: if for some reason a sage was not spawned, try to spawn him now
-void zyk_validate_sages(gentity_t *ent)
-{
-	int i = 0;
-	qboolean sage_of_light_ok = qfalse;
-	qboolean sage_of_darkness_ok = qfalse;
-	qboolean sage_of_eternity_ok = qfalse;
-	gentity_t *npc_ent = NULL;
-
-	for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
-	{
-		npc_ent = &g_entities[i];
-
-		if (npc_ent && npc_ent->NPC && Q_stricmp(npc_ent->NPC_type, "sage_of_light") == 0)
-		{
-			sage_of_light_ok = qtrue;
-		}
-		else if (npc_ent && npc_ent->NPC && Q_stricmp(npc_ent->NPC_type, "sage_of_darkness") == 0)
-		{
-			sage_of_darkness_ok = qtrue;
-		}
-		else if (npc_ent && npc_ent->NPC && Q_stricmp(npc_ent->NPC_type, "sage_of_eternity") == 0)
-		{
-			sage_of_eternity_ok = qtrue;
-		}
-	}
-
-	if (sage_of_light_ok == qfalse)
-	{
-		npc_ent = Zyk_NPC_SpawnType("sage_of_light", 2750, -115, -3806, 179);
-
-		if (npc_ent)
-		{ // zyk: sets the player id who must protect this sage
-			npc_ent->client->pers.universe_quest_objective_control = ent - g_entities;
-		}
-	}
-	if (sage_of_darkness_ok == qfalse)
-	{
-		npc_ent = Zyk_NPC_SpawnType("sage_of_darkness", 2750, -39, -3806, 179);
-
-		if (npc_ent)
-		{ // zyk: sets the player id who must protect this sage
-			npc_ent->client->pers.universe_quest_objective_control = ent - g_entities;
-		}
-	}
-	if (sage_of_eternity_ok == qfalse)
-	{
-		npc_ent = Zyk_NPC_SpawnType("sage_of_eternity", 2750, 39, -3806, 179);
-
-		if (npc_ent)
-		{ // zyk: sets the player id who must protect this sage
-			npc_ent->client->pers.universe_quest_objective_control = ent - g_entities;
-		}
-	}
-}
-
-// zyk: checks if the player has already all artifacts
-extern void save_account(gentity_t *ent, qboolean save_char_file);
-extern int number_of_artifacts(gentity_t *ent);
-void universe_quest_artifacts_checker(gentity_t *ent)
-{
-	if (number_of_artifacts(ent) == 8)
-	{ // zyk: after collecting all artifacts, go to next objective
-		zyk_text_message(ent, "universe/mission_2/mission_2_got_all_artifacts", qtrue, qtrue, ent->client->pers.netname);
-
-		if (ent->client->pers.universe_quest_counter & (1 << 29))
-		{ // zyk: if player is in Challenge Mode, do not remove this bit value
-			ent->client->pers.universe_quest_counter = 0;
-			ent->client->pers.universe_quest_counter |= (1 << 29);
-		}
-		else
-			ent->client->pers.universe_quest_counter = 0;
-
-		ent->client->pers.universe_quest_progress = 3;
-		ent->client->pers.universe_quest_timer = level.time + 1000;
-		ent->client->pers.universe_quest_objective_control = 4; // zyk: fourth Universe Quest objective
-		ent->client->pers.universe_quest_messages = 0;
-	}
-}
-
-// zyk: checks if the player got all crystals
-extern int number_of_crystals(gentity_t *ent);
-extern void quest_get_new_player(gentity_t *ent);
-void universe_crystals_check(gentity_t *ent)
-{
-	if (number_of_crystals(ent) == 3)
-	{
-		ent->client->pers.universe_quest_progress = 10;
-		if (ent->client->pers.universe_quest_counter & (1 << 29))
-		{ // zyk: if player is in Challenge Mode, do not remove this bit value
-			ent->client->pers.universe_quest_counter = 0;
-			ent->client->pers.universe_quest_counter |= (1 << 29);
-		}
-		else
-			ent->client->pers.universe_quest_counter = 0;
-
-		quest_get_new_player(ent);
-	}
-}
-
-extern void clean_note_model();
-void zyk_try_get_dark_quest_note(gentity_t *ent, int note_bitvalue)
-{
-	if (ent->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && ent->client->pers.guardian_mode == 0 && 
-		!(ent->client->pers.hunter_quest_progress & (1 << note_bitvalue)) && ent->client->pers.can_play_quest == 1 &&
-		level.quest_note_id != -1 && (int)Distance(ent->client->ps.origin, g_entities[level.quest_note_id].r.currentOrigin) < 40)
-	{
-		zyk_text_message(ent, "dark/found_note", qtrue, qfalse);
-		ent->client->pers.hunter_quest_progress |= (1 << note_bitvalue);
-		clean_note_model();
-		quest_get_new_player(ent);
-	}
-}
+// GalaxyRP fix: [Quests] first_second_act_objective, zyk_spawn_catwalk_prison,
+// zyk_spawn_quest_reborns, zyk_validate_sages, universe_quest_artifacts_checker,
+// universe_crystals_check, and zyk_try_get_dark_quest_note used to live here. All were part of the
+// general (non-Guardian/Bounty) automated Universe/Dark Quest machinery driven by
+// choose_new_player/quest_get_new_player (g_cmds.c) and the dead Touch_Item block in g_items.c, which
+// are themselves fully unreachable now that quest_get_new_player's sole gate is permanently disabled
+// (see the GalaxyRP fix comment on quest_get_new_player's old location in g_cmds.c). Deleted outright,
+// along with their call sites in g_items.c.
 
 // zyk: backup player force powers
 void player_backup_force(gentity_t *ent)
@@ -9222,13 +8982,8 @@ void SetMoverState( gentity_t *ent, moverState_t moverState, int time );
 
 extern void remove_credits(gentity_t *ent, int credits);
 extern void try_finishing_race();
-extern gentity_t *load_crystal_model(int x,int y,int z, int yaw, int crystal_number);
-extern void clean_crystal_model(int crystal_number);
-extern qboolean dark_quest_collected_notes(gentity_t *ent);
-extern qboolean light_quest_defeated_guardians(gentity_t *ent);
 extern void set_max_health(gentity_t *ent);
 extern void set_max_shield(gentity_t *ent);
-extern gentity_t *load_effect(int x,int y,int z, int spawnflags, char *fxFile);
 extern void duel_show_table(gentity_t *ent);
 extern void WP_DisruptorAltFire(gentity_t *ent);
 extern int zyk_max_magic_power(gentity_t *ent);
@@ -10098,40 +9853,10 @@ void G_RunFrame( int levelTime ) {
 		}
 	}
 
-	// zyk: Guardian of Map abilities
-	if (level.guardian_quest > 0)
-	{
-		gentity_t *npc_ent = &g_entities[level.guardian_quest];
-
-		if (npc_ent && npc_ent->client && npc_ent->health > 0)
-		{		
-			npc_ent->client->ps.stats[STAT_WEAPONS] = level.initial_map_guardian_weapons;
-
-			if (npc_ent->client->pers.hunter_quest_timer < level.time)
-			{
-				if (npc_ent->client->pers.hunter_quest_messages == 0)
-				{
-					healing_area(npc_ent, 5, 5000);
-					trap->SendServerCommand(-1, "chat \"^3Guardian of Map: ^7Healing Area!\"");
-					npc_ent->client->pers.hunter_quest_messages++;
-				}
-				else if (npc_ent->client->pers.hunter_quest_messages == 1)
-				{
-					magic_explosion(npc_ent, 320, 130, 900);
-					trap->SendServerCommand(-1, "chat \"^3Guardian of Map: ^7Magic Explosion!\"");
-					npc_ent->client->pers.hunter_quest_messages++;
-				}
-				else if (npc_ent->client->pers.hunter_quest_messages == 2)
-				{
-					lightning_dome(npc_ent, 70);
-					trap->SendServerCommand(-1, "chat \"^3Guardian of Map: ^7Lightning Dome!\"");
-					npc_ent->client->pers.hunter_quest_messages = 0;
-				}
-
-				npc_ent->client->pers.hunter_quest_timer = level.time + Q_irand(6000, 9000);
-			}
-		}
-	}
+	// GalaxyRP fix: [Quests] the "Guardian of Map abilities" block used to live here, driving periodic
+	// special attacks for the map_guardian NPC spawned by Cmd_GuardianQuest_f. That command was deleted
+	// as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and level.guardian_quest --
+	// its only setter -- has been removed along with it, so this block is removed too.
 
 	if (level.load_entities_timer != 0 && level.load_entities_timer < level.time)
 	{ // zyk: loading entities from the file specified in entload command, or the default file

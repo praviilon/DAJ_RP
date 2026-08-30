@@ -232,8 +232,9 @@ XCVAR_DEF( zyk_ammo_respawn_time,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,
 XCVAR_DEF( zyk_shield_respawn_time,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_health_respawn_time,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_guardian_quest,"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_bounty_quest,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Quests] zyk_allow_guardian_quest and zyk_allow_bounty_quest used to be defined here.
+// Their only consumers, Cmd_GuardianQuest_f and Cmd_BountyQuest_f, were deleted as unreachable dead
+// code (see the GalaxyRP fix comment in g_cmds.c), leaving these cvars orphaned. Removed outright.
 XCVAR_DEF( zyk_allow_rpg_lms,	"1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_race_mode, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -302,10 +303,11 @@ XCVAR_DEF( zyk_enable_ultra_drain,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,
 XCVAR_DEF( zyk_enable_immunity_power,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_chaos_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_time_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_light_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_dark_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_eternity_power,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_universe_power,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Quests] zyk_enable_light_power, zyk_enable_dark_power, zyk_enable_eternity_power,
+// and zyk_enable_universe_power used to be defined here. Their only consumers were the /settings 1-4
+// (Light/Dark/Eternity/Universe Power) special-casing in Cmd_Settings_f, which was removed since those
+// quest-completion-granted powers can no longer be earned (see the GalaxyRP fix comment in g_cmds.c).
+// Removed outright.
 XCVAR_DEF( zyk_enable_resurrection_power,	"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_water_attack,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_shifting_sand,    "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

@@ -235,11 +235,10 @@ void NPC_ChoosePainAnimation( gentity_t *self, gentity_t *other, vec3_t point, i
 		return;
 	}
 
-	// zyk: Guardian of Map also resist attack and does not have pain anim
-	if (level.guardian_quest > 0 && self->s.number == level.guardian_quest)
-	{
-		return;
-	}
+	// GalaxyRP fix: [Quests] a "Guardian of Map also resists attack" pain-immunity guard, gated on
+	// level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only setter) was deleted as
+	// unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and level.guardian_quest has
+	// been removed along with it, so this guard is removed too.
 
 	if ( self->s.weapon == WP_THERMAL && self->client->ps.weaponTime > 0 )
 	{//don't interrupt thermal throwing anim

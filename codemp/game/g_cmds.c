@@ -5098,7 +5098,6 @@ void Cmd_FollowPrev_f( gentity_t *ent ) {
 }
 
 extern void save_account(gentity_t *ent, qboolean save_char_file);
-extern void quest_get_new_player(gentity_t *ent);
 
 /*
 ==================
@@ -8241,56 +8240,11 @@ qboolean validate_rpg_class(gentity_t *ent)
 	return qtrue;
 }
 
-// zyk: number of artifacts collected by the player in Universe Quest
-int number_of_artifacts(gentity_t *ent)
-{
-	int i = 0, collected_artifacts = 0;
-
-	if (ent->client->pers.universe_quest_progress == 2)
-	{
-		for (i = 0; i < 10; i++)
-		{
-			if (ent->client->pers.universe_quest_counter & (1 << i))
-			{
-				collected_artifacts++;
-			}
-		}
-	}
-
-	return collected_artifacts;
-}
-
-// zyk: amount of amulets got by the player in Amulets Mission of Universe Quest
-int number_of_amulets(gentity_t *ent)
-{
-	int i = 0, number_of_amulets = 0;
-
-	for (i = 0; i < 3; i++)
-	{
-		if (ent->client->pers.universe_quest_counter & (1 << i))
-		{
-			number_of_amulets++;
-		}
-	}
-
-	return number_of_amulets;
-}
-
-// zyk: amount of crystals got by the player in Crystals mission of Universe Quest
-int number_of_crystals(gentity_t *ent)
-{
-	int i = 0, number_of_crystals = 0;
-
-	for (i = 0; i < 3; i++)
-	{
-		if (ent->client->pers.universe_quest_counter & (1 << i))
-		{
-			number_of_crystals++;
-		}
-	}
-
-	return number_of_crystals;
-}
+// GalaxyRP fix: [Quests] number_of_artifacts, number_of_amulets, and number_of_crystals used to live
+// here. All three were only ever called from the general (non-Guardian/Bounty) automated quest system
+// (universe_quest_artifacts_checker/universe_crystals_check in g_main.c and got_all_amulets below),
+// which is itself fully unreachable now that quest_get_new_player's sole gate is permanently disabled
+// (see the GalaxyRP fix comment further down in this file). Deleted outright along with their callers.
 
 // zyk: initialize RPG skills of this player
 void initialize_rpg_skills(gentity_t *ent)
@@ -8725,127 +8679,21 @@ void clean_guardians(gentity_t *ent)
 	}
 }
 
-// zyk: tests if the player has beaten the guardians before the Guardian of Light in Light Quest
-qboolean light_quest_defeated_guardians(gentity_t *ent)
-{
-	int j = 0, NUM_OF_GUARDIANS_defeated = 0;
-
-	for (j = 4; j <= 12; j++)
-	{
-		if (ent->client->pers.defeated_guardians & (1 << j))
-		{
-			NUM_OF_GUARDIANS_defeated++;
-		}
-	}
-
-	if (NUM_OF_GUARDIANS_defeated == (NUM_OF_GUARDIANS - 1))
-		return qtrue;
-	else
-		return qfalse;
-}
-
-// zyk: tests if the player has collected the 9 notes before the Guardian of Darkness in Dark Quest
-qboolean dark_quest_collected_notes(gentity_t *ent)
-{
-	if (ent->client->pers.hunter_quest_progress & (1 << 4) && ent->client->pers.hunter_quest_progress & (1 << 5) && ent->client->pers.hunter_quest_progress & (1 << 6) && ent->client->pers.hunter_quest_progress & (1 << 7) && ent->client->pers.hunter_quest_progress & (1 << 8) && ent->client->pers.hunter_quest_progress & (1 << 9) && ent->client->pers.hunter_quest_progress & (1 << 10) && ent->client->pers.hunter_quest_progress & (1 << 11) && ent->client->pers.hunter_quest_progress & (1 << 12))
-	{
-		return qtrue;
-	}
-	else
-	{
-		return qfalse;
-	}
-}
-
+// GalaxyRP fix: [Quests] light_quest_defeated_guardians, dark_quest_collected_notes, load_note_model,
+// load_crystal_model, load_effect, clean_note_model, and clean_crystal_model used to live here. All
+// were exclusively part of the general (non-Guardian/Bounty) automated quest system's map-note/
+// map-crystal/map-effect spawning, driven entirely by choose_new_player/quest_get_new_player further
+// down in this file -- which is itself fully unreachable (see the GalaxyRP fix comment on
+// quest_get_new_player below). Deleted outright, along with the level.quest_note_id/
+// level.universe_quest_note_id/level.quest_crystal_id fields they were the sole users of.
+//
+// clean_effect() just below is kept even though it is likewise part of this dead map-effect machinery,
+// because it is still called unconditionally from spawn_boss() (the guardian_mode boss-battle spawner),
+// which is being left untouched this round.
 extern void zyk_set_entity_field(gentity_t *ent, char *key, char *value);
 extern void zyk_spawn_entity(gentity_t *ent);
 extern void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value);
 extern void zyk_main_spawn_entity(gentity_t *ent);
-
-// zyk: loads the datapad md3 model for the Dark Quest notes
-void load_note_model(int x,int y,int z)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent,"classname","misc_model_breakable");
-	zyk_set_entity_field(new_ent,"origin",va("%d %d %d",x,y,z));
-	zyk_set_entity_field(new_ent,"angles","0 90 0");
-	zyk_set_entity_field(new_ent,"model","models/items/datapad.md3");
-
-	zyk_spawn_entity(new_ent);
-
-	if (x == 2780 && y == 3966 && z == 1411)
-		level.universe_quest_note_id = new_ent->s.number;
-	else
-		level.quest_note_id = new_ent->s.number;
-}
-
-// zyk: loads the crystal md3 model for the Universe Quest crystals
-gentity_t *load_crystal_model(int x,int y,int z, int yaw, int crystal_number)
-{
-	gentity_t *ent = G_Spawn();
-
-	zyk_set_entity_field(ent,"classname","misc_model_breakable");
-	zyk_set_entity_field(ent,"origin",va("%d %d %d",x,y,z));
-	zyk_set_entity_field(ent,"angles",va("0 %d 0",yaw));
-
-	if (crystal_number == 0)
-		zyk_set_entity_field(ent,"model","models/map_objects/mp/crystal_blue.md3");
-	else if (crystal_number == 1)
-		zyk_set_entity_field(ent,"model","models/map_objects/mp/crystal_red.md3");
-	else
-		zyk_set_entity_field(ent,"model","models/map_objects/mp/crystal_green.md3");
-
-	zyk_spawn_entity(ent);
-
-	level.quest_crystal_id[crystal_number] = ent->s.number;
-
-	return ent;
-}
-
-// zyk: load an effect used in quests
-gentity_t *load_effect(int x,int y,int z, int spawnflags, char *fxFile)
-{
-	gentity_t *ent = G_Spawn();
-
-	zyk_set_entity_field(ent,"classname","fx_runner");
-	zyk_set_entity_field(ent,"spawnflags",va("%d",spawnflags));
-	zyk_set_entity_field(ent,"origin",va("%d %d %d",x,y,z));
-
-	ent->s.modelindex = G_EffectIndex( fxFile );
-
-	zyk_spawn_entity(ent);
-
-	level.quest_effect_id = ent->s.number;
-
-	return ent;
-}
-
-// zyk: cleans the note model if player gets it
-void clean_note_model()
-{
-	if (level.quest_note_id != -1)
-	{
-		G_FreeEntity(&g_entities[level.quest_note_id]);
-		level.quest_note_id = -1;
-	}
-
-	if (level.universe_quest_note_id != -1)
-	{
-		G_FreeEntity(&g_entities[level.universe_quest_note_id]);
-		level.universe_quest_note_id = -1;
-	}
-}
-
-// zyk: cleans the crystal model if player gets it
-void clean_crystal_model(int crystal_number)
-{
-	if (level.quest_crystal_id[crystal_number] != -1)
-	{
-		G_FreeEntity(&g_entities[level.quest_crystal_id[crystal_number]]);
-		level.quest_crystal_id[crystal_number] = -1;
-	}
-}
 
 // zyk: cleans the effect if player reaches it
 void clean_effect()
@@ -8857,378 +8705,21 @@ void clean_effect()
 	}
 }
 
-// zyk: tests if player got all 3 amulets in Amulets Mission of Universe Quest
-void got_all_amulets(gentity_t *ent)
-{
-	if (number_of_amulets(ent) == 3)
-	{
-		ent->client->pers.universe_quest_objective_control = -6;
-		ent->client->pers.universe_quest_timer = level.time + 3000;
-		ent->client->pers.universe_quest_messages = 199;
-	}
-}
-
-// zyk: tests how many side quests completed by the player
-int zyk_number_of_completed_quests(gentity_t *ent)
-{
-	int number_of_completed_quests = 0;
-
-	if (ent->client->pers.defeated_guardians == NUM_OF_GUARDIANS)
-		number_of_completed_quests++;
-	if (ent->client->pers.hunter_quest_progress == NUM_OF_OBJECTIVES)
-		number_of_completed_quests++;
-	if (ent->client->pers.eternity_quest_progress == NUM_OF_ETERNITY_QUEST_OBJ)
-		number_of_completed_quests++;
-
-	return number_of_completed_quests;
-}
-
-// zyk: used by the quest_get_new_player function to actually get the new player based on his quest settings
-void choose_new_player(gentity_t *next_player)
-{
-	int found = 0;
-	if (next_player && next_player->client && next_player->client->sess.amrpgmode == 2 && !(next_player->client->pers.player_settings & (1 << 0)) && next_player->client->pers.can_play_quest == 0 && next_player->client->pers.connected == CON_CONNECTED && next_player->client->sess.sessionTeam != TEAM_SPECTATOR && next_player->inuse == qtrue)
-	{
-		if (level.quest_map == 1 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 4))) || (next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 4))) || (next_player->client->pers.universe_quest_progress == 2 && (!(next_player->client->pers.universe_quest_counter & (1 << 1)) || !(next_player->client->pers.universe_quest_counter & (1 << 3)))) || next_player->client->pers.universe_quest_progress == 3))
-			found = 1;
-		else if (level.quest_map == 2 && next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 5)))
-			found = 1;
-		else if (level.quest_map == 3 && next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 6)))
-			found = 1;
-		else if (level.quest_map == 4 && (
-			(next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 7))) || 
-			(next_player->client->pers.universe_quest_progress >= 17 && next_player->client->pers.universe_quest_progress < NUM_OF_UNIVERSE_QUEST_OBJ &&
-			 next_player->client->pers.universe_quest_counter & (1 << 3))))
-			found = 1;
-		else if (level.quest_map == 5 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 12))) || (next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 8))) || (next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 9)))))
-			found = 1;
-		else if (level.quest_map == 6 && (
-			(next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 9))) ||
-			(next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 6))) ||
-			(next_player->client->pers.universe_quest_progress >= 18 && next_player->client->pers.universe_quest_progress < NUM_OF_UNIVERSE_QUEST_OBJ && 
-			 next_player->client->pers.universe_quest_counter & (1 << 0)) || 
-			(next_player->client->pers.universe_quest_progress == 16 && next_player->client->pers.universe_quest_counter & (1 << 1)) || 
-			(next_player->client->pers.universe_quest_progress >= 15 && next_player->client->pers.universe_quest_progress <= 17 && next_player->client->pers.universe_quest_counter & (1 << 2))))
-		{
-			found = 1;
-		}
-		else if (level.quest_map == 7 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 7))) || (next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 10)))))
-			found = 1;
-		else if (level.quest_map == 8 && next_player->client->pers.universe_quest_progress == 4)
-			found = 1;
-		else if (level.quest_map == 9 && (next_player->client->pers.universe_quest_progress < 2 || (next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 12)))))
-			found = 1;
-		else if (level.quest_map == 10 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 6))) || 
-				 light_quest_defeated_guardians(next_player) == qtrue || dark_quest_collected_notes(next_player) == qtrue || 
-				 next_player->client->pers.eternity_quest_progress < NUM_OF_ETERNITY_QUEST_OBJ || 
-				(next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 8))) || 
-				(next_player->client->pers.universe_quest_progress == 15 && next_player->client->pers.universe_quest_counter & (1 << 0)) || 
-				(next_player->client->pers.universe_quest_progress == 16 && next_player->client->pers.universe_quest_counter & (1 << 3))))
-		{
-			found = 1;
-		}
-		else if (level.quest_map == 11 && next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 9)))
-			found = 1;
-		else if (level.quest_map == 12 && (next_player->client->pers.universe_quest_progress == 7 ||
-				(next_player->client->pers.universe_quest_progress == 8 && !(next_player->client->pers.universe_quest_counter & (1 << 1))) || 
-				(next_player->client->pers.universe_quest_progress == 15 && next_player->client->pers.universe_quest_counter & (1 << 1)) || 
-				(next_player->client->pers.universe_quest_progress >= 17 && next_player->client->pers.universe_quest_progress < NUM_OF_UNIVERSE_QUEST_OBJ && 
-				 next_player->client->pers.universe_quest_counter & (1 << 1)) || 
-				(next_player->client->pers.universe_quest_progress == 15 && next_player->client->pers.universe_quest_counter & (1 << 3))))
-		{
-			found = 1;
-		}
-		else if (level.quest_map == 13 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 5))) || (next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 5)))))
-			found = 1;
-		else if (level.quest_map == 14 && next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 11)))
-			found = 1;
-		else if (level.quest_map == 15 && next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 10)))
-			found = 1;
-		else if (level.quest_map == 17 && ((next_player->client->pers.universe_quest_progress == 8 && !(next_player->client->pers.universe_quest_counter & (1 << 2))) || (next_player->client->pers.universe_quest_progress == 9 && (!(next_player->client->pers.universe_quest_counter & (1 << 0)) || !(next_player->client->pers.universe_quest_counter & (1 << 1)) || !(next_player->client->pers.universe_quest_counter & (1 << 2)))) || (next_player->client->pers.universe_quest_progress >= 10 && next_player->client->pers.universe_quest_progress < 14) || (next_player->client->pers.universe_quest_progress == 14 && zyk_number_of_completed_quests(next_player) == 3)))
-			found = 1;
-		else if (level.quest_map == 18 && ((next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES && !(next_player->client->pers.hunter_quest_progress & (1 << 11))) || (next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 4)))))
-			found = 1;
-		else if (level.quest_map == 20 && ((next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS && !(next_player->client->pers.defeated_guardians & (1 << 8))) || (next_player->client->pers.universe_quest_progress == 2 && !(next_player->client->pers.universe_quest_counter & (1 << 7)))))
-			found = 1;
-		else if (level.quest_map == 24 && (next_player->client->pers.universe_quest_progress == 5 ||
-				(next_player->client->pers.universe_quest_progress == 16 && next_player->client->pers.universe_quest_counter & (1 << 0)) || 
-				(next_player->client->pers.universe_quest_progress == 17 && next_player->client->pers.universe_quest_counter & (1 << 0)) || 
-				(next_player->client->pers.universe_quest_progress >= 18 && next_player->client->pers.universe_quest_progress < NUM_OF_UNIVERSE_QUEST_OBJ && 
-				 next_player->client->pers.universe_quest_counter & (1 << 2))))
-		{
-			found = 1;
-		}
-		else if (level.quest_map == 25 && next_player->client->pers.universe_quest_progress == 6)
-			found = 1;
-	}
-
-	if (found == 1)
-	{ // zyk: clean quest npcs of this map
-		int j = 0;
-		for (j = MAX_CLIENTS; j < level.num_entities; j++)
-		{
-			if (&g_entities[j] && g_entities[j].NPC && g_entities[j].health > 0 && (Q_stricmp(g_entities[j].NPC_type, "ymir_boss") == 0 || Q_stricmp(g_entities[j].NPC_type, "thor_boss") == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_ragnos" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_jawa" ) == 0 || Q_stricmp(g_entities[j].NPC_type, "quest_mage") == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_protocol_imp" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_sand_raider_green" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_sand_raider_brown" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_sand_raider_blue" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_sand_raider_red" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_reborn" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_reborn_blue" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_reborn_boss" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "quest_reborn_red" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "sage_of_light" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "sage_of_darkness" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "sage_of_eternity" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "sage_of_universe" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "quest_super_soldier" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "guardian_of_time" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "guardian_boss_9" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "guardian_of_darkness" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "guardian_of_eternity" ) == 0 || 
-				Q_stricmp( g_entities[j].NPC_type, "guardian_of_universe" ) == 0 || Q_stricmp( g_entities[j].NPC_type, "master_of_evil" ) == 0 || 
-				Q_stricmp(g_entities[j].NPC_type, "soul_of_sorrow") == 0 || Q_stricmp(g_entities[j].NPC_type, "quest_citizen_warrior") == 0))
-			{
-				G_FreeEntity(&g_entities[j]);
-			}
-			else if (&g_entities[j] && (Q_stricmp(g_entities[j].targetname, "zyk_quest_models") == 0 || Q_stricmp(g_entities[j].targetname, "zyk_quest_artifact") == 0 || 
-					 Q_stricmp(g_entities[j].targetname, "zyk_sage_prison") == 0 || g_entities[j].spawnflags & 131072))
-			{ // zyk: cleans the models/effects/items spawned in quests
-				G_FreeEntity(&g_entities[j]);
-			}
-		}
-
-		// zyk: setting the attributes depending on the quests this player must complete in this map
-		next_player->client->pers.guardian_mode = 0;
-		next_player->client->pers.guardian_timer = 0;
-
-		next_player->client->pers.universe_quest_artifact_holder_id = -1;
-		next_player->client->pers.universe_quest_messages = 0;
-
-		// zyk: give some seconds to the new player to start his quest
-		next_player->client->pers.universe_quest_timer = level.time + 3000;
-
-		next_player->client->pers.hunter_quest_timer = level.time + 3000;
-		next_player->client->pers.hunter_quest_messages = 0;
-
-		next_player->client->pers.light_quest_timer = level.time + 3000;
-		next_player->client->pers.light_quest_messages = 0;
-
-		if (next_player->client->pers.eternity_quest_progress < (NUM_OF_ETERNITY_QUEST_OBJ - 1))
-		{ // zyk: give some time before the riddle appears to the quest player
-			next_player->client->pers.eternity_quest_timer = level.time + 1000;
-		}
-		else
-		{ 
-			next_player->client->pers.eternity_quest_timer = 0;
-		}
-
-		// zyk: must clean here too so in yavin1b the correct note is spawned for this player
-		if (level.quest_map == 1)
-			clean_note_model();
-
-		if (level.quest_map == 9 && next_player->client->pers.universe_quest_progress == 0) 
-		{ // zyk: first Universe Quest objective
-			next_player->client->pers.universe_quest_objective_control = 8; // zyk: player must kill quest reborn npcs to complete the first objective
-			next_player->client->pers.light_quest_messages = 9;
-		}
-		else if (level.quest_map == 9 && next_player->client->pers.universe_quest_progress == 1)
-		{ // zyk: second Universe Quest objective
-			next_player->client->pers.universe_quest_objective_control = 2; // zyk: sets this player as playing the second objective of Universe Quest
-		}
-		else if (next_player->client->pers.universe_quest_progress == 2)
-		{ // zyk: third Universe Quest objective
-			next_player->client->pers.universe_quest_objective_control = 3; // zyk: sets this player as playing the third objective of Universe Quest
-		}
-		else if (level.quest_map == 1 && next_player->client->pers.universe_quest_progress == 3)
-		{
-			if (level.universe_quest_note_id == -1)
-				load_note_model(2780,3966,1411);
-
-			next_player->client->pers.universe_quest_objective_control = 4; // zyk: fourth Universe Quest objective
-		}
-		else if (level.quest_map == 8 && next_player->client->pers.universe_quest_progress == 4)
-		{ // zyk: fifth Universe Quest objective
-			next_player->client->pers.universe_quest_objective_control = 5;
-			next_player->client->pers.universe_quest_timer = level.time + 2000;
-		}
-		else if (level.quest_map == 24 && next_player->client->pers.universe_quest_progress == 5)
-		{
-			next_player->client->pers.universe_quest_objective_control = -6;
-			got_all_amulets(next_player);
-		}
-		else if (level.quest_map == 25 && next_player->client->pers.universe_quest_progress == 6)
-		{ // zyk: seventh Universe Quest objective
-			next_player->client->pers.universe_quest_timer = level.time + 3000;
-			next_player->client->pers.universe_quest_objective_control = -7;
-		}
-		else if (level.quest_map == 17)
-		{ // zyk: Universe Quest
-			if (next_player->client->pers.universe_quest_progress == 9)
-			{ // zyk: cleaning crystals that were in the map
-				int zyk_it = 0;
-
-				for (zyk_it = 0; zyk_it < 3; zyk_it++)
-				{
-					clean_crystal_model(zyk_it);
-				}
-			}
-
-			if (next_player->client->pers.universe_quest_progress == 11)
-			{ // zyk: player must defeat this quantity of quest_super_soldier npcs in this mission
-				next_player->client->pers.universe_quest_timer = level.time + 3000;
-				next_player->client->pers.universe_quest_objective_control = 20;
-			}
-		}
-
-		// zyk: loading note models if player must find a Dark Quest note
-		if (level.quest_note_id == -1 && next_player->client->pers.hunter_quest_progress != NUM_OF_OBJECTIVES)
-		{
-			if (level.quest_map == 1 && !(next_player->client->pers.hunter_quest_progress & (1 << 4)))
-			{
-				load_note_model(2375,4600,1810);
-			}
-			else if (level.quest_map == 2 && !(next_player->client->pers.hunter_quest_progress & (1 << 5)))
-			{
-				load_note_model(7500,-755,2);
-			}
-			else if (level.quest_map == 3 && !(next_player->client->pers.hunter_quest_progress & (1 << 6)))
-			{
-				load_note_model(-765,4790,196);
-			}
-			else if (level.quest_map == 4 && !(next_player->client->pers.hunter_quest_progress & (1 << 7)))
-			{
-				load_note_model(2400,2990,-2093);
-			}
-			else if (level.quest_map == 5 && !(next_player->client->pers.hunter_quest_progress & (1 << 8)))
-			{
-				load_note_model(-500,-4690,928);
-			}
-			else if (level.quest_map == 6 && !(next_player->client->pers.hunter_quest_progress & (1 << 9)))
-			{
-				load_note_model(-9838,-1547,2);
-			}
-			else if (level.quest_map == 7 && !(next_player->client->pers.hunter_quest_progress & (1 << 10)))
-			{
-				load_note_model(1905,1180,706);
-			}
-			else if (level.quest_map == 18 && !(next_player->client->pers.hunter_quest_progress & (1 << 11)))
-			{
-				load_note_model(-1148,-1458,593);
-			}
-			else if (level.quest_map == 9 && !(next_player->client->pers.hunter_quest_progress & (1 << 12)))
-			{
-				load_note_model(-1963,2633,-3005);
-			}
-		}
-
-		// zyk: loading effects in guardian area
-		if (level.quest_effect_id == -1 && next_player->client->pers.defeated_guardians != NUM_OF_GUARDIANS)
-		{
-			if (level.quest_map == 1 && !(next_player->client->pers.defeated_guardians & (1 << 4)))
-			{ // zyk: Guardian of Water
-				load_effect(2062,4089,351,0,"env/btend");
-			}
-			else if (level.quest_map == 13 && !(next_player->client->pers.defeated_guardians & (1 << 5)))
-			{ // zyk: Guardian of Earth
-				load_effect(-2149,-4187,3645,0,"env/btend");
-			}
-			else if (level.quest_map == 10 && !(next_player->client->pers.defeated_guardians & (1 << 6)))
-			{ // zyk: Guardian of Forest
-				load_effect(512,4829,62,0,"env/btend");
-			}
-			else if (level.quest_map == 7 && !(next_player->client->pers.defeated_guardians & (1 << 7)))
-			{ // zyk: Guardian of Intelligence
-				load_effect(1920, 2068, 720,0,"env/btend");
-			}
-			else if (level.quest_map == 20 && !(next_player->client->pers.defeated_guardians & (1 << 8)))
-			{ // zyk: Guardian of Agility
-				load_effect(8474,-1322,-159,0,"env/btend");
-			}
-			else if (level.quest_map == 11 && !(next_player->client->pers.defeated_guardians & (1 << 9)))
-			{ // zyk: Guardian of Fire
-				load_effect(0,5,-375,0,"env/btend");
-			}
-			else if (level.quest_map == 15 && !(next_player->client->pers.defeated_guardians & (1 << 10)))
-			{ // zyk: Guardian of Wind
-				load_effect(-153,-455,216,0,"env/btend");
-			}
-			else if (level.quest_map == 14 && !(next_player->client->pers.defeated_guardians & (1 << 11)))
-			{ // zyk: Guardian of Resistance
-				load_effect(0,1135,9,0,"env/btend");
-			}
-			else if (level.quest_map == 5 && !(next_player->client->pers.defeated_guardians & (1 << 12)))
-			{ // zyk: Guardian of Ice
-				load_effect(-5548,11548,990,0,"env/btend");
-			}
-		}
-
-		// GalaxyRP fix: [Cvars] zyk_quest_afk_timer was removed along with the rest of the general
-		// quest system (see the early return in quest_get_new_player) -- this function is unreachable
-		// dead code now, kept only so its historical logic still compiles; the old cvar default
-		// (300000ms) is hardcoded here since it can no longer be configured.
-		next_player->client->pers.quest_afk_timer = level.time + 300000;
-		next_player->client->pers.can_play_quest = 1;
-
-		do_scale(next_player, 100);
-
-		trap->SendServerCommand( -1, va("chat \"^3Quest System: ^7%s ^7turn.\"",next_player->client->pers.netname));
-	}
-}
-
-// zyk: searches for a new player to play a quest if he died or failed
-void quest_get_new_player(gentity_t *ent)
-{
-	int i = 0;
-	gentity_t *next_player = NULL;
-
-	ent->client->pers.can_play_quest = 0;
-
-	// GalaxyRP fix: [Quests] the general (non-Guardian/Bounty) quest system is unused -- GalaxyRP's
-	// current gameplay is admin-driven RP and manual leveling rather than automated quests, and this
-	// system was already unreachable in practice by default (zyk_allow_quests defaulted to 0, and
-	// zyk_rp_mode defaulted to 1, which independently also blocked it). Both cvars have been removed;
-	// this short-circuit keeps this function's behavior identical to what every server already got
-	// under those defaults, matching the existing dead-code convention used for the Guardian/Bounty
-	// Quest commands elsewhere in this file.
-	return;
-
-	if (level.gametype != GT_FFA)
-	{ // zyk: quests can only be played at FFA gametype
-		return;
-	}
-
-	for (i = 0; i < level.maxclients; i++)
-	{ // zyk: verify if there is someone who is already playing a quest and is not in spectator mode
-		next_player = &g_entities[i];
-		if (next_player && next_player->client && next_player->client->sess.amrpgmode == 2 && next_player->client->pers.can_play_quest == 1 && next_player->client->sess.sessionTeam != TEAM_SPECTATOR)
-			return;
-	}
-
-	for (i = 0; i < level.maxclients; i++)
-	{ // zyk: remove guardian_mode from all players that were fighting a boss battle
-		next_player = &g_entities[i];
-		if (next_player && next_player->client && next_player->client->sess.amrpgmode == 2 && next_player->client->pers.guardian_mode != 0)
-			next_player->client->pers.guardian_mode = 0;
-	}
-
-	// zyk: no one is already playing the quest, so choose a new player
-
-	for (i = ((ent-g_entities) + 1); i < level.maxclients; i++)
-	{
-		next_player = &g_entities[i];
-
-		choose_new_player(next_player);
-
-		if (next_player && next_player->client && next_player->client->sess.amrpgmode == 2 && next_player->client->pers.can_play_quest == 1) // zyk: found the player
-			return;
-	}
-
-	for (i = 0; i < (ent-g_entities); i++)
-	{
-		next_player = &g_entities[i];
-
-		choose_new_player(next_player);
-
-		if (next_player && next_player->client && next_player->client->sess.amrpgmode == 2 && next_player->client->pers.can_play_quest == 1) // zyk: found the player
-			return;
-	}
-
-	// zyk: didnt find anyone to play this quest, so choose the same player again if he still needs to play a quest in this map
-	choose_new_player(ent);
-}
+// GalaxyRP fix: [Quests] got_all_amulets, zyk_number_of_completed_quests, choose_new_player, and
+// quest_get_new_player used to live here. quest_get_new_player is the sole setter of
+// pers.can_play_quest anywhere in the codebase, and it was disabled with an unconditional early
+// return in an earlier change ("Remove dead server cvars and the game code paths that referenced
+// them") -- GalaxyRP's current gameplay is admin-driven RP and manual leveling rather than automated
+// quests, and this system was already unreachable in practice by default before that (zyk_allow_quests
+// defaulted to 0, and zyk_rp_mode defaulted to 1, which independently also blocked it). That single
+// permanently-false gate makes this entire general (non-Guardian/Bounty) automated quest system --
+// Light/Dark/Hunter/Eternity/Universe Quest map-turn selection alike -- unreachable, so all four
+// functions have been deleted outright along with their direct call sites elsewhere in the codebase
+// (g_main.c, g_client.c, g_combat.c, g_items.c, g_utils.c). The pers.* quest-progress fields these
+// functions read/wrote (defeated_guardians, hunter_quest_progress, eternity_quest_progress,
+// universe_quest_progress, can_play_quest, etc.) are kept -- they are still read by live code
+// elsewhere (the magic-power selection system and /settings Challenge Mode), so only the dead
+// selection logic itself is removed here.
 
 // zyk: tests if the race must be finished
 void try_finishing_race()
@@ -9313,7 +8804,9 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	{
 		// zyk: if this is the quest player, reset the boss battle music
 		level.boss_battle_music_reset_timer = level.time + 1000;
-		quest_get_new_player(ent);
+		// GalaxyRP fix: [Quests] quest_get_new_player was removed (see the GalaxyRP fix comment
+		// above choose_new_player's old location further up in this file) -- can_play_quest can no
+		// longer become 1 anywhere, so this block is dead in practice, but it is left compiling as-is.
 	}
 
 	ent->client->pers.bitvalue = 0;
@@ -11100,41 +10593,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			sprintf(message,"\n^3 0 - RPG quests - ^2ON");
 		}
 
-		if (ent->client->pers.player_settings & (1 << 1))
-		{
-			sprintf(message,"%s\n^3 1 - Light Power - ^1OFF", message);
-		}
-		else
-		{
-			sprintf(message,"%s\n^3 1 - Light Power - ^2ON", message);
-		}
-
-		if (ent->client->pers.player_settings & (1 << 2))
-		{
-			sprintf(message,"%s\n^3 2 - Dark Power - ^1OFF", message);
-		}
-		else
-		{
-			sprintf(message,"%s\n^3 2 - Dark Power - ^2ON", message);
-		}
-
-		if (ent->client->pers.player_settings & (1 << 3))
-		{
-			sprintf(message,"%s\n^3 3 - Eternity Power - ^1OFF", message);
-		}
-		else
-		{
-			sprintf(message,"%s\n^3 3 - Eternity Power - ^2ON", message);
-		}
-
-		if (ent->client->pers.player_settings & (1 << 4))
-		{
-			sprintf(message,"%s\n^3 4 - Universe Power - ^1OFF", message);
-		}
-		else
-		{
-			sprintf(message,"%s\n^3 4 - Universe Power - ^2ON", message);
-		}
+		// GalaxyRP fix: [Quests] the status lines for settings 1-4 (Light/Dark/Eternity/Universe Power)
+		// used to be printed here. Those quest-completion-granted powers can no longer be earned now
+		// that the general quest system is gone (see the GalaxyRP fix comment on quest_get_new_player's
+		// old location in this file), so /settings 1-4 have been removed below and their status lines
+		// removed here to match.
 
 		if (ent->client->pers.player_settings & (1 << 5))
 		{
@@ -11257,7 +10720,12 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		trap->Argv(1, arg1, sizeof( arg1 ));
 		value = atoi(arg1);
 
-		if (value < 0 || value > 15)
+		// GalaxyRP fix: [Quests] settings 1-4 (Light/Dark/Eternity/Universe Power) used to be valid
+		// values here, toggling pers.quest_power_status bits that can no longer be earned now that the
+		// general quest system is gone (see the GalaxyRP fix comment on quest_get_new_player's old
+		// location in this file). Excluded from the valid range so they now report as invalid, matching
+		// the removed status lines above.
+		if (value < 0 || value > 15 || (value >= 1 && value <= 4))
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid settings value.\n\"" );
 			return;
@@ -11269,29 +10737,6 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			{
 				ent->client->pers.player_settings &= ~(1 << value);
 
-				if (value == 1 && ent->client->pers.defeated_guardians == NUM_OF_GUARDIANS && zyk_enable_light_power.integer == 1)
-				{
-					ent->client->pers.magic_power--;
-					ent->client->pers.quest_power_status |= (1 << 14);
-					send_rpg_events(1000);
-				}
-				else if (value == 2 && ent->client->pers.hunter_quest_progress == NUM_OF_OBJECTIVES && zyk_enable_dark_power.integer == 1)
-				{
-					ent->client->pers.magic_power--;
-					ent->client->pers.quest_power_status |= (1 << 15);
-					send_rpg_events(1000);
-				}
-				else if (value == 3 && ent->client->pers.eternity_quest_progress == NUM_OF_ETERNITY_QUEST_OBJ && zyk_enable_eternity_power.integer == 1)
-				{
-					ent->client->pers.magic_power--;
-					ent->client->pers.quest_power_status |= (1 << 16);
-					send_rpg_events(1000);
-				}
-				else if (value == 4 && ent->client->pers.universe_quest_progress > 7 && zyk_enable_universe_power.integer == 1)
-				{
-					ent->client->pers.quest_power_status |= (1 << 13);
-				}
-
 				if (value == 5)
 					strcpy(new_status, "^3English^7");
 				else
@@ -11300,15 +10745,6 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			else
 			{
 				ent->client->pers.player_settings |= (1 << value);
-
-				if (value == 1)
-					ent->client->pers.quest_power_status &= ~(1 << 14);
-				else if (value == 2)
-					ent->client->pers.quest_power_status &= ~(1 << 15);
-				else if (value == 3)
-					ent->client->pers.quest_power_status &= ~(1 << 16);
-				else if (value == 4)
-					ent->client->pers.quest_power_status &= ~(1 << 13);
 
 				if (value == 5)
 					strcpy(new_status, "^1Custom^7");
@@ -11402,22 +10838,6 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		if (value == 0)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Quests %s\n\"", new_status) );
-		}
-		else if (value == 1)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Light Power %s\n\"", new_status) );
-		}
-		else if (value == 2)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Dark Power %s\n\"", new_status) );
-		}
-		else if (value == 3)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Eternity Power %s\n\"", new_status) );
-		}
-		else if (value == 4)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Universe Power %s\n\"", new_status) );
 		}
 		else if (value == 5)
 		{
@@ -11563,141 +10983,12 @@ void save_config(gentity_t *ent)
 	}
 }
 
-/*
-==================
-Cmd_GuardianQuest_f
-==================
-*/
-extern void zyk_start_boss_battle_music(gentity_t *ent);
-extern gentity_t *Zyk_NPC_SpawnType( char *npc_type, int x, int y, int z, int yaw );
-void Cmd_GuardianQuest_f( gentity_t *ent ) {
-
-	return;
-
-	if (zyk_allow_guardian_quest.integer != 1)
-	{
-		trap->SendServerCommand( ent-g_entities, va("chat \"^3Guardian Quest: ^7this quest is not allowed in this server\n\"") );
-		return;
-	}
-
-	if (level.guardian_quest_timer > level.time)
-	{
-		trap->SendServerCommand( ent-g_entities, va("chat \"^3Guardian Quest: ^7wait %d seconds and try again\n\"", (level.guardian_quest_timer - level.time)/1000) );
-		return;
-	}
-
-	if (level.guardian_quest == 0)
-	{
-		int i = 0, j = 0, num_spawn_points = 0, chosen_spawn_point = -1;
-		gentity_t *this_ent = NULL;
-		gentity_t *npc_ent = NULL;
-		vec3_t npc_origin, npc_angles;
-
-		// zyk: player cant spawn if someone is fighting a guardian
-		for (i = 0; i < level.maxclients; i++)
-		{
-			this_ent = &g_entities[i];
-			if (this_ent && this_ent->client && this_ent->client->sess.amrpgmode == 2 && this_ent->client->pers.guardian_mode > 0)
-			{
-				trap->SendServerCommand( ent-g_entities, "print \"You can't start this quest while a player is fighting a guardian.\n\"" );
-				return;
-			}
-		}
-
-		for (i = 0; i < level.num_entities; i++)
-		{
-			this_ent = &g_entities[i];
-			if (this_ent && Q_stricmp(this_ent->classname, "info_player_deathmatch") == 0)
-			{
-				num_spawn_points++;
-			}
-		}
-
-		chosen_spawn_point = Q_irand(1,num_spawn_points) - 1;
-
-		// zyk: finds the chosen spawn point entity and gets its origin, which will be the guardian origin
-		for (i = 0; i < level.num_entities; i++)
-		{
-			this_ent = &g_entities[i];
-			if (this_ent && Q_stricmp(this_ent->classname, "info_player_deathmatch") == 0)
-			{
-				if (chosen_spawn_point == j)
-				{
-					VectorCopy(this_ent->s.origin, npc_origin);
-					VectorCopy(this_ent->s.angles, npc_angles);
-					break;
-				}
-
-				j++;
-			}
-		}
-
-		npc_ent = Zyk_NPC_SpawnType("map_guardian",(int)npc_origin[0],(int)npc_origin[1],(int)npc_origin[2],(int)npc_angles[1]);
-
-		if (npc_ent)
-		{
-			npc_ent->client->pers.hunter_quest_messages = 0;
-			npc_ent->client->pers.hunter_quest_timer = level.time + 5000;
-			npc_ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
-			level.initial_map_guardian_weapons = npc_ent->client->ps.stats[STAT_WEAPONS];
-			level.guardian_quest = npc_ent->s.number;
-		}
-
-		zyk_start_boss_battle_music(ent);
-
-		trap->SendServerCommand( -1, va("chat \"^3Guardian Quest: ^7The ^3Guardian Quest ^7is activated!\"") );
-	}
-	else
-	{
-		trap->SendServerCommand( ent->s.number, va("print \"Guardian Quest is already active.\n\"") );
-	}
-}
-
-/*
-==================
-Cmd_BountyQuest_f
-==================
-*/
-void Cmd_BountyQuest_f( gentity_t *ent ) {
-	gentity_t *this_ent = NULL;
-
-	return;
-
-	if (zyk_allow_bounty_quest.integer != 1)
-	{
-		trap->SendServerCommand( ent-g_entities, va("chat \"^3Bounty Quest: ^7this quest is not allowed in this server\n\"") );
-		return;
-	}
-
-	// zyk: reached MAX_CLIENTS, reset it to 0
-	if (level.bounty_quest_target_id == level.maxclients)
-		level.bounty_quest_target_id = 0;
-
-	if (level.bounty_quest_choose_target == qtrue)
-	{ // zyk: no one is the target, so choose one player to be the target
-		while (level.bounty_quest_target_id < level.maxclients)
-		{
-			this_ent = &g_entities[level.bounty_quest_target_id];
-
-			if (this_ent && this_ent->client && this_ent->client->sess.amrpgmode == 2 && this_ent->health > 0 && this_ent->client->sess.sessionTeam != TEAM_SPECTATOR && 
-				!(this_ent->client->pers.player_statuses & (1 << 26)))
-			{
-				level.bounty_quest_choose_target = qfalse;
-				trap->SendServerCommand( -1, va("chat \"^3Bounty Quest: ^7A reward of ^3%d ^7credits will be given to who kills %s^7\n\"", (this_ent->client->pers.level*15), this_ent->client->pers.netname) );
-				return;
-			}
-
-			level.bounty_quest_target_id++;
-		}
-		trap->SendServerCommand( -1, va("chat \"^3Bounty Quest: ^7No one was chosen as the target\n\"") );
-	}
-	else
-	{ // zyk: there is already a target player
-		this_ent = &g_entities[level.bounty_quest_target_id];
-		if (this_ent && this_ent->client)
-			trap->SendServerCommand( -1, va("chat \"^3Bounty Quest: ^7%s ^7is already the target\n\"", this_ent->client->pers.netname) );
-	}
-}
+// GalaxyRP fix: [Quests] Cmd_GuardianQuest_f and Cmd_BountyQuest_f used to live here. Both were
+// fully dead -- an unconditional `return;` as their first statement, and Cmd_GuardianQuest_f was not
+// even registered in the commands[] dispatch table (Cmd_BountyQuest_f's entry was already commented
+// out there). Deleted outright, along with the now-unreferenced zyk_allow_guardian_quest/
+// zyk_allow_bounty_quest cvars, per the same convention used for other confirmed-unreachable code in
+// this file.
 
 // GalaxyRP fix: [Cvars] Cmd_PlayerMode_f (which read zyk_allow_rpg_mode, now removed) used to live
 // here. It was already fully orphaned before this change -- not registered in the commands[] dispatch
@@ -17723,7 +17014,6 @@ command_t commands[] = {
 	{ "zykchars",			Cmd_ZykChars_f,			CMD_ALIVE | CMD_NOINTERMISSION }
 //	{ "unique",				Cmd_Unique_f,				CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
 //	{ "meleearena",			Cmd_MeleeArena_f,			CMD_ALIVE|CMD_NOINTERMISSION },
-//	{ "bountyquest",		Cmd_BountyQuest_f,			CMD_RPG|CMD_NOINTERMISSION },
 //	{ "thedestroyer",		Cmd_TheDestroyer_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "teamtask",			Cmd_TeamTask_f,				CMD_NOINTERMISSION },
 //	{ "kylesmash",			TryGrapple,					0 },

@@ -2642,8 +2642,6 @@ qboolean CheckItemCanBePickedUpByNPC( gentity_t *item, gentity_t *pickerupper )
 Touch_Item
 ===============
 */
-extern void universe_quest_artifacts_checker(gentity_t *ent);
-extern void quest_get_new_player(gentity_t *ent);
 void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	int			respawn;
 	qboolean	predict;
@@ -2679,51 +2677,18 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	if (other->health < 1)
 		return;		// dead people can't pickup
 
-	if (Q_stricmp(ent->targetname, "zyk_quest_artifact") == 0 && ent->item->giType == IT_POWERUP && ent->item->giTag == PW_FORCE_BOON)
-	{ // zyk: an Universe Quest artifact
-		if (other->client->sess.amrpgmode == 2 && other->client->pers.can_play_quest == 1 && other->client->pers.guardian_mode == 0 &&
-			other->client->pers.universe_quest_artifact_holder_id != -1)
-		{ // zyk: player got the artifact in Universe Quest
-			zyk_text_message(other, "universe/mission_2/mission_2_got_artifact", qtrue, qfalse, other->client->pers.netname);
-			other->client->pers.universe_quest_counter |= (1 << other->client->pers.universe_quest_artifact_holder_id);
-			other->client->pers.universe_quest_artifact_holder_id = -1;
-
-			universe_quest_artifacts_checker(other);
-
-			ent->targetname = NULL; // zyk: nullify so in this case the quest system does not free this entity
-
-			quest_get_new_player(other);
-		}
-		else
-		{ // zyk: this is not the quest player. Only the quest player can get the artifact
-
-			// zyk: if he is in a guardian battle and tries to get artifact, do not allow it
-			if (other->client->pers.guardian_mode > 0)
-				ent->targetname = NULL;
-
-			return;
-		}
-	}
+	// GalaxyRP fix: [Quests] a `zyk_quest_artifact` pickup handler used to live here, along with the
+	// `ent->spawnflags & 131072` (Universe Quest prison key) branch just below in the RPG-class pickup
+	// restrictions block. Both were part of the general automated Universe Quest system, which is
+	// fully unreachable now that quest_get_new_player, its sole entry point, has been deleted as
+	// unreachable dead code (see the GalaxyRP fix comment on its old location in g_cmds.c). Removed
+	// outright, along with the universe_quest_artifacts_checker call the first block was the last
+	// live caller of.
 
 	// zyk: Some RPG classes cant pickup some items
 	if (other->client->sess.amrpgmode == 2)
 	{
-		if (ent->spawnflags & 131072)
-		{
-			if (other->client->pers.can_play_quest == 1 && other->client->pers.universe_quest_messages < 6)
-			{ // zyk: player got the key to the prison door in first Universe Quest mission
-				other->client->pers.universe_quest_messages = 6;
-
-				zyk_text_message(other, "universe/mission_0/mission_0_key", qtrue, qfalse, other->client->pers.netname);
-
-				ent->think = G_FreeEntity;
-				ent->nextthink = level.time;
-			}
-
-			return;
-		}
-
-		if (other->client->pers.rpg_class == 1 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || ent->item->giType == IT_AMMO || 
+		if (other->client->pers.rpg_class == 1 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || ent->item->giType == IT_AMMO ||
 			ent->item->giType == IT_HOLDABLE))
 		{
 			return;

@@ -1599,37 +1599,10 @@ static void CG_ClientLevelShot_f( void ) {
 	cg.levelShot = qtrue;
 }
 
-static qboolean light_quest_defeated_guardians(int light_quest_progress)
-{
-	int j = 0, defeated_guardians = 0;
-
-	for (j = 4; j <= 12; j++)
-	{
-		if (light_quest_progress & (1 << j))
-		{
-			defeated_guardians++;
-		}
-	}
-
-	if (defeated_guardians == 9)
-		return qtrue;
-	else
-		return qfalse;
-}
-
-static qboolean dark_quest_collected_notes(int dark_quest_progress)
-{
-	if (dark_quest_progress & (1 << 4) && dark_quest_progress & (1 << 5) && dark_quest_progress & (1 << 6) && dark_quest_progress & (1 << 7) && 
-		dark_quest_progress & (1 << 8) && dark_quest_progress & (1 << 9) && dark_quest_progress & (1 << 10) && dark_quest_progress & (1 << 11) && 
-		dark_quest_progress & (1 << 12))
-	{
-		return qtrue;
-	}
-	else
-	{
-		return qfalse;
-	}
-}
+// GalaxyRP fix: [Quests] light_quest_defeated_guardians and dark_quest_collected_notes (client-side
+// mirrors of the same-named server functions) used to live here. Both were orphaned -- zero call
+// sites anywhere in cgame -- even before the server-side quest system was confirmed fully dead (see
+// the GalaxyRP fix comment on quest_get_new_player's old location in g_cmds.c). Deleted outright.
 
 // GalaxyRP fix: [Model/Name] same root cause and same fix shape as CG_SaberUpdate_f below --
 // set_model()/set_netname() in g_cmds.c force a player's model/name from the database (on login,

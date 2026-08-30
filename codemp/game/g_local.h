@@ -629,8 +629,10 @@ typedef struct clientPersistant_s {
 	int zyk_saved_force_powers;
 	int zyk_saved_force_power_levels[NUM_FORCE_POWERS];
 
-	// zyk: time in which quest player is afk during a quest
-	int quest_afk_timer;
+	// GalaxyRP fix: [Quests] quest_afk_timer used to be declared here. Its only writer was inside
+	// choose_new_player (deleted as unreachable dead code -- see the GalaxyRP fix comment on its old
+	// location in g_cmds.c), and its only reader had already been removed in an earlier change (see
+	// the GalaxyRP fix comment in g_active.c), leaving it completely unused. Removed outright.
 
 	// zyk: amount of times player must be hit by poison
 	int poison_dart_hit_counter;
@@ -1616,44 +1618,23 @@ typedef struct level_locals_s {
 	int rpg_lms_timer;
 	int rpg_lms_quantity;
 
-	// zyk: the player id who is the target in Bounty Quest. Default 0
-	int bounty_quest_target_id;
-
-	// zyk: determines if a target can be chosen now. Default qtrue
-	qboolean bounty_quest_choose_target;
+	// GalaxyRP fix: [Quests] bounty_quest_target_id, bounty_quest_choose_target, quest_crystal_id,
+	// quest_note_id, universe_quest_note_id, guardian_quest, guardian_quest_timer,
+	// initial_map_guardian_weapons, and quest_puzzle_order used to be declared here. They were only
+	// ever used by the Guardian/Bounty Quest commands and the general automated quest system's
+	// map-note/map-crystal spawning and NPC-dialogue/puzzle interactions, all of which have been
+	// deleted as unreachable dead code (see the GalaxyRP fix comments in g_cmds.c, g_main.c, and
+	// g_utils.c). Removed outright.
 
 	// zyk: sets the map in which the player must complete a quest objective
 	int quest_map;
-
-	// zyk: has the quest crystal ids that a player must get. Default -1 for each position.
-	// crystal gets cleaned when the player gets the crystal
-	int quest_crystal_id[3];
-
-	// zyk: has the quest note id that a player must get. Default -1.
-	// gets cleaned when the player gets the note
-	int quest_note_id;
-
-	// zyk: id of the note spawned in the fourth Universe Quest mission
-	int universe_quest_note_id;
 
 	// zyk: has the quest effect id of the fx_runner entity in the guardian area. Default -1.
 	// gets cleaned when the player arrives at it
 	int quest_effect_id;
 
-	// zyk: has the order of each quest item that must be used to solve a quest puzzle
-	int quest_puzzle_order[9];
-
 	// zyk: id of the portal effect entity at last universe quest mission, so players can go through the teleport
 	int chaos_portal_id;
-
-	// zyk: Guardian Quest. Default 0. After the guardian is spawned, guardian_quest will have the guardian npc id
-	int guardian_quest;
-
-	// zyk: timer to start the Guardian Quest
-	int guardian_quest_timer;
-
-	// zyk: allows guardian of map to get his weapons back
-	int initial_map_guardian_weapons;
 
 	// zyk: default map music. After a boss battle, resets music to this one
 	char default_map_music[128];
