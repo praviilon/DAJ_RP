@@ -4651,6 +4651,77 @@ argCheck:
 	}
 }
 
+extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+
+// GalaxyRP: [Force] shared restriction check for Cmd_UpdateForce_f() below -- mirrors
+// saber_switch_allowed() further down in this file (see update_saber()/Cmd_UpdateSaber_f()), same
+// three checks (private duel, Duel Tournament duelist, boss battle), kept as its own small
+// function instead of reusing that one so its name and message stay force-specific. Also gates on
+// the player being logged out: a logged-in (RPG mode) player's force powers come from their
+// account's database-driven skill levels instead of the "forcepowers" userinfo string WP_InitForcePowers()
+// reads (see the "zyk: resetting force powers" WP_InitForcePowers() call in the logout handler
+// above, which is what hands a player back to the userinfo-driven system once they log out), so
+// re-applying that string here would be meaningless -- and, since amrpgmode is only ever set to 2
+// as part of logging in, this also makes the boss-battle check below unreachable in practice, but
+// it's kept for the same defense-in-depth reason update_saber()'s checks are unconditional.
+static qboolean force_switch_allowed(gentity_t* ent)
+{
+	if (ent->client->sess.loggedin == qtrue)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"This command is only available to players who are not logged into an account.\n\"");
+		return qfalse;
+	}
+
+	if (ent->client->ps.duelInProgress == qtrue)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in private duels.\n\"");
+		return qfalse;
+	}
+
+	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
+		return qfalse;
+	}
+
+	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.guardian_mode > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in boss battles.\n\"");
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+/*
+==================
+Cmd_UpdateForce_f
+
+GalaxyRP: [Force] "/updateforce" -- takes no arguments. Re-applies whatever force power
+allocation the player already picked in the in-game force power menu immediately, without needing
+a /kill or death to force a respawn. Adapted from JA++'s japp_instantForceSwitch feature (see the
+JA++ source at C:\Users\richa\TaystJK\japp-master, specifically Cmd_ForceChanged_f in g_cmds.cpp --
+the command this mod's own, pre-existing Cmd_ForceChanged_f above is already modelled on). The
+client's force power menu already calls that pre-existing "forcechanged" command automatically on
+every change; for a non-spectator it just marks ps.fd.forceDoInit for ClientSpawn() to pick up on
+the player's next respawn, which is the "requires /kill" behaviour this command is meant to skip.
+
+Unlike a saber hilt, force powers need no diffing: WP_InitForcePowers() (in w_force.c) re-reads and
+re-parses the player's own "forcepowers" userinfo cvar directly, so applying it here is just a
+direct call -- clearing any pending forceDoInit afterwards the same way ClientSpawn() does, since
+it's already been satisfied. See force_switch_allowed() above for the restriction checks (private
+duel, Duel Tournament duelist, boss battle, and -- unlike /updatesaber -- logged-out players only);
+no separate enable cvar, per design.
+==================
+*/
+void Cmd_UpdateForce_f( gentity_t *ent ) {
+	if (!force_switch_allowed(ent))
+		return;
+
+	WP_InitForcePowers(ent);
+	ent->client->ps.fd.forceDoInit = 0;
+}
+
 extern qboolean WP_SaberStyleValidForSaber( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int saberAnimLevel );
 extern qboolean WP_UseFirstValidSaberStyle( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int *saberAnimLevel );
 qboolean G_SetSaber(gentity_t *ent, int saberNum, char *saberName, qboolean siegeOverride)
@@ -9396,7 +9467,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name>: ^7Ignores chat of a player.\n\
 ^3/ignorelist: ^7Lists ignored players.\n\
-^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
+^3/jetpack: ^7Gives or removes jetpack from the player.\n\
+^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
 ^3/sabercolor <1|2> <r g b>/<color name>: ^7Sets the RGB or a preset color of saber 1 or 2. Run with no arguments to see current colors.\n\
@@ -17256,6 +17328,7 @@ command_t commands[] = {
 	{ "follownext",			Cmd_FollowNext_f,			CMD_NOINTERMISSION },
 	{ "followprev",			Cmd_FollowPrev_f,			CMD_NOINTERMISSION },
 	{ "forcechanged",		Cmd_ForceChanged_f,			0 },
+	{ "updateforce",		Cmd_UpdateForce_f,			CMD_NOINTERMISSION },	// GalaxyRP: [Force] instant-apply from the in-game force power menu, logged-out players only
 	{ "gc",					Cmd_GameCommand_f,			CMD_NOINTERMISSION },
 	{ "give",				Cmd_Give_f,					CMD_LOGGEDIN|CMD_NOINTERMISSION },
 	{ "jetpack",			Cmd_Jetpack_f,				CMD_ALIVE|CMD_NOINTERMISSION },
