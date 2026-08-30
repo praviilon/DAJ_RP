@@ -17193,6 +17193,38 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 	}
 }
 
+// GalaxyRP: [Training Saber fix] pers.training_mode is only ever written by this command and by
+// ClientBegin's reset -- it is never told about a saber reselection (/saber, the saber-select UI,
+// or a DB-driven saber reload on spawn), which fully re-parses the new saber's parms and resets
+// damageScale/damageScale2 back to that saber's own defaults. That leaves a window where the flag
+// still claims training mode is ACTIVE even though the player's current saber(s) are already back
+// to full damage. Rather than trust the flag blindly, treat training mode as active only when the
+// flag says so AND every saber slot's live damage scale is still actually zeroed, and self-heal the
+// flag the moment that stops being true. This is what "true status" means below, and using it for
+// the on/off guards too (not just the status print) keeps every code path agreeing with what's
+// actually applied to the player right now.
+static qboolean Training_IsLiveActive(gentity_t* ent)
+{
+	int i;
+
+	if (!ent->client->pers.training_mode)
+		return qfalse;
+
+	for (i = 0; i < MAX_SABERS; i++)
+	{
+		if (ent->client->saber[i].damageScale != 0 || ent->client->saber[i].damageScale2 != 0)
+		{
+			// Stale flag: a saber slot's live damage scale no longer matches what training mode
+			// applied, almost certainly because the player picked a new saber since. Self-heal so
+			// nothing downstream (status display, on/off guards) is fooled by the old flag value.
+			ent->client->pers.training_mode = qfalse;
+			return qfalse;
+		}
+	}
+
+	return qtrue;
+}
+
 //GalaxyRP (Alex): [Training Saber] This method activates and deactivates the training saber, making it so that when active, you do very little damage.
 
 // GalaxyRP: [Training Saber fix] rewritten from a single no-argument toggle to explicit
@@ -17205,13 +17237,24 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 // while already on and "off" while already off are both harmless no-ops that don't touch anything
 // live, and turning it on is the point where the player is warned about the exact conditions that
 // deactivate it, rather than needing to be told after the fact.
+// "/training" with no argument now reports the true current status (see Training_IsLiveActive)
+// alongside the usage tip, so a player who switched saber, /kill'd, or rejoined always sees what's
+// actually applied rather than a possibly-stale flag.
 void Cmd_TrainingMode_f(gentity_t* ent) {
 	char arg[MAX_TOKEN_CHARS];
 	int i;
+	qboolean isActive;
 
-	if (trap->Argc() != 2)
+	// Resolving this up front self-heals pers.training_mode if it had gone stale, so the status
+	// print and the on/off guards below all agree with reality.
+	isActive = Training_IsLiveActive(ent);
+
+	if (trap->Argc() == 1)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training <on|off>\n\"");
+		if (isActive)
+			trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training <on|off>^7. Training saber is currently ^2ACTIVE\n\"");
+		else
+			trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/training <on|off>^7. Training saber is currently ^1INACTIVE\n\"");
 		return;
 	}
 
@@ -17219,7 +17262,7 @@ void Cmd_TrainingMode_f(gentity_t* ent) {
 
 	if (!Q_stricmp(arg, "on"))
 	{
-		if (ent->client->pers.training_mode)
+		if (isActive)
 		{
 			trap->SendServerCommand(ent->s.number, "print \"Training saber is already ^2ACTIVE\n\"");
 			return;
@@ -17243,7 +17286,7 @@ void Cmd_TrainingMode_f(gentity_t* ent) {
 	}
 	else if (!Q_stricmp(arg, "off"))
 	{
-		if (!ent->client->pers.training_mode)
+		if (!isActive)
 		{
 			trap->SendServerCommand(ent->s.number, "print \"Training saber is already ^1INACTIVE\n\"");
 			return;
