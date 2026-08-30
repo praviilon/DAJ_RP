@@ -85,7 +85,7 @@
 		{
 			name				backlink
 			group				none
-			text				"< Back to hilt selection"
+			text				"Back to hilt selection"
 			descText			"Return to saber type and hilt selection"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
