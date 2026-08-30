@@ -2983,8 +2983,19 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		accountID = sqlite3_column_int(stmt, 0);
 		player_settings = sqlite3_column_int(stmt, 1);
 		adminLevel = sqlite3_column_int(stmt, 2);
-		strcpy(password, sqlite3_column_text(stmt, 3));
-		strcpy(username, sqlite3_column_text(stmt, 4));
+		// GalaxyRP fix: [security] bound both copies instead of trusting the DB values' length. Not
+		// reachable through a *new* /new registration any more (Cmd_Register_F now rejects a username/
+		// password too long for the fixed buffers these ultimately feed, a few lines below), but an
+		// account created before that guard existed could still have an oversized value sitting in the
+		// database right now, and this restore runs on every /login for as long as that row exists.
+		// GalaxyRP fix note: this function's own signature declares "char username[MAX_STRING_CHARS]",
+		// but a parameter array decays to a plain pointer -- sizeof(username) here would silently give
+		// the pointer's size (8), not 1024, and the declared 1024 doesn't reflect reality either: the
+		// only caller, Cmd_Login_F, actually passes its own local char username[256]. Bounding to 256
+		// explicitly (matching that real, only caller) rather than trusting either the misleading
+		// parameter type or a sizeof() that would have been wrong anyway.
+		Q_strncpyz(password, sqlite3_column_text(stmt, 3), sizeof(password));
+		Q_strncpyz(username, sqlite3_column_text(stmt, 4), 256);
 		charID = sqlite3_column_int(stmt, 7);
 		credits = sqlite3_column_int(stmt, 8);
 		level = sqlite3_column_int(stmt, 9);
@@ -3031,8 +3042,12 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		ent->client->sess.accountID = accountID;
 		ent->client->pers.player_settings = player_settings;
 		ent->client->pers.bitvalue = adminLevel;
-		strcpy(ent->client->pers.password, password);
-		strcpy(ent->client->sess.filename, username);
+		// GalaxyRP fix: [security] pers.password and sess.filename are both fixed 32-byte buffers
+		// (g_local.h); password/username here come straight from the database (already bounded to
+		// 256 above, but still well over 32) and this restore runs on every /login. Bound the copy
+		// instead of trusting it, for the same pre-existing-row reason given above.
+		Q_strncpyz(ent->client->pers.password, password, sizeof(ent->client->pers.password));
+		Q_strncpyz(ent->client->sess.filename, username, sizeof(ent->client->sess.filename));
 		ent->client->pers.CharID = charID;
 		ent->client->pers.credits = credits;
 		ent->client->pers.level = level;
@@ -3437,6 +3452,27 @@ void Cmd_Register_F(gentity_t * ent)
 	Q_StripColor(username);
 	Q_strlwr(username);
 
+	// GalaxyRP fix: [security] neither of these was checked before -- ent->client->sess.filename and
+	// ent->client->pers.password are both fixed 32-byte buffers (g_local.h), but username/password
+	// here were only bounded by their local 256-byte Argv() buffers. A long-enough /new <username>
+	// <password> overflowed sess.filename/pers.password directly, right below, on every single
+	// registration; the same oversized values were also persisted to the Accounts table and would go
+	// on to overflow those same two fields again on every future /login (see the matching
+	// Q_strncpyz() fixes in select_account_and_default_character_data() below). The password limit
+	// matches /changepassword's own existing "maximum of 30 characters" check exactly, so a password
+	// that's valid from one command is valid from the other.
+	if (strlen(username) > sizeof(ent->client->sess.filename) - 1) {
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Username can only have a maximum of %i characters.\n\"", (int)sizeof(ent->client->sess.filename) - 1));
+		sqlite3_close(db);
+		return;
+	}
+
+	if (strlen(password) > 30) {
+		trap->SendServerCommand(ent - g_entities, "print \"^1Password can only have a maximum of 30 characters.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
 	if (select_number_of_accounts_with_username(ent, username, db, zErrMsg, rc, stmt) != 0) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Username ^7%s ^1is already in use.\n\"", comparisonName));
 		trap->SendServerCommand(ent - g_entities, va("cp \"^1Username ^7%s ^1is already in use.\n\"", comparisonName));
@@ -3457,8 +3493,11 @@ void Cmd_Register_F(gentity_t * ent)
 	// CG_GreyItem in sync with login state right away.
 	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
-	strcpy(ent->client->sess.filename, username);
-	strcpy(ent->client->pers.password, password);
+	// GalaxyRP fix: [security] defense-in-depth -- Q_strncpyz() instead of strcpy(), even though the
+	// length checks above already guarantee both fit, matching the same belt-and-suspenders approach
+	// already used for saber1Model/saber2Model and the character-name copies elsewhere in this file.
+	Q_strncpyz(ent->client->sess.filename, username, sizeof(ent->client->sess.filename));
+	Q_strncpyz(ent->client->pers.password, password, sizeof(ent->client->pers.password));
 
 	insert_chars_table_row(ent, username, db, zErrMsg, rc, stmt);
 	insert_skills_table_row(ent, db, zErrMsg, rc, stmt);
