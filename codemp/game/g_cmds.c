@@ -14461,25 +14461,24 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	qboolean changedSaber = qfalse;
 	char userinfo[MAX_INFO_STRING] = { 0 }, * saber = NULL, * key = NULL, * value = NULL;
 
-	if (zyk_allow_saber_command.integer < 1)
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"This command is not allowed in this server.\n\"");
-		return;
-	}
-
-	if (zyk_allow_saber_command.integer > 1 && ent->client->ps.duelInProgress == qtrue)
+	// GalaxyRP: [Saber RGB] instant saber switching (hilt/type only -- color and blade style are
+	// their own commands, ungated) is always allowed now; zyk_allow_saber_command used to gate this
+	// at three levels (0: never, 1: always, 2: always except duels/boss battles), but this mod only
+	// ever wants the level-2 behaviour, so the cvar is gone and these three checks -- previously only
+	// active at level 2 -- now run unconditionally.
+	if (ent->client->ps.duelInProgress == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in private duels.\n\"");
 		return;
 	}
 
-	if (zyk_allow_saber_command.integer > 1 && level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
+	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
 		return;
 	}
 
-	if (zyk_allow_saber_command.integer > 1 && ent->client->sess.amrpgmode == 2 && ent->client->pers.guardian_mode > 0)
+	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.guardian_mode > 0)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in boss battles.\n\"");
 		return;
