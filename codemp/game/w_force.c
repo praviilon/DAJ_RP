@@ -2471,6 +2471,20 @@ int ForceShootDrain( gentity_t *self )
 	{
 		return 0;
 	}
+
+	// GalaxyRP: [Force Drain FX] set the caster's hand/channel FX flag up front, before the target
+	// search below, so it refreshes every tick this function runs regardless of whether a target is
+	// actually found. It used to sit after the if/else below; the trace-line branch (levels 1-2)
+	// returns early the instant it doesn't hit a valid client, which skipped that assignment entirely
+	// and silently suppressed the caster's own hand effect whenever Drain was used on empty space at
+	// low levels -- while the arc branch (level 3+) has no such early return, so it always reached the
+	// assignment and looked correct. Moving it here matches both the arc branch's existing behavior and
+	// ForceShootLightning's sibling flag (set once, independent of whether a hit lands -- see
+	// WP_ForcePowerStart's FP_LIGHTNING case). This only touches the cosmetic FX flag: the
+	// BG_ForcePowerDrain cost and the regen debounce below are untouched and still only apply when a
+	// target is actually hit, so this doesn't change how much Force channeling costs.
+	self->client->ps.activeForcePass = self->client->ps.fd.forcePowerLevel[FP_DRAIN] + FORCE_LEVEL_3;
+
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
 
@@ -2583,8 +2597,6 @@ int ForceShootDrain( gentity_t *self )
 		ForceDrainDamage( self, traceEnt, forward, tr.endpos );
 		gotOneOrMore = 1;
 	}
-
-	self->client->ps.activeForcePass = self->client->ps.fd.forcePowerLevel[FP_DRAIN] + FORCE_LEVEL_3;
 
 	BG_ForcePowerDrain( &self->client->ps, FP_DRAIN, 5 ); //used to be 1, but this did, too, anger the God of Balance.
 
