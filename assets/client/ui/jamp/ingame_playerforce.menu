@@ -1535,12 +1535,11 @@
 			{
 				play			"sound/interface/button1.wav" ;
 				uiScript 		setForce "same"
-				close 			ingame_playerforce ;
 //				uiScript		updateForceStatus ;
-				// GalaxyRP: [Profile UI] this screen is only reachable from ingame_galaxyrp's
-				// Customize tab (the "force" button, logged-out players only), not from the
-				// vanilla ingame_player pause-menu profile -- return there instead.
-				open			ingame_galaxyrp
+				// GalaxyRP: [Profile UI] exit straight back to gameplay on Apply, the same way the
+				// saber menu's and the Customize tab's own Apply buttons do, instead of reopening
+				// ingame_galaxyrp.
+				uiScript		closeingame
 			}
 			mouseEnter 
 			{ 

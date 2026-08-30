@@ -1288,7 +1288,7 @@
 			rect				40 222 24 24
 			background			"gfx/menus/saber_icon_rgb"
 			forecolor			.75 .75 .75 1
-			descText			"custom RGB blade -- opens color sliders and blade style"
+			descText			"Custom RGB color and unique blade design"
 			border				1
 			bordersize			1
 			bordercolor			.33 .33 .5 1
@@ -1590,7 +1590,7 @@
 			rect				295 222 24 24
 			background			"gfx/menus/saber_icon_rgb"
 			forecolor			.75 .75 .75 1
-			descText			"custom RGB blade -- opens color sliders and blade style"
+			descText			"Custom RGB color and unique blade design"
 			border				1
 			bordersize			1
 			bordercolor			.33 .33 .5 1

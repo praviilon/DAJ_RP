@@ -795,7 +795,7 @@
 		{
 			name				force
 			group				listControls
-			background			"gfx/menus/configforce"
+			background			"gfx/menus/forcepbtn"
 			descText			@MENUS_SET_UP_THE_FORCE_ABILITIES
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_SHADER
