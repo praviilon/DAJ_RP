@@ -17225,6 +17225,12 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	Q_strncpyz(saber1Model, Info_ValueForKey(userinfo, "saber1"), sizeof(saber1Model));
 	Q_strncpyz(saber2Model, Info_ValueForKey(userinfo, "saber2"), sizeof(saber2Model));
 
+	// GalaxyRP: [Profile UI] tell the client whether it is currently logged into an account, so the
+	// Profile menu can gate the Force icon and the Character Information/Skills/Characters/Shop/Games
+	// sections on login state (see CG_LoggedInUpdate_f). Sent unconditionally and before the NOGUID
+	// return below, so a logged-out player (who by definition has no GUID-backed account session)
+	// still gets a fresh "0" every time the menu is opened rather than being skipped entirely.
+	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
 	if (Q_stricmp(ent->client->pers.guid, "NOGUID") == 0)
 	{

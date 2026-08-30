@@ -185,6 +185,11 @@
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -203,6 +208,12 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
+			// GalaxyRP: [Profile UI] Skills only make sense for a logged-in account.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 			descText			"Check your character's skill levels"
 
 			mouseEnter 
@@ -260,6 +271,11 @@
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -278,6 +294,12 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
+			// GalaxyRP: [Profile UI] character management only makes sense for a logged-in account.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 			descText			"Manage your characters. You can also change via /char in console"
 
 			mouseEnter 
@@ -335,6 +357,11 @@
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -353,6 +380,12 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
+			// GalaxyRP: [Profile UI] the shop spends RPG credits, which only a logged-in account has.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 			descText			"Buy and sell gear, ammunition, and upgrades"
 
 			mouseEnter 
@@ -409,6 +442,11 @@
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -427,6 +465,13 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
+			// GalaxyRP: [Profile UI] mini-games are tied to the RPG account, which a logged-out
+			// player does not have.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 			descText			"Play mini-games"
 
 			mouseEnter 
@@ -718,6 +763,71 @@
 			}  	  
 		}
 
+		// GalaxyRP: [Profile UI] Force selection picker for logged-out players. A logged-in account
+		// manages Force powers through the RPG skill tree instead, so this is hidden whenever
+		// ui_loggedin is "1" (see CG_LoggedInUpdate_f / Cmd_GalaxyRpUi_f). Positioned and styled to
+		// match the existing customtitle/custom and sabertitle/saber icon pairs above.
+		itemDef
+		{
+			name				forcetitle
+			group				listControls
+			style				0
+			text				"Force"
+			rect				425 280 150 26
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			75
+			textaligny			-3
+			outlinecolor		1 .5 .5 .5
+			backcolor			0 0 0 0
+			font				2
+			textscale			1
+			forecolor			.549 .854 1 1
+			visible			1
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"0"
+			}
+			decoration
+		}
+
+		itemDef
+		{
+			name				force
+			group				listControls
+			background			"gfx/menus/configforce"
+			descText			@MENUS_SET_UP_THE_FORCE_ABILITIES
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_SHADER
+			rect				465 305 75 75
+			font				3
+			textscale			1
+			textaligny			-1
+			textalign			ITEM_ALIGN_CENTER
+			textstyle			3
+			forecolor			.5 .5 .5 1
+			visible			1
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"0"
+			}
+			mouseEnter
+			{
+				setitemcolor		force	forecolor	1 1 1 1
+			}
+			mouseExit
+			{
+				setitemcolor		force	forecolor	.5 .5 .5 1
+			}
+	     		action
+			{
+				play			"sound/interface/button1.wav"
+				close			ingame_galaxyrp
+				open			ingame_playerforce
+			}
+		}
+
 		//itemDef
 		//{
 		//	name				character
@@ -751,6 +861,14 @@
 			font				2
 			forecolor			1 .682 0 1
 			visible				0
+			// GalaxyRP: [Profile UI] a logged-out player's client can still be holding stale
+			// level/xp/skillpoints/credits cvars left over from a previous login, so this whole
+			// block only shows once ui_loggedin confirms the player is actually logged in.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -766,6 +884,11 @@
 			font				2
 			forecolor			1 .682 0 1
 			visible				0
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -781,6 +904,11 @@
 			font				2
 			forecolor			1 .682 0 1
 			visible				0
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -796,6 +924,11 @@
 			font				2
 			forecolor			1 .682 0 1
 			visible				0
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -811,6 +944,11 @@
 			font				2
 			forecolor			1 .682 0 1
 			visible				0
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -822,12 +960,17 @@
 			type				ITEM_TYPE_EDITFIELD
 			text				""
 			textscale			0.8
-			cvar				"ui_zyk_rpg_level" 
+			cvar				"ui_zyk_rpg_level"
 			textalign			ITEM_ALIGN_LEFT
 			font				2
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -840,12 +983,17 @@
 			type				ITEM_TYPE_EDITFIELD
 			text				""
 			textscale			0.8
-			cvar				"ui_rp_xp_value" 
-			textalign			ITEM_ALIGN_LEFT	 
+			cvar				"ui_rp_xp_value"
+			textalign			ITEM_ALIGN_LEFT
 			font				2
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -857,12 +1005,17 @@
 			type				ITEM_TYPE_EDITFIELD
 			text				""
 			textscale			0.8
-			cvar				"ui_zyk_rpg_skillpoints" 
+			cvar				"ui_zyk_rpg_skillpoints"
 			textalign			ITEM_ALIGN_LEFT
 			font				2
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 
@@ -874,12 +1027,17 @@
 			type				ITEM_TYPE_EDITFIELD
 			text				""
 			textscale			0.8
-			cvar				"ui_zyk_rpg_credits" 
+			cvar				"ui_zyk_rpg_credits"
 			textalign			ITEM_ALIGN_LEFT
 			font				2
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
 		}
 
 		itemDef 

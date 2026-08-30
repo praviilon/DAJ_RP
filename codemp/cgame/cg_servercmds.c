@@ -1665,6 +1665,25 @@ static void CG_NameUpdate_f(void)
 	trap->Cvar_Set("name", CG_Argv(1));
 }
 
+// GalaxyRP: [Profile UI] the Profile menu (ingame_galaxyrp.menu) needs to know whether the local
+// player is currently logged into an account so it can hide the Character Information block and
+// the Skills/Characters/Shop/Games tabs (which only make sense for a logged-in account) and show
+// the Force selection icon (which only makes sense for a logged-out player, since a logged-in
+// account manages Force powers through the RPG skill tree instead). There was previously no
+// client-visible signal for this at all. Cmd_GalaxyRpUi_f sends this command every time the
+// Profile menu is opened or its "Customize"/"Skills"/"Characters" tabs are clicked (the existing
+// "exec zykmod" calls in the menu), unconditionally and regardless of login state, so ui_loggedin
+// is always refreshed before the menu's cvarTest/hideCvar gating reads it.
+static void CG_LoggedInUpdate_f(void)
+{
+	if (trap->Cmd_Argc() < 2)
+	{
+		return;
+	}
+
+	trap->Cvar_Set("ui_loggedin", CG_Argv(1));
+}
+
 // GalaxyRP fix: [Saber] the server can change a player's saber1/saber2 out from under them --
 // on login/character load (restoring the character's saved saber from the database) or by
 // silently rejecting/correcting an invalid combo typed at the /saber console command (e.g. two
@@ -1888,6 +1907,7 @@ static serverCommand_t	commands[] = {
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },
 	{ "spc",				CG_SiegeProfileMenu_f },
+	{ "supdateloggedin",	CG_LoggedInUpdate_f },	// GalaxyRP: [Profile UI]
 	{ "supdatemodel",		CG_ModelUpdate_f },
 	{ "supdatename",		CG_NameUpdate_f },
 	{ "supdatesaber",		CG_SaberUpdate_f },

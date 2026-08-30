@@ -151,6 +151,11 @@ XCVAR_DEF( ui_singlePlayerActive,			"0",					NULL,				CVAR_INTERNAL )
 XCVAR_DEF( ui_team_fraglimit,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_team_friendly,				"1",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_team_timelimit,				"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP: [Profile UI] whether the local player is currently logged into an account, pushed by
+// the "supdateloggedin" server command (see CG_LoggedInUpdate_f / Cmd_GalaxyRpUi_f). Registered
+// with an explicit "0" default, same as the other zyk rpg fields below, so the Profile menu's
+// cvarTest gating has a defined (logged-out) value even before the first server response arrives.
+XCVAR_DEF( ui_loggedin,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level_up_score,		"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_skillpoints,			"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
