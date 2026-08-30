@@ -9401,6 +9401,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
 ^3/sabercolor <1|2> <r g b>/<color name>: ^7Sets the RGB or a preset color of saber 1 or 2. Run with no arguments to see current colors.\n\
 ^3/saberblade <1|2> <type>: ^7Sets the RGB blade style (classic/flame1/electric1/flame2/electric2) of saber 1 or 2.\n\
+^3/updatesaber: ^7Applies your saber menu pick instantly, no respawn needed.\n\
 ^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
 ^3/getup: ^7Revives current player from downed state.\n\
 ^3/helpup <player name>: ^7Revives another player from downed state.\n\
@@ -14457,61 +14458,52 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern qboolean G_SaberModelSetup(gentity_t *ent);
 
-void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
-	qboolean changedSaber = qfalse;
-	char userinfo[MAX_INFO_STRING] = { 0 }, * saber = NULL, * key = NULL, * value = NULL;
-
-	// GalaxyRP: [Saber RGB] instant saber switching (hilt/type only -- color and blade style are
-	// their own commands, ungated) is always allowed now; zyk_allow_saber_command used to gate this
-	// at three levels (0: never, 1: always, 2: always except duels/boss battles), but this mod only
-	// ever wants the level-2 behaviour, so the cvar is gone and these three checks -- previously only
-	// active at level 2 -- now run unconditionally.
+// GalaxyRP: [Saber] shared by update_saber() (the "/saber <a> <b>" path) and Cmd_UpdateSaber_f()
+// (the argument-less "/updatesaber" path below) -- both are just server-side saber changes, so
+// both are subject to the same three restriction checks. These used to only be active at
+// zyk_allow_saber_command level 2; that cvar is gone (see the instant-saber-switching change
+// above this one) and this mod only ever wanted level-2 behaviour, so the checks now run
+// unconditionally for any command that can change a player's saber. Prints the matching refusal
+// message and returns qfalse if the change is currently blocked.
+static qboolean saber_switch_allowed(gentity_t* ent)
+{
 	if (ent->client->ps.duelInProgress == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in private duels.\n\"");
-		return;
+		return qfalse;
 	}
 
 	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
-		return;
+		return qfalse;
 	}
 
 	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.guardian_mode > 0)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command in boss battles.\n\"");
-		return;
+		return qfalse;
 	}
 
-	if (number_of_args == 1)
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"Usage: /saber <saber1> <saber2>. Examples: /saber single_1, /saber single_1 single_1, /saber dual_1\n\"");
-		return;
-	}
+	return qtrue;
+}
 
-	//first we want the userinfo so we can see if we should update this client's saber -rww
-	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
-
-	saber = ent->client->pers.saber1;
-	value = G_NewString(saber1Model);
-
-	Info_SetValueForKey(userinfo, "saber1", value);
-
-	saber = ent->client->pers.saber2;
-
-	if (number_of_args == 2)
-	{
-		value = "none";
-	}
-	else
-	{
-		value = G_NewString(saber2Model);
-	}
-
-	Info_SetValueForKey(userinfo, "saber2", value);
-
-	trap->SetUserinfo(ent->s.number, userinfo);
+// GalaxyRP: [Saber] shared tail of update_saber() -- re-reads this client's own userinfo, diffs
+// its saber1/saber2 keys against pers.saber1/2, and applies any difference server-side
+// (G_SetSaber/ClientUserinfoChanged/G_SaberModelSetup/saber-style reset), then syncs the client's
+// own display. update_saber() calls this right after pushing saber1Model/saber2Model into
+// userinfo itself (the "/saber <a> <b>" path, which names the sabers explicitly). Cmd_UpdateSaber_f
+// below calls it directly with no such push, picking up whatever the in-game saber menu's Apply
+// button already wrote into this client's own "saber1"/"saber2" userinfo cvars (see
+// UI_UpdateSaberCvars() in ui_main.c) -- adapted from JA++'s japp_allowSaberSwitch idea (see
+// C:\Users\richa\TaystJK\japp-master\game\g_client.cpp's ClientSpawn userinfo-diff block, which is
+// what actually performs this apply there, only on respawn), but exposed as its own always-on
+// command instead of folding it into "/saber" with no arguments (which here still just prints the
+// player's current saber names, unchanged) and instead of JA++'s separate enable cvar.
+static void apply_saber_from_userinfo(gentity_t* ent)
+{
+	qboolean changedSaber = qfalse;
+	char userinfo[MAX_INFO_STRING] = { 0 }, * saber = NULL, * key = NULL, * value = NULL;
 
 	//first we want the userinfo so we can see if we should update this client's saber -rww
 	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
@@ -14589,6 +14581,41 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", ent->client->pers.saber1, ent->client->pers.saber2));
 }
 
+void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
+	char userinfo[MAX_INFO_STRING] = { 0 }, * value = NULL;
+
+	if (!saber_switch_allowed(ent))
+		return;
+
+	if (number_of_args == 1)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /saber <saber1> <saber2>. Examples: /saber single_1, /saber single_1 single_1, /saber dual_1\n\"");
+		return;
+	}
+
+	//first we want the userinfo so we can see if we should update this client's saber -rww
+	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
+
+	value = G_NewString(saber1Model);
+
+	Info_SetValueForKey(userinfo, "saber1", value);
+
+	if (number_of_args == 2)
+	{
+		value = "none";
+	}
+	else
+	{
+		value = G_NewString(saber2Model);
+	}
+
+	Info_SetValueForKey(userinfo, "saber2", value);
+
+	trap->SetUserinfo(ent->s.number, userinfo);
+
+	apply_saber_from_userinfo(ent);
+}
+
 /*
 ==================
 Cmd_Saber_f
@@ -14605,6 +14632,29 @@ void Cmd_Saber_f( gentity_t *ent ) {
 	trap->Argv(2, arg2, sizeof(arg2));
 
 	update_saber(ent, arg1, arg2, number_of_args);
+}
+
+/*
+==================
+Cmd_UpdateSaber_f
+
+GalaxyRP: [Saber] "/updatesaber" -- takes no arguments. Re-applies whatever saber hilt/type the
+player already picked in the in-game saber menu and pressed Apply on (which only ever wrote to
+this client's own "saber1"/"saber2" userinfo cvars, see UI_UpdateSaberCvars() in ui_main.c)
+immediately, without needing a /kill or death to force a respawn -- ClientSpawn() in g_client.c
+does this same userinfo diff-and-apply, but only ever runs it when the player is placed fresh in
+the world. Adapted from JA++'s japp_allowSaberSwitch feature (see
+C:\Users\richa\TaystJK\japp-master\game\g_client.cpp's ClientSpawn), kept as its own command
+instead of folding it into "/saber" with no arguments (which stays a pure status query here) and
+subject to the same restriction checks as any other saber change instead of a separate enable
+cvar -- see saber_switch_allowed() above.
+==================
+*/
+void Cmd_UpdateSaber_f( gentity_t *ent ) {
+	if (!saber_switch_allowed(ent))
+		return;
+
+	apply_saber_from_userinfo(ent);
 }
 
 // GalaxyRP: [Saber RGB] defined in bg_saberLoad.c (shared across game/cgame/ui) -- Cmd_SaberColor_f
@@ -17216,6 +17266,7 @@ command_t commands[] = {
 	{ "saber",				Cmd_Saber_f,				CMD_NOINTERMISSION },
 	{ "saberblade",			Cmd_SaberBlade_f,			CMD_NOINTERMISSION },	// GalaxyRP: [Saber RGB]
 	{ "sabercolor",			Cmd_SaberColor_f,			CMD_NOINTERMISSION },	// GalaxyRP: [Saber RGB]
+	{ "updatesaber",		Cmd_UpdateSaber_f,			CMD_NOINTERMISSION },	// GalaxyRP: [Saber] instant-apply from the in-game saber menu, see saber/saberblade/sabercolor above
 	{ "say",				Cmd_Say_f,					0 },
 	{ "say_team",			Cmd_SayTeam_f,				0 },
 	{ "score",				Cmd_Score_f,				0 },
