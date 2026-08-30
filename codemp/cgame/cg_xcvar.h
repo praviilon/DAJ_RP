@@ -187,6 +187,12 @@ XCVAR_DEF( ui_about_mapname,					"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_about_hostname,					"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_about_needpass,					"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_about_botminplayers,				"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
+// GalaxyRP: [Profile UI / Force Enlightenment] mirrors the local player's login state, pushed by
+// the "supdateloggedin" server command (see CG_LoggedInUpdate_f). Registered here too (not just in
+// the UI module's ui_xcvar.h) so cgame code -- e.g. CG_GreyItem below -- can read
+// ui_loggedin.integer directly every frame via CG_UpdateCvars(), the same way it already reads
+// cg_simpleItems.integer.
+XCVAR_DEF( ui_loggedin,							"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_myteam,							"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_tm1_c0_cnt,						"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_tm1_c1_cnt,						"0",					NULL,					CVAR_ROM|CVAR_INTERNAL )

@@ -3040,6 +3040,11 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 
 		ent->client->sess.loggedin = qtrue;
 
+		// GalaxyRP: [Force Enlightenment] push the login state to the client immediately -- see the
+		// matching comment in g_client.c -- so CG_GreyItem stops greying out the "wrong side"
+		// Enlightenment pickup for this player right away, not only after the Profile UI is opened.
+		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
+
 		// GalaxyRP fix: [gameplay] Same bug as select_player_character() above, plus this copy
 		// compared against "" instead of "none" -- saber2Model coming from the database is never
 		// really an empty string (the column's schema default is 'saber_1', and update_saber()
@@ -3375,6 +3380,11 @@ void Cmd_Register_F(gentity_t * ent)
 	//always 2, kept for backwards compatibility
 	ent->client->sess.amrpgmode = 2;
 	ent->client->sess.loggedin = qtrue;
+
+	// GalaxyRP: [Force Enlightenment] see the matching comment in g_client.c -- keeps cgame's
+	// CG_GreyItem in sync with login state right away.
+	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
+
 	strcpy(ent->client->sess.filename, username);
 	strcpy(ent->client->pers.password, password);
 
@@ -9187,6 +9197,11 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
 
 	ent->client->sess.loggedin = qfalse;
+
+	// GalaxyRP: [Force Enlightenment] see the matching comment in g_client.c -- keeps cgame's
+	// CG_GreyItem in sync with login state right away (goes back to greying out the "wrong side"
+	// Enlightenment pickup once this player is logged out again).
+	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
 	// zyk: update the rpg stuff info at the client-side game
 	send_rpg_events(10000);

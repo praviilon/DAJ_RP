@@ -2909,6 +2909,12 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		// zyk: load account again
 		ent->client->sess.loggedin = qtrue;
 
+		// GalaxyRP: [Force Enlightenment] push the login state to the client immediately -- not just
+		// on the next Profile menu open (see Cmd_GalaxyRpUi_f) -- so cgame's CG_GreyItem stops
+		// greying out the "wrong side" Enlightenment pickup for this player as soon as they're
+		// actually logged in, not only after they happen to open the Profile UI.
+		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
+
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;

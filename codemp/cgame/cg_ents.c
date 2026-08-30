@@ -1862,6 +1862,14 @@ qboolean CG_GreyItem(int type, int tag, int plSide)
 	if (type == IT_POWERUP &&
 		(tag == PW_FORCE_ENLIGHTENED_LIGHT || tag == PW_FORCE_ENLIGHTENED_DARK))
 	{
+		// GalaxyRP: [Force Enlightenment] logged-in players can pick up either Enlightenment color
+		// now (see Touch_Item in g_items.c), so don't grey out the one that doesn't match their
+		// current Force side -- it's not actually unavailable to them.
+		if (ui_loggedin.integer)
+		{
+			return qfalse;
+		}
+
 		if (plSide == FORCE_LIGHTSIDE)
 		{
 			if (tag == PW_FORCE_ENLIGHTENED_DARK)
