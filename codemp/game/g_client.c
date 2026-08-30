@@ -2345,6 +2345,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	{
 		int i;
 		static const char *sbRGBKey[2] = { "cp_sbRGB1", "cp_sbRGB2" };
+		static const char *colorKey[2] = { "color1", "color2" };
 
 		for ( i = 0; i < 2; i++ ) {
 			int fromClient = G_ParseSaberRGB( Info_ValueForKey( userinfo, sbRGBKey[i] ) );
@@ -2353,13 +2354,27 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 				client->pers.saberRGB[i] = fromClient;
 		}
 
-		// A blade with a custom colour always reports SABER_RGB as its palette entry, whatever the
-		// client's own color1/color2 happen to say -- that is the flag every other client's cgame
-		// keys off to read "c3"/"c4" instead of using one of the six fixed palette colours.
-		if ( client->pers.saberRGB[0] )
-			Q_strncpyz( color1, va( "%i", SABER_RGB ), sizeof( color1 ) );
-		if ( client->pers.saberRGB[1] )
-			Q_strncpyz( color2, va( "%i", SABER_RGB ), sizeof( color2 ) );
+		// GalaxyRP: [Saber RGB] which of the NUM_SABER_COLORS palette entries is selected is now
+		// server-authoritative in pers.saberColorMode[] -- set by /sabercolor, /saberblade, or
+		// restored from the database on login -- same "adopt only a plausible value, otherwise
+		// keep what the server already has" treatment as saberRGB[] above, and for the same reason
+		// (an ordinary client just echoes back whatever color1/color2 it was last told, which must
+		// not stomp a change made through one of the other two routes). Unlike saberRGB[], 0 is a
+		// legitimate, meaningful value here (SABER_RED), so this can't reuse G_ParseSaberRGB()'s
+		// "<=0 means unset" semantics -- any value inside the enum's range is adopted as-is.
+		for ( i = 0; i < 2; i++ ) {
+			int fromClient = atoi( Info_ValueForKey( userinfo, colorKey[i] ) );
+
+			if ( fromClient >= 0 && fromClient < NUM_SABER_COLORS )
+				client->pers.saberColorMode[i] = fromClient;
+		}
+
+		// pers.saberColorMode[] is authoritative for what gets published below, replacing whatever
+		// the client's own color1/color2 said -- every other client's cgame reads this off "c1"/"c2"
+		// to decide both the palette entry and (for the five RGB-family values) whether to also
+		// consult "c3"/"c4" for the actual custom colour.
+		Q_strncpyz( color1, va( "%i", client->pers.saberColorMode[0] ), sizeof( color1 ) );
+		Q_strncpyz( color2, va( "%i", client->pers.saberColorMode[1] ), sizeof( color2 ) );
 	}
 
 	// gender hints

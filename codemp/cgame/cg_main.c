@@ -638,18 +638,36 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.blueSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/blue_line" );
 	cgs.media.purpleSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_glow" );
 	cgs.media.purpleSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_line" );
-	// GalaxyRP: [Saber RGB] tintable glow shader, ported from JAPro/TaystJK's own RGB saber assets
-	// (assets/client/shaders/sbRGB.shader) rather than our earlier hand-generated ones. Only the
-	// "1" variant is wired up -- RGBglow2-5/RGBcore2-5/RGBtrail2-4 in that file back JAPro's
-	// FLAME/ELEC blade styles, which TaystJK itself ships disabled (_SHITTYLINEFX) and DAJ_RP does
-	// not implement; see the reserved SABER_FLAME1/ELEC1/FLAME2/ELEC2 ordinals in q_shared.h.
-	// Registered unconditionally alongside the six fixed-colour shaders so a custom-coloured blade
-	// never has to register a shader mid-frame.
+	// GalaxyRP: [Saber RGB] tintable glow/core shaders, ported from JAPro/TaystJK's own RGB saber
+	// assets (assets/client/shaders/sbRGB.shader) rather than our earlier hand-generated ones. "1" is
+	// the classic RGB style (SABER_RGB); 2-5 back the four TaystJK/JAPro blade-style variants
+	// (SABER_FLAME1/ELEC1/FLAME2/ELEC2). Registered unconditionally alongside the six fixed-colour
+	// shaders so a custom-coloured blade never has to register a shader mid-frame.
 	cgs.media.rgbSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow1" );
 	// GalaxyRP: [Saber RGB] the core/blade pass is drawn at a fixed white shaderRGBA in CG_DoSaber
 	// regardless of colour (see the tint comment there) -- RGBcore1.jpg is itself a plain white
-	// blade texture, matching how JAPro/TaystJK render it. Only the glow halo carries the tint.
+	// blade texture, matching how JAPro/TaystJK render it. Only the glow halo carries the tint. Same
+	// is true of all four RGBcore2-5 pairs below.
 	cgs.media.rgbSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore1" );
+	cgs.media.rgbSaberGlowShader2		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow2" );
+	cgs.media.rgbSaberCoreShader2		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore2" );
+	cgs.media.rgbSaberGlowShader3		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow3" );
+	cgs.media.rgbSaberCoreShader3		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore3" );
+	cgs.media.rgbSaberGlowShader4		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow4" );
+	cgs.media.rgbSaberCoreShader4		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore4" );
+	cgs.media.rgbSaberGlowShader5		= trap->R_RegisterShader( "gfx/effects/sabers/RGBglow5" );
+	cgs.media.rgbSaberCoreShader5		= trap->R_RegisterShader( "gfx/effects/sabers/RGBcore5" );
+	// GalaxyRP: [Saber RGB] swing-trail counterparts -- see the field comments in cg_local.h for why
+	// there is no "1" or "5" here (the classic style keeps using plain saberBlurShader below, and the
+	// "5" style falls back to swordTrailShader, matching TaystJK's own registration exactly).
+	cgs.media.rgbSaberTrail2Shader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBtrail2" );
+	cgs.media.rgbSaberTrail3Shader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBtrail3" );
+	cgs.media.rgbSaberTrail4Shader		= trap->R_RegisterShader( "gfx/effects/sabers/RGBtrail4" );
+	// GalaxyRP: [Saber RGB] the fixed black blade (SABER_BLACK) -- no custom colour behind it, no
+	// tinting involved; see the field comments in cg_local.h.
+	cgs.media.blackSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/blackglow" );
+	cgs.media.blackSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/blackcore" );
+	cgs.media.blackBlurShader			= trap->R_RegisterShader( "gfx/effects/sabers/blacktrail" );
 	cgs.media.saberBlurShader			= trap->R_RegisterShader( "gfx/effects/sabers/saberBlur" );
 	cgs.media.swordTrailShader			= trap->R_RegisterShader( "gfx/effects/sabers/swordTrail" );
 

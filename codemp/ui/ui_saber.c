@@ -56,6 +56,19 @@ static qhandle_t purpleSaberCoreShader;
 // assets/client/shaders/sbRGB.shader and the matching cgs.media handles in cg_local.h.
 static qhandle_t rgbSaberGlowShader;
 static qhandle_t rgbSaberCoreShader;
+// GalaxyRP: [Saber RGB] the four blade-style variants (SABER_FLAME1/ELEC1/FLAME2/ELEC2) and the
+// fixed black blade (SABER_BLACK), mirroring the same set cg_main.c registers into cgs.media for
+// this menu preview's own use -- no trail shaders here, the 3D preview has no swing-trail effect.
+static qhandle_t rgbSaberGlowShader2;
+static qhandle_t rgbSaberCoreShader2;
+static qhandle_t rgbSaberGlowShader3;
+static qhandle_t rgbSaberCoreShader3;
+static qhandle_t rgbSaberGlowShader4;
+static qhandle_t rgbSaberCoreShader4;
+static qhandle_t rgbSaberGlowShader5;
+static qhandle_t rgbSaberCoreShader5;
+static qhandle_t blackSaberGlowShader;
+static qhandle_t blackSaberCoreShader;
 
 void UI_CacheSaberGlowGraphics( void )
 {//FIXME: these get fucked by vid_restarts
@@ -72,9 +85,19 @@ void UI_CacheSaberGlowGraphics( void )
 	purpleSaberGlowShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_glow" );
 	purpleSaberCoreShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_line" );
 	// GalaxyRP: [Saber RGB] ported from JAPro/TaystJK's own RGB saber assets (see cg_main.c's
-	// registration of the same pair for why only the "1" variant is used).
+	// registration of the same set).
 	rgbSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow1" );
 	rgbSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore1" );
+	rgbSaberGlowShader2			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow2" );
+	rgbSaberCoreShader2			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore2" );
+	rgbSaberGlowShader3			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow3" );
+	rgbSaberCoreShader3			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore3" );
+	rgbSaberGlowShader4			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow4" );
+	rgbSaberCoreShader4			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore4" );
+	rgbSaberGlowShader5			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBglow5" );
+	rgbSaberCoreShader5			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/RGBcore5" );
+	blackSaberGlowShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/blackglow" );
+	blackSaberCoreShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/blackcore" );
 }
 
 qboolean UI_SaberModelForSaber( const char *saberName, char *saberModel )
@@ -306,14 +329,45 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 			VectorSet( rgb, 0.9f, 0.2f, 1.0f );
 			break;
 		// GalaxyRP: [Saber RGB] read the player's live slider values rather than a fixed colour, so
-		// dragging a slider updates the preview immediately instead of only on Apply.
+		// dragging a slider updates the preview immediately instead of only on Apply. All five
+		// RGB-family ordinals share this same slider-reading/tint code, only the glow/core shader
+		// pair differs -- see the switch below. (In practice ui_saber_color only ever carries "rgb"
+		// today -- SaberColorToString has no distinct string yet for the four blade-style ordinals --
+		// so FLAME1/ELEC1/FLAME2/ELEC2 aren't reachable from this menu until a later UI pass adds
+		// them; handled here anyway so that pass is a pure UI change with no rendering work left.)
 		case SABER_RGB:
+		case SABER_FLAME1:
+		case SABER_ELEC1:
+		case SABER_FLAME2:
+		case SABER_ELEC2:
 		{
 			int i;
 			int channel[3];
 
-			glow = rgbSaberGlowShader;
-			blade = rgbSaberCoreShader;
+			switch ( color )
+			{
+				default:
+				case SABER_RGB:
+					glow = rgbSaberGlowShader;
+					blade = rgbSaberCoreShader;
+					break;
+				case SABER_FLAME1:
+					glow = rgbSaberGlowShader2;
+					blade = rgbSaberCoreShader2;
+					break;
+				case SABER_ELEC1:
+					glow = rgbSaberGlowShader3;
+					blade = rgbSaberCoreShader3;
+					break;
+				case SABER_FLAME2:
+					glow = rgbSaberGlowShader4;
+					blade = rgbSaberCoreShader4;
+					break;
+				case SABER_ELEC2:
+					glow = rgbSaberGlowShader5;
+					blade = rgbSaberCoreShader5;
+					break;
+			}
 
 			channel[0] = (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_r" : "ui_sab1_r" );
 			channel[1] = (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_g" : "ui_sab1_g" );
@@ -324,25 +378,21 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 				tint[i] = (byte)Com_Clampi( 0, 255, channel[i] );
 				rgb[i] = tint[i] / 255.0f;
 			}
-
-			// GalaxyRP: [Saber RGB] all three sliders at zero would multiply the blade by black and
-			// draw nothing, leaving the player staring at an apparently broken preview. Show the
-			// darkest colour that can actually be sent instead -- the same nudge
-			// UI_PackSaberRGBCvar() applies when it packs the value for real.
-			if ( !tint[0] && !tint[1] && !tint[2] )
-			{
-				tint[0] = tint[1] = tint[2] = 1;
-				VectorSet( rgb, 1.0f / 255.0f, 1.0f / 255.0f, 1.0f / 255.0f );
-			}
 			break;
 		}
+		// GalaxyRP: [Saber RGB] the fixed black blade -- no custom colour behind it, tint stays
+		// default white (a no-op, these shaders use "rgbGen identity" and draw black on their own).
+		case SABER_BLACK:
+			glow = blackSaberGlowShader;
+			blade = blackSaberCoreShader;
+			break;
 		default:
-			// GalaxyRP: [Saber RGB] the enum now carries ordinals we reserve but do not draw (see
-			// saber_colors_t in q_shared.h). Falling through with blade/glow still 0 would submit a
-			// refEntity with no shader, so land on the same blue everything else defaults to.
-			glow = blueSaberGlowShader;
-			blade = blueSaberCoreShader;
-			VectorSet( rgb, 0.2f, 0.4f, 1.0f );
+			// GalaxyRP: [Saber RGB] out-of-range values land here (mirrors CG_ClampSaberColor's
+			// default-to-red in cg_players.c). Falling through with blade/glow still 0 would submit a
+			// refEntity with no shader.
+			glow = redSaberGlowShader;
+			blade = redSaberCoreShader;
+			VectorSet( rgb, 1.0f, 0.2f, 0.2f );
 			break;
 	}
 

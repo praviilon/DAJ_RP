@@ -28,6 +28,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "cg_local.h"
 #include "ui/menudef.h"
+
+// GalaxyRP: [Saber RGB] defined in bg_saberLoad.c (shared across game/cgame/ui) -- CG_SaberColorUpdate_f
+// below needs the palette-name string for the mode the server just pushed down.
+const char *SaberColorToString( saber_colors_t color );
 #include "ghoul2/G2.h"
 #include "ui/ui_public.h"
 
@@ -1685,38 +1689,40 @@ static void CG_SaberUpdate_f(void)
 }
 
 // GalaxyRP: [Saber RGB] the colour counterpart of CG_SaberUpdate_f above, and needed for the same
-// reason: pers.saberRGB[] on the server is authoritative, but the cvars the player's own console
-// and saber menu read (cp_sbRGB1/cp_sbRGB2, and the color1/color2 that select RGB mode in the first
-// place) live on the CLIENT, where the server cannot write them. update_saber_colors() in g_cmds.c
-// sends this after every colour change -- a /sabercolor, or a database restore on login -- so the
-// menu shows what is actually in effect instead of re-sending its stale value on the next Apply.
+// reason: pers.saberColorMode[]/pers.saberRGB[] on the server are authoritative, but the cvars the
+// player's own console and saber menu read (cp_sbRGB1/cp_sbRGB2, and the color1/color2 that select
+// which palette entry -- ordinary, RGB-family, or black -- is in effect) live on the CLIENT, where
+// the server cannot write them. update_saber_colors() in g_cmds.c sends this after every change --
+// a /sabercolor, a /saberblade, or a database restore on login -- so the menu shows what is actually
+// in effect instead of re-sending its stale value on the next Apply.
 //
-// Note this deliberately writes color1/color2 as well: without it a restored colour would be
-// published by the server (every other player would see it) while the owner's own client still
-// thought it was using an ordinary palette colour.
+// Payload is four ints now (mode1 rgb1 mode2 rgb2) instead of two, and every field below is written
+// UNCONDITIONALLY -- deliberately including color1/color2 and the palette-name cvars even when the
+// packed RGB value is 0. The previous version only touched those when packed was nonzero, which is
+// exactly why clearing a colour (going back to an ordinary palette entry) never actually restored
+// the client's own console/menu state: color1/color2 stayed stuck on SABER_RGB, and the menu would
+// then re-send that stale value on its very next Apply, undoing the clear server-side too. Now that
+// pers.saberColorMode[] is sent explicitly rather than inferred from "is the RGB payload nonzero,"
+// there is no case where skipping the write is correct.
 static void CG_SaberColorUpdate_f(void)
 {
 	int i;
 
-	if (trap->Cmd_Argc() < 3)
+	if (trap->Cmd_Argc() < 5)
 	{
 		return;
 	}
 
 	for (i = 0; i < 2; i++)
 	{
-		int packed = atoi(CG_Argv(i + 1));
+		int mode = atoi(CG_Argv(i * 2 + 1));
+		int packed = atoi(CG_Argv(i * 2 + 2));
 
 		trap->Cvar_Set(i ? "cp_sbRGB2" : "cp_sbRGB1", va("%i", packed));
 
-		// Only claim the RGB palette slot when there is actually a colour to show. Clearing a colour
-		// leaves color1/color2 alone so the player falls back to whatever they had chosen before.
-		if (packed)
-		{
-			trap->Cvar_Set(i ? "color2" : "color1", va("%i", SABER_RGB));
-			trap->Cvar_Set(i ? "ui_saber2_color" : "ui_saber_color", "rgb");
-			trap->Cvar_Set(i ? "g_saber2_color" : "g_saber_color", "rgb");
-		}
+		trap->Cvar_Set(i ? "color2" : "color1", va("%i", mode));
+		trap->Cvar_Set(i ? "ui_saber2_color" : "ui_saber_color", SaberColorToString((saber_colors_t)mode));
+		trap->Cvar_Set(i ? "g_saber2_color" : "g_saber_color", SaberColorToString((saber_colors_t)mode));
 
 		// Keep the menu's own slider cvars in step too, so re-opening it shows the real colour
 		// rather than snapping back to whatever the sliders were last dragged to.

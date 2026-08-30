@@ -1188,6 +1188,33 @@ typedef struct cgMedia_s {
 	// tint comment in CG_DoSaber() (cg_players.c).
 	qhandle_t	rgbSaberGlowShader;
 	qhandle_t	rgbSaberCoreShader;
+	// GalaxyRP: [Saber RGB] the four TaystJK/JAPro "blade style" variants (Flame1/Electric1/Flame2/
+	// Electric2 -- SABER_FLAME1..SABER_ELEC2), same glow/core split and same rgbGen vertex tinting
+	// as the classic pair above, just a different glow/core texture pair per style. Numbered 2-5 to
+	// match the RGBglow2-5/RGBcore2-5 shader/asset names (see assets/client/shaders/sbRGB.shader);
+	// "1" is the untinted-name classic pair just above.
+	qhandle_t	rgbSaberGlowShader2;
+	qhandle_t	rgbSaberCoreShader2;
+	qhandle_t	rgbSaberGlowShader3;
+	qhandle_t	rgbSaberCoreShader3;
+	qhandle_t	rgbSaberGlowShader4;
+	qhandle_t	rgbSaberCoreShader4;
+	qhandle_t	rgbSaberGlowShader5;
+	qhandle_t	rgbSaberCoreShader5;
+	// GalaxyRP: [Saber RGB] swing-trail counterparts to the four blade styles above (RGBtrail2-4 --
+	// there is no RGBtrail1, the classic style's trail is the plain, untinted saberBlurShader below,
+	// and no RGBtrail5 asset exists either, so that style's trail shares swordTrailShader instead --
+	// matching TaystJK's own registration exactly, not a missing-asset bug). See CG_AddSaberBlade()
+	// in cg_players.c.
+	qhandle_t	rgbSaberTrail2Shader;
+	qhandle_t	rgbSaberTrail3Shader;
+	qhandle_t	rgbSaberTrail4Shader;
+	// GalaxyRP: [Saber RGB] the fixed black blade (SABER_BLACK) -- unlike the RGB-family shaders
+	// above these use "rgbGen identity", not "vertex" (see sbRGB.shader): the shader itself already
+	// draws black, no tint is applied or needed.
+	qhandle_t	blackSaberGlowShader;
+	qhandle_t	blackSaberCoreShader;
+	qhandle_t	blackBlurShader;
 	qhandle_t	saberBlurShader;
 	qhandle_t	swordTrailShader;
 

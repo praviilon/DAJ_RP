@@ -5277,11 +5277,12 @@ static void UI_PackSaberRGBCvar( qboolean secondSaber )
 	g = Com_Clampi( 0, 255, (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_g" : "ui_sab1_g" ) );
 	b = Com_Clampi( 0, 255, (int)trap->Cvar_VariableValue( secondSaber ? "ui_sab2_b" : "ui_sab1_b" ) );
 
-	// A packed 0 is the "unset" marker, so a fully black blade cannot be expressed. Nudge it to the
-	// darkest colour that can be, rather than silently turning the choice into "no custom colour".
-	if ( !SABERRGB_PACK( r, g, b ) )
-		r = g = b = 1;
-
+	// GalaxyRP: [Saber RGB] a packed (r,g,b) of (0,0,0) used to be nudged to (1,1,1) here, since a
+	// packed 0 is indistinguishable from "unset" -- but that ambiguity is fine now: CG_NewClientInfo
+	// (cg_players.c) defaults a packed 0 to plain red on the render side, matching TaystJK's own
+	// legacy-compatibility behaviour, so a literal black request just renders as red like everything
+	// else that resolves to "no real colour set." A true black blade has its own dedicated palette
+	// entry (SABER_BLACK / /sabercolor <n> black) instead, unaffected by this cvar entirely.
 	trap->Cvar_Set( destCvar, va( "%i", SABERRGB_PACK( r, g, b ) ) );
 }
 

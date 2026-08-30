@@ -2522,17 +2522,26 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized ) {
 
 	newInfo.icolor2 = atoi(v);
 
-	// GalaxyRP: [Saber RGB] the custom blade colours that go with an icolor of SABER_RGB, sent as
-	// packed 24-bit integers by ClientUserinfoChanged(). Absent (an ordinary palette colour, or a
-	// server that predates this feature) simply leaves them zeroed, which nothing reads because the
-	// icolor above will not be SABER_RGB either.
+	// GalaxyRP: [Saber RGB] the custom blade colours that go with an icolor in the RGB family
+	// (SABER_RGB..SABER_ELEC2), sent as packed 24-bit integers by ClientUserinfoChanged(). Nothing
+	// reads these when icolor isn't RGB-family, so the fallback below is harmless in that case.
+	//
+	// A packed value of 0 -- absent (a server/client that predates this feature), or a real,
+	// legitimate "no custom colour chosen yet" -- defaults to packed 255, which unpacks to pure red
+	// (255,0,0). This matches TaystJK/JAPro's own legacy-compatibility fallback exactly (their
+	// CG_NewClientInfo does the identical "if (!full) full=255;"), and is what makes a bare "rgb"
+	// selection with no colour set render as a sensible default instead of invisible black.
 	{
 		int packed;
 
 		packed = atoi( Info_ValueForKey( configstring, "c3" ) );
+		if ( !packed )
+			packed = 255;
 		VectorSet( newInfo.rgb1, SABERRGB_R( packed ), SABERRGB_G( packed ), SABERRGB_B( packed ) );
 
 		packed = atoi( Info_ValueForKey( configstring, "c4" ) );
+		if ( !packed )
+			packed = 255;
 		VectorSet( newInfo.rgb2, SABERRGB_R( packed ), SABERRGB_G( packed ), SABERRGB_B( packed ) );
 	}
 
@@ -6213,18 +6222,16 @@ its color1/color2 cvar -- an arbitrary integer, not necessarily one of ours. Fol
 not draw ourselves back onto a colour we do, so an out-of-range value can never index past the end
 of a switch's worth of shaders or leave a blade drawn with an uninitialised handle.
 
-SABER_FLAME1..SABER_BLACK are the ordinals we reserve for TaystJK/JAPro wire compatibility but do
-not implement (see saber_colors_t in q_shared.h); they collapse onto SABER_RGB, which renders the
-player's actual custom colour rather than an arbitrary palette entry -- the closest thing we have
-to what they asked for. Anything else falls back to blue, matching TranslateSaberColor().
+Deliberately simple: any in-range value (0..NUM_SABER_COLORS-1) passes through unchanged -- including
+SABER_RGB and the four blade-style/black ordinals, all of which we now actually draw (see
+CG_RGBForSaberColor and CG_DoSaber below) -- and anything outside that range clamps to SABER_RED, no
+modulo cycling (unlike TaystJK's own ClampSaberColor, which wraps out-of-range values back into the
+palette via "% NUM_SABER_COLORS"; deliberately not replicated here, kept simple instead).
 */
 static saber_colors_t CG_ClampSaberColor( int color )
 {
-	if ( color >= SABER_RGB && color < NUM_SABER_COLORS )
-		return SABER_RGB;
-
-	if ( color < 0 || color >= NUM_SABER_BASE_COLORS )
-		return SABER_BLUE;
+	if ( color < 0 || color >= NUM_SABER_COLORS )
+		return SABER_RED;
 
 	return (saber_colors_t)color;
 }
@@ -6232,13 +6239,12 @@ static saber_colors_t CG_ClampSaberColor( int color )
 /*
 GalaxyRP: [Saber RGB] does this blade actually have a custom colour to draw?
 
-SABER_RGB can arrive without one. A client can send c1=SABER_RGB with an empty c3; a .npc or siege
-class file can name "rgb" as a saber colour for an NPC, which has no player colour behind it at
-all; and reserved ordinals fold onto SABER_RGB in CG_ClampSaberColor above. In every one of those
-cases the colour resolves to 0,0,0 -- and a saber tinted pure black is invisible, which is both a
-rendering bug and, historically, something people deliberately abused. Zero is already the "unset"
-marker on the wire and in the database, so treat it as unset here too and let the caller fall back
-to an ordinary palette colour.
+SABER_RGB (and the four blade-style ordinals) can arrive without one: a .npc or siege class file can
+name "rgb" as a saber colour for an NPC, which has no player colour behind it at all, and a real
+player's packed RGB payload can legitimately be sent as 0. This NULL-context guard is what
+CG_DoSaberLight (no client context at all) relies on to fall back cleanly; a real networked player's
+rgb1/rgb2 no longer needs this to distinguish "unset" from "black" (see CG_NewClientInfo's
+zero-defaults-to-red handling), but NPC/.sab callers still pass ci == NULL and need a defined result.
 */
 static qboolean CG_HasCustomSaberColor( const clientInfo_t *ci, int bnum )
 {
@@ -6252,21 +6258,26 @@ static qboolean CG_HasCustomSaberColor( const clientInfo_t *ci, int bnum )
 	return (qboolean)( rgb[0] > 0.0f || rgb[1] > 0.0f || rgb[2] > 0.0f );
 }
 
-// GalaxyRP: [Saber RGB] "ci" supplies the custom colour behind SABER_RGB and "bnum" picks which of
-// the player's two saber slots it comes from. Both may be omitted (NULL) by callers with no client
-// context, in which case SABER_RGB degrades to the default blue -- see CG_DoSaberLight.
+// GalaxyRP: [Saber RGB] "ci" supplies the custom colour behind SABER_RGB (and the four blade-style
+// ordinals, which share the same custom-colour source -- only the shader differs) and "bnum" picks
+// which of the player's two saber slots it comes from. Both may be omitted (NULL) by callers with no
+// client context, in which case these degrade to plain red -- see CG_DoSaberLight.
 static void CG_RGBForSaberColor( saber_colors_t color, vec3_t rgb, const clientInfo_t *ci, int bnum )
 {
 	switch( color )
 	{
 		case SABER_RGB:
+		case SABER_FLAME1:
+		case SABER_ELEC1:
+		case SABER_FLAME2:
+		case SABER_ELEC2:
 			if ( CG_HasCustomSaberColor( ci, bnum ) )
 			{
 				// Stored 0-255 by CG_NewClientInfo; the dlight and tint paths both want 0-1 here.
 				VectorScale( bnum ? ci->rgb2 : ci->rgb1, 1.0f / 255.0f, rgb );
 				break;
 			}
-			VectorSet( rgb, 0.2f, 0.4f, 1.0f );
+			VectorSet( rgb, 1.0f, 0.2f, 0.2f );
 			break;
 		case SABER_RED:
 			VectorSet( rgb, 1.0f, 0.2f, 0.2f );
@@ -6285,6 +6296,11 @@ static void CG_RGBForSaberColor( saber_colors_t color, vec3_t rgb, const clientI
 			break;
 		case SABER_PURPLE:
 			VectorSet( rgb, 0.9f, 0.2f, 1.0f );
+			break;
+		case SABER_BLACK:
+			// The black shaders (rgbGen identity) supply the actual colour themselves; this value
+			// only feeds the dynamic-light call (CG_DoSaberLight), where white is a harmless no-op.
+			VectorSet( rgb, 1.0f, 1.0f, 1.0f );
 			break;
 		default:
 			break;
@@ -6400,11 +6416,13 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 
 	color = CG_ClampSaberColor( color );
 
-	// GalaxyRP: [Saber RGB] a blade can claim SABER_RGB with no colour behind it (an NPC whose .npc
-	// file names "rgb", a client sending c1 without c3). Drop back to a palette colour rather than
-	// selecting the tintable shaders and multiplying them by black, which draws nothing at all.
-	if ( color == SABER_RGB && !CG_HasCustomSaberColor( ci, bnum ) )
-		color = SABER_BLUE;
+	// GalaxyRP: [Saber RGB] a blade can claim SABER_RGB (or one of the four blade-style ordinals)
+	// with no colour behind it (an NPC whose .npc file names "rgb", a client sending c1 without c3).
+	// Drop back to a palette colour rather than selecting the tintable shaders and multiplying them
+	// by black, which draws nothing at all. SABER_BLACK is excluded -- it doesn't need a custom
+	// colour behind it, its shaders draw black on their own.
+	if ( color >= SABER_RGB && color <= SABER_ELEC2 && !CG_HasCustomSaberColor( ci, bnum ) )
+		color = SABER_RED;
 
 	if ( length < 0.5f )
 	{
@@ -6441,24 +6459,59 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 			glow = cgs.media.purpleSaberGlowShader;
 			blade = cgs.media.purpleSaberCoreShader;
 			break;
-		// GalaxyRP: [Saber RGB] the greyscale, tintable pair. Unlike the six above, these carry no
-		// colour of their own -- the shaderRGBA set on the refEntity below supplies it.
+		// GalaxyRP: [Saber RGB] the five greyscale, tintable pairs -- classic RGB plus the four
+		// TaystJK/JAPro blade-style variants. Unlike the six fixed-palette shaders above, these carry
+		// no colour of their own -- the shaderRGBA set on the refEntity below supplies it, and all
+		// five share the exact same tint-computation code, only the glow/core shader pair differs.
 		case SABER_RGB:
+		case SABER_FLAME1:
+		case SABER_ELEC1:
+		case SABER_FLAME2:
+		case SABER_ELEC2:
 		{
 			int i;
 			vec3_t custom;
 
-			glow = cgs.media.rgbSaberGlowShader;
-			blade = cgs.media.rgbSaberCoreShader;
+			switch ( color )
+			{
+				default:
+				case SABER_RGB:
+					glow = cgs.media.rgbSaberGlowShader;
+					blade = cgs.media.rgbSaberCoreShader;
+					break;
+				case SABER_FLAME1:
+					glow = cgs.media.rgbSaberGlowShader2;
+					blade = cgs.media.rgbSaberCoreShader2;
+					break;
+				case SABER_ELEC1:
+					glow = cgs.media.rgbSaberGlowShader3;
+					blade = cgs.media.rgbSaberCoreShader3;
+					break;
+				case SABER_FLAME2:
+					glow = cgs.media.rgbSaberGlowShader4;
+					blade = cgs.media.rgbSaberCoreShader4;
+					break;
+				case SABER_ELEC2:
+					glow = cgs.media.rgbSaberGlowShader5;
+					blade = cgs.media.rgbSaberCoreShader5;
+					break;
+			}
 
-			CG_RGBForSaberColor( SABER_RGB, custom, ci, bnum );
+			CG_RGBForSaberColor( color, custom, ci, bnum );
 			for ( i = 0; i < 3; i++ )
 				tint[i] = (byte)Com_Clampi( 0, 255, (int)(custom[i] * 255.0f) );
 			break;
 		}
+		// GalaxyRP: [Saber RGB] the fixed black blade -- no custom colour behind it, tint stays
+		// default white (a no-op here, since these shaders use "rgbGen identity" rather than
+		// "vertex" -- see sbRGB.shader -- so they draw black on their own regardless of the tint).
+		case SABER_BLACK:
+			glow = cgs.media.blackSaberGlowShader;
+			blade = cgs.media.blackSaberCoreShader;
+			break;
 		default:
-			glow = cgs.media.blueSaberGlowShader;
-			blade = cgs.media.blueSaberCoreShader;
+			glow = cgs.media.redSaberGlowShader;
+			blade = cgs.media.redSaberCoreShader;
 			break;
 	}
 
@@ -7428,7 +7481,12 @@ CheckTrail:
 				else
 	#endif
 				{
-					vec3_t	rgb1={255.0f,255.0f,255.0f};
+					vec3_t		rgb1={255.0f,255.0f,255.0f};
+					// GalaxyRP: [Saber RGB] which trail shader to use, same layout the idle blade's
+					// glow/core selection uses (CG_DoSaber) -- default is the plain motion-blur trail
+					// every fixed-palette colour already used, overridden below for the RGB-family
+					// and black cases.
+					qhandle_t	trailShader = cgs.media.saberBlurShader;
 
 					switch( scolor )
 					{
@@ -7449,6 +7507,45 @@ CheckTrail:
 							break;
 						case SABER_PURPLE:
 							VectorSet( rgb1, 220.0f, 0.0f, 255.0f );
+							break;
+						// GalaxyRP: [Saber RGB] the confirmed "swing trail always renders blue" bug --
+						// this switch previously had no case for SABER_RGB or any of the four
+						// blade-style variants at all, so every one of them silently fell to default
+						// (plain blue) here, even though the idle blade a few hundred lines away
+						// (CG_DoSaber) already renders the real custom colour correctly, through a
+						// completely separate code path. client->rgb1/rgb2 are already 0-255 scale,
+						// matching rgb1 here exactly -- no rescale needed.
+						case SABER_RGB:
+						case SABER_FLAME1:
+						case SABER_ELEC1:
+						case SABER_FLAME2:
+						case SABER_ELEC2:
+							VectorCopy( saberNum ? client->rgb2 : client->rgb1, rgb1 );
+							switch ( scolor )
+							{
+								default:
+								case SABER_RGB:
+									trailShader = cgs.media.saberBlurShader;
+									break;
+								case SABER_FLAME1:
+									trailShader = cgs.media.rgbSaberTrail2Shader;
+									break;
+								case SABER_ELEC1:
+									trailShader = cgs.media.rgbSaberTrail3Shader;
+									break;
+								case SABER_FLAME2:
+									trailShader = cgs.media.rgbSaberTrail4Shader;
+									break;
+								case SABER_ELEC2:
+									// No RGBtrail5 asset -- matches TaystJK's own registration, which
+									// falls back to the plain sword trail for this one style too.
+									trailShader = cgs.media.swordTrailShader;
+									break;
+							}
+							break;
+						case SABER_BLACK:
+							VectorSet( rgb1, 255.0f, 255.0f, 255.0f );
+							trailShader = cgs.media.blackBlurShader;
 							break;
 						default:
 							VectorSet( rgb1, 0.0f, 64.0f, 255.0f );
@@ -7490,7 +7587,10 @@ CheckTrail:
 							}
 							else
 							{
-								fx.mShader = cgs.media.saberBlurShader;
+								// GalaxyRP: [Saber RGB] trailShader is saberBlurShader for every
+								// fixed-palette colour (unchanged behaviour) and the RGB-family/black
+								// shader for those cases -- see the switch above.
+								fx.mShader = trailShader;
 							}
 							fx.mKillTime = trailDur;
 							fx.mSetFlags = FX_USE_ALPHA;

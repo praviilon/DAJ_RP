@@ -84,10 +84,12 @@ tint on every other player's machine -- so it is masked down to the three channe
 occupy here rather than anywhere further downstream. Returns 0 for "no custom colour", which is
 also what an absent, empty, malformed or negative value degrades to.
 
-Note that 0 is not merely the "unset" marker but also the only unrepresentable colour: pure black
-would pack to 0 as well. That is deliberate -- a black blade is invisible against a dark map and
-was historically used to cheat -- so /sabercolor rejects it up front rather than silently turning
-the request into "no custom colour".
+Note that 0 is not merely the "unset" marker but also indistinguishable from a literal, deliberately
+requested (0,0,0). That ambiguity is fine now: a client-facing packed RGB of 0 falls back to plain
+red on the render side (CG_NewClientInfo, matching TaystJK's own legacy-compatibility behaviour), so
+"unset" and "asked for pure black" end up rendering the same reasonable way either side of this
+function. Anyone who actually wants a true black blade has the dedicated SABER_BLACK palette entry
+(/sabercolor <n> black) instead, which carries no RGB payload at all and isn't affected by this.
 =====================================================================
 */
 int G_ParseSaberRGB( const char *str ) {

@@ -359,22 +359,24 @@ typedef enum
 	SABER_BLUE,
 	SABER_PURPLE,
 	// GalaxyRP: [Saber RGB] everything from here on extends the original six-colour palette.
-	// SABER_RGB means "this blade uses the player's own custom colour"; the colour itself travels
-	// separately, as a packed 24-bit integer in the "c3"/"c4" clientinfo configstring keys -- see
-	// ClientUserinfoChanged() (g_client.c) and CG_NewClientInfo() (cg_players.c).
+	// SABER_RGB and the four blade-style variants below it all mean "this blade uses the player's
+	// own custom colour, rendered with a particular glow/core shader pair"; the colour itself
+	// travels separately, as a packed 24-bit integer in the "c3"/"c4" clientinfo configstring keys
+	// -- see ClientUserinfoChanged() (g_client.c) and CG_NewClientInfo() (cg_players.c). Which of
+	// these five is selected, plus SABER_BLACK, is chosen via /sabercolor (the custom colour itself)
+	// and /saberblade (the blade style among an already-RGB saber), and is server-authoritative in
+	// clientPersistant_t::saberColorMode[] (g_local.h) -- see that field for the full picture.
 	//
 	// The ordinals below deliberately match TaystJK/JAPro's own saber_colors_t exactly, so a
 	// TaystJK client rendering sabers with its own cgame (rather than ours) still reads the same
-	// values off the wire and shows our players the right colour. SABER_FLAME1..SABER_BLACK exist
-	// only to keep that numbering aligned -- we do not offer them, and any of them arriving from a
-	// client is folded back to a base colour by CG_ClampSaberColor().
-	SABER_RGB,
-	SABER_FLAME1,	// reserved (TaystJK/JAPro wire compatibility) -- not implemented here
-	SABER_ELEC1,	// reserved
-	SABER_FLAME2,	// reserved
-	SABER_ELEC2,	// reserved
-	SABER_BLACK,	// reserved
-	NUM_SABER_COLORS,
+	// values off the wire and shows our players the right colour.
+	SABER_RGB,		// classic RGB blade, using the player's own custom colour
+	SABER_FLAME1,	// RGB blade, "flame" style 1 (TaystJK/JAPro line-art variant)
+	SABER_ELEC1,	// RGB blade, "electric" style 1
+	SABER_FLAME2,	// RGB blade, "flame" style 2
+	SABER_ELEC2,	// RGB blade, "electric" style 2
+	SABER_BLACK,	// fixed black blade, no custom colour behind it
+	NUM_SABER_COLORS,	// values >= this (or < 0) are invalid and clamp to SABER_RED
 
 	// The classic palette that a .sab file's "saberColor" keyword (including "random") may select
 	// from. Kept separate from NUM_SABER_COLORS so extending the enum above never silently widens

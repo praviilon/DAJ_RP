@@ -580,6 +580,13 @@ typedef struct clientPersistant_s {
 	// published to every other client through the "c3"/"c4" clientinfo configstring keys.
 	int			saberRGB[2];
 
+	// GalaxyRP: [Saber RGB] the server-authoritative saber_colors_t mode (0-11) selected for each
+	// saber slot -- separate from saberRGB[] above, since a blade style (classic RGB vs. one of the
+	// Flame/Electric variants vs. black) and its custom colour are now set independently (/sabercolor
+	// vs. /saberblade). This is the field published through the "c1"/"c2" clientinfo configstring
+	// keys; unlike saberRGB[], 0 is a legitimate, meaningful value here (SABER_RED), not "unset".
+	int			saberColorMode[2];
+
 	int			vote, teamvote; // 0 = none, 1 = yes, 2 = no
 
 	char		guid[33];
@@ -1828,6 +1835,18 @@ void SaveRegisteredItems( void );
 // confused with the legacy default, a stored value is tagged with this bit; anything without it
 // (0, or the old default of 1) means "no custom colour set".
 #define SABERRGB_SET	( 1 << 24 )
+
+// GalaxyRP: [Saber RGB] the saberColorMode[] value (0-11, see saber_colors_t) is packed into the
+// same stored int, in the bits above SABERRGB_SET's bit 24 -- bits 25-28, 4 bits being enough to
+// hold NUM_SABER_COLORS-1 (11). Max possible packed value (mode=11, SABERRGB_SET set, full 24-bit
+// RGB payload) is 0x16FFFFFF, well inside a signed 32-bit int. A pre-existing row (schema default
+// 1, predates this field entirely) decodes via SABER_STORED_MODE to 0 (SABER_RED), consistent with
+// how this column already treats its own legacy default.
+#define SABERCOLORMODE_SHIFT	25
+#define SABERCOLORMODE_MASK	0xF
+#define SABER_STORED_MODE(stored)			( ((stored) >> SABERCOLORMODE_SHIFT) & SABERCOLORMODE_MASK )
+#define SABER_STORED_PACK(mode, packedRGB)	\
+	( (((mode) & SABERCOLORMODE_MASK) << SABERCOLORMODE_SHIFT) | ((packedRGB) ? (SABERRGB_SET | ((packedRGB) & SABERRGB_MASK)) : 0) )
 
 // Parses a packed saber colour as sent by a client (cp_sbRGB1/cp_sbRGB2) or read from the
 // database, and clamps it to something safe to hand on to the renderer. Returns 0 for "unset".

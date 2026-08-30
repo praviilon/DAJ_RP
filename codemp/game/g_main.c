@@ -410,6 +410,11 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	// source formatting -- true content is 347 bytes plus the NUL terminator, so 310 would silently
 	// truncate this string with no space left for the terminator (see create_new_character_query's
 	// near-identical bug, fixed earlier this engagement, for what that failure mode looks like).
+	// GalaxyRP: [Saber RGB] no schema change for the RGB/blade-style redesign -- saberOneColor/
+	// saberTwoColor (INTEGER DEFAULT 1) are reused as-is, now packing both the selected
+	// saber_colors_t mode and the custom RGB payload via SABER_STORED_PACK (g_local.h) instead of
+	// just the RGB payload. The DEFAULT 1 a pre-existing row still holds decodes to mode 0
+	// (SABER_RED) with no RGB payload -- a reasonable default for a row this feature predates.
 	char statement_saber_columns_alter[400] = "BEGIN;\
 												ALTER TABLE Characters ADD COLUMN saberOneModel TEXT DEFAULT 'saber_1';\
 												ALTER TABLE Characters ADD COLUMN saberOneColor INTEGER DEFAULT 1;\

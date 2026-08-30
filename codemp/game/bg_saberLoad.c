@@ -187,6 +187,10 @@ saber_colors_t TranslateSaberColor( const char *name ) {
 	// pers.saberRGB[] (server) -- this enum value only says "use it".
 	if ( !Q_stricmp( name, "rgb" ) )
 		return SABER_RGB;
+	// GalaxyRP: [Saber RGB] "black" selects the fixed black-blade shader (SABER_BLACK) -- unlike
+	// "rgb" this is not a custom colour, it's its own entry in the palette.
+	if ( !Q_stricmp( name, "black" ) )
+		return SABER_BLACK;
 	if ( !Q_stricmp( name, "random" ) )
 		return (saber_colors_t)Q_irand( SABER_ORANGE, SABER_PURPLE );
 
@@ -200,7 +204,14 @@ const char *SaberColorToString( saber_colors_t color ) {
 	if ( color == SABER_GREEN )		return "green";
 	if ( color == SABER_BLUE )		return "blue";
 	if ( color == SABER_PURPLE )	return "purple";
-	if ( color == SABER_RGB )		return "rgb";	// GalaxyRP: [Saber RGB]
+	// GalaxyRP: [Saber RGB] SABER_RGB and the four blade-style variants (FLAME1/ELEC1/FLAME2/ELEC2)
+	// all share this one string -- there is no distinct dropdown/menu string for the blade-style
+	// variants yet (that's a UI-pass addition), so the customization menu's live preview shows any
+	// of the five as plain classic RGB until that lands. The blade style itself is unaffected --
+	// this string only feeds the menu preview cvar, not rendering.
+	if ( color >= SABER_RGB && color <= SABER_ELEC2 )
+		return "rgb";	// GalaxyRP: [Saber RGB]
+	if ( color == SABER_BLACK )		return "black";	// GalaxyRP: [Saber RGB]
 
 	// GalaxyRP fix: [Saber] this used to return NULL for anything outside the palette, and its only
 	// caller (UI_GetSaberCvars in ui_main.c) feeds the result straight into trap->Cvar_Set() -- so
