@@ -3428,7 +3428,7 @@ void Cmd_Register_F(gentity_t * ent)
 	char *zErrMsg = 0;
 	int rc;
 	sqlite3_stmt *stmt = NULL;
-	char username[256] = { 0 }, password[256] = { 0 }, comparisonName[256] = { 0 };
+	char username[256] = { 0 }, password[256] = { 0 };
 	int accountID = 0, i = 0;
 
 	rc = RP_DB_Open(&db);
@@ -3473,9 +3473,14 @@ void Cmd_Register_F(gentity_t * ent)
 		return;
 	}
 
+	// GalaxyRP fix: [cosmetic] this used to print comparisonName here instead of username --
+	// comparisonName was declared but never assigned anywhere in this function, so both messages
+	// always printed an empty name where the rejected username was supposed to appear ("Username
+	// ^7^1is already in use."). Print the actual username that was checked, and drop the dead
+	// comparisonName local entirely (it served no other purpose).
 	if (select_number_of_accounts_with_username(ent, username, db, zErrMsg, rc, stmt) != 0) {
-		trap->SendServerCommand(ent - g_entities, va("print \"^1Username ^7%s ^1is already in use.\n\"", comparisonName));
-		trap->SendServerCommand(ent - g_entities, va("cp \"^1Username ^7%s ^1is already in use.\n\"", comparisonName));
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Username ^7%s ^1is already in use.\n\"", username));
+		trap->SendServerCommand(ent - g_entities, va("cp \"^1Username ^7%s ^1is already in use.\n\"", username));
 
 		sqlite3_close(db);
 		return;
