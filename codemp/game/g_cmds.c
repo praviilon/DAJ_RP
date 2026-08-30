@@ -44,6 +44,10 @@ void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin);
 extern int check_xp(int currentLevel);
 extern void Cmd_GalaxyRpUi_f(gentity_t* ent);
 extern void Cmd_ZykChars_f(gentity_t* ent);
+// GalaxyRP: [Char fix] forward-declared so Cmd_Char_f (below) can flush the currently active
+// character before switching/creating/removing one -- same pattern already used above for
+// Cmd_GalaxyRpUi_f/Cmd_ZykChars_f, whose own definitions also sit later in this file.
+extern void save_account(gentity_t *ent, qboolean save_char_file);
 
 // GalaxyRP (Alex): [Skills] This is used to display everything about a skill in various places throughout the mod.
 const skill_t skills[] = {
@@ -2757,7 +2761,15 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		ent->client->pers.credits = sqlite3_column_int(stmt, 2);
 		ent->client->pers.level = sqlite3_column_int(stmt, 3);
 		do_scale(ent, sqlite3_column_int(stmt, 4));
-		strcpy(ent->client->sess.rpgchar, character_name);
+		// GalaxyRP fix: [security] sess.rpgchar is a fixed 32-byte buffer (g_local.h); character_name
+		// here is the raw argument /char use <name> was typed with, only bounded by MAX_STRING_CHARS
+		// (1024). create_new_character() now rejects any new character name that wouldn't fit this
+		// buffer, so no character created from this point on can trigger this -- but a pre-existing
+		// row created before that guard existed (or added directly to the database) could still match
+		// this query and reach this strcpy() with an oversized name. Q_strncpyz() bounds the copy
+		// instead of trusting the match, matching the same defense-in-depth already applied to
+		// saber1Model/saber2Model just below.
+		Q_strncpyz(ent->client->sess.rpgchar, character_name, sizeof(ent->client->sess.rpgchar));
 		ent->client->pers.skillpoints = sqlite3_column_int(stmt, 6);
 		strcpy(ent->client->pers.description, sqlite3_column_text(stmt, 7));
 		strcpy(displayName, sqlite3_column_text(stmt, 8));
@@ -3025,7 +3037,12 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 		ent->client->pers.credits = credits;
 		ent->client->pers.level = level;
 		do_scale(ent, modelScale);
-		strcpy(ent->client->sess.rpgchar, name);
+		// GalaxyRP fix: [security] same fixed-32-byte-buffer overflow risk as the matching strcpy() in
+		// select_player_character() above (this is /login's own version of the same restore) -- bound
+		// the copy instead of trusting a DB-column value that predates create_new_character()'s length
+		// guard, or that never went through it (e.g. a first character named after the account's own
+		// username at registration time -- see insert_chars_table_row()).
+		Q_strncpyz(ent->client->sess.rpgchar, name, sizeof(ent->client->sess.rpgchar));
 		ent->client->pers.skillpoints = skillpoints;
 		strcpy(ent->client->pers.description, description);
 
@@ -3099,7 +3116,36 @@ void select_account_and_default_character_data(gentity_t* ent, char username[MAX
 }
 
 // GalaxyRP (Alex): [Database] This method creates a new character associated with the account the player is currently logged in, and adds the default data in all the tables. ASSUMES PLAYER IS LOGGED IN!
+
+// GalaxyRP: [Char fix] added three checks ahead of the pre-existing uniqueness check below, none of
+// which previously existed: an empty name (a bare /char new "" would otherwise insert a blank,
+// unselectable-looking row that just clutters /char's own list output), a name too long for
+// ent->client->sess.rpgchar to hold (a fixed 32-byte buffer -- see the matching Q_strncpyz() fixes
+// in select_player_character() and select_account_and_default_character_data() above, both of which
+// strcpy() a character name into that buffer once this one is ever loaded), and a name containing
+// '&' (CG_ZykChars() on the client, cg_servercmds.c, splits the character list this command's
+// caller pushes to the client on exactly that character via strtok(arg, "&"); a name containing '&'
+// would be split into multiple bogus entries and desync every character slot after it in that
+// player's own character-select UI). Unlike Cmd_Register_F()'s username handling, this deliberately
+// does NOT strip color codes or force lowercase -- a character's name is meant to be a player-chosen
+// display name (shown with its own colors throughout, e.g. select_character_list()'s listing), not
+// a login credential that needs to be predictable/comparable the way an account username does.
 void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+
+	if (char_name[0] == '\0') {
+		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot be empty.\n\"");
+		return;
+	}
+
+	if (strlen(char_name) > sizeof(ent->client->sess.rpgchar) - 1) {
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Character name can only have a maximum of %i characters.\n\"", (int)sizeof(ent->client->sess.rpgchar) - 1));
+		return;
+	}
+
+	if (strchr(char_name, '&') != NULL) {
+		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot contain the '&' character.\n\"");
+		return;
+	}
 
 	// GalaxyRP (Alex): [Database] Character names should be unique, check for it here.
 	if (select_number_of_characters_with_name(ent, char_name, db, zErrMsg, rc, stmt) > 0) {
@@ -3160,14 +3206,40 @@ void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqli
 }
 
 // GalaxyRP (Alex): [Database] This method removes a character form the database. It affects all tables that contain character information. ASSUMES THE PLAYER IS LOGGED IN!!!
+
+// GalaxyRP: [Char fix] this used to unconditionally run its DELETEs against whatever CharID
+// select_char_id_using_char_name() returned, including -1 (its "not found" sentinel) -- so
+// /char remove <a name that doesn't exist> matched zero rows and silently did nothing, with no
+// feedback either way, success or failure. It also never checked whether char_name was the
+// character the player currently has loaded: deleting that row left ent->client->pers.CharID (and,
+// in the common case, the account's own DefaultChar column -- /char use keeps it in sync with
+// whatever was last selected, see update_accounts_table_row_with_default_char()) pointing at a
+// now-nonexistent character. Any later save would then silently update nothing, and the account's
+// next /login would find no matching character to restore at all. Both are checked explicitly now,
+// each with its own message; Q_stricmp (case-insensitive) is used for the active-character check
+// specifically so it can't be bypassed by retyping the name with different casing.
 void remove_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
 	int charID;
+
+	if (Q_stricmp(char_name, ent->client->sess.rpgchar) == 0) {
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot remove your currently active character. Switch to a different character first with /char use <character name>.\n\"");
+		return;
+	}
+
 	charID = select_char_id_using_char_name(ent, char_name, db, zErrMsg, rc, stmt);
+
+	if (charID == -1) {
+		trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2does not exist.\n\"", char_name));
+		return;
+	}
 
 	char remove_character_query[117] = "DELETE FROM Characters WHERE CharID='%i';DELETE FROM Skills WHERE CharID='%i';DELETE FROM Weapons WHERE CharID='%i';";
 
 	run_db_query(va(remove_character_query, charID, charID, charID), db, zErrMsg, rc, stmt);
+
+	trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2has been removed.\n\"", char_name));
+	trap->SendServerCommand(ent - g_entities, va("cp \"^2Character %s ^2has been removed.\n\"", char_name));
 
 	return;
 }
@@ -3474,14 +3546,27 @@ void Cmd_Login_F(gentity_t * ent)
 	return;
 }
 
+// GalaxyRP: [Char fix] full audit/rewrite. Previously this command printed no usage tip at all for
+// any malformed invocation -- a bare "/char new" with no name, an unrecognized subcommand, or extra
+// arguments were all silently ignored -- unlike every other account command in this file (/login,
+// /new, /logout, /changepassword), which all print a "Command Usage: ..." hint the moment their
+// arguments don't parse. It also leaked its sqlite3 database handle on those same malformed-
+// invocation paths (the argc==1 branch returned without ever calling sqlite3_close(), and anything
+// that fell through both "if" blocks skipped the close entirely), and never called
+// Cmd_ZykChars_f() after removing a character, so a removed character kept showing in that
+// player's own character-select UI until something else happened to refresh it. Most importantly,
+// unlike /logout (which calls save_account(ent, qtrue) as its very first statement), it never
+// flushed the player's *currently loaded* character to the database before switching away from it,
+// creating a new one, or removing one -- so any progress made since the last incidental save point
+// (a purchase, a /settings toggle, a race win, etc. -- there is no periodic autosave in this
+// codebase) was silently discarded the moment select_player_character() overwrote
+// ent->client->pers with a different character's data. save_account(ent, qtrue) is now called up
+// front, exactly like /logout does, before any subcommand runs.
 void Cmd_Char_f(gentity_t *ent) {
 	sqlite3 *db;
 	char *zErrMsg = 0;
 	int rc;
 	sqlite3_stmt *stmt = 0;
-	char username[256] = { 0 }, password[256] = { 0 }, comparisonName[256] = { 0 };
-	int accountID = 0, i = 0;
-
 	int argc = trap->Argc();
 	char command[MAX_STRING_CHARS];
 	char charName[MAX_STRING_CHARS];
@@ -3494,9 +3579,14 @@ void Cmd_Char_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP: [Char fix] flush whatever character is currently active before this command does
+	// anything that might change or replace it -- see the function-level comment above.
+	save_account(ent, qtrue);
+
 	if (argc == 1)
 	{
 		select_character_list(ent, db, zErrMsg, rc, stmt);
+		sqlite3_close(db);
 		return;
 	}
 	if (argc == 3)
@@ -3529,9 +3619,17 @@ void Cmd_Char_f(gentity_t *ent) {
 
 			remove_character(ent, charName, db, zErrMsg, rc, stmt);
 			sqlite3_close(db);
+			Cmd_ZykChars_f(ent);
 			return;
 		}
 	}
+
+	// GalaxyRP: [Char fix] anything else -- no arguments beyond "/char" itself is handled above, so
+	// reaching here means an unrecognized subcommand, a missing character name, or extra arguments.
+	// Print the same usage tip every other malformed invocation in this file gets, instead of
+	// silently doing nothing.
+	sqlite3_close(db);
+	trap->SendServerCommand(ent - g_entities, "print \"^2Command Usage: /char <new/use/remove> <character name>. Run with no arguments to list your characters.\n\"");
 }
 
 //INVENTORY
