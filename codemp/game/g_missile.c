@@ -486,7 +486,10 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		}
 	}
 
-	if ((other->flags & FL_SHIELDED || zyk_can_deflect_shots(other)) &&
+	// GalaxyRP fix: [Upgrades] dropped the zyk_can_deflect_shots(other) disjunct here — the function
+	// was a stub always returning qfalse after Armored Soldier Upgrade (its only possible source of
+	// qtrue) was removed as inert/non-functional
+	if ((other->flags & FL_SHIELDED) &&
 		ent->s.weapon != WP_ROCKET_LAUNCHER &&
 		ent->s.weapon != WP_THERMAL &&
 		ent->s.weapon != WP_TRIP_MINE &&

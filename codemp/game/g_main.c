@@ -10325,7 +10325,13 @@ void G_RunFrame( int levelTime ) {
 				}
 			}
 
-			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) remain in use by the live quest_mage/ymir_boss/thor_boss chain below
+			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) remain in use by the live quest_mage chain below
+
+			// GalaxyRP fix: [Guardian] ymir_boss and thor_boss ability sub-chains removed here — both were
+			// gated on universe_quest_messages==-10000, a sentinel no code path ever assigns, so they were
+			// permanently unreachable (unlike quest_mage's sibling chain just below, which has no such
+			// guard and is reachable by an admin-spawned quest_mage NPC). guardian_timer is still used by
+			// the surviving quest_mage chain and was NOT removed.
 			if (ent->health > 0 && Q_stricmp(ent->NPC_type, "quest_mage") == 0 && ent->enemy && ent->client->pers.guardian_timer < level.time)
 			{ // zyk: powers used by the quest_mage npc
 				int random_magic = Q_irand(0, 26);
@@ -10440,184 +10446,6 @@ void G_RunFrame( int levelTime ) {
 				}
 
 				ent->client->pers.guardian_timer = level.time + Q_irand(3000, 6000);
-			}
-			else if (ent->client->pers.universe_quest_messages == -10000 && ent->health > 0 && ent->enemy && Q_stricmp(ent->NPC_type, "ymir_boss") == 0)
-			{ // zyk: Ymir
-				if (ent->client->pers.guardian_timer < level.time)
-				{
-					int random_magic = Q_irand(0, 26);
-
-					if (random_magic == 0)
-					{
-						ultra_strength(ent, 30000);
-					}
-					else if (random_magic == 1)
-					{
-						poison_mushrooms(ent, 100, 600);
-					}
-					else if (random_magic == 2)
-					{
-						water_splash(ent, 400, 15);
-					}
-					else if (random_magic == 3)
-					{
-						ultra_flame(ent, 500, 35);
-					}
-					else if (random_magic == 4)
-					{
-						rock_fall(ent, 500, 40);
-					}
-					else if (random_magic == 5)
-					{
-						dome_of_damage(ent, 500, 25);
-					}
-					else if (random_magic == 6)
-					{
-						hurricane(ent, 600, 5000);
-					}
-					else if (random_magic == 7)
-					{
-						slow_motion(ent, 400, 15000);
-					}
-					else if (random_magic == 8)
-					{
-						ultra_resistance(ent, 30000);
-					}
-					else if (random_magic == 9)
-					{
-						sleeping_flowers(ent, 2500, 350);
-					}
-					else if (random_magic == 10)
-					{
-						healing_water(ent, 120);
-					}
-					else if (random_magic == 11)
-					{
-						flame_burst(ent, 5000);
-					}
-					else if (random_magic == 12)
-					{
-						earthquake(ent, 2000, 300, 500);
-					}
-					else if (random_magic == 13)
-					{
-						magic_shield(ent, 6000);
-					}
-					else if (random_magic == 14)
-					{
-						blowing_wind(ent, 700, 5000);
-					}
-					else if (random_magic == 15)
-					{
-						ultra_speed(ent, 15000);
-					}
-					else if (random_magic == 16)
-					{
-						ice_stalagmite(ent, 500, 130);
-					}
-					else if (random_magic == 17)
-					{
-						ice_boulder(ent, 380, 40);
-					}
-					else if (random_magic == 18)
-					{
-						water_attack(ent, 500, 40);
-					}
-					else if (random_magic == 19)
-					{
-						shifting_sand(ent, 1000);
-					}
-					else if (random_magic == 20)
-					{
-						tree_of_life(ent);
-					}
-					else if (random_magic == 21)
-					{
-						magic_disable(ent, 450);
-					}
-					else if (random_magic == 22)
-					{
-						fast_and_slow(ent, 400, 6000);
-					}
-					else if (random_magic == 23)
-					{
-						flaming_area(ent, 20);
-					}
-					else if (random_magic == 24)
-					{
-						reverse_wind(ent, 700, 5000);
-					}
-					else if (random_magic == 25)
-					{
-						enemy_nerf(ent, 450);
-					}
-					else if (random_magic == 26)
-					{
-						ice_block(ent, 3500);
-					}
-
-					ent->client->pers.guardian_timer = level.time + Q_irand(6000, 10000);
-				}
-
-				if (ent->client->pers.light_quest_timer < level.time)
-				{ // zyk: unique
-					ent->client->pers.light_quest_timer = level.time + Q_irand(8000, 10000);
-
-					ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-
-					zyk_no_attack(ent);
-				}
-			}
-			else if (ent->client->pers.universe_quest_messages == -10000 && ent->health > 0 && ent->enemy && Q_stricmp(ent->NPC_type, "thor_boss") == 0)
-			{ // zyk: Thor
-				if (ent->client->pers.guardian_timer < level.time)
-				{
-					int random_magic = Q_irand(0, 6);
-
-					if (random_magic == 0)
-					{
-						ultra_drain(ent, 450, 30, 8000);
-					}
-					else if (random_magic == 1)
-					{
-						immunity_power(ent, 20000);
-					}
-					else if (random_magic == 2)
-					{
-						chaos_power(ent, 400, 4600);
-					}
-					else if (random_magic == 3)
-					{
-						time_power(ent, 400, 4000);
-					}
-					else if (random_magic == 4)
-					{
-						healing_area(ent, 2, 5000);
-					}
-					else if (random_magic == 5)
-					{
-						magic_explosion(ent, 320, 130, 900);
-					}
-					else if (random_magic == 6)
-					{
-						lightning_dome(ent, 70);
-					}
-
-					ent->client->pers.guardian_timer = level.time + Q_irand(7000, 12000);
-				}
-
-				if (ent->client->pers.light_quest_timer < level.time)
-				{ // zyk: unique
-					ent->client->pers.light_quest_timer = level.time + Q_irand(8000, 10000);
-
-					ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 2000;
-
-					ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-					ent->client->ps.forceDodgeAnim = BOTH_FORCE_DRAIN_START;
-					ent->client->ps.forceHandExtendTime = level.time + 2000;
-
-					zyk_super_beam(ent, ent->client->ps.viewangles[1]);
-				}
 			}
 		}
 

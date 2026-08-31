@@ -2130,7 +2130,6 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	qboolean	wasJediMaster = qfalse;
 	int			sPMType = 0;
 	char		buf[512] = {0};
-	gentity_t	*quest_player = NULL;
 
 	if ( self->client->ps.pm_type == PM_DEAD ) {
 		return;
@@ -2237,75 +2236,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	// GalaxyRP fix: [Dead Code] removed guardian_invoked_by_id quest_player lookup (guardian_invoked_by_id always -1)
 
-	if (self->client->pers.universe_quest_messages == -10000 && self->NPC)
-	{ // zyk: Ymir or Thor defeated
-		int j = 0;
-		qboolean still_has_boss = qfalse;
-		quest_player = &g_entities[self->client->pers.universe_quest_objective_control];
-
-		if (Q_stricmp(self->NPC_type, "guardian_of_universe") == 0)
-		{ // zyk: failed mission
-			zyk_text_message(quest_player, "universe/mission_16_guardians/mission_16_guardians_fail", qtrue, qfalse, quest_player->client->pers.netname);
-
-			// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see
-			// the GalaxyRP fix comment on its old location in g_cmds.c) -- this call is gone, the rest
-			// of this dead-but-compiling block is left as-is.
-		}
-		else
-		{
-			for (j = (MAX_CLIENTS + BODY_QUEUE_SIZE); j < level.num_entities; j++)
-			{
-				gentity_t *old_boss = &g_entities[j];
-
-				if (old_boss && old_boss->NPC && old_boss->health > 0 && old_boss->client && old_boss->client->pers.universe_quest_messages == -10000 && 
-					Q_stricmp(old_boss->NPC_type, "guardian_of_universe") != 0)
-				{
-					if (Q_stricmp(old_boss->NPC_type, "ymir_boss") == 0)
-					{
-						zyk_text_message(quest_player, "universe/mission_16_guardians/mission_16_guardians_ymir", qtrue, qfalse);
-					}
-					else
-					{
-						zyk_text_message(quest_player, "universe/mission_16_guardians/mission_16_guardians_thor", qtrue, qfalse);
-					}
-
-					still_has_boss = qtrue;
-				}
-			}
-
-			if (still_has_boss == qfalse)
-			{
-				for (j = (MAX_CLIENTS + BODY_QUEUE_SIZE); j < level.num_entities; j++)
-				{
-					gentity_t *old_npc = &g_entities[j];
-
-					if (old_npc && old_npc->NPC && old_npc->health > 0 && old_npc->client && Q_stricmp(old_npc->NPC_type, "quest_mage") == 0 && old_npc->die)
-					{ // zyk: killing the remaining mages
-						old_npc->health = 0;
-						old_npc->client->ps.stats[STAT_HEALTH] = 0;
-						old_npc->die(old_npc, old_npc, old_npc, 100, MOD_UNKNOWN);
-					}
-				}
-
-				quest_player->client->pers.universe_quest_messages = 6;
-				quest_player->client->pers.universe_quest_timer = level.time + 3000;
-			}
-		}
-	}
-	else if (self->client->pers.universe_quest_artifact_holder_id != -1 && self->NPC)
-	{ // zyk: artifact holder of Universe Quest, set the player universe_quest_artifact_holder_id to -2 so he can get the artifact when he touches the force boon item
-		if (Q_stricmp(self->NPC_type, "quest_ragnos") == 0) // zyk: quest_ragnos npc has a different way to get the artifact
-		{
-			gentity_t* player_ent = &g_entities[self->client->pers.universe_quest_artifact_holder_id];
-
-			zyk_text_message(player_ent, "universe/mission_2/mission_2_artifact_guardian_fail", qtrue, qfalse);
-			player_ent->client->pers.universe_quest_artifact_holder_id = -1;
-
-			// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see
-			// the GalaxyRP fix comment on its old location in g_cmds.c) -- the call this comment used
-			// to sit next to is gone, the rest of this dead-but-compiling block is left as-is.
-		}
-	}
+	// GalaxyRP fix: [Quests] removed dead universe_quest_messages==-10000 sentinel block here (Ymir/Thor/guardian_of_universe death handling) and its sibling universe_quest_artifact_holder_id!=-1 branch (quest_ragnos artifact-guardian handling) -- neither sentinel is ever assigned a matching value anywhere in the codebase (ymir_boss/thor_boss ability chains that used to set universe_quest_messages==-10000 conditions were themselves removed as dead code; universe_quest_artifact_holder_id is only ever reset to -1), so both branches were permanently unreachable. quest_player local var (only used inside this block) removed too.
 	
 	if (self->client->sess.amrpgmode == 2)
 	{
@@ -4682,10 +4613,9 @@ qboolean zyk_can_damage_saber_only_entities(gentity_t *attacker, gentity_t *infl
 
 		// GalaxyRP fix: [Dead Code] removed rpg_class==8 Magic Master Ultra Bolt saber-only-damage grant (rpg_class always 0)
 
-		if (mod == MOD_DET_PACK_SPLASH && attacker->client->pers.secrets_found & (1 << 14))
-		{ // zyk: detpacks
-			return qtrue;
-		}
+		// GalaxyRP fix: [Upgrades] removed detpack saber-only-damage grant here (gated on
+		// secrets_found&(1<<14), the Rocket Upgrade bit) — Rocket Upgrade was removed as
+		// inert/non-functional, so this bit can never be set again
 	}
 
 	return qfalse;

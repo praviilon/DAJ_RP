@@ -2332,7 +2332,7 @@ extern void Boba_FlyStop( gentity_t *self );
 extern void zyk_show_magic_master_powers(gentity_t *ent, qboolean next_power);
 extern void zyk_show_left_magic_master_powers(gentity_t *ent, qboolean next_power);
 extern void zyk_show_right_magic_master_powers(gentity_t *ent, qboolean next_power);
-extern void zyk_unique_boost(gentity_t *ent);
+// GalaxyRP fix: [Quests] removed zyk_unique_boost() extern here — function removed as dead (see g_cmds.c)
 extern void TossClientWeapon(gentity_t *self, vec3_t direction, float speed);
 extern qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, vec3_t velocity);
 extern qboolean zyk_can_use_unique(gentity_t *ent);
@@ -3799,8 +3799,6 @@ void ClientThink_real( gentity_t *ent ) {
 								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
 							}
 						}
-
-						zyk_unique_boost(ent);
 					}
 					else if (ent->client->pers.skill_levels[38] > 0)
 					{ // zyk: still in cooldown time, shows the time left in chat

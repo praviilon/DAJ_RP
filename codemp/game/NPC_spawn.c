@@ -1772,7 +1772,7 @@ finish:
 		// spawn_boss() (their only setter) was deleted as unreachable dead code, so
 		// these fields are permanently 0/-1 and are being removed from g_local.h.
 		newent->client->pers.player_statuses = 0;
-		newent->client->pers.universe_quest_objective_control = -1;
+		// GalaxyRP fix: [Quests] universe_quest_objective_control reset removed here — field removed as dead (see g_local.h)
 		newent->client->pers.universe_quest_artifact_holder_id = -1;
 		newent->client->pers.race_position = 0;
 		newent->client->pers.seller_invoked_by_id = -1;

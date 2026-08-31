@@ -648,7 +648,10 @@ static void WP_DisruptorMainFire( gentity_t *ent )
 				return;
 			}
 		}
-		else if ( (traceEnt->flags&FL_SHIELDED) || zyk_can_deflect_shots(traceEnt))
+		// GalaxyRP fix: [Upgrades] dropped the zyk_can_deflect_shots(traceEnt) disjunct here — the
+		// function was a stub always returning qfalse after Armored Soldier Upgrade (its only
+		// possible source of qtrue) was removed as inert/non-functional
+		else if ( traceEnt->flags&FL_SHIELDED )
 		{//stopped cold
 			return;
 		}
@@ -670,7 +673,10 @@ static void WP_DisruptorMainFire( gentity_t *ent )
 
 	if ( render_impact )
 	{
-		if ( tr.entityNum < ENTITYNUM_WORLD && traceEnt->takedamage && zyk_can_deflect_shots(traceEnt) == qfalse)
+		// GalaxyRP fix: [Upgrades] dropped the zyk_can_deflect_shots(traceEnt)==qfalse conjunct here —
+		// the function was a stub always returning qfalse after Armored Soldier Upgrade (its only
+		// possible source of qtrue) was removed as inert/non-functional, so the conjunct was always true
+		if ( tr.entityNum < ENTITYNUM_WORLD && traceEnt->takedamage )
 		{
 			if ( traceEnt->client && LogAccuracyHit( traceEnt, ent ))
 			{
@@ -927,7 +933,10 @@ void WP_DisruptorAltFire( gentity_t *ent )
 				break; // and don't try any more traces
 			}
 
-			if ( (traceEnt->flags&FL_SHIELDED) || zyk_can_deflect_shots(traceEnt))
+			// GalaxyRP fix: [Upgrades] dropped the zyk_can_deflect_shots(traceEnt) disjunct here — the
+			// function was a stub always returning qfalse after Armored Soldier Upgrade (its only
+			// possible source of qtrue) was removed as inert/non-functional
+			if ( traceEnt->flags&FL_SHIELDED )
 			{//stops us cold
 				break;
 			}

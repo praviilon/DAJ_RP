@@ -772,25 +772,26 @@ typedef struct clientPersistant_s {
 	// zyk: bit flag, loaded in load_account()
 	// Possible bit values (1 << bit_value) are:
 	// 0 - Holdable Items Upgrade
-	// 1 - Bounty Hunter Upgrade
+	// 1 - Unused (was Bounty Hunter Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 2 - Unique Ability 1
 	// 3 - Unique Ability 2
 	// 4 - Unique Ability 3
 	// 5 - Unused
 	// 6 - Unused
-	// 7 - Stealth Attacker Upgrade
-	// 8 - Force Gunner Upgrade
+	// 7 - Unused (was Stealth Attacker Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
+	// 8 - Unused (was Force Gunner Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 9 - Impact Reducer
 	// 10 - Flame Thrower
-	// 11 - Power Cell Weapons Upgrade
-	// 12 - Blaster Pack Weapons Upgrade
-	// 13 - Metal Bolts Weapons Upgrade
-	// 14 - Rocket Upgrade
+	// 11 - Unused (was Power Cell Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
+	// 12 - Unused (was Blaster Pack Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
+	// 13 - Unused (was Metal Bolts Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
+	// 14 - Unused (was Rocket Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 15 - Stun Baton Upgrade
-	// 16 - Armored Soldier Upgrade
-	// 17 - Jetpack Upgrade
+	// 16 - Unused (was Armored Soldier Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
+	// 17 - Unused (was documented as Jetpack Upgrade, but had zero code references anywhere -- actual
+	//      Jetpack Upgrade gameplay is gated by skill_levels[34], unrelated to this bitfield)
 	// 18 - Unused
-	// 19 - Force Guardian Upgrade
+	// 19 - Unused (was Force Guardian Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	int secrets_found;
 
 	// GalaxyRP (Alex): [Telemark] Saving the coordinates here
@@ -889,8 +890,8 @@ typedef struct clientPersistant_s {
 	// If player chose Challenge Mode in settings, sets a bit value 29
 	int universe_quest_counter;
 
-	// zyk: used to control some events in Universe Quest. In the quest_reborn_red npc, sets the player id who is playing the quest. In the player, sets how much quest_reborn_red npcs the player must kill to complete the first objective
-	int universe_quest_objective_control;
+	// GalaxyRP fix: [Quests] removed universe_quest_objective_control here — its sole reader was the
+	// dead universe_quest_messages==-10000 block in g_combat.c's player_die(), removed alongside it.
 
 	// zyk: used to set the npc who holds the artifact in the third objective of Universe Quest
 	int universe_quest_artifact_holder_id;

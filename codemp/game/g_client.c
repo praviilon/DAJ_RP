@@ -4111,8 +4111,7 @@ void ClientSpawn(gentity_t *ent) {
 	G_SetOrigin( ent, spawn_origin );
 	VectorCopy( spawn_origin, client->ps.origin );
 
-	// zyk: initializing universe_quest_objective_control value
-	ent->client->pers.universe_quest_objective_control = -1;
+	// GalaxyRP fix: [Quests] removed universe_quest_objective_control init here — field removed as dead (see g_local.h)
 
 	// zyk: initializing mind control attributes on spawn time
 	ent->client->pers.being_mind_controlled = -1;
@@ -4571,7 +4570,7 @@ void ClientDisconnect( int clientNum ) {
 	ent->client->sess.sessionTeam = TEAM_FREE;
 	ent->r.contents = 0;
 
-	ent->client->pers.universe_quest_objective_control = -1;
+	// GalaxyRP fix: [Quests] removed universe_quest_objective_control reset here — field removed as dead (see g_local.h)
 
 	// zyk: if this player is being mind controlled, stops mind control on him
 	if (ent->client->pers.being_mind_controlled != -1)

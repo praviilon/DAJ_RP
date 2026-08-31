@@ -8985,12 +8985,10 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 		}
 		else if (Q_stricmp(arg1, "upgrades" ) == 0)
 		{
+			// GalaxyRP fix: [Upgrades] removed 25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
+			// Upgrades) and 28 (Rocket Upgrade) listing lines here — all inert/non-functional
 			trap->SendServerCommand( ent-g_entities, "print \"\n"
 				"^315 - Impact Reducer: ^7Buy: 40000\n"
-				"^325 - Power Cell Weapons Upgrade: ^7Buy: 2000\n"
-				"^326 - Blaster Pack Weapons Upgrade: ^7Buy: 18000\n"
-				"^327 - Metal Bolts Weapons Upgrade: ^7Buy: 22000\n"
-				"^328 - Rocket Upgrade: ^7Buy: 25000\n"
 				"^333 - Stun Baton Upgrade: ^7Buy: 15000\n"
 				"^340 - Holdable Items Upgrade: ^7Buy: 30000\n\"");
 		}
@@ -9022,10 +9020,7 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Det Packs: ^7recovers 2 ammo of det packs\n\n\"");
 		}
-		else if (i == 8)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Stealth Attacker Upgrade: ^7Stealth Attacker will be invulnerable to electric attacks and will have 20 per cent more damage in his starting weapons. Protects from stun baton speed decrease and also from losing guns to force pull. Adds the thermal detector in his disruptor scope. Makes him invisible to the Bounty Hunter Upgrade Radar\n\n\"");
-		}
+		// GalaxyRP fix: [Upgrades] removed i==8 (Stealth Attacker Upgrade) info text here — inert/non-functional, removed along with all its supporting code
 		else if (i == 9)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Shield Booster: ^7recovers 50 shield\n\n\"");
@@ -9070,26 +9065,9 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Concussion Rifle: ^7powerful weapon, alt fire can shoot a beam that gets through force fields. Uses metal bolts ammo\n\n\"");
 		}
-		else if (i == 25)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Power Cell Weapons Upgrade: ^7increases damage by 12 percent and other features of weapons that use power cell ammo\n\n\"");
-		}
-		else if (i == 26)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Blaster Pack Weapons Upgrade: ^7increases damage by 12 percent and other features of weapons that use blaster pack ammo\n\n\"");
-		}
-		else if (i == 27)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Metal Bolts Weapons Upgrade: ^7increases damage by 12 percent and other features of weapons that use metal bolts ammo. Concussion rifle can break saber-only damage objects and can move pushable/pullable objects\n\n\"");
-		}
-		else if (i == 28)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Rocket Upgrade: ^7increases rocket launcher damage by 12 percent which uses rockets as ammo. Makes rockets and detpacks damage saber-only damage objects and move pushable/pullable objects\n\n\"");
-		}
-		else if (i == 29)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Bounty Hunter Upgrade: ^7increases Bounty Hunter resistance to damage by 7 per cent. Seeker Drone lasts 20 seconds more, has fast shooting rate and more damage. Allows getting seeker drone back with Saber Style key. Sentry Gun has more damage and range. Allows placing more sentry guns and recovering them by pressing Use key on each one. Allows recovering force fields by pressing Use key on them. Allows buying and selling from seller remotely, so no need to call him. Gives the Thermal Vision, used with Binoculars. Gives the Radar (requires Zyk OpenJK Client installed)\n\n\"");
-		}
+		// GalaxyRP fix: [Upgrades] removed i==25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
+		// Upgrades), i==28 (Rocket Upgrade) and i==29 (Bounty Hunter Upgrade) info text here — all
+		// inert/non-functional, removed along with all their supporting code
 		else if (i == 30)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Flame Thrower Fuel: ^7recovers all fuel of the flame thrower\n\n\"");
@@ -9122,10 +9100,7 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Bryar Pistol: ^7similar to blaster pistol, but has a faster fire rate with normal fire. Uses blaster pack ammo\n\n\"");
 		}
-		else if (i == 39)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Armored Soldier Upgrade: ^7increases damage resistance by 5 per cent, deflects some gun shots, cuts flame thrower fuel usage by half, has less chance of losing gun to force pull, has a chance of setting ysalamiri for some seconds if attacked by force powers. It also protects from drowning\n\n\"");
-		}
+		// GalaxyRP fix: [Upgrades] removed i==39 (Armored Soldier Upgrade) info text here — inert/non-functional, removed along with all its supporting code
 		else if (i == 40)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Holdable Items Upgrade: ^7Bacta Canister recovers more health, Big Bacta recovers more HP, Force Field resists more and Cloak Item will be able to cloak vehicles\n\n\"");
@@ -9138,14 +9113,8 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Force Boon: ^7allows the player to regenerate force faster\n\n\"");
 		}
-		else if (i == 45)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Force Gunner Upgrade: ^7increases run speed by 20 per cent. Force power regens 2x faster. Unique Skill will restore 25 shield\n\n\"");
-		}
-		else if (i == 47)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Force Guardian Upgrade: ^7increases damage resistance. Saber can no longer be dropped out of hand. Decreases knockback a bit\n\n\"");
-		}
+		// GalaxyRP fix: [Upgrades] removed i==45 (Force Gunner Upgrade) and i==47 (Force Guardian
+		// Upgrade) info text here — both inert/non-functional, removed along with all their supporting code
 		else if (i == 48)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3Ammo All: ^7recovers all ammo types, including flame thrower fuel\n\n\"");
@@ -9305,39 +9274,13 @@ void Cmd_Buy_f( gentity_t *ent ) {
 	}*/
 
 	// zyk: general validations. Some items require certain conditions to be bought
-	if (value == 8 && ent->client->pers.secrets_found & (1 << 7))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Stealth Attacker Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 15 && ent->client->pers.secrets_found & (1 << 9))
+	// GalaxyRP fix: [Upgrades] removed the "already have" duplicate-purchase checks for value==8
+	// (Stealth Attacker), 25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons), 28 (Rocket),
+	// 29 (Bounty Hunter), 39 (Armored Soldier), 45 (Force Gunner) and 47 (Force Guardian) here —
+	// these upgrades and all their supporting code were removed as inert/non-functional.
+	if (value == 15 && ent->client->pers.secrets_found & (1 << 9))
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"You already have the Impact Reducer.\n\"" );
-		return;
-	}
-	else if (value == 25 && ent->client->pers.secrets_found & (1 << 11))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Power Cell Weapons Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 26 && ent->client->pers.secrets_found & (1 << 12))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Blaster Pack Weapons Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 27 && ent->client->pers.secrets_found & (1 << 13))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Metal Bolts Weapons Weapons Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 28 && ent->client->pers.secrets_found & (1 << 14))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Rocket Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 29 && ent->client->pers.secrets_found & (1 << 1))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Bounty Hunter Upgrade.\n\"" );
 		return;
 	}
 	else if (value == 33 && ent->client->pers.secrets_found & (1 << 15))
@@ -9345,24 +9288,9 @@ void Cmd_Buy_f( gentity_t *ent ) {
 		trap->SendServerCommand( ent-g_entities, "print \"You already have the Stun Baton Upgrade.\n\"" );
 		return;
 	}
-	else if (value == 39 && ent->client->pers.secrets_found & (1 << 16))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Armored Soldier Upgrade.\n\"" );
-		return;
-	}
 	else if (value == 40 && ent->client->pers.secrets_found & (1 << 0))
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"You already have the Holdable Items Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 45 && ent->client->pers.secrets_found & (1 << 8))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Force Gunner Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 47 && ent->client->pers.secrets_found & (1 << 19))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Force Guardian Upgrade.\n\"" );
 		return;
 	}
 	else if (value == 53 && ent->client->pers.secrets_found & (1 << 2))
@@ -9378,6 +9306,20 @@ void Cmd_Buy_f( gentity_t *ent ) {
 	else if (value == 55 && ent->client->pers.secrets_found & (1 << 4))
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"You already have the Unique Ability 3.\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Upgrades] reject these product ids outright before the credit-deduction dispatch
+	// below -- 8/25/26/27/28/29/39/45/47 (Stealth Attacker, Power Cell/Blaster Pack/Metal Bolts
+	// Weapons, Rocket, Bounty Hunter, Armored Soldier, Force Gunner, Force Guardian Upgrades) had
+	// their purchase branches removed as inert/non-functional, but item_costs[] was intentionally
+	// left untouched (see the removal comments below) to avoid renumbering every other product id.
+	// Without this check the credit-deduction/"Thanks!" code at the end of this function would still
+	// fire for these ids and silently charge full price for a purchase that does nothing.
+	if (value == 8 || value == 25 || value == 26 || value == 27 || value == 28 || value == 29 ||
+		value == 39 || value == 45 || value == 47)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"This item is no longer available.\n\"" );
 		return;
 	}
 
@@ -9415,13 +9357,7 @@ void Cmd_Buy_f( gentity_t *ent ) {
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_DET_PACK);
 			Add_Ammo(ent,AMMO_DETPACK,1);
 		}
-		else if (value == 8)
-		{
-			ent->client->pers.secrets_found |= (1 << 7);
-
-			// zyk: update the rpg stuff info at the client-side game
-			send_rpg_events(10000);
-		}
+		// GalaxyRP fix: [Upgrades] removed value==8 (Stealth Attacker Upgrade) purchase branch here — inert/non-functional, removed along with all its supporting code
 		else if (value == 14)
 		{
 			if (ent->client->ps.powerups[PW_YSALAMIRI] < level.time)
@@ -9465,29 +9401,9 @@ void Cmd_Buy_f( gentity_t *ent ) {
 		{
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_CONCUSSION);
 		}*/
-		else if (value == 25)
-		{
-			ent->client->pers.secrets_found |= (1 << 11);
-		}
-		else if (value == 26)
-		{
-			ent->client->pers.secrets_found |= (1 << 12);
-		}
-		else if (value == 27)
-		{
-			ent->client->pers.secrets_found |= (1 << 13);
-		}
-		else if (value == 28)
-		{
-			ent->client->pers.secrets_found |= (1 << 14);
-		}
-		else if (value == 29)
-		{
-			ent->client->pers.secrets_found |= (1 << 1);
-
-			// zyk: update the rpg stuff info at the client-side game
-			send_rpg_events(10000);
-		}
+		// GalaxyRP fix: [Upgrades] removed value==25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
+		// Upgrades), value==28 (Rocket Upgrade) and value==29 (Bounty Hunter Upgrade) purchase branches
+		// here — all inert/non-functional, removed along with all their supporting code
 		else if (value == 30)
 		{
 			ent->client->ps.cloakFuel = 100;
@@ -9513,10 +9429,7 @@ void Cmd_Buy_f( gentity_t *ent ) {
 		{
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_OLD);
 		}*/
-		else if (value == 39)
-		{
-			ent->client->pers.secrets_found |= (1 << 16);
-		}
+		// GalaxyRP fix: [Upgrades] removed value==39 (Armored Soldier Upgrade) purchase branch here — inert/non-functional, removed along with all its supporting code
 		else if (value == 40)
 		{
 			ent->client->pers.secrets_found |= (1 << 0);
@@ -9534,14 +9447,9 @@ void Cmd_Buy_f( gentity_t *ent ) {
 
 			send_rpg_events(2000);
 		}
-		else if (value == 45)
-		{
-			ent->client->pers.secrets_found |= (1 << 8);
-		}
-		else if (value == 47)
-		{
-			ent->client->pers.secrets_found |= (1 << 19);
-		}
+		// GalaxyRP fix: [Upgrades] removed value==45 (Force Gunner Upgrade) and value==47 (Force
+		// Guardian Upgrade) purchase branches here — both inert/non-functional, removed along with
+		// all their supporting code
 		else if (value == 48)
 		{
 			Add_Ammo(ent,AMMO_BLASTER,100);
@@ -13929,15 +13837,11 @@ void Cmd_SaberBlade_f( gentity_t *ent ) {
 		saberNum, arg2 ) );
 }
 
-qboolean zyk_can_deflect_shots(gentity_t *ent)
-{
-	// GalaxyRP fix: [Classes] this used to check (rpg_class==3 && secrets_found&(1<<16)) (Armored
-	// Soldier Upgrade) or (rpg_class==9 && player_statuses&(1<<21)) (Force Armor unique ability).
-	// rpg_class is permanently 0 now that character classes are gone, so both disjuncts were always
-	// false; simplified to unconditionally return qfalse. Kept as a function rather than deleted
-	// outright since it has call sites in g_missile.c and g_weapon.c (out of scope for this pass).
-	return qfalse;
-}
+// GalaxyRP fix: [Upgrades] removed zyk_can_deflect_shots() here — it was a stub always returning
+// qfalse (its condition used to check Armored Soldier Upgrade or the Force Armor unique ability;
+// rpg_class was already permanently 0, and now Armored Soldier Upgrade has been removed as
+// inert/non-functional too). Its 4 call sites in g_missile.c and g_weapon.c were simplified to drop
+// the always-false disjunct/conjunct.
 
 qboolean zyk_can_use_unique(gentity_t *ent)
 {
@@ -13955,15 +13859,10 @@ qboolean zyk_can_use_unique(gentity_t *ent)
 	return qtrue;
 }
 
-// zyk: Unique Boost, makes unique skill cooldown time lower
-void zyk_unique_boost(gentity_t *ent)
-{
-	if (ent->client->pers.unique_skill_timer > level.time && ent->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ &&
-		ent->client->pers.universe_quest_counter & (1 << 2) && !(ent->client->sess.magic_more_disabled_powers & (1 << 1)))
-	{
-		ent->client->pers.unique_skill_timer -= ((ent->client->pers.unique_skill_timer - level.time) / 5);
-	}
-}
+// GalaxyRP fix: [Quests] removed zyk_unique_boost() here and its 3 call sites in Cmd_Unique_f —
+// its guard (universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ) was permanently false, since
+// the automated Universe Quest that could advance universe_quest_progress is long dead, making
+// this cooldown-reduction perk permanently inert.
 
 /*
 ==================
@@ -14023,8 +13922,6 @@ void Cmd_Unique_f(gentity_t *ent) {
 			{
 				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 25 mp to use it\"", (zyk_max_force_power.integer / 4)));
 			}
-
-			zyk_unique_boost(ent);
 		}
 		else
 		{
@@ -14072,8 +13969,6 @@ void Cmd_Unique_f(gentity_t *ent) {
 			{
 				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 25 mp to use it\"", (zyk_max_force_power.integer / 2)));
 			}
-
-			zyk_unique_boost(ent);
 		}
 		else
 		{
@@ -14177,8 +14072,6 @@ void Cmd_Unique_f(gentity_t *ent) {
 			{
 				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 20 mp to use it\"", (zyk_max_force_power.integer / 4)));
 			}
-
-			zyk_unique_boost(ent);
 		}
 		else
 		{
