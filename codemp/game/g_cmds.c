@@ -8433,7 +8433,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
 ^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
-^3/createitem <itemname>: ^7Creates an item with a given name. Items containing more than one word need " " around the argument. ^1(Admin only)\n\
+^3/createitem <itemname>: ^7Creates an item with a given name. Items containing more than one word need double quotes around the argument. ^1(Admin only)\n\
 ^3/trashitem <itemid>: ^7Deletes an item.\n\
 ^3/giveitem <itemid> <playername>: ^7Transfers an item to the desired player.\n\n\
 ^3--------News System--------\n\
