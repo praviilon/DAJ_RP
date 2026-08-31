@@ -898,7 +898,9 @@ void Cmd_Give_f( gentity_t *ent )
 
 	if (trap->Argc() != 3)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"Usage: /give <player name or ID> <option>.\n\"" );
+		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/give ^2<player name or ID> <force|guns>\n"
+			"^1Example: ^3/give ^2PlayerName force\n"
+			"^7Toggles full non-RPG force powers or full non-RPG weapon loadout for the target player.\n\"" );
 		return;
 	}
 
