@@ -9115,7 +9115,10 @@ Cmd_Stuff_f
 void Cmd_Stuff_f( gentity_t *ent ) {
 	if (trap->Argc() == 1)
 	{ // zyk: shows the categories of stuff
-		trap->SendServerCommand( ent-g_entities, "print \"\n^7Use ^2/stuff <category> ^7to buy or sell stuff\nThe Category may be ^3ammo^7, ^3misc ^7or ^3upgrades\n^7Use ^3/stuff <number> ^7to see info about the item\n\n^7Use ^2/buy <number> ^7to buy or ^2/sell <number> ^7to sell\nStuff bought from ^3upgrades ^7category are permanent\n\n\"");
+		// GalaxyRP fix: [Shop] this used to also mention "/sell <number> to sell" -- there has never
+		// been a /sell command (only "buy", see the command table below), so that line described
+		// something a player could never actually do. Trimmed to just the real, working /buy usage.
+		trap->SendServerCommand( ent-g_entities, "print \"\n^7Use ^2/stuff <category> ^7to buy stuff\nThe Category may be ^3ammo^7, ^3misc ^7or ^3upgrades\n^7Use ^3/stuff <number> ^7to see info about the item\n\n^7Use ^2/buy <number> ^7to buy\nStuff bought from ^3upgrades ^7category are permanent\n\n\"");
 		return;
 	}
 	else
@@ -12482,6 +12485,20 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 		//GalaxyRP (Alex): [Skill] Reset max force power immediately.
 		ent->client->pers.max_force_power = (int)ceil((zyk_max_force_power.value / 4.0) * ent->client->pers.skill_levels[skill_id]);
 		ent->client->ps.fd.forcePowerMax = ent->client->pers.max_force_power;
+		break;
+	case 34:
+		// GalaxyRP fix: [Skills] the client-side blue/yellow jetpack flame effect (cg_players.c's
+		// jetpack FX code) reads a cached per-player flag that's normally set by a one-time-per-life
+		// event push in g_active.c's ClientThink sync cascade (gated by player_statuses bit 3) -- so
+		// upgrading or downgrading Jetpack to/from level 3 while already alive didn't take effect
+		// until the next respawn re-ran that cascade. Send the corrected event immediately here too,
+		// mirroring that cascade's own condition exactly, so the effect updates live instead of only
+		// on next respawn. This doesn't touch player_statuses bit 3, so the lazy cascade is left free
+		// to also (harmlessly) resend the same thing later.
+		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[34] == 3)
+			G_AddEvent(ent, EV_ITEMUSEFAIL, 7);
+		else
+			G_AddEvent(ent, EV_ITEMUSEFAIL, 8);
 		break;
 	default:
 		//GalaxyRP (Alex): [Skill] Do nothing for standard skills.
