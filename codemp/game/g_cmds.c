@@ -94,7 +94,11 @@ const skill_t skills[] = {
 	{3, "Sense Health",			"allows you to see info about someone, including npcs. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force, mp and max mp. To use it, when you are near a player or npc, use ^3Sense ^7force power",		"force",	"light",	0},
 	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"other",	"merc",		0},
 	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"other",	"merc",		0},
-	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"other",	"merc",		0},
+	// GalaxyRP fix: [Skills] this description used to read "placeholder, does nothing" -- that was stale.
+	// Leveling this skill unlocks a self-heal: press Engage Duel while in RPG mode to spend 1/4 max force
+	// power and restore 25 HP/shield/MP, on a shared 50-second cooldown with the (currently disabled)
+	// /unique command's abilities. See g_active.c's GENCMD_ENGAGE_DUEL handling.
+	{1, "Unique Skill",			"press Engage Duel to spend 1/4 max force power and restore 25 HP, shield and MP. 50 second cooldown.",																																																																					"other",	"merc",		0},
 	// GalaxyRP fix: [Skills] indices 39-42 below (Blaster Pack/Powercell/Metal Bolts/Rockets) are removed
 	// from use -- do_upgrade_skill()/do_downgrade_skill() reject them outright and they're no longer shown
 	// in ingame_galaxyrp.menu's Skills section. They never had any gameplay effect coded (unlike the
