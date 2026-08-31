@@ -7148,167 +7148,16 @@ int zyk_max_magic_power(gentity_t *ent)
 	return max_mp;
 }
 
-void zyk_show_magic_in_chat(gentity_t *ent, int magic_power)
-{
-	if (ent->client->pers.player_settings & (1 << 7))
-	{ // zyk: do not show magic cast in chat
-		return;
-	}
-
-	if (magic_power < MAGIC_MAGIC_SENSE)
-	{ // zyk: Ultimate Power
-		if (magic_power == -1)
-		{ // zyk: Ultra Drain
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ultra Drain!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == -2)
-		{ // zyk: Immunity Power
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Immunity Power!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == -3)
-		{ // zyk: uses Chaos Power
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Chaos Power!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == -4)
-		{ // zyk: uses Time Power
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Time Power!\"", ent->client->pers.netname));
-		}
-	}
-	else
-	{ // zyk: Magic Power
-		if (magic_power == MAGIC_MAGIC_SENSE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Magic Sense!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ULTRA_STRENGTH)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ultra Strength!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_POISON_MUSHROOMS)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Poison Mushrooms!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_WATER_SPLASH)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Water Splash!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ULTRA_FLAME)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ultra Flame!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ROCKFALL)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Rockfall!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_DOME_OF_DAMAGE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Dome of Damage!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_HURRICANE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Hurricane!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_SLOW_MOTION)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Slow Motion!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ULTRA_RESISTANCE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ultra Resistance!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_SLEEPING_FLOWERS)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Sleeping Flowers!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_HEALING_WATER)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Healing Water!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_FLAME_BURST)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Flame Burst!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_EARTHQUAKE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Earthquake!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_MAGIC_SHIELD)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Magic Shield!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_BLOWING_WIND)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Blowing Wind!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ULTRA_SPEED)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ultra Speed!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ICE_STALAGMITE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ice Stalagmite!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ICE_BOULDER)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ice Boulder!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_HEALING_AREA)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Healing Area!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_MAGIC_EXPLOSION)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Magic Explosion!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_LIGHTNING_DOME)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Lightning Dome!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_WATER_ATTACK)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Water Attack!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_SHIFTING_SAND)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Shifting Sand!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_TREE_OF_LIFE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Tree of Life!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_MAGIC_DISABLE)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Magic Disable!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_FAST_AND_SLOW)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Fast and Slow!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_FLAMING_AREA)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Flaming Area!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_REVERSE_WIND)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Reverse Wind!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ENEMY_WEAKENING)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Enemy Weakening!\"", ent->client->pers.netname));
-		}
-		else if (magic_power == MAGIC_ICE_BLOCK)
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"%s^7: ^7Ice Block!\"", ent->client->pers.netname));
-		}
-	}
-}
-
-void zyk_set_magic_power_cooldown_time(gentity_t *ent, int duration)
-{
-	// GalaxyRP fix: [Classes] the rpg_class==8 (Magic Master) reduced-cooldown branch used to be here.
-	// rpg_class is permanently 0 now that character classes are gone, so this was unreachable.
-	ent->client->pers.quest_power_usage_timer = level.time + duration;
-}
+// GalaxyRP fix: [Magic] zyk_show_magic_in_chat() and zyk_set_magic_power_cooldown_time() removed
+// outright. Both lost their only callers when the Ultimate Power (Ultra Drain/Immunity Power/Chaos
+// Power/Time Power) and Magic Power (Ultra Strength/Ultra Resistance/Enemy Weakening) branches were
+// removed from TryGrapple() below -- those seven branches were the sole reason either function
+// existed (zyk_show_magic_in_chat() printed the "X used power!" chat line for them, and
+// zyk_set_magic_power_cooldown_time() set their shared cooldown timer), and both gates that would
+// ever let those branches fire (pers.defeated_guardians and pers.universe_quest_progress/
+// universe_quest_counter) can never become nonzero -- see the matching fix comment on TryGrapple()'s
+// old dispatch logic below for the full explanation. Grepped the whole tree first to confirm neither
+// function has any other caller.
 
 extern void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance);
 extern void magic_sense(gentity_t *ent, int duration);
@@ -7381,8 +7230,6 @@ qboolean TryGrapple(gentity_t *ent)
 	G_SetAnim(ent, &ent->client->pers.cmd, SETANIM_BOTH, BOTH_KYLE_GRAB, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD, 0);
 	if (ent->client->ps.torsoAnim == BOTH_KYLE_GRAB)
 	{ //providing the anim set succeeded..
-		int use_this_power = -1; // zyk: if >= 0, sets the power this RPG player can use now
-
 		ent->client->ps.torsoTimer += 500; //make the hand stick out a little longer than it normally would
 		if (ent->client->ps.legsAnim == ent->client->ps.torsoAnim)
 		{
@@ -7393,176 +7240,24 @@ qboolean TryGrapple(gentity_t *ent)
 		
 		if (ent->client->sess.amrpgmode == 2)
 		{ // zyk: if this is a RPG player, tests if he can use a magic power
-			float universe_mp_cost_factor = 1.0; // zyk: if player has universe power, increases mp cost by this factor
-
-			if (ent->client->pers.quest_power_status & (1 << 13) && zyk_universe_mp_cost_factor.value > 1.0)
-			{ // zyk: Universe Power is active and this cvar is higher than 1.0
-				universe_mp_cost_factor = zyk_universe_mp_cost_factor.value;
-			}
-
 			if (ent->client->pers.quest_power_usage_timer < level.time)
 			{
-				// GalaxyRP fix: [Classes] the rpg_class==8 (Magic Master) power-selection branch used to be
-				// here. rpg_class is permanently 0 now that character classes are gone, so this was
-				// unreachable; only the else branch below (used by every other class) is kept, unconditionally.
-				{
-					// zyk: each class can use a different set of powers
-					if (ent->client->pers.cmd.rightmove > 0)
-					{ // zyk: Magic Power Right direction
-						// zyk: can use the power if he beat a specific light quest boss
-						// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one
-						// branch per class). rpg_class is permanently 0 now that character classes are
-						// gone, so the rpg_class==1..9 branches were unreachable and have been removed;
-						// the rpg_class==0 condition is likewise always true and has been dropped.
-						if (ent->client->pers.defeated_guardians & (1 << 11) ||
-							ent->client->pers.defeated_guardians == NUM_OF_GUARDIANS)
-						{ // zyk: Ultra Resistance
-							use_this_power = MAGIC_ULTRA_RESISTANCE;
-						}
-					}
-					else if (ent->client->pers.cmd.rightmove < 0)
-					{ // zyk: Magic Power Left direction
-						// zyk: can use the power if he beat a specific light quest boss
-						// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one
-						// branch per class). rpg_class is permanently 0 now that character classes are
-						// gone, so the rpg_class==1..9 branches were unreachable and have been removed;
-						// the rpg_class==0 condition is likewise always true and has been dropped.
-						if (ent->client->pers.defeated_guardians & (1 << 11) ||
-							ent->client->pers.defeated_guardians == NUM_OF_GUARDIANS)
-						{ // zyk: Ultra Strength
-							use_this_power = MAGIC_ULTRA_STRENGTH;
-						}
-					}
-					else if (ent->client->pers.cmd.forwardmove > 0)
-					{ // zyk: Magic Power Front direction
-						// zyk: can use the power if he beat a specific light quest boss
-						// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one
-						// branch per class). rpg_class is permanently 0 now that character classes are
-						// gone, so the rpg_class==1..9 branches were unreachable and have been removed;
-						// the rpg_class==0 condition is likewise always true and has been dropped.
-						if (ent->client->pers.defeated_guardians & (1 << 11) ||
-							ent->client->pers.defeated_guardians == NUM_OF_GUARDIANS)
-						{ // zyk: Enemy Weakening
-							use_this_power = MAGIC_ENEMY_WEAKENING;
-						}
-					}
-				}
-
-				if (ent->client->sess.magic_disabled_powers & (1 << use_this_power))
-				{ // zyk: if the magic power is not enabled or player does not have it, do not use it
-					use_this_power = -1;
-				}
-
-				if (ent->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && ent->client->pers.universe_quest_counter & (1 << 3) && 
-					!(ent->client->sess.magic_more_disabled_powers & (1 << 1)))
-				{ // zyk: Magic Improvement. Decreases mp cost of Universe Power
-					universe_mp_cost_factor = 1.0;
-				}
-				
-				if (ent->client->pers.cmd.forwardmove < 0 && ent->client->pers.universe_quest_progress >= 14 && !(ent->client->sess.magic_more_disabled_powers & (1 << 0)))
-				{ // zyk: Ultimate Power
-					if (zyk_enable_ultra_drain.integer == 1 && ent->client->pers.universe_quest_counter & (1 << 0) && ent->client->pers.magic_power >= zyk_ultra_drain_mp_cost.integer)
-					{ // zyk: Ultra Drain
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 1000;
-						ultra_drain(ent, 450, 30, 8000);
-						ent->client->pers.magic_power -= zyk_ultra_drain_mp_cost.integer;
-						
-						zyk_set_magic_power_cooldown_time(ent, 28000);
-
-						zyk_show_magic_in_chat(ent, -1);
-					}
-					else if (zyk_enable_immunity_power.integer == 1 && ent->client->pers.universe_quest_counter & (1 << 1) && ent->client->pers.magic_power >= zyk_immunity_power_mp_cost.integer)
-					{ // zyk: Immunity Power
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 1000;
-						immunity_power(ent,25000);
-						ent->client->pers.magic_power -= zyk_immunity_power_mp_cost.integer;
-						
-						zyk_set_magic_power_cooldown_time(ent, 28000);
-
-						ent->client->pers.player_statuses |= (1 << 15);
-
-						zyk_show_magic_in_chat(ent, -2);
-					}
-					else if (zyk_enable_chaos_power.integer == 1 && ent->client->pers.universe_quest_counter & (1 << 2) && ent->client->pers.magic_power >= zyk_chaos_power_mp_cost.integer)
-					{ // zyk: uses Chaos Power
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 1000;
-						chaos_power(ent, 400, 4600);
-						ent->client->pers.magic_power -= zyk_chaos_power_mp_cost.integer;
-						
-						zyk_set_magic_power_cooldown_time(ent, 28000);
-
-						zyk_show_magic_in_chat(ent, -3);
-					}
-					else if (zyk_enable_time_power.integer == 1 && ent->client->pers.universe_quest_counter & (1 << 3) && ent->client->pers.magic_power >= zyk_time_power_mp_cost.integer)
-					{ // zyk: uses Time Power
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 1000;
-						time_power(ent, 400, 4000);
-						ent->client->pers.magic_power -= zyk_time_power_mp_cost.integer;
-						
-						zyk_set_magic_power_cooldown_time(ent, 28000);
-
-						zyk_show_magic_in_chat(ent, -4);
-					}
-
-					if (ent->client->pers.universe_quest_progress < 15)
-					{ // zyk: before beating Guardian of Chaos, Ultimate Power has longer cooldown
-						// GalaxyRP fix: [Classes] the rpg_class==8 (Magic Master) shorter-cooldown branch
-						// used to be here. rpg_class is permanently 0 now that character classes are
-						// gone, so this was unreachable.
-						ent->client->pers.quest_power_usage_timer += 4000;
-					}
-				}
-				else if (use_this_power >= MAGIC_MAGIC_SENSE)
-				{ // zyk: Magic Power
-					// GalaxyRP fix: [Magic] this dispatch used to list all ~30 magic powers (Magic Sense,
-					// Poison Mushrooms, Water Splash, Ultra Flame, Rockfall, Dome of Damage, Hurricane,
-					// Slow Motion, Sleeping Flowers, Healing Water, Flame Burst, Earthquake, Magic Shield,
-					// Blowing Wind, Ultra Speed, Ice Stalagmite, Ice Boulder, Healing Area, Magic Explosion,
-					// Lightning Dome, Water Attack, Shifting Sand, Tree of Life, Magic Disable, Fast and
-					// Slow, Flaming Area, Reverse Wind and Ice Block), but use_this_power is only ever
-					// assigned above (see the rightmove/forwardmove branches earlier in this function) as
-					// MAGIC_ULTRA_STRENGTH, MAGIC_ULTRA_RESISTANCE, MAGIC_ENEMY_WEAKENING, or -1 -- so
-					// those ~27 other branches could never actually be reached by a real player, no matter
-					// how the underlying magic_master_has_this_power() gate was configured. Removed the
-					// dead branches outright, keeping only the 3 that are genuinely reachable through this
-					// grapple-hook gesture. The dead effect functions themselves (water_splash(),
-					// earthquake(), etc. in g_main.c) are left in place, just uncalled now, in case a
-					// future pass wants to reconnect them through a real input path.
-					if (use_this_power == MAGIC_ULTRA_STRENGTH && zyk_enable_ultra_strength.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_strength_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ultra_strength(ent,30000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ultra_strength_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 8000);
-
-						ent->client->pers.player_statuses |= (1 << 16);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ULTRA_RESISTANCE && zyk_enable_ultra_resistance.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_resistance_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ultra_resistance(ent,30000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ultra_resistance_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 8000);
-
-						ent->client->pers.player_statuses |= (1 << 17);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ENEMY_WEAKENING && zyk_enable_enemy_nerf.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_enemy_nerf_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						enemy_nerf(ent, 450);
-						ent->client->pers.magic_power -= (int)ceil((zyk_enemy_nerf_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-				}
+				// GalaxyRP fix: [Magic] the rightmove/forwardmove power-selection dispatch (use_this_power),
+				// the magic_disabled_powers sanity check, the Magic Improvement mp-cost-factor perk
+				// (universe_mp_cost_factor), and the Ultimate Power (Ultra Drain/Immunity Power/Chaos Power/
+				// Time Power) and Magic Power (Ultra Strength/Ultra Resistance/Enemy Weakening) branches
+				// themselves used to be here. All seven powers they could ever trigger turned out to be
+				// permanently unreachable: every one of them is gated on pers.defeated_guardians and/or
+				// pers.universe_quest_progress/universe_quest_counter being nonzero, and the only place
+				// anywhere in the codebase that ever writes those fields is add_new_char(), which resets them
+				// to 0 at character creation -- no quest completion, admin command, or database load ever
+				// advances them (confirmed by grepping every assignment to all three fields). Removed the
+				// whole dead dispatch outright, including the now-pointless use_this_power/
+				// universe_mp_cost_factor locals that existed solely to feed it. zyk_show_magic_in_chat() and
+				// zyk_set_magic_power_cooldown_time() lost their only callers here and have been removed too
+				// (see their old location above). The effect functions themselves (ultra_drain(), time_power(),
+				// etc. in g_main.c) are untouched -- they're still called by the NPC "custom quest npc" random-
+				// power block there, so they're left exactly as they were.
 
 				if (ent->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && ent->client->pers.universe_quest_counter & (1 << 1) && 
 					!(ent->client->sess.magic_more_disabled_powers & (1 << 1)))
@@ -10049,14 +9744,12 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			len += sprintf(message + len, "\n^3 6 - Allow Force Powers from allies - ^2ON");
 		}
 
-		if (ent->client->pers.player_settings & (1 << 7))
-		{
-			len += sprintf(message + len, "\n^3 7 - Show magic cast in chat - ^1OFF");
-		}
-		else
-		{
-			len += sprintf(message + len, "\n^3 7 - Show magic cast in chat - ^2ON");
-		}
+		// GalaxyRP fix: [Magic] the status line for setting 7 (Show magic cast in chat) used to be
+		// printed here. /settings 7 has been removed below (see the range-check comment further down)
+		// since the chat line it gated, zyk_show_magic_in_chat(), has been removed as dead -- it lost
+		// its only callers when the seven magic/ultimate powers it announced were themselves removed
+		// as permanently unreachable (see the fix comment on TryGrapple()'s old dispatch logic), so
+		// its status line is removed here to match.
 
 		// zyk: Saber Style flags
 		if (ent->client->pers.player_settings & (1 << 26))
@@ -10141,7 +9834,12 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// never read by anything that gates actual jetpack availability (Cmd_Jetpack_f checks unrelated
 		// fields), only by this command's own status line, so it's excluded from the valid range now,
 		// matching the removed status line above.
-		if (value <= 0 || value > 13 || (value >= 1 && value <= 4) || value == 12)
+		// GalaxyRP fix: [Magic] setting 7 (Show magic cast in chat) used to be a valid value here too.
+		// The chat line it toggled, zyk_show_magic_in_chat(), has been removed as dead (it lost its
+		// only callers when the seven magic/ultimate powers it announced were removed as permanently
+		// unreachable), so it's excluded from the valid range now, matching the removed status line
+		// above.
+		if (value <= 0 || value > 13 || (value >= 1 && value <= 4) || value == 7 || value == 12)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid settings value.\n\"" );
 			return;
@@ -10216,10 +9914,8 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Allow Force Powers from allies %s\n\"", new_status) );
 		}
-		else if (value == 7)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Show magic cast in chat %s\n\"", new_status) );
-		}
+		// GalaxyRP fix: [Magic] the value==7 (Show magic cast in chat) print branch used to be here.
+		// Removed since 7 is now rejected above as an invalid settings value.
 		else if (value == 8)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Starting Single Saber Style %s\n\"", new_status) );
