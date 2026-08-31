@@ -831,6 +831,15 @@ void zyk_remove_guns( gentity_t *ent )
 		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
 
 	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
+
+	// GalaxyRP fix: [Account] this granted WP_BRYAR_PISTOL without ever giving it any ammo -- the
+	// ammo-zeroing block above (correct for the weapons that get fully removed) also zeroed
+	// AMMO_BLASTER, and nothing after it restored any, so the Bryar Pistol was equipped but had 0
+	// shots and (with cg_autoSwitch on, the client default) couldn't even be selected from the weapon
+	// wheel -- invisible in practice. ClientSpawn's own non-siege baseline (g_client.c) always gives a
+	// fresh spawn 100 blaster ammo regardless of RPG mode; match that same baseline here, since this
+	// function exists specifically to reset a player back to that same logged-out/no-guns baseline.
+	ent->client->ps.ammo[AMMO_BLASTER] = 100;
 }
 
 void zyk_add_force_powers( gentity_t *ent )
@@ -929,7 +938,7 @@ void Cmd_Give_f( gentity_t *ent )
 
 	if (g_entities[client_id].client->sess.amrpgmode == 2)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"Cannot give stuff to logged in players.\n\"" );
+		trap->SendServerCommand( ent-g_entities, "print \"Cannot use on logged-in players.\n\"" );
 		return;
 	}
 
@@ -14038,6 +14047,12 @@ void Cmd_Unique_f(gentity_t *ent) {
 				send_rpg_events(2000);
 
 				ent->client->pers.unique_skill_timer = level.time + 50000;
+
+				// GalaxyRP fix: [RPG Class] dedicated trigger (eventParm 105) for the client-side Unique
+				// Ability cooldown bar (cg_event.c), sent only to this player and only now that an ability
+				// actually fired -- see the matching fix comment in cg_event.c for why the bar can no
+				// longer piggyback on the unrelated, far more frequent eventParm 104 signal.
+				G_AddEvent(ent, EV_USE_ITEM13, 105);
 			}
 			else
 			{
@@ -14085,6 +14100,9 @@ void Cmd_Unique_f(gentity_t *ent) {
 				send_rpg_events(2000);
 
 				ent->client->pers.unique_skill_timer = level.time + 50000;
+
+				// GalaxyRP fix: [RPG Class] see the matching fix comment on Unique Ability 1 above.
+				G_AddEvent(ent, EV_USE_ITEM13, 105);
 			}
 			else
 			{
@@ -14188,6 +14206,9 @@ void Cmd_Unique_f(gentity_t *ent) {
 				send_rpg_events(2000);
 
 				ent->client->pers.unique_skill_timer = level.time + 50000;
+
+				// GalaxyRP fix: [RPG Class] see the matching fix comment on Unique Ability 1 above.
+				G_AddEvent(ent, EV_USE_ITEM13, 105);
 			}
 			else
 			{

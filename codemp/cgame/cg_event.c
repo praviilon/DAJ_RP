@@ -2690,11 +2690,17 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			}
 		}
 
-		if (cg.snap->ps.clientNum == es->number && es->eventParm == 104 && cg.unique_cooldown_timer == 0)
-		{ // GalaxyRP fix: [RPG Class] restored the unique-skill cooldown trigger using the surviving EV_USE_ITEM13
-			// signal (eventParm 104 == confirmed RPG Mode 2) in place of the deleted cg.rpg_class[num] >= 0 check;
-			// duration matches the original cg_players.c formula (50000 -- the only branch ever reachable, since the
-			// server-side class value baked into eventParm was always 0 in practice)
+		if (cg.snap->ps.clientNum == es->number && es->eventParm == 105 && cg.unique_cooldown_timer == 0)
+		{ // GalaxyRP fix: [RPG Class] an earlier fix in this codebase repointed this trigger at eventParm 104,
+			// reasoning that value meant "confirmed RPG Mode 2" once cg.rpg_class[num] >= 0 (its original guard)
+			// became dead code. That was wrong: 104 is g_active.c's own periodic per-player status-sync signal
+			// (sent once shortly after every spawn, and again for every connected player whenever
+			// send_rpg_events() runs, e.g. any time anyone uses their Unique Ability) -- nothing to do with this
+			// player having actually used theirs. That made this cooldown bar appear for every RPG player on
+			// every spawn (and re-appear for everyone whenever anyone used the ability), with no real cooldown
+			// behind it. Cmd_Unique_f (g_cmds.c) now sends this event with its own dedicated parm (105), only to
+			// the entity that actually triggered an ability and only when it does, so the bar now tracks the
+			// real 50-second reuse timer it's meant to (duration matches Cmd_Unique_f's own unique_skill_timer).
 			cg.unique_cooldown_duration = 50000;
 			cg.unique_cooldown_timer = cg.time + cg.unique_cooldown_duration;
 		}
