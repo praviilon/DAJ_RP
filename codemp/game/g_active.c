@@ -2335,7 +2335,8 @@ extern void zyk_show_right_magic_master_powers(gentity_t *ent, qboolean next_pow
 // GalaxyRP fix: [Quests] removed zyk_unique_boost() extern here — function removed as dead (see g_cmds.c)
 extern void TossClientWeapon(gentity_t *self, vec3_t direction, float speed);
 extern qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, vec3_t velocity);
-extern qboolean zyk_can_use_unique(gentity_t *ent);
+// GalaxyRP fix: [Skills] removed zyk_can_use_unique() extern here — function removed as dead along
+// with Cmd_Unique_f and the GENCMD_ENGAGE_DUEL Unique Skill branch above (see g_cmds.c)
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
 // GalaxyRP fix: [Guardian] removed zyk_can_hit_boss_battle_target() extern here — function removed
 // as dead (see g_main.c); it was a stub always returning qtrue.
@@ -3758,63 +3759,13 @@ void ClientThink_real( gentity_t *ent ) {
 					}
 				}
 
-				if (pmove.cmd.generic_cmd == GENCMD_ENGAGE_DUEL && zyk_can_use_unique(ent) == qtrue)
-				{ // zyk: Unique Skill, used by each RPG class
-					if (ent->client->pers.unique_skill_timer < level.time && ent->client->pers.skill_levels[38] > 0)
-					{
-						// GalaxyRP fix: [Dead Code] dropped the rpg_class dispatch here: rpg_class is
-						// always 0 server-side, so only the "Free Warrior" (class 0) body below could
-						// ever run; the rpg_class==1 through rpg_class==9 branches (~290 lines) were
-						// deleted as unreachable.
-						{ // zyk: Free Warrior
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 1000;
-
-								// zyk: recovers hp, shield and mp
-								if ((ent->health + 25) < ent->client->pers.max_rpg_health)
-									ent->health += 25;
-								else
-									ent->health = ent->client->pers.max_rpg_health;
-
-								if ((ent->client->ps.stats[STAT_ARMOR] + 25) < ent->client->pers.max_rpg_shield)
-									ent->client->ps.stats[STAT_ARMOR] += 25;
-								else
-									ent->client->ps.stats[STAT_ARMOR] = ent->client->pers.max_rpg_shield;
-
-								if ((ent->client->pers.magic_power + 25) < zyk_max_magic_power(ent))
-									ent->client->pers.magic_power += 25;
-								else
-									ent->client->pers.magic_power = zyk_max_magic_power(ent);
-
-								G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/boon.wav"));
-
-								send_rpg_events(2000);
-
-								ent->client->pers.unique_skill_timer = level.time + 50000;
-
-								// GalaxyRP fix: [Skills] this ability shares unique_skill_timer/the 50-second
-								// cooldown with Cmd_Unique_f's three Unique Abilities (g_cmds.c), but never sent
-								// the client-side event those do -- so using it only ever showed chat text, with
-								// no cooldown-bar UI at all. Send the same dedicated eventParm 105 they use, to
-								// the same CGUNIQUEBAR cooldown bar (cg_draw.c), so this ability's reuse timer is
-								// visible too.
-								G_AddEvent(ent, EV_USE_ITEM13, 105);
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
-					}
-					else if (ent->client->pers.skill_levels[38] > 0)
-					{ // zyk: still in cooldown time, shows the time left in chat
-						trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7%d seconds left\"", ((ent->client->pers.unique_skill_timer - level.time)/1000)));
-					}
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE)
+				// GalaxyRP fix: [Skills] removed the GENCMD_ENGAGE_DUEL Unique Skill (skill index 38) heal
+				// branch that used to be here -- skill 38 is being removed the same way as 39-42 (see the
+				// skills[] comment in g_cmds.c), and this was its only trigger. Engaging a duel via this
+				// key still runs normally through the switch statement below (Cmd_EngageDuel_f); only the
+				// bonus heal that used to fire alongside it for players with skill 38 leveled is gone, so
+				// pressing this key can no longer reach that ability at all, regardless of skill level.
+				if (pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE)
 				{
 					// GalaxyRP fix: [Dead Code] removed the Bounty Hunter seeker-drone-recovery
 					// (rpg_class==2) and Magic Master fist-selection-cycling (rpg_class==8) branches

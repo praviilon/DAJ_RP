@@ -94,17 +94,16 @@ const skill_t skills[] = {
 	{3, "Sense Health",			"allows you to see info about someone, including npcs. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force, mp and max mp. To use it, when you are near a player or npc, use ^3Sense ^7force power",		"force",	"light",	0},
 	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"other",	"merc",		0},
 	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"other",	"merc",		0},
-	// GalaxyRP fix: [Skills] this description used to read "placeholder, does nothing" -- that was stale.
-	// Leveling this skill unlocks a self-heal: press Engage Duel while in RPG mode to spend 1/4 max force
-	// power and restore 25 HP/shield/MP, on a shared 50-second cooldown with the (currently disabled)
-	// /unique command's abilities. See g_active.c's GENCMD_ENGAGE_DUEL handling.
-	{1, "Unique Skill",			"press Engage Duel to spend 1/4 max force power and restore 25 HP, shield and MP. 50 second cooldown.",																																																																					"other",	"merc",		0},
-	// GalaxyRP fix: [Skills] indices 39-42 below (Blaster Pack/Powercell/Metal Bolts/Rockets) are removed
-	// from use -- do_upgrade_skill()/do_downgrade_skill() reject them outright and they're no longer shown
-	// in ingame_galaxyrp.menu's Skills section. They never had any gameplay effect coded (unlike the
-	// sibling ammo skills at 43-45, which do grant their weapon in initialize_rpg_skills()), so a player
-	// could level them up and nothing would happen. Left as reserved/unused entries here, rather than
-	// deleted outright, so every other skill's numeric index (43+) doesn't shift.
+	// GalaxyRP fix: [Skills] indices 38-42 below (Unique Skill/Blaster Pack/Powercell/Metal Bolts/Rockets)
+	// are removed from use -- do_upgrade_skill()/do_downgrade_skill() reject them outright and they're no
+	// longer shown in ingame_galaxyrp.menu's Skills section. 39-42 never had any gameplay effect coded
+	// (unlike the sibling ammo skills at 43-45, which do grant their weapon in initialize_rpg_skills()).
+	// 38 did have an effect (a self-heal on the Engage Duel key, in g_active.c) but that was the last
+	// remnant of the /unique command's Unique Abilities -- a fully-removed 10-class system -- so its
+	// gameplay hook has been removed outright rather than left disabled. All five are left as
+	// reserved/unused entries here, rather than deleted outright, so every other skill's numeric index
+	// (43+) doesn't shift.
+	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"other",	"merc",		0},
 	{3, "Blaster Pack",			"used as ammo for Blaster Pistol, Bryar Pistol and E11 Blaster Rifle.",																																																											"ammo",		"merc",		0},
 	{3, "Powercell",			"used as ammo for Disruptor, Bowcaster and DEMP2.",																																																																"ammo",		"merc",		0},
 	{3, "Metal Bolts",			"used as ammo for Repeater, Flechette and Concussion Rifle.",																																																													"ammo",		"merc",		0},
@@ -12499,11 +12498,13 @@ qboolean do_upgrade_skill(gentity_t* upgrader, gentity_t* upgradee, int skill_id
 		return qfalse;
 	}
 
-	// GalaxyRP fix: [Skills] skill_id 39-42 (Blaster Pack/Power Cell/Metal Bolts/Rockets) are kept as
-	// reserved, unused entries in the skills[] table below so every skill index at 43+ doesn't shift --
-	// they had no gameplay effect coded anywhere (unlike the sibling ammo skills at 43-45, which do grant
-	// their weapon), so they're blocked here instead of being left as a leveling slot that does nothing.
-	if (skill_id >= 39 && skill_id <= 42)
+	// GalaxyRP fix: [Skills] skill_id 38-42 (Unique Skill/Blaster Pack/Power Cell/Metal Bolts/Rockets)
+	// are kept as reserved, unused entries in the skills[] table below so every skill index at 43+
+	// doesn't shift. 39-42 never had any gameplay effect coded anywhere (unlike the sibling ammo skills
+	// at 43-45, which do grant their weapon). 38's own ability (g_active.c's GENCMD_ENGAGE_DUEL heal)
+	// has been removed outright, the last remnant of the /unique command's now fully-removed Unique
+	// Abilities. All five are blocked here instead of being left as a leveling slot that does nothing.
+	if (skill_id >= 38 && skill_id <= 42)
 	{
 		trap->SendServerCommand(upgrader - g_entities, "print \"This skill is no longer in use.\n\"");
 		return qfalse;
@@ -12553,9 +12554,9 @@ qboolean do_downgrade_skill(gentity_t* downgrader, gentity_t* downgradee, int sk
 		return qfalse;
 	}
 
-	// GalaxyRP fix: [Skills] see the matching fix comment in do_upgrade_skill() above -- skill_id 39-42
+	// GalaxyRP fix: [Skills] see the matching fix comment in do_upgrade_skill() above -- skill_id 38-42
 	// are reserved/unused and blocked from being touched by either command.
-	if (skill_id >= 39 && skill_id <= 42)
+	if (skill_id >= 38 && skill_id <= 42)
 	{
 		trap->SendServerCommand(downgrader - g_entities, "print \"This skill is no longer in use.\n\"");
 		return qfalse;
@@ -14011,259 +14012,12 @@ qboolean zyk_can_deflect_shots(gentity_t *ent)
 	return qfalse;
 }
 
-qboolean zyk_can_use_unique(gentity_t *ent)
-{
-	if (ent->health < 1)
-	{ // zyk: must be alive to use unique skills or unique abilities
-		return qfalse;
-	}
+// GalaxyRP fix: [Skills] removed zyk_can_use_unique() and Cmd_Unique_f() here -- the /unique command
+// was already disabled (its console command table entry was commented out, further down this file),
+// and its three Unique Abilities were the last remnant of a fully-removed 10-class system. Neither is
+// coming back, so the dead command and its helper are gone rather than left disabled. The command
+// table's own commented-out "unique" entry is removed below where the other command registrations are.
 
-	if ((ent->client->ps.forceHandExtend != HANDEXTEND_NONE && ent->client->ps.forceHandExtend != HANDEXTEND_FORCE_HOLD) ||
-		 ent->client->pers.quest_power_status & (1 << 2))
-	{ // zyk: using emotes/anims, special moves, and hit by Time Power. Cannot use unique ability
-		return qfalse;
-	}
-
-	return qtrue;
-}
-
-// GalaxyRP fix: [Quests] removed zyk_unique_boost() here and its 3 call sites in Cmd_Unique_f —
-// its guard (universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ) was permanently false, since
-// the automated Universe Quest that could advance universe_quest_progress is long dead, making
-// this cooldown-reduction perk permanently inert.
-
-/*
-==================
-Cmd_Unique_f
-==================
-*/
-extern void Jedi_Cloak(gentity_t *self);
-extern void WP_AddAsMindtricked(forcedata_t *fd, int entNum);
-extern qboolean G_InGetUpAnim(playerState_t *ps);
-extern void zyk_WP_FireBryarPistol(gentity_t *ent);
-extern void zyk_WP_FireRocket(gentity_t *ent);
-extern gentity_t *zyk_WP_FireThermalDetonator(gentity_t *ent, int yaw);
-extern void zyk_add_bomb_model(gentity_t *ent);
-extern void elemental_attack(gentity_t *ent);
-extern void zyk_no_attack(gentity_t *ent);
-extern void zyk_super_beam(gentity_t *ent, int angle_yaw);
-extern void force_scream(gentity_t *ent);
-extern void zyk_force_storm(gentity_t *ent);
-extern qboolean zyk_unique_ability_can_hit_target(gentity_t *attacker, gentity_t *target);
-extern void zyk_ice_bomb(gentity_t *ent);
-extern void zyk_force_dash(gentity_t *ent);
-void Cmd_Unique_f(gentity_t *ent) {
-	if (ent->client->pers.secrets_found & (1 << 2))
-	{ // zyk: Unique Ability 1
-		// GalaxyRP fix: [Classes] a rpg_class==3 (Armored Soldier) lightning-dome-release branch used to
-		// be here. rpg_class is permanently 0 now that character classes are gone, so this was
-		// unreachable.
-
-		if (zyk_can_use_unique(ent) == qfalse)
-		{
-			trap->SendServerCommand(ent->s.number, "chat \"^3Unique Ability: ^7cannot use Unique Ability now\"");
-			return;
-		}
-
-		if (ent->client->pers.unique_skill_timer < level.time)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch per
-			// class). rpg_class is permanently 0 now that character classes are gone, so the
-			// rpg_class==1..9 branches were unreachable and have been removed; the rpg_class==0
-			// condition is likewise always true and has been dropped, keeping its body unconditional.
-			// zyk: Free Warrior Mimic Damage. Makes the enemy receive back part of the damage he did
-			if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer / 4) && ent->client->pers.magic_power >= 25)
-			{
-				ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer / 4);
-				ent->client->pers.magic_power -= 25;
-
-				ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 8000;
-				ent->client->pers.unique_skill_duration = level.time + 8000;
-
-				ent->client->pers.player_statuses |= (1 << 21);
-
-				send_rpg_events(2000);
-
-				ent->client->pers.unique_skill_timer = level.time + 50000;
-
-				// GalaxyRP fix: [RPG Class] dedicated trigger (eventParm 105) for the client-side Unique
-				// Ability cooldown bar (cg_event.c), sent only to this player and only now that an ability
-				// actually fired -- see the matching fix comment in cg_event.c for why the bar can no
-				// longer piggyback on the unrelated, far more frequent eventParm 104 signal.
-				G_AddEvent(ent, EV_USE_ITEM13, 105);
-			}
-			else
-			{
-				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 25 mp to use it\"", (zyk_max_force_power.integer / 4)));
-			}
-		}
-		else
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7%d seconds left\"", ((ent->client->pers.unique_skill_timer - level.time) / 1000)));
-		}
-	}
-	else if (ent->client->pers.secrets_found & (1 << 3))
-	{ // zyk: Unique Ability 2
-		if (zyk_can_use_unique(ent) == qfalse)
-		{
-			trap->SendServerCommand(ent->s.number, "chat \"^3Unique Ability: ^7cannot use Unique Ability now\"");
-			return;
-		}
-
-		// GalaxyRP fix: [Classes] a rpg_class==2 (Bounty Hunter) Wrist Shot ability block used to be
-		// here. rpg_class is permanently 0 now that character classes are gone, so this was
-		// unreachable.
-
-		if (ent->client->pers.unique_skill_timer < level.time)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch per
-			// class). rpg_class is permanently 0 now that character classes are gone, so the
-			// rpg_class==1..9 branches were unreachable and have been removed; the rpg_class==0
-			// condition is likewise always true and has been dropped, keeping its body unconditional.
-			// zyk: Free Warrior Super Beam
-			if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer / 2) && ent->client->pers.magic_power >= 25)
-			{
-				ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer / 2);
-				ent->client->pers.magic_power -= 25;
-
-				ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 2000;
-				ent->client->pers.unique_skill_duration = level.time + 2000;
-
-				ent->client->pers.player_statuses |= (1 << 22);
-
-				play_animation(ent, BOTH_FORCE_DRAIN_START, 2000);
-
-				zyk_super_beam(ent, ent->client->ps.viewangles[1]);
-
-				send_rpg_events(2000);
-
-				ent->client->pers.unique_skill_timer = level.time + 50000;
-
-				// GalaxyRP fix: [RPG Class] see the matching fix comment on Unique Ability 1 above.
-				G_AddEvent(ent, EV_USE_ITEM13, 105);
-			}
-			else
-			{
-				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 25 mp to use it\"", (zyk_max_force_power.integer / 2)));
-			}
-		}
-		else
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7%d seconds left\"", ((ent->client->pers.unique_skill_timer - level.time) / 1000)));
-		}
-	}
-	else if (ent->client->pers.secrets_found & (1 << 4))
-	{ // zyk: Unique Ability 3
-		if (zyk_can_use_unique(ent) == qfalse)
-		{
-			trap->SendServerCommand(ent->s.number, "chat \"^3Unique Ability: ^7cannot use Unique Ability now\"");
-			return;
-		}
-
-		// GalaxyRP fix: [Classes] this used to also require rpg_class==0 (Free Warrior). rpg_class is
-		// permanently 0 now that character classes are gone, so that condition was always true and has
-		// been dropped.
-		if (ent->client->pers.player_statuses & (1 << 23))
-		{ // zyk: Free Warrior used Flee to Safety already, find the place to be transported to
-			int i = 0;
-			gentity_t *effect_ent = NULL;
-
-			for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
-			{
-				effect_ent = &g_entities[i];
-
-				if (effect_ent && effect_ent->parent == ent && Q_stricmp(effect_ent->targetname, "zyk_flee_to_safety") == 0)
-				{ // zyk: found the effect entity
-					break;
-				}
-			}
-
-			for (i = 0; i < level.num_entities; i++)
-			{
-				gentity_t *player_ent = &g_entities[i];
-
-				if (player_ent && player_ent->client && player_ent->health > 0 && 
-					Distance(effect_ent->s.origin, player_ent->client->ps.origin) < 50)
-				{ // zyk: do not teleport if there is someone near the tele point
-					trap->SendServerCommand(ent->s.number, "chat \"^3Unique Ability: ^7someone near target point\"");
-					return;
-				}
-			}
-
-			// zyk: transport the player to the effect place
-			zyk_TeleportPlayer(ent, effect_ent->s.origin, ent->client->ps.viewangles);
-
-			// zyk: set timers to finish the unique and clear the effect entity
-			ent->client->ps.powerups[PW_NEUTRALFLAG] = 0;
-			ent->client->pers.unique_skill_duration = 0;
-			level.special_power_effects_timer[effect_ent->s.number] = level.time + 500;
-			return;
-		}
-
-		// GalaxyRP fix: [Classes] a rpg_class==2 (Bounty Hunter) Ice Bomb detonation branch used to be
-		// here (an "else if" sibling of the Flee to Safety block above). rpg_class is permanently 0 now
-		// that character classes are gone, so this was unreachable.
-
-		if (ent->client->pers.unique_skill_timer < level.time)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch per
-			// class). rpg_class is permanently 0 now that character classes are gone, so the
-			// rpg_class==1..9 branches were unreachable and have been removed; the rpg_class==0
-			// condition is likewise always true and has been dropped, keeping its body unconditional.
-			// zyk: Free Warrior Flee to Safety
-			if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer / 4) && ent->client->pers.magic_power >= 20)
-			{
-				gentity_t *new_ent = G_Spawn();
-				int flee_to_safety_duration = 45000;
-
-				ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer / 4);
-				ent->client->pers.magic_power -= 20;
-
-				ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + flee_to_safety_duration;
-				ent->client->pers.unique_skill_duration = level.time + flee_to_safety_duration;
-
-				ent->client->pers.player_statuses |= (1 << 23);
-
-				play_animation(ent, BOTH_FORCE_DRAIN_START, 700);
-
-				zyk_set_entity_field(new_ent, "classname", "fx_runner");
-				zyk_set_entity_field(new_ent, "spawnflags", "0");
-				zyk_set_entity_field(new_ent, "targetname", "zyk_flee_to_safety");
-
-				zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->client->ps.origin[0], (int)ent->client->ps.origin[1], (int)ent->client->ps.origin[2]));
-
-				new_ent->s.modelindex = G_EffectIndex("env/btend");
-
-				new_ent->parent = ent;
-
-				zyk_spawn_entity(new_ent);
-
-				level.special_power_effects[new_ent->s.number] = ent->s.number;
-				level.special_power_effects_timer[new_ent->s.number] = level.time + flee_to_safety_duration;
-
-				send_rpg_events(2000);
-
-				ent->client->pers.unique_skill_timer = level.time + 50000;
-
-				// GalaxyRP fix: [RPG Class] see the matching fix comment on Unique Ability 1 above.
-				G_AddEvent(ent, EV_USE_ITEM13, 105);
-			}
-			else
-			{
-				trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7needs %d force and 20 mp to use it\"", (zyk_max_force_power.integer / 4)));
-			}
-		}
-		else
-		{
-			trap->SendServerCommand(ent->s.number, va("chat \"^3Unique Ability: ^7%d seconds left\"", ((ent->client->pers.unique_skill_timer - level.time) / 1000)));
-		}
-	}
-	else
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"You have no Unique Abilities to use this command\n\"");
-		return;
-	}
-}
 
 /*
 ==================
@@ -15790,7 +15544,6 @@ command_t commands[] = {
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 	{ "zykmod",				Cmd_GalaxyRpUi_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "zykchars",			Cmd_ZykChars_f,			CMD_ALIVE | CMD_NOINTERMISSION }
-//	{ "unique",				Cmd_Unique_f,				CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
 //	{ "meleearena",			Cmd_MeleeArena_f,			CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "thedestroyer",		Cmd_TheDestroyer_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "teamtask",			Cmd_TeamTask_f,				CMD_NOINTERMISSION },

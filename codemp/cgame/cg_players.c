@@ -11122,11 +11122,14 @@ void CG_Player( centity_t *cent ) {
 	// GalaxyRP fix: [RPG Class] removed the unique-skill cooldown trigger that depended on them; its "confirmed RPG Mode 2"
 	// guard (cg.rpg_class[num] >= 0) has no live cgame-side replacement now that the mirror is gone -- sess.amrpgmode is
 	// server-only and was only ever bridged to cgame via that mirror (EV_USE_ITEM13, eventParm 104/114). Originally
-	// flagged here for follow-up rather than guessed; since resolved -- Cmd_Unique_f (g_cmds.c) now sends a dedicated
-	// eventParm 105 only when an RPG Unique Ability actually fires, and cg_event.c's cooldown-bar trigger listens for
-	// that instead. (A separate, later fix had briefly reused eventParm 104 itself for this, which turned out to
-	// collide with g_active.c's unrelated periodic per-player status-sync signal of the same value -- see the fix
-	// comment in cg_event.c.)
+	// flagged here for follow-up rather than guessed; since resolved -- Cmd_Unique_f (g_cmds.c) was fixed to send a
+	// dedicated eventParm 105 only when an RPG Unique Ability actually fires, and cg_event.c's cooldown-bar trigger
+	// listened for that instead. (A separate, later fix had briefly reused eventParm 104 itself for this, which
+	// turned out to collide with g_active.c's unrelated periodic per-player status-sync signal of the same value --
+	// see the fix comment in cg_event.c.)
+	// GalaxyRP fix: [Skills] Cmd_Unique_f has since been removed entirely (the /unique command was dead, disabled
+	// code), along with the only other eventParm-105 sender (g_active.c's Unique Skill branch) -- see the fix
+	// comment in cg_event.c for what that leaves permanently unreachable.
 
 	if (cent->currentState.powerups & (1 << PW_FORCE_BOON))
 	{

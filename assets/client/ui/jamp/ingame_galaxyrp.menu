@@ -1939,22 +1939,10 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				uniqueSkillButton
-			group				otherSkillsControls
-			text				"[39] Unique Skill"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 260 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
+		// GalaxyRP fix: [Skills] Unique Skill (skill index 38) removed from the Other Skills panel --
+		// see the matching fix comment in g_cmds.c's skills[] table. Force Power/Improvements/Shield
+		// Regen/Health Regen below are shifted up (rect y 280/300/320/340 -> 260/280/300/320) to close
+		// the gap left at [39]'s old slot.
 
 		itemDef 
 		{
@@ -1966,7 +1954,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 280 130 15
+			rect				270 260 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1983,7 +1971,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 300 130 15
+			rect				270 280 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 
@@ -2000,7 +1988,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 320 130 15
+			rect				270 300 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 
@@ -2017,7 +2005,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 340 130 15
+			rect				270 320 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 
@@ -3006,28 +2994,14 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				uniqueSkillValue
-			group				levelother
-			rect				410 260 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_39_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
+		// GalaxyRP fix: [Skills] value field for the removed Unique Skill (38) is gone -- see the
+		// matching fix comment above the shifted skill buttons.
 
 		itemDef 
 		{
 			name				forcePowerSkillValue
 			group				levelother
-			rect				410 280 30 30
+			rect				410 260 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3044,7 +3018,7 @@
 		{
 			name				improvementsSkillValue
 			group				levelother
-			rect				410 300 30 30
+			rect				410 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3061,7 +3035,7 @@
 		{
 			name				shieldRegenSkillValue
 			group				levelother
-			rect				410 320 30 30
+			rect				410 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3078,7 +3052,7 @@
 		{
 			name				healthRegenSkillValue
 			group				levelother
-			rect				410 340 30 30
+			rect				410 320 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""

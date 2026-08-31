@@ -2698,9 +2698,15 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			// send_rpg_events() runs, e.g. any time anyone uses their Unique Ability) -- nothing to do with this
 			// player having actually used theirs. That made this cooldown bar appear for every RPG player on
 			// every spawn (and re-appear for everyone whenever anyone used the ability), with no real cooldown
-			// behind it. Cmd_Unique_f (g_cmds.c) now sends this event with its own dedicated parm (105), only to
-			// the entity that actually triggered an ability and only when it does, so the bar now tracks the
-			// real 50-second reuse timer it's meant to (duration matches Cmd_Unique_f's own unique_skill_timer).
+			// behind it. Cmd_Unique_f (g_cmds.c) was fixed to send this event with its own dedicated parm
+			// (105), only to the entity that actually triggered an ability and only when it does, so the bar
+			// tracked the real 50-second reuse timer it was meant to.
+			// GalaxyRP fix: [Skills] Cmd_Unique_f itself has since been removed entirely (the /unique command
+			// was dead, disabled code -- see g_cmds.c), along with the only other eventParm-105 sender
+			// (g_active.c's GENCMD_ENGAGE_DUEL Unique Skill branch). Nothing sends 105 any more, so this
+			// block -- and the cooldown bar it drives (CG_DrawUniqueSkillTimer, cg_draw.c) -- is now
+			// permanently unreachable. Left in place rather than removed, since it's harmless dead code and
+			// wasn't itself part of what was asked to be removed.
 			cg.unique_cooldown_duration = 50000;
 			cg.unique_cooldown_timer = cg.time + cg.unique_cooldown_duration;
 		}
