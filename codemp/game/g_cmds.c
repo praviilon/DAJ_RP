@@ -7345,7 +7345,9 @@ extern void flaming_area(gentity_t *ent, int damage);
 extern void reverse_wind(gentity_t *ent, int distance, int duration);
 extern void enemy_nerf(gentity_t *ent, int distance);
 extern void ice_block(gentity_t *ent, int duration);
-extern qboolean magic_master_has_this_power(gentity_t *ent, int selected_power);
+// GalaxyRP fix: [Magic] removed magic_master_has_this_power() extern here — this function was never
+// actually called from TryGrapple() below (or anywhere reachable), and has been removed as dead
+// along with the rest of the magic-power selection system it gated (see g_main.c).
 qboolean TryGrapple(gentity_t *ent)
 {
 	if (ent->client->ps.weaponTime > 0)
@@ -7512,17 +7514,21 @@ qboolean TryGrapple(gentity_t *ent)
 				}
 				else if (use_this_power >= MAGIC_MAGIC_SENSE)
 				{ // zyk: Magic Power
-					if (use_this_power == MAGIC_MAGIC_SENSE && zyk_enable_magic_sense.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_magic_sense_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						magic_sense(ent,3000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_magic_sense_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 14000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ULTRA_STRENGTH && zyk_enable_ultra_strength.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_strength_mp_cost.integer * universe_mp_cost_factor)))
+					// GalaxyRP fix: [Magic] this dispatch used to list all ~30 magic powers (Magic Sense,
+					// Poison Mushrooms, Water Splash, Ultra Flame, Rockfall, Dome of Damage, Hurricane,
+					// Slow Motion, Sleeping Flowers, Healing Water, Flame Burst, Earthquake, Magic Shield,
+					// Blowing Wind, Ultra Speed, Ice Stalagmite, Ice Boulder, Healing Area, Magic Explosion,
+					// Lightning Dome, Water Attack, Shifting Sand, Tree of Life, Magic Disable, Fast and
+					// Slow, Flaming Area, Reverse Wind and Ice Block), but use_this_power is only ever
+					// assigned above (see the rightmove/forwardmove branches earlier in this function) as
+					// MAGIC_ULTRA_STRENGTH, MAGIC_ULTRA_RESISTANCE, MAGIC_ENEMY_WEAKENING, or -1 -- so
+					// those ~27 other branches could never actually be reached by a real player, no matter
+					// how the underlying magic_master_has_this_power() gate was configured. Removed the
+					// dead branches outright, keeping only the 3 that are genuinely reachable through this
+					// grapple-hook gesture. The dead effect functions themselves (water_splash(),
+					// earthquake(), etc. in g_main.c) are left in place, just uncalled now, in case a
+					// future pass wants to reconnect them through a real input path.
+					if (use_this_power == MAGIC_ULTRA_STRENGTH && zyk_enable_ultra_strength.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_strength_mp_cost.integer * universe_mp_cost_factor)))
 					{
 						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
 						ultra_strength(ent,30000);
@@ -7531,76 +7537,6 @@ qboolean TryGrapple(gentity_t *ent)
 						zyk_set_magic_power_cooldown_time(ent, 8000);
 
 						ent->client->pers.player_statuses |= (1 << 16);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_POISON_MUSHROOMS && zyk_enable_poison_mushrooms.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_poison_mushrooms_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						poison_mushrooms(ent,100,600);
-						ent->client->pers.magic_power -= (int)ceil((zyk_poison_mushrooms_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 10000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_WATER_SPLASH && zyk_enable_water_splash.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_water_splash_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						water_splash(ent,400,15);
-						ent->client->pers.magic_power -= (int)ceil((zyk_water_splash_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 11000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ULTRA_FLAME && zyk_enable_ultra_flame.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_flame_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ultra_flame(ent, 600, 35);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ultra_flame_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 10000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ROCKFALL && zyk_enable_rockfall.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_rockfall_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						rock_fall(ent, 500, 40);
-						ent->client->pers.magic_power -= (int)ceil((zyk_rockfall_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 11000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_DOME_OF_DAMAGE && zyk_enable_dome_of_damage.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_dome_of_damage_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						dome_of_damage(ent, 500, 25);
-						ent->client->pers.magic_power -= (int)ceil((zyk_dome_of_damage_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 16000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_HURRICANE && zyk_enable_hurricane.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_hurricane_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						hurricane(ent,600,5000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_hurricane_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_SLOW_MOTION && zyk_enable_slow_motion.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_slow_motion_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						slow_motion(ent,400,15000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_slow_motion_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 9000);
 
 						zyk_show_magic_in_chat(ent, use_this_power);
 					}
@@ -7616,196 +7552,6 @@ qboolean TryGrapple(gentity_t *ent)
 
 						zyk_show_magic_in_chat(ent, use_this_power);
 					}
-					else if (use_this_power == MAGIC_SLEEPING_FLOWERS && zyk_enable_sleeping_flowers.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_sleeping_flowers_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						sleeping_flowers(ent,2500,350);
-						ent->client->pers.magic_power -= (int)ceil((zyk_sleeping_flowers_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 15000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_HEALING_WATER && zyk_enable_healing_water.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_healing_water_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						healing_water(ent,120);
-						ent->client->pers.magic_power -= (int)ceil((zyk_healing_water_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_FLAME_BURST && zyk_enable_flame_burst.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_flame_burst_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						flame_burst(ent, 5000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_flame_burst_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 10000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_EARTHQUAKE && zyk_enable_earthquake.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_earthquake_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						earthquake(ent,2000,300,500);
-						ent->client->pers.magic_power -= (int)ceil((zyk_earthquake_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 11000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_MAGIC_SHIELD && zyk_enable_magic_shield.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_magic_shield_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						magic_shield(ent, 6000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_magic_shield_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 24000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_BLOWING_WIND && zyk_enable_blowing_wind.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_blowing_wind_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						blowing_wind(ent,700,5000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_blowing_wind_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ULTRA_SPEED && zyk_enable_ultra_speed.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ultra_speed_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ultra_speed(ent,15000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ultra_speed_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 9000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ICE_STALAGMITE && zyk_enable_ice_stalagmite.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ice_stalagmite_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ice_stalagmite(ent, 500, 130);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ice_stalagmite_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ICE_BOULDER && zyk_enable_ice_boulder.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ice_boulder_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ice_boulder(ent, 380, 40);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ice_boulder_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_HEALING_AREA && zyk_enable_healing_area.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_healing_area_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						healing_area(ent,2,5000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_healing_area_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_MAGIC_EXPLOSION && zyk_enable_magic_explosion.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_magic_explosion_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						magic_explosion(ent,320,130,900);
-						ent->client->pers.magic_power -= (int)ceil((zyk_magic_explosion_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 24000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_LIGHTNING_DOME && zyk_enable_lightning_dome.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_lightning_dome_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						lightning_dome(ent, 70);
-						ent->client->pers.magic_power -= (int)ceil((zyk_lightning_dome_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 25000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_WATER_ATTACK && zyk_enable_water_attack.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_water_attack_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						water_attack(ent, 500, 40);
-						ent->client->pers.magic_power -= (int)ceil((zyk_water_attack_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_SHIFTING_SAND && zyk_enable_shifting_sand.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_shifting_sand_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						shifting_sand(ent, 1000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_shifting_sand_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_TREE_OF_LIFE && zyk_enable_tree_of_life.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_tree_of_life_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						tree_of_life(ent);
-						ent->client->pers.magic_power -= (int)ceil((zyk_tree_of_life_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_MAGIC_DISABLE && zyk_enable_magic_disable.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_magic_disable_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						magic_disable(ent, 450);
-						ent->client->pers.magic_power -= (int)ceil((zyk_magic_disable_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 6000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_FAST_AND_SLOW && zyk_enable_fast_and_slow.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_fast_and_slow_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						fast_and_slow(ent, 400, 6000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_fast_and_slow_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_FLAMING_AREA && zyk_enable_flaming_area.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_flaming_area_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						flaming_area(ent, 20);
-						ent->client->pers.magic_power -= (int)ceil((zyk_flaming_area_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 18000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_REVERSE_WIND && zyk_enable_reverse_wind.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_reverse_wind_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						reverse_wind(ent, 700, 5000);
-						ent->client->pers.magic_power -= (int)ceil((zyk_reverse_wind_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
 					else if (use_this_power == MAGIC_ENEMY_WEAKENING && zyk_enable_enemy_nerf.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_enemy_nerf_mp_cost.integer * universe_mp_cost_factor)))
 					{
 						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
@@ -7813,16 +7559,6 @@ qboolean TryGrapple(gentity_t *ent)
 						ent->client->pers.magic_power -= (int)ceil((zyk_enemy_nerf_mp_cost.integer * universe_mp_cost_factor));
 
 						zyk_set_magic_power_cooldown_time(ent, 12000);
-
-						zyk_show_magic_in_chat(ent, use_this_power);
-					}
-					else if (use_this_power == MAGIC_ICE_BLOCK && zyk_enable_ice_block.integer == 1 && ent->client->pers.magic_power >= (int)ceil((zyk_ice_block_mp_cost.integer * universe_mp_cost_factor)))
-					{
-						ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 1000;
-						ice_block(ent, 3500);
-						ent->client->pers.magic_power -= (int)ceil((zyk_ice_block_mp_cost.integer * universe_mp_cost_factor));
-
-						zyk_set_magic_power_cooldown_time(ent, 20000);
 
 						zyk_show_magic_in_chat(ent, use_this_power);
 					}

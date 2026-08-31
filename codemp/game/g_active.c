@@ -2329,9 +2329,9 @@ once for each server frame, which makes for smooth demo recording.
 ==============
 */
 extern void Boba_FlyStop( gentity_t *self );
-extern void zyk_show_magic_master_powers(gentity_t *ent, qboolean next_power);
-extern void zyk_show_left_magic_master_powers(gentity_t *ent, qboolean next_power);
-extern void zyk_show_right_magic_master_powers(gentity_t *ent, qboolean next_power);
+// GalaxyRP fix: [Magic] removed zyk_show_magic_master_powers()/zyk_show_left_magic_master_powers()/
+// zyk_show_right_magic_master_powers() externs here — all three removed as dead, along with
+// magic_master_has_this_power() and their other helpers (see g_main.c)
 // GalaxyRP fix: [Quests] removed zyk_unique_boost() extern here — function removed as dead (see g_cmds.c)
 extern void TossClientWeapon(gentity_t *self, vec3_t direction, float speed);
 extern qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, vec3_t velocity);
