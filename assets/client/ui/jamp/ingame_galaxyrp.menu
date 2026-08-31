@@ -6142,71 +6142,13 @@
 		// /settings 0 command was removed; this edit field only ever displayed
 		// ui_zyk_setting_0_value and never called exec, but is removed for consistency.
 
+		// Removed setting1Value/setting2Value/setting3Value/setting4Value (no matching Buttons
+		// existed in this menu for any of them) 2026-08-31: server-side /settings 1-4 were removed
+		// in an earlier pass of this same cleanup; these edit fields only ever displayed
+		// ui_zyk_setting_1_value through ui_zyk_setting_4_value and never called exec, so they were
+		// missed at the time — removed now for consistency with setting0Value above.
+
 		itemDef
-		{
-			name				setting1Value
-			group				settingsControls
-			rect				410 65 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_1_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting2Value
-			group				settingsControls
-			rect				410 80 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_2_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting3Value
-			group				settingsControls
-			rect				410 95 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_3_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting4Value
-			group				settingsControls
-			rect				410 110 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_4_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
 		{
 			name				setting5Value
 			group				settingsControls
