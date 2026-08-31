@@ -8386,8 +8386,7 @@ void add_new_char(gentity_t *ent)
 	}
 
 	ent->client->pers.defeated_guardians = 0;
-	ent->client->pers.hunter_quest_progress = 0;
-	ent->client->pers.eternity_quest_progress = 0;
+	// GalaxyRP fix: [Quests] hunter_quest_progress/eternity_quest_progress resets removed here — both fields removed as dead (see g_local.h)
 	ent->client->pers.secrets_found = 0;
 	ent->client->pers.universe_quest_progress = 0;
 	ent->client->pers.universe_quest_counter = 0;
@@ -8451,10 +8450,15 @@ extern void zyk_main_spawn_entity(gentity_t *ent);
 // Light/Dark/Hunter/Eternity/Universe Quest map-turn selection alike -- unreachable, so all four
 // functions have been deleted outright along with their direct call sites elsewhere in the codebase
 // (g_main.c, g_client.c, g_combat.c, g_items.c, g_utils.c). The pers.* quest-progress fields these
-// functions read/wrote (defeated_guardians, hunter_quest_progress, eternity_quest_progress,
-// universe_quest_progress, can_play_quest, etc.) are kept -- they are still read by live code
-// elsewhere (the magic-power selection system and /settings Challenge Mode), so only the dead
+// functions read/wrote (defeated_guardians, universe_quest_progress, can_play_quest, etc.) are kept
+// -- they are still read by live code elsewhere (the magic-power selection system), so only the dead
 // selection logic itself is removed here.
+// GalaxyRP fix: [Quests] correction, made in a later pass: this comment previously also listed
+// hunter_quest_progress and eternity_quest_progress as "still read by live code elsewhere" and cited
+// "/settings Challenge Mode" as a reader -- both were wrong. hunter_quest_progress/
+// eternity_quest_progress turned out to have zero readers anywhere (they've since been removed as
+// dead, see g_local.h) and Challenge Mode itself was removed as dead in an earlier pass than this
+// comment's own claim.
 
 // zyk: tests if the race must be finished
 void try_finishing_race()
@@ -8528,15 +8532,10 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// zyk: saving the not logged player mode in session
 	ent->client->sess.amrpgmode = 0;
 
-	// zyk: if this player was playing a quest, find a new one to play quests in this map
-	if (ent->client->pers.can_play_quest == 1)
-	{
-		// zyk: if this is the quest player, reset the boss battle music
-		level.boss_battle_music_reset_timer = level.time + 1000;
-		// GalaxyRP fix: [Quests] quest_get_new_player was removed (see the GalaxyRP fix comment
-		// above choose_new_player's old location further up in this file) -- can_play_quest can no
-		// longer become 1 anywhere, so this block is dead in practice, but it is left compiling as-is.
-	}
+	// GalaxyRP fix: [Guardian] removed the `if (can_play_quest == 1) { boss_battle_music_reset_timer
+	// = ...; }` block here -- can_play_quest can no longer become 1 anywhere (see the GalaxyRP fix
+	// comment on quest_get_new_player's old location further up in this file), and
+	// boss_battle_music_reset_timer itself has now been removed as dead (see g_local.h).
 
 	ent->client->pers.bitvalue = 0;
 

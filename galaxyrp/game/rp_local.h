@@ -32,7 +32,7 @@ int RP_DB_Open(sqlite3 **db);
 
 #define NUM_OF_GUARDIANS				10 // zyk: number of Light Quest guardians to be defeated 
 #define NUM_OF_OBJECTIVES				10 // zyk: number of Dark Quest objectives
-#define NUM_OF_ETERNITY_QUEST_OBJ		11 // zyk: number of Eternity Quest objectives
+// GalaxyRP fix: [Quests] removed NUM_OF_ETERNITY_QUEST_OBJ here — unused anywhere in the codebase
 #define NUM_OF_UNIVERSE_QUEST_OBJ		22 // zyk: number of Universe Quest objectives
 #define NUM_OF_SKILLS					60 // zyk: number of RPG Mode skills
 

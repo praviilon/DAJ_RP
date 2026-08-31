@@ -838,22 +838,8 @@ typedef struct clientPersistant_s {
 	// 12 - Guardian of Ice
 	int defeated_guardians; 
 
-	// zyk: number of notes collected in Dark Quest
-	// the value will be NUM_OF_OBJECTIVES after completing the quest
-	// before that, has bitvalue of each collected note. Possible bitvalues are:
-	// 4 - Note at yavin1b
-	// 5 - Note at t1_sour
-	// 6 - Note at t1_surprise
-	// 7 - Note at t3_rift
-	// 8 - Note at hoth2
-	// 9 - Note at t3_bounty
-	// 10 - Note at t2_rogue
-	// 11 - Note at t1_danger
-	// 12 - Note at mp/duel6
-	int hunter_quest_progress;
-
-	// zyk: number of objectives completed in Eternity Quest
-	int eternity_quest_progress;
+	// GalaxyRP fix: [Quests] removed hunter_quest_progress and eternity_quest_progress here — both
+	// were write-only (only ever reset to 0), with zero readers anywhere in the codebase.
 
 	// zyk: Universe Quest progress of this player
 	int universe_quest_progress;
@@ -1609,8 +1595,12 @@ typedef struct level_locals_s {
 	// zyk: default map music. After a boss battle, resets music to this one
 	char default_map_music[128];
 
-	// zyk: timer to reset boss song after battle ends
-	int boss_battle_music_reset_timer;
+	// GalaxyRP fix: [Guardian] removed boss_battle_music_reset_timer here — its only non-zero writers
+	// sat inside two dead `can_play_quest == 1` guards (can_play_quest can no longer become 1
+	// anywhere), so its reader in g_main.c never fired; that reader has also been removed. Note:
+	// default_map_music above is now itself write-only (that reader was its only consumer) but is
+	// left in place -- untangling it further would mean following level.quest_map's per-map fallback
+	// selection logic too, which is out of scope for this pass.
 
 	// zyk: each index has the effect id. The value is the owner of the effect used in Special Powers
 	int special_power_effects[ENTITYNUM_MAX_NORMAL];

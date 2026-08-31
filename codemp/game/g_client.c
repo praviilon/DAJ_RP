@@ -4550,16 +4550,12 @@ void ClientDisconnect( int clientNum ) {
 	// zyk: logout player from account
 	ent->client->sess.amrpgmode = 0;
 
-	// zyk: if this player was playing a quest, find a new one to play quests in this map
 	// GalaxyRP fix: [Guardian] guardian_mode reset removed - field is permanently 0, sole writer spawn_boss() had zero callers
 
-	if (ent->client->pers.can_play_quest == 1)
-	{
-		// GalaxyRP fix: [Guardian] clean_guardians() call removed - function was a permanent no-op
-		level.boss_battle_music_reset_timer = level.time + 1000;
-		// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see the
-		// GalaxyRP fix comment on its old location in g_cmds.c).
-	}
+	// GalaxyRP fix: [Guardian] removed the `if (can_play_quest == 1) { boss_battle_music_reset_timer
+	// = ...; }` block here -- can_play_quest can no longer become 1 anywhere (see the GalaxyRP fix
+	// comment on quest_get_new_player's old location in g_cmds.c), and boss_battle_music_reset_timer
+	// itself has now been removed as dead (see g_local.h).
 
 	trap->UnlinkEntity ((sharedEntity_t *)ent);
 	ent->s.modelindex = 0;

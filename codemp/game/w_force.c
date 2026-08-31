@@ -589,10 +589,9 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 		return 0;
 	}
 
-	if (other && other->client && other->NPC && other->client->pers.universe_quest_messages == -2000)
-	{ // zyk: special quest npcs that cannot be hit by force
-		return 0;
-	}
+	// GalaxyRP fix: [Quests] removed the "special quest npcs that cannot be hit by force" guard here
+	// (universe_quest_messages == -2000) — that sentinel value is never assigned anywhere in the
+	// codebase (the only remaining assignment is a reset to 0), so this was permanently dead.
 
 	if (attacker && attacker->client && !BG_CanUseFPNow(level.gametype, &attacker->client->ps, level.time, forcePower))
 	{

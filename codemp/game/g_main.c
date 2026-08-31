@@ -1089,7 +1089,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	level.chaos_portal_id = -1;
 
-	level.boss_battle_music_reset_timer = 0;
+	// GalaxyRP fix: [Guardian] level.boss_battle_music_reset_timer init removed here — field removed as dead (see g_local.h)
 
 	level.voting_player = -1;
 
@@ -5041,10 +5041,10 @@ qboolean zyk_check_immunity_power(gentity_t *ent)
 	return qfalse;
 }
 
-qboolean zyk_can_hit_boss_battle_target(gentity_t *attacker, gentity_t *target)
-{
-	return qtrue;
-}
+// GalaxyRP fix: [Guardian] removed zyk_can_hit_boss_battle_target() here — it was a stub always
+// returning qtrue (its condition used to gate on being in a boss battle; guardian_mode was already
+// permanently 0). Its 3 call sites in this file and g_active.c were simplified to drop the
+// always-true conjunct.
 
 // zyk: tests if the target player can be hit by the attacker gun/saber damage, force power or special power
 qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
@@ -5132,10 +5132,10 @@ qboolean zyk_unique_ability_can_hit_target(gentity_t *attacker, gentity_t *targe
 			is_ally = 1;
 		}
 
-		if (is_ally == 0 &&
-			zyk_can_hit_boss_battle_target(attacker, target))
-		{ // zyk: players in bosses can only hit bosses and their helper npcs. Players not in boss battles
-		  // can only hit normal enemy npcs and npcs spawned by bosses but not the bosses themselves. Unique-using npcs can hit everyone that are not their allies
+		// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(attacker, target) conjunct
+		// here — the function was a stub always returning qtrue.
+		if (is_ally == 0)
+		{ // zyk: Unique-using npcs can hit everyone that are not their allies
 			return qtrue;
 		}
 	}
@@ -5170,10 +5170,10 @@ qboolean zyk_special_power_can_hit_target(gentity_t *attacker, gentity_t *target
 				is_ally = 1;
 			}
 
-			if (is_ally == 0 && !(zyk_check_immunity_power(target)) && 
-				zyk_can_hit_boss_battle_target(attacker, target))
-			{ // zyk: Cannot hit target with Immunity Power. Players in bosses can only hit bosses and their helper npcs. Players not in boss battles
-			  // can only hit normal enemy npcs and npcs spawned by bosses but not the bosses themselves. Magic-using npcs can hit everyone that are not their allies
+			// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(attacker, target)
+			// conjunct here — the function was a stub always returning qtrue.
+			if (is_ally == 0 && !(zyk_check_immunity_power(target)))
+			{ // zyk: Cannot hit target with Immunity Power. Magic-using npcs can hit everyone that are not their allies
 				(*targets_hit)++;
 
 				return qtrue;
@@ -8839,11 +8839,9 @@ void G_RunFrame( int levelTime ) {
 	trap->PrecisionTimer_Start(&timer_ItemRun);
 #endif
 
-	if (level.boss_battle_music_reset_timer > 0 && level.boss_battle_music_reset_timer < level.time)
-	{ // zyk: resets music to default one
-		level.boss_battle_music_reset_timer = 0;
-		trap->SetConfigstring( CS_MUSIC, G_NewString(level.default_map_music) );
-	}
+	// GalaxyRP fix: [Guardian] removed the boss_battle_music_reset_timer reset block here — field
+	// removed as dead (see g_local.h); this reader never fired since the field could never become
+	// nonzero.
 
 	if (level.race_mode == 1 && level.race_start_timer < level.time)
 	{ // zyk: Race Mode. Tests if we should start the race
@@ -9208,8 +9206,11 @@ void G_RunFrame( int levelTime ) {
 		else if (level.duel_tournament_mode == 2 && level.duel_tournament_timer < level.time)
 		{ // zyk: search for duelists and put them in the arena
 			int zyk_it = 0;
-			qboolean is_in_boss = qfalse;
 
+			// GalaxyRP fix: [Guardian] removed the is_in_boss local here — its only setter ("someone
+			// fighting a quest boss") was already removed as dead (guardian_mode is permanently 0,
+			// spawn_boss has no callers), making it permanently qfalse. Both branches below that
+			// tested it are simplified accordingly.
 			for (zyk_it = 0; zyk_it < MAX_CLIENTS; zyk_it++)
 			{
 				gentity_t *this_ent = &g_entities[zyk_it];
@@ -9217,11 +9218,9 @@ void G_RunFrame( int levelTime ) {
 				// zyk: cleaning flag from player
 				if (this_ent && this_ent->client)
 					this_ent->client->pers.player_statuses &= ~(1 << 27);
-
-				// GalaxyRP fix: [Guardian] "someone fighting a quest boss" is_in_boss setter removed here — guardian_mode is permanently 0 (spawn_boss has no callers)
 			}
 
-			if (is_in_boss == qfalse && level.duel_matches_done < level.duel_matches_quantity)
+			if (level.duel_matches_done < level.duel_matches_quantity)
 			{ // zyk: if there are still matches to be chosen, try to choose now
 				level.duelist_1_id = level.duel_matches[level.duel_matches_done][0];
 				level.duelist_2_id = level.duel_matches[level.duel_matches_done][1];
@@ -9279,12 +9278,7 @@ void G_RunFrame( int levelTime ) {
 				}
 			}
 
-			if (is_in_boss == qtrue)
-			{
-				level.duel_tournament_timer = level.time + 15000;
-				trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7Waiting for the quest player to finish boss battle!\"");
-			}
-			else if (level.duel_matches_quantity == level.duel_matches_done && level.duel_tournament_mode == 2)
+			if (level.duel_matches_quantity == level.duel_matches_done && level.duel_tournament_mode == 2)
 			{ // zyk: all matches were done. Determine the tournament winner
 				duel_tournament_winner();
 				duel_tournament_end();

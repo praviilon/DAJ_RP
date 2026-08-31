@@ -4828,13 +4828,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	// GalaxyRP fix: [Dead Code] removed "targ is a RPG mode boss" block, including its decloak-on-hit logic
 	// (guardian_invoked_by_id always -1)
 
-	if (targ && targ->client && targ->NPC)
-	{
-		if (targ->client->pers.universe_quest_messages == -2000)
-		{ // zyk: special npcs spawned in the Universe Quest that cannot be killed
-			return;
-		}
-	}
+	// GalaxyRP fix: [Quests] removed the "special npcs spawned in the Universe Quest that cannot be
+	// killed" guard here (universe_quest_messages == -2000) — that sentinel value is never assigned
+	// anywhere in the codebase (the only remaining assignment is a reset to 0), so this was permanently dead.
 
 	// GalaxyRP fix: [Challenge Mode] removed the +15% damage-taken Challenge Mode penalty (already dead via
 	// can_play_quest, and doubly dead now that Challenge Mode itself is removed)
