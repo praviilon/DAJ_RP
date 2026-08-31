@@ -95,6 +95,12 @@ const skill_t skills[] = {
 	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"other",	"merc",		0},
 	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"other",	"merc",		0},
 	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"other",	"merc",		0},
+	// GalaxyRP fix: [Skills] indices 39-42 below (Blaster Pack/Powercell/Metal Bolts/Rockets) are removed
+	// from use -- do_upgrade_skill()/do_downgrade_skill() reject them outright and they're no longer shown
+	// in ingame_galaxyrp.menu's Skills section. They never had any gameplay effect coded (unlike the
+	// sibling ammo skills at 43-45, which do grant their weapon in initialize_rpg_skills()), so a player
+	// could level them up and nothing would happen. Left as reserved/unused entries here, rather than
+	// deleted outright, so every other skill's numeric index (43+) doesn't shift.
 	{3, "Blaster Pack",			"used as ammo for Blaster Pistol, Bryar Pistol and E11 Blaster Rifle.",																																																											"ammo",		"merc",		0},
 	{3, "Powercell",			"used as ammo for Disruptor, Bowcaster and DEMP2.",																																																																"ammo",		"merc",		0},
 	{3, "Metal Bolts",			"used as ammo for Repeater, Flechette and Concussion Rifle.",																																																													"ammo",		"merc",		0},
@@ -12479,6 +12485,16 @@ qboolean do_upgrade_skill(gentity_t* upgrader, gentity_t* upgradee, int skill_id
 		return qfalse;
 	}
 
+	// GalaxyRP fix: [Skills] skill_id 39-42 (Blaster Pack/Power Cell/Metal Bolts/Rockets) are kept as
+	// reserved, unused entries in the skills[] table below so every skill index at 43+ doesn't shift --
+	// they had no gameplay effect coded anywhere (unlike the sibling ammo skills at 43-45, which do grant
+	// their weapon), so they're blocked here instead of being left as a leveling slot that does nothing.
+	if (skill_id >= 39 && skill_id <= 42)
+	{
+		trap->SendServerCommand(upgrader - g_entities, "print \"This skill is no longer in use.\n\"");
+		return qfalse;
+	}
+
 	int number_of_possible_upgrades = skills[skill_id].max_level - upgradee->client->pers.skill_levels[skill_id];
 	if (number_of_possible_upgrades < number_of_upgrades) {
 		number_of_upgrades = number_of_possible_upgrades;
@@ -12520,6 +12536,14 @@ qboolean do_downgrade_skill(gentity_t* downgrader, gentity_t* downgradee, int sk
 	if (skill_id < 0 || skill_id >= NUM_OF_SKILLS)
 	{
 		trap->SendServerCommand(downgrader - g_entities, "print \"Invalid skill number.\n\"");
+		return qfalse;
+	}
+
+	// GalaxyRP fix: [Skills] see the matching fix comment in do_upgrade_skill() above -- skill_id 39-42
+	// are reserved/unused and blocked from being touched by either command.
+	if (skill_id >= 39 && skill_id <= 42)
+	{
+		trap->SendServerCommand(downgrader - g_entities, "print \"This skill is no longer in use.\n\"");
 		return qfalse;
 	}
 
