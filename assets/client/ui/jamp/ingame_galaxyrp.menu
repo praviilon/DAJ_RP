@@ -3987,10 +3987,11 @@
 			visible				0
 			descText			""
 	  	  
-			action 
-			{ 
+			action
+			{
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharnew "" ;
+				close			ingame_galaxyrp
 			}
 		}
 

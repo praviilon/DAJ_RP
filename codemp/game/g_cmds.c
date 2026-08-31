@@ -2662,7 +2662,14 @@ void update_current_character_scale(gentity_t* ent, sqlite3* db, char* zErrMsg, 
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args);
 // GalaxyRP (Alex): [Database] This method changes the character used currently by the player. It reassigns skills, weapons, userinfo, and changes the default character associated with the account.
-void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+// GalaxyRP fix: [Char] added announce_switch -- when qfalse, suppresses this function's own "X
+// switched to: Y" broadcast at the end. /char new now calls this function immediately after
+// creating a character (see Cmd_Char_f) so the player is placed straight onto it instead of having
+// to run a separate /char use; without this flag that flow would broadcast both "X created a new
+// character and is now using: Y" (sent by Cmd_Char_f) and "X switched to: Y" (this function's own,
+// unconditional) back to back for the same action. /new (Cmd_Register_F) and /char use both still
+// pass qtrue, unchanged.
+void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, qboolean announce_switch) {
 	int numberOfChars = 0;
 	
 	if (ent->client->sess.loggedin == qfalse) {
@@ -2849,7 +2856,9 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	// GalaxyRP (Alex): [Database] Display Messages.
 	trap->SendServerCommand(ent - g_entities, "print \"^2Character loaded sucessfully!\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2Character loaded sucessfully!\n\"");
-	trap->SendServerCommand(-1, va("chat \"%s switched to: %s\n\"", ent->client->pers.netname, character_name));
+	if (announce_switch) {
+		trap->SendServerCommand(-1, va("chat \"%s switched to: %s\n\"", ent->client->pers.netname, character_name));
+	}
 
 	return;
 }
@@ -3161,28 +3170,28 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 // does NOT strip color codes or force lowercase -- a character's name is meant to be a player-chosen
 // display name (shown with its own colors throughout, e.g. select_character_list()'s listing), not
 // a login credential that needs to be predictable/comparable the way an account username does.
-void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
 	if (char_name[0] == '\0') {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot be empty.\n\"");
-		return;
+		return qfalse;
 	}
 
 	if (strlen(char_name) > sizeof(ent->client->sess.rpgchar) - 1) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Character name can only have a maximum of %i characters.\n\"", (int)sizeof(ent->client->sess.rpgchar) - 1));
-		return;
+		return qfalse;
 	}
 
 	if (strchr(char_name, '&') != NULL) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot contain the '&' character.\n\"");
-		return;
+		return qfalse;
 	}
 
 	// GalaxyRP (Alex): [Database] Character names should be unique, check for it here.
 	if (select_number_of_characters_with_name(ent, char_name, db, zErrMsg, rc, stmt) > 0) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Character name ^7%s ^1is already in use.\n\"", char_name));
 		trap->SendServerCommand(ent - g_entities, va("cp \"^1Character name ^7%s ^1is already in use.\n\"", char_name));
-		return;
+		return qfalse;
 	}
 
 	// GalaxyRP fix: [security] this used to go through run_db_query() as one combined
@@ -3192,12 +3201,18 @@ void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqli
 	// '0', no placeholders at all), so only the Characters INSERT needs binding; it's split out and
 	// prepared/bound/stepped on its own, while the still-static Skills+Weapons INSERT stays a single
 	// run_db_query() call, unchanged, below.
+	// GalaxyRP fix: [Char] both of these SQL failure paths used to fall through to "return;" (a bare,
+	// unconditional success as far as any caller could tell -- this function returned void). Now that
+	// the return value controls whether Cmd_Char_f switches the player onto this character and
+	// announces it as created, a failed Characters insert has to report qfalse here too, or the
+	// player would be told (and everyone else shown a chat broadcast) that a character was created
+	// and is now in use when no row actually exists for it.
 	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		return;
+		return qfalse;
 	}
 	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
 	sqlite3_bind_text(stmt, 2, char_name, -1, SQLITE_TRANSIENT);
@@ -3205,6 +3220,8 @@ void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqli
 	if (rc != SQLITE_DONE)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return qfalse;
 	}
 	sqlite3_finalize(stmt);
 
@@ -3231,9 +3248,10 @@ void create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqli
 
 	run_db_query(create_new_character_query, db, zErrMsg, rc, stmt);
 
-	trap->SendServerCommand(-1, va("chat \"%s created a char: %s\n\"", ent->client->pers.netname, char_name));
-
-	return;
+	// GalaxyRP fix: [Char] the "X created a char: Y" broadcast that used to be sent from here is now
+	// sent by Cmd_Char_f instead, once it also knows the immediately-following switch onto this
+	// character (select_player_character()) has happened -- see the comment on that call site.
+	return qtrue;
 }
 
 // GalaxyRP (Alex): [Database] This method removes a character form the database. It affects all tables that contain character information. ASSUMES THE PLAYER IS LOGGED IN!!!
@@ -3523,7 +3541,7 @@ void Cmd_Register_F(gentity_t * ent)
 	insert_chars_table_row(ent, username, db, zErrMsg, rc, stmt);
 	insert_skills_table_row(ent, db, zErrMsg, rc, stmt);
 	insert_weapons_table_row(ent, db, zErrMsg, rc, stmt);
-	select_player_character(ent, username, db, zErrMsg, rc, stmt);
+	select_player_character(ent, username, db, zErrMsg, rc, stmt, qtrue);
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2Your account has been successfully created and you are now logged in.\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2Your account has been successfully created and you are now logged in.\n\"");
@@ -3667,7 +3685,20 @@ void Cmd_Char_f(gentity_t *ent) {
 
 		//Create New Character
 		if (Q_stricmp(command, "new") == 0) {
-			create_new_character(ent, charName, db, zErrMsg, rc, stmt);
+			// GalaxyRP fix: [Char] /char new used to only insert the new character's DB rows and leave
+			// the player on whatever character they already had loaded -- they had to separately run
+			// /char use <name> to actually start playing it, unlike the reference mod's equivalent
+			// command, which switches to the newly created character immediately. Do the same here:
+			// on a successful creation, immediately switch onto it the same way /char use does (full
+			// data load, synchronous stat/gear apply, and the same kill+respawn), instead of leaving
+			// the new character sitting unused in the character list. announce_switch is qfalse here
+			// because the combined "created and now using" broadcast below already covers what
+			// select_player_character()'s own "switched to" broadcast would otherwise say a second time.
+			if (create_new_character(ent, charName, db, zErrMsg, rc, stmt)) {
+				trap->SendServerCommand(-1, va("chat \"%s created a new character and is now using: %s\n\"", ent->client->pers.netname, charName));
+				select_player_character(ent, charName, db, zErrMsg, rc, stmt, qfalse);
+				Cmd_GalaxyRpUi_f(ent);
+			}
 			sqlite3_close(db);
 			Cmd_ZykChars_f(ent);
 			return;
@@ -3675,7 +3706,7 @@ void Cmd_Char_f(gentity_t *ent) {
 
 		//Switch character
 		if (Q_stricmp(command, "use") == 0) {
-			select_player_character(ent, charName, db, zErrMsg, rc, stmt);
+			select_player_character(ent, charName, db, zErrMsg, rc, stmt, qtrue);
 			sqlite3_close(db);
 
 			Cmd_ZykChars_f(ent);

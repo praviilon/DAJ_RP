@@ -6591,6 +6591,15 @@ static void UI_RunMenuScript(char **args)
 			UI_SanitizeAccountArg(zyk_char);
 
 			trap->Cmd_ExecuteText(EXEC_APPEND, va("char new \"%s\"\n", zyk_char));
+
+			// GalaxyRP fix: [UI] the charEntry field (ingame_galaxyrp.menu) kept whatever name was
+			// typed here after pressing Create, so the menu's own newCharDone action closing the menu
+			// (see that itemDef) would otherwise leave the same name sitting in the field for next
+			// time. /char new now switches the player onto the character it creates, exactly like
+			// zykcharuse's "char use" does, so clear the field the same optimistic way zykchardelete
+			// already clears its own char-slot cvar just above -- the server-side command handles
+			// success/failure feedback (print/cp) independently of this client-side reset.
+			trap->Cvar_Set("zykCharName", "");
 		}
 		else if (Q_stricmp(name, "setForce") == 0)
 		{
