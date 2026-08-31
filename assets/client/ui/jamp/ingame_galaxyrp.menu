@@ -37,7 +37,7 @@
 			hide			charControls ;
 			hide 			rpgClassControls ;
 			hide 			upControls ;
-			hide 			forceSkillsControls ;
+			hide 			forceLoginSkillsControls ;
 			hide			weaponSkillsControls ;
 			hide			otherSkillsControls ;
 			hide			ammoSkillsControls ;
@@ -50,7 +50,6 @@
 			hide			questMapsControls ;
 			show 			listControls ;
 			hide 			commandsControls ;
-			hide			levelforce ;
 			hide			levelweapon ;
 			hide			levelother ;
 			hide			levelammo ;
@@ -146,7 +145,7 @@
 				hide			charControls ;
 				hide			changePassControls ;
 				hide 			rpgClassControls ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
@@ -159,7 +158,6 @@
 				hide			questMapsControls ;
 				hide 			upControls ;
 				hide 			commandsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -232,7 +230,7 @@
 				hide			charControls ;
 				hide			changePassControls ;
 				hide 			rpgClassControls ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
@@ -245,7 +243,6 @@
 				hide			questMapsControls ;
 				hide 			listControls ;
 				hide 			commandsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -318,7 +315,7 @@
 				hide			upControls ;
 				hide			changePassControls ;
 				hide 			rpgClassControls ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
@@ -331,7 +328,6 @@
 				hide			questMapsControls ;
 				hide 			listControls ;
 				hide 			commandsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -404,7 +400,7 @@
 				hide			changePassControls ;
 				hide 			rpgClassControls ;
 				hide 			upControls ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
@@ -416,7 +412,6 @@
 				hide			eternityControls ;
 				hide			questMapsControls ;
 				hide 			listControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -490,7 +485,7 @@
 				hide			changePassControls ;
 				hide 			rpgClassControls ;
 				hide 			upControls ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
@@ -503,7 +498,6 @@
 				hide			questMapsControls ;
 				hide 			listControls ;
 				hide 			commandsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -571,7 +565,7 @@
 				hide				changePassControls ;
 				hide 				rpgClassControls ;
 				hide 				upControls ;
-				hide 				forceSkillsControls ;
+				hide 				forceLoginSkillsControls ;
 				hide				weaponSkillsControls ;
 				hide				otherSkillsControls ;
 				hide				ammoSkillsControls ;
@@ -584,7 +578,6 @@
 				hide				questMapsControls ;
 				hide 				listControls ;
 				hide 				commandsControls ;
-				hide				levelforce ;
 				hide				levelweapon ;
 				hide				levelother ;
 				hide				levelammo ;
@@ -671,7 +664,7 @@
 			name				customtitle
 			group				listControls
 			style				0	
-			text				@MENUS_CUSTOM
+			text				"Custom skin"
 			rect				425 50 150 26
 			textalign			ITEM_ALIGN_CENTER
 			textalignx			75
@@ -690,7 +683,7 @@
 			name				custom
 			group				listControls
 			background			"gfx/menus/custombtn"
-			descText			@MENUS_CUSTOMPLAYER_DESC
+			descText			"Select custom skin"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_SHADER
 			rect				465 75 75 75
@@ -834,6 +827,918 @@
 				open			ingame_playerforce
 			}
 		}
+		// GalaxyRP: [Profile UI] Force skill menu entry point for logged-in players -- clone of the
+		// forcetitle/force icon pair above, shown only when ui_loggedin is "1" (inverse of that pair).
+		// Opens the redesigned in-menu Force skill list (forceLoginSkillsControls) below instead of the
+		// vanilla ingame_playerforce picker used by logged-out players.
+		itemDef
+		{
+			name				forceLoginTitle
+			group				listControls
+			style				0
+			text				"Force"
+			rect				425 280 150 26
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			75
+			textaligny			-3
+			outlinecolor		1 .5 .5 .5
+			backcolor			0 0 0 0
+			font				2
+			textscale			1
+			forecolor			.549 .854 1 1
+			visible			1
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+			decoration
+		}
+
+		itemDef
+		{
+			name				forceLogin
+			group				listControls
+			background			"gfx/menus/forcepbtn"
+			descText			"Manage your Force power skills"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_SHADER
+			rect				465 305 75 75
+			font				3
+			textscale			1
+			textaligny			-1
+			textalign			ITEM_ALIGN_CENTER
+			textstyle			3
+			forecolor			.5 .5 .5 1
+			visible			1
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+			mouseEnter
+			{
+				setitemcolor		forceLogin	forecolor	1 1 1 1
+			}
+			mouseExit
+			{
+				setitemcolor		forceLogin	forecolor	.5 .5 .5 1
+			}
+	     		action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			listControls ;
+				hide			charControls ;
+				hide			changePassControls ;
+				hide			rpgClassControls ;
+				hide			upControls ;
+				hide			weaponSkillsControls ;
+				hide			otherSkillsControls ;
+				hide			ammoSkillsControls ;
+				hide			itemsSkillsControls ;
+				hide			questControls ;
+				hide			universeControls ;
+				hide			lightControls ;
+				hide			darkControls ;
+				hide			eternityControls ;
+				hide			questMapsControls ;
+				hide			commandsControls ;
+				hide			levelweapon ;
+				hide			levelother ;
+				hide			levelammo ;
+				hide			levelitem ;
+				hide			settingsControls ;
+				hide			buyControls ;
+				hide			buyAmmoControls ;
+				hide			buyWeaponsControls ;
+				hide			buyMiscControls ;
+				hide			cameraControls ;
+				hide			gamesControls ;
+				show			forceLoginSkillsControls ;
+			}
+		}
+
+		itemDef 
+		{
+			name				forceLoginSkillPoints
+			group				forceLoginSkillsControls
+			rect				175 50 120 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_TEXT
+			text				"Skill Points"
+			textscale			1
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			forecolor			1 .682 0 1
+			visible				0
+		}
+
+		itemDef
+		{
+			name				forceLoginSkillPointsValue
+			group				forceLoginSkillsControls
+			rect				350 50 120 20
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			textscale			1
+			cvar				"ui_zyk_rpg_skillpoints"
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				jumpSkillButton
+			group				forceLoginSkillsControls
+			text				"[1] Jump"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 95 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				pushSkillButton
+			group				forceLoginSkillsControls
+			text				"[2] Push"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 115 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				pullSkillButton
+			group				forceLoginSkillsControls
+			text				"[3] Pull"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 135 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				speedSkillButton
+			group				forceLoginSkillsControls
+			text				"[4] Speed"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 155 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				senseSkillButton
+			group				forceLoginSkillsControls
+			text				"[5] Sense"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 175 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				saberAttackSkillButton
+			group				forceLoginSkillsControls
+			text				"[6] Saber Attack"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 195 100 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				saberDefenseSkillButton
+			group				forceLoginSkillsControls
+			text				"[7] Saber Defense"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 215 105 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				saberThrowSkillButton
+			group				forceLoginSkillsControls
+			text				"[8] Saber Throw"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 235 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				absorbSkillButton
+			group				forceLoginSkillsControls
+			text				"[9] Absorb"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 255 60 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				healSkillButton
+			group				forceLoginSkillsControls
+			text				"[10] Heal"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 95 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration	  
+		}
+
+		itemDef 
+		{
+			name				protectSkillButton
+			group				forceLoginSkillsControls
+			text				"[11] Protect"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 115 60 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	 
+			decoration 
+		}
+
+		itemDef 
+		{
+			name				mindTrickSkillButton
+			group				forceLoginSkillsControls
+			text				"[12] Mind Trick"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 135 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamHealSkillButton
+			group				forceLoginSkillsControls
+			text				"[13] Team Heal"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 155 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0	  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				lightningSkillButton
+			group				forceLoginSkillsControls
+			text				"[14] Lightning"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 175 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				gripSkillButton
+			group				forceLoginSkillsControls
+			text				"[15] Grip"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 195 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0	  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				drainSkillButton
+			group				forceLoginSkillsControls
+			text				"[16] Drain"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 215 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0	  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				rageSkillButton
+			group				forceLoginSkillsControls
+			text				"[17] Rage"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 235 50 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamEnergizeSkillButton
+			group				forceLoginSkillsControls
+			text				"[18] Team Energize"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 255 100 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				jumpSkillValue
+			group				forceLoginSkillsControls
+			rect				280 95 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_1_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				pushSkillValue
+			group				forceLoginSkillsControls
+			rect				280 115 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_2_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				pullSkillValue
+			group				forceLoginSkillsControls
+			rect				280 135 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_3_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				speedSkillValue
+			group				forceLoginSkillsControls
+			rect				280 155 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_4_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				senseSkillValue
+			group				forceLoginSkillsControls
+			rect				280 175 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_5_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				saberAttackSkillValue
+			group				forceLoginSkillsControls
+			rect				280 195 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_6_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				saberDefenseSkillValue
+			group				forceLoginSkillsControls
+			rect				280 215 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_7_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				saberThrowSkillValue
+			group				forceLoginSkillsControls
+			rect				280 235 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_8_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				absorbSkillValue
+			group				forceLoginSkillsControls
+			rect				280 255 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_9_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				healSkillValue
+			group				forceLoginSkillsControls
+			rect				430 95 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_10_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				protectSkillValue
+			group				forceLoginSkillsControls
+			rect				430 115 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_11_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				mindTrickSkillValue
+			group				forceLoginSkillsControls
+			rect				430 135 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_12_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamHealSkillValue
+			group				forceLoginSkillsControls
+			rect				430 155 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_13_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				lightningSkillValue
+			group				forceLoginSkillsControls
+			rect				430 175 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_14_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				gripSkillValue
+			group				forceLoginSkillsControls
+			rect				430 195 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_15_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				drainSkillValue
+			group				forceLoginSkillsControls
+			rect				430 215 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_16_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				rageSkillValue
+			group				forceLoginSkillsControls
+			rect				430 235 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_17_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamEnergizeSkillValue
+			group				forceLoginSkillsControls
+			rect				430 255 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_18_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		// GalaxyRP: [Skills] Related Other-skills relocated here from the Other Skills panel to sit
+		// alongside Force powers for logged-in players (see Task 2 of the Force skill menu rework).
+		// Left column: Drain Shield [34]/Sense Health [36], extra gap, then Force Power [55] alone.
+		// Right column: Shield Heal [37]/Team Shield Heal [38], opposite Drain Shield/Sense Health.
+		// Label widths trimmed vs. their old single-column defs so they don't collide with the value
+		// column now sitting to their right -- eyeball in-game and adjust if any text still clips.
+
+		itemDef 
+		{
+			name				drainShieldSkillButton
+			group				forceLoginSkillsControls
+			text				"[34] Drain Shield"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 300 100 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				senseHealthSkillButton
+			group				forceLoginSkillsControls
+			text				"[36] Sense Health"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 320 100 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				forcePowerSkillButton
+			group				forceLoginSkillsControls
+			text				"[55] Force Power"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				170 360 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+		itemDef 
+		{
+			name				shieldHealSkillButton
+			group				forceLoginSkillsControls
+			text				"[37] Shield Heal"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 300 90 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamShieldHealSkillButton
+			group				forceLoginSkillsControls
+			text				"[38] Team Shield Heal"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				320 320 100 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0  
+			decoration
+		}
+
+		itemDef 
+		{
+			name				drainShieldSkillValue
+			group				forceLoginSkillsControls
+			rect				280 300 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_34_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				senseHealthSkillValue
+			group				forceLoginSkillsControls
+			rect				280 320 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_36_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				forcePowerSkillValue
+			group				forceLoginSkillsControls
+			rect				280 360 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_55_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				shieldHealSkillValue
+			group				forceLoginSkillsControls
+			rect				430 300 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_37_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				teamShieldHealSkillValue
+			group				forceLoginSkillsControls
+			rect				430 320 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_38_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
 
 		//itemDef
 		//{
@@ -1128,372 +2033,13 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				forceSkillsButton_glow
-			style				WINDOW_STYLE_SHADER
-			rect				160 100 100 30
-			background			"gfx/menus/menu_blendbox2"
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
-		itemDef 
-		{
-			name				forceSkillsButton
-			group				upControls
-			text				"Force"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 100 100 30
-			font				3
-			textscale			0.7
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Force power skills"
-
-			mouseEnter 
-			{ 
-				show			forceSkillsButton_glow
-			}
-			mouseExit 
-			{ 
-				hide			forceSkillsButton_glow
-			}	  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				show 			forceSkillsControls ;
-				hide			weaponSkillsControls ;
-				hide			otherSkillsControls ;
-				hide			ammoSkillsControls ;
-				hide			itemsSkillsControls ;
-				show			levelforce ;
-				hide			levelweapon ;
-				hide			levelother ;
-				hide			levelammo ;
-				hide			levelitem ;
-				setitemcolor		upControls		forecolor 1 .682 0 1 ;
-				setitemcolor		forceSkillsButton	forecolor 1 1 1 1 ;
-			}
-		}
-
-		itemDef 
-		{
-			name				jumpSkillButton
-			group				forceSkillsControls
-			text				"[1] Jump"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 100 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				pushSkillButton
-			group				forceSkillsControls
-			text				"[2] Push"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 120 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				pullSkillButton
-			group				forceSkillsControls
-			text				"[3] Pull"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 140 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				speedSkillButton
-			group				forceSkillsControls
-			text				"[4] Speed"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 160 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				senseSkillButton
-			group				forceSkillsControls
-			text				"[5] Sense"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 180 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				saberAttackSkillButton
-			group				forceSkillsControls
-			text				"[6] Saber Attack"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 200 100 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				saberDefenseSkillButton
-			group				forceSkillsControls
-			text				"[7] Saber Defense"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 220 105 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				saberThrowSkillButton
-			group				forceSkillsControls
-			text				"[8] Saber Throw"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 240 90 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				absorbSkillButton
-			group				forceSkillsControls
-			text				"[9] Absorb"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 260 60 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				healSkillButton
-			group				forceSkillsControls
-			text				"[10] Heal"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 100 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration	  
-		}
-
-		itemDef 
-		{
-			name				protectSkillButton
-			group				forceSkillsControls
-			text				"[11] Protect"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 120 60 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	 
-			decoration 
-		}
-
-		itemDef 
-		{
-			name				mindTrickSkillButton
-			group				forceSkillsControls
-			text				"[12] Mind Trick"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 140 90 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				teamHealSkillButton
-			group				forceSkillsControls
-			text				"[13] Team Heal"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 160 90 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0	  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				lightningSkillButton
-			group				forceSkillsControls
-			text				"[14] Lightning"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 180 90 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
-
-		itemDef 
-		{
-			name				gripSkillButton
-			group				forceSkillsControls
-			text				"[15] Grip"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 200 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0	  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				drainSkillButton
-			group				forceSkillsControls
-			text				"[16] Drain"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 220 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0	  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				rageSkillButton
-			group				forceSkillsControls
-			text				"[17] Rage"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 240 50 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
-
-		itemDef 
-		{
-			name				teamEnergizeSkillButton
-			group				forceSkillsControls
-			text				"[18] Team Energize"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				420 260 100 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  	
-			decoration  
-		}
 
 		itemDef 
 		{
 			name				weaponSkillsButton_glow
 			style				WINDOW_STYLE_SHADER
-			rect				160 130 100 30
+			rect				160 100 100 30
 			background			"gfx/menus/menu_blendbox2"
 			forecolor			1 1 1 1
 			visible				0
@@ -1507,7 +2053,7 @@
 			text				"Weapons"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
-			rect				160 130 100 30
+			rect				160 100 100 30
 			font				3
 			textscale			0.7
 			textalignx			15
@@ -1529,12 +2075,11 @@
 			action 
 			{ 
 				play			"sound/interface/button1.wav" ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				show			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
 				hide			itemsSkillsControls ;
-				hide			levelforce ;
 				show			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -1752,7 +2297,7 @@
 		{
 			name				otherSkillsButton_glow
 			style				WINDOW_STYLE_SHADER
-			rect				160 160 100 30
+			rect				160 130 100 30
 			background			"gfx/menus/menu_blendbox2"
 			forecolor			1 1 1 1
 			visible				0
@@ -1766,7 +2311,7 @@
 			text				"Other"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
-			rect				160 160 100 30
+			rect				160 130 100 30
 			font				3
 			textscale			0.7
 			textalignx			15
@@ -1788,12 +2333,11 @@
 			action 
 			{ 
 				play			"sound/interface/button1.wav" ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				show			otherSkillsControls ;
 				hide			ammoSkillsControls ;
 				hide			itemsSkillsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				show			levelother ;
 				hide			levelammo ;
@@ -1854,22 +2398,6 @@
 			decoration  
 		}
 
-		itemDef 
-		{
-			name				drainShieldSkillButton
-			group				otherSkillsControls
-			text				"[34] Drain Shield"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 160 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
 
 		itemDef 
 		{
@@ -1881,85 +2409,22 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 180 130 15
+			rect				270 160 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
 			decoration  
 		}
 
-		itemDef 
-		{
-			name				senseHealthSkillButton
-			group				otherSkillsControls
-			text				"[36] Sense Health"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 200 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
 
-		itemDef 
-		{
-			name				shieldHealSkillButton
-			group				otherSkillsControls
-			text				"[37] Shield Heal"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 220 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration
-		}
 
-		itemDef 
-		{
-			name				teamShieldHealSkillButton
-			group				otherSkillsControls
-			text				"[38] Team Shield Heal"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 240 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0  
-			decoration
-		}
 
-		// GalaxyRP fix: [Skills] Unique Skill (skill index 38) removed from the Other Skills panel --
-		// see the matching fix comment in g_cmds.c's skills[] table. Force Power/Improvements/Shield
-		// Regen/Health Regen below are shifted up (rect y 280/300/320/340 -> 260/280/300/320) to close
-		// the gap left at [39]'s old slot.
+		// GalaxyRP: [Skills] Drain Shield [34], Sense Health [36], Shield Heal [37], Team Shield Heal
+		// [38] and Force Power [55] moved out of this panel into the new logged-in Force skill menu
+		// (forceLoginSkillsControls) -- see Task 2 of the Force skill menu rework. Shield Regen/Health
+		// Regen below are shifted up (rect y 280/300 -> 180/200) to close the gap left by their removal,
+		// same pattern used for the earlier Unique Skill (38)/Improvements (56) removals.
 
-		itemDef 
-		{
-			name				forcePowerSkillButton
-			group				otherSkillsControls
-			text				"[55] Force Power"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 260 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
 
 		// GalaxyRP fix: [Skills] Improvements (skill 56) removed from the Other Skills panel -- it's now
 		// a reserved/unused skill (see the matching fix comment in do_upgrade_skill() in g_cmds.c).
@@ -1976,7 +2441,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 280 130 15
+			rect				270 180 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -1993,7 +2458,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 300 130 15
+			rect				270 200 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2004,7 +2469,7 @@
 		{
 			name				ammoSkillsButton_glow
 			style				WINDOW_STYLE_SHADER
-			rect				160 190 100 30
+			rect				160 160 100 30
 			background			"gfx/menus/menu_blendbox2"
 			forecolor			1 1 1 1
 			visible				0
@@ -2018,7 +2483,7 @@
 			text				"Ammo"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
-			rect				160 190 100 30
+			rect				160 160 100 30
 			font				3
 			textscale			0.7
 			textalignx			15
@@ -2040,12 +2505,11 @@
 			action 
 			{ 
 				play			"sound/interface/button1.wav" ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				show			ammoSkillsControls ;
 				hide			itemsSkillsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				show			levelammo ;
@@ -2115,7 +2579,7 @@
 		{
 			name				itemsSkillsButton_glow
 			style				WINDOW_STYLE_SHADER
-			rect				160 220 100 30
+			rect				160 190 100 30
 			background			"gfx/menus/menu_blendbox2"
 			forecolor			1 1 1 1
 			visible				0
@@ -2129,7 +2593,7 @@
 			text				"Items"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
-			rect				160 220 100 30
+			rect				160 190 100 30
 			font				3
 			textscale			0.7
 			textalignx			15
@@ -2151,12 +2615,11 @@
 			action 
 			{ 
 				play			"sound/interface/button1.wav" ;
-				hide 			forceSkillsControls ;
+				hide 			forceLoginSkillsControls ;
 				hide			weaponSkillsControls ;
 				hide			otherSkillsControls ;
 				hide			ammoSkillsControls ;
 				show			itemsSkillsControls ;
-				hide			levelforce ;
 				hide			levelweapon ;
 				hide			levelother ;
 				hide			levelammo ;
@@ -2336,311 +2799,6 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				jumpSkillValue
-			group				levelforce
-			rect				380 100 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_1_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				pushSkillValue
-			group				levelforce
-			rect				380 120 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_2_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				pullSkillValue
-			group				levelforce
-			rect				380 140 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_3_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				speedSkillValue
-			group				levelforce
-			rect				380 160 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_4_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				senseSkillValue
-			group				levelforce
-			rect				380 180 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_5_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				saberAttackSkillValue
-			group				levelforce
-			rect				380 200 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_6_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				saberDefenseSkillValue
-			group				levelforce
-			rect				380 220 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_7_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				saberThrowSkillValue
-			group				levelforce
-			rect				380 240 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_8_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				absorbSkillValue
-			group				levelforce
-			rect				380 260 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_9_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				healSkillValue
-			group				levelforce
-			rect				530 100 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_10_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				protectSkillValue
-			group				levelforce
-			rect				530 120 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_11_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				mindTrickSkillValue
-			group				levelforce
-			rect				530 140 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_12_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				teamHealSkillValue
-			group				levelforce
-			rect				530 160 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_13_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				lightningSkillValue
-			group				levelforce
-			rect				530 180 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_14_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				gripSkillValue
-			group				levelforce
-			rect				530 200 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_15_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				drainSkillValue
-			group				levelforce
-			rect				530 220 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_16_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				rageSkillValue
-			group				levelforce
-			rect				530 240 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_17_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				teamEnergizeSkillValue
-			group				levelforce
-			rect				530 260 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_18_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
 		itemDef 
 		{
@@ -2897,28 +3055,12 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				drainShieldSkillValue
-			group				levelother
-			rect				410 160 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_34_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
 		itemDef 
 		{
 			name				jetpackSkillValue
 			group				levelother
-			rect				410 180 30 30
+			rect				410 160 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -2931,85 +3073,15 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				senseHealthSkillValue
-			group				levelother
-			rect				410 200 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_36_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
-		itemDef 
-		{
-			name				shieldHealSkillValue
-			group				levelother
-			rect				410 220 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_37_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
-		itemDef 
-		{
-			name				teamShieldHealSkillValue
-			group				levelother
-			rect				410 240 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_38_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
 
-		// GalaxyRP fix: [Skills] value field for the removed Unique Skill (38) is gone -- see the
-		// matching fix comment above the shifted skill buttons.
-
-		itemDef 
-		{
-			name				forcePowerSkillValue
-			group				levelother
-			rect				410 260 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_55_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		// GalaxyRP fix: [Skills] value field for the removed Improvements skill (56) is gone -- see the
-		// matching fix comment above the shifted skill buttons.
 
 		itemDef
 		{
 			name				shieldRegenSkillValue
 			group				levelother
-			rect				410 280 30 30
+			rect				410 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3026,7 +3098,7 @@
 		{
 			name				healthRegenSkillValue
 			group				levelother
-			rect				410 300 30 30
+			rect				410 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
