@@ -775,8 +775,12 @@ void zyk_remove_force_powers( gentity_t *ent )
 	{
 		ent->client->ps.fd.forcePowersKnown &= ~(1 << i);
 		ent->client->ps.fd.forcePowerLevel[i] = FORCE_LEVEL_0;
-		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
 	}
+
+	// GalaxyRP fix: [cleanup] this used to re-clear the WP_SABER bit on every loop iteration above
+	// (NUM_FORCE_POWERS times); the bit doesn't depend on the loop index, so clearing it once here
+	// is equivalent and skips the redundant repeats.
+	ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
 
 	ent->client->ps.weapon = WP_MELEE;
 
@@ -835,19 +839,23 @@ void zyk_add_force_powers( gentity_t *ent )
 			ent->client->ps.fd.forcePowerLevel[i] = FORCE_LEVEL_5;
 		else
 			ent->client->ps.fd.forcePowerLevel[i] = FORCE_LEVEL_3;
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
 	}
+
+	// GalaxyRP fix: [cleanup] this used to re-set the WP_SABER bit on every loop iteration above
+	// (NUM_FORCE_POWERS times); the bit doesn't depend on the loop index, so setting it once here
+	// is equivalent and skips the redundant repeats.
+	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
 }
 
+// GalaxyRP fix: [cleanup] ASSUMES zyk_remove_force_powers() was already called on ent (both call
+// sites do this immediately beforehand) -- this used to redundantly re-clear forcePowersKnown and
+// forcePowerLevel for every force power here too, right after zyk_remove_force_powers() had just
+// done the exact same clear. Removed the duplicate loop; the WP_SABER bit clear right below is
+// kept since it's a necessary override (zyk_remove_force_powers() can re-set that bit if the
+// player's WP_InitForcePowers()-restored saber offense level is non-zero), not a duplicate.
 void zyk_add_guns( gentity_t *ent )
 {
 	int i = 0;
-
-	for (i = FP_HEAL; i < NUM_FORCE_POWERS; i++)
-	{
-		ent->client->ps.fd.forcePowersKnown &= ~(1 << i);
-		ent->client->ps.fd.forcePowerLevel[i] = FORCE_LEVEL_0;
-	}
 
 	ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
 
@@ -900,7 +908,7 @@ void Cmd_Give_f( gentity_t *ent )
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/give ^2<player name or ID> <force|guns>\n"
 			"^1Example: ^3/give ^2PlayerName force\n"
-			"^7Toggles full non-RPG force powers or full non-RPG weapon loadout for the target player.\n\"" );
+			"^7Toggles full force powers or full weapon loadout for the target player (logged-out only).\n\"" );
 		return;
 	}
 
@@ -916,7 +924,7 @@ void Cmd_Give_f( gentity_t *ent )
 
 	if (g_entities[client_id].client->sess.amrpgmode == 2)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"Cannot give stuff to RPG players.\n\"" );
+		trap->SendServerCommand( ent-g_entities, "print \"Cannot give stuff to logged in players.\n\"" );
 		return;
 	}
 
