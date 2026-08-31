@@ -2683,6 +2683,14 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	{
 		char displayName[MAX_INFO_STRING], modelName[MAX_STRING_CHARS];
 
+		// GalaxyRP fix: [Account] pers.player_statuses (bits like "was given force powers/guns via
+		// admin /give while logged out") was never reset here, unlike pers.bitvalue and
+		// pers.player_settings in Cmd_LogoutAccount_f -- so a flag set while logged out survived both
+		// /new (this function is also the tail end of account creation) and /char use character
+		// switches, even though it's only meant to describe a logged-out player's state. Reset it here
+		// too, at the same "a character is now loaded" point as the rest of this block.
+		ent->client->pers.player_statuses = 0;
+
 		// GalaxyRP (Alex): [Database] Grab info from characters table.
 		ent->client->pers.CharID = sqlite3_column_int(stmt, 1);
 		ent->client->pers.credits = sqlite3_column_int(stmt, 2);
@@ -3067,6 +3075,13 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 	// GalaxyRP: [Saber RGB] same as select_player_character() -- republish the restored colours and
 	// push them into the client's own cvars so its console and saber menu agree with the server.
 	update_saber_colors(ent);
+
+	// GalaxyRP fix: [Account] pers.player_statuses (bits like "was given force powers/guns via admin
+	// /give while logged out") was never reset on login, unlike pers.bitvalue and pers.player_settings
+	// in Cmd_LogoutAccount_f -- so a flag set while logged out stayed set through this account's login
+	// and every subsequent map-change reload, even though it's only meant to describe a logged-out
+	// player's state. Reset it here too, for the same reason and at the same "now logged in" point.
+	ent->client->pers.player_statuses = 0;
 
 	ent->client->sess.amrpgmode = 2;
 
