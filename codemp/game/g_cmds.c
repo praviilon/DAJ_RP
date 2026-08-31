@@ -13836,11 +13836,55 @@ void Cmd_SaberBlade_f( gentity_t *ent ) {
 		saberNum, arg2 ) );
 }
 
-// GalaxyRP fix: [Upgrades] removed zyk_can_deflect_shots() here — it was a stub always returning
-// qfalse (its condition used to check Armored Soldier Upgrade or the Force Armor unique ability;
-// rpg_class was already permanently 0, and now Armored Soldier Upgrade has been removed as
-// inert/non-functional too). Its 4 call sites in g_missile.c and g_weapon.c were simplified to drop
-// the always-false disjunct/conjunct.
+// GalaxyRP (Alex): [Armor Skill] minimum time between successful Armor-skill blaster-deflect procs.
+// Matches the existing Saber Defense "one block per ~200ms" throttle in g_missile.c, so a burst of
+// blaster fire can't be deflected shot-for-shot once a player has high-level armor.
+#define ARMOR_DEFLECT_COOLDOWN_MS 200
+
+// GalaxyRP (Alex): [Armor Skill] revived zyk_can_deflect_shots() (previously a dead stub removed in
+// an earlier cleanup pass -- see g_missile.c for where its call site was simplified away) to give
+// level 1-5 Armor skill a percent chance to deflect an incoming blaster-type shot back at its
+// shooter: 10% at level 1, 25% at level 2, 40% at level 3, 55% at level 4, 70% at level 5. Only one
+// proc can succeed per ARMOR_DEFLECT_COOLDOWN_MS (see armor_deflect_timer in g_local.h), and the
+// caller in g_missile.c only reaches this check for weapons that are already eligible for the
+// existing FL_SHIELDED deflection path (Disruptor rifle shots are hitscan and never call this).
+qboolean zyk_can_deflect_shots(gentity_t *ent)
+{
+	int armor_level = 0;
+	int deflect_chance = 0;
+
+	if (ent == NULL || ent->client == NULL || ent->client->sess.amrpgmode != 2)
+	{
+		return qfalse;
+	}
+
+	if (ent->health < 1)
+	{ // zyk: a dead player cannot deflect anything
+		return qfalse;
+	}
+
+	armor_level = ent->client->pers.skill_levels[56];
+
+	if (armor_level < 1)
+	{
+		return qfalse;
+	}
+
+	if (ent->client->pers.armor_deflect_timer >= level.time)
+	{ // zyk: still on cooldown from a previous deflect
+		return qfalse;
+	}
+
+	deflect_chance = 10 + ((armor_level - 1) * 15); // zyk: 10/25/40/55/70% at levels 1-5
+
+	if (Q_irand(0, 100) < deflect_chance)
+	{
+		ent->client->pers.armor_deflect_timer = level.time + ARMOR_DEFLECT_COOLDOWN_MS;
+		return qtrue;
+	}
+
+	return qfalse;
+}
 
 qboolean zyk_can_use_unique(gentity_t *ent)
 {

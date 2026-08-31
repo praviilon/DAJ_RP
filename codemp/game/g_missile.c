@@ -486,11 +486,15 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		}
 	}
 
-	// GalaxyRP fix: [Upgrades] dropped the zyk_can_deflect_shots(other) disjunct here — the function
-	// was a stub always returning qfalse after Armored Soldier Upgrade (its only possible source of
-	// qtrue) was removed as inert/non-functional
-	if ((other->flags & FL_SHIELDED) &&
-		ent->s.weapon != WP_ROCKET_LAUNCHER &&
+	// GalaxyRP (Alex): [Armor Skill] restored the zyk_can_deflect_shots(other) disjunct here — Armor
+	// skill level 1-5 now gives a percent chance to deflect blaster-type shots (see g_cmds.c). The
+	// weapon/MOD exclusion checks were reordered to run first: zyk_can_deflect_shots() rolls a
+	// chance and sets a cooldown as a side effect, so it must only be evaluated once we already know
+	// this shot is an eligible (non-heavy) weapon -- otherwise an excluded shot (rocket, thermal,
+	// etc.) could burn a player's deflect proc/cooldown on a shot that was never going to be
+	// deflected anyway. This is a pure reordering of the same && chain (order doesn't change the
+	// FL_SHIELDED-only result for NPCs, only when the new stateful check gets reached).
+	if (ent->s.weapon != WP_ROCKET_LAUNCHER &&
 		ent->s.weapon != WP_THERMAL &&
 		ent->s.weapon != WP_TRIP_MINE &&
 		ent->s.weapon != WP_DET_PACK &&
@@ -502,7 +506,8 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		ent->methodOfDeath != MOD_VEHICLE &&
 		ent->methodOfDeath != MOD_CONC &&
 		ent->methodOfDeath != MOD_CONC_ALT &&
-		!(ent->dflags&DAMAGE_HEAVY_WEAP_CLASS) )
+		!(ent->dflags&DAMAGE_HEAVY_WEAP_CLASS) &&
+		(other->flags & FL_SHIELDED || zyk_can_deflect_shots(other)) )
 	{
 		vec3_t fwd;
 		gentity_t *this_npc = NULL;

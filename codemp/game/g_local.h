@@ -751,6 +751,11 @@ typedef struct clientPersistant_s {
 	// zyk: timer to keep this player stunned by No Attack ability
 	int no_attack_timer;
 
+	// GalaxyRP (Alex): [Armor Skill] cooldown for the Armor skill's blaster-deflect proc (see
+	// zyk_can_deflect_shots() in g_cmds.c) -- only one deflect attempt can succeed per cooldown
+	// window, mirroring the existing Saber Defense "one block per ~200ms" throttle in g_missile.c
+	int armor_deflect_timer;
+
 	// zyk: RPG skills
 	int skill_levels[NUM_OF_SKILLS];
 
