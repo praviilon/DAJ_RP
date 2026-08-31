@@ -1961,24 +1961,12 @@
 			decoration  
 		}
 
-		itemDef 
-		{
-			name				improvementsSkillButton
-			group				otherSkillsControls
-			text				"[56] Improvements"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 280 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 
-			decoration
-		}
+		// GalaxyRP fix: [Skills] Improvements (skill 56) removed from the Other Skills panel -- it's now
+		// a reserved/unused skill (see the matching fix comment in do_upgrade_skill() in g_cmds.c).
+		// Shield Regen/Health Regen below are shifted up (rect y 300/320 -> 280/300) to close the gap
+		// left at [56]'s old slot, same pattern used for the earlier Unique Skill (38) removal above.
 
-		itemDef 
+		itemDef
 		{
 			name				shieldRegenSkillButton
 			group				otherSkillsControls
@@ -1988,14 +1976,14 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 300 130 15
+			rect				270 280 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
-			visible				0 
+			visible				0
 			decoration
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				healthRegenSkillButton
 			group				otherSkillsControls
@@ -2005,10 +1993,10 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 320 130 15
+			rect				270 300 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
-			visible				0 
+			visible				0
 			decoration
 		}
 
@@ -3014,15 +3002,18 @@
 			decoration
 		}
 
-		itemDef 
+		// GalaxyRP fix: [Skills] value field for the removed Improvements skill (56) is gone -- see the
+		// matching fix comment above the shifted skill buttons.
+
+		itemDef
 		{
-			name				improvementsSkillValue
+			name				shieldRegenSkillValue
 			group				levelother
 			rect				410 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
-			cvar				"ui_zyk_skill_56_level" 
+			cvar				"ui_rp_skill_59_level"
 			textalign			ITEM_ALIGN_LEFT
 			font				3
 			textscale			.5
@@ -3031,32 +3022,15 @@
 			decoration
 		}
 
-		itemDef 
+		itemDef
 		{
-			name				shieldRegenSkillValue
+			name				healthRegenSkillValue
 			group				levelother
 			rect				410 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
-			cvar				"ui_rp_skill_59_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
-			name				healthRegenSkillValue
-			group				levelother
-			rect				410 320 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_rp_skill_60_level" 
+			cvar				"ui_rp_skill_60_level"
 			textalign			ITEM_ALIGN_LEFT
 			font				3
 			textscale			.5

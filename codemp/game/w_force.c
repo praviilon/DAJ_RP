@@ -1485,8 +1485,6 @@ void ForceTeamForceReplenish( gentity_t *self )
 	int pl[MAX_CLIENTS];
 	int poweradd = 0;
 	gentity_t *te = NULL;
-	int max_blasterpack_ammo = 0;
-	int max_powercell_ammo = 0;
 
 	if ( self->health <= 0 )
 	{
@@ -1526,18 +1524,15 @@ void ForceTeamForceReplenish( gentity_t *self )
 	{
 		ent = &g_entities[i];
 
-		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter max-ammo bonus unreachable
-		max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer;
-		max_powercell_ammo = zyk_max_power_cell_ammo.integer;
-
-		// zyk: created new condition so we can use Team Energize in FFA. Also added skill_levels[55] condition to restore ammo of the target
-		if (ent && ent->client && self != ent && 
-			(ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax || 
-			 (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[55] > 0 && !ent->NPC && 
-			  ent->client->pers.connected == CON_CONNECTED && ent->client->sess.sessionTeam != TEAM_SPECTATOR &&
-			  (ent->client->ps.ammo[AMMO_BLASTER] < max_blasterpack_ammo || ent->client->ps.ammo[AMMO_POWERCELL] < max_powercell_ammo)
-			 )
-			) && 
+		// zyk: created new condition so we can use Team Energize in FFA.
+		// GalaxyRP fix: [Skills] this used to also select a target whose force power was already full
+		// but who was short on blaster pack/power cell ammo, gated behind pers.skill_levels[55]
+		// (Improvements) > 0, so the loop below could restore their ammo instead of force power.
+		// Improvements is now a reserved/unused skill (see the matching fix comment in
+		// do_upgrade_skill() in g_cmds.c), so that ammo-regen path -- and the target-selection branch
+		// that fed it -- have been removed outright, back to selecting only targets below full force.
+		if (ent && ent->client && self != ent &&
+			ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax &&
 			ForcePowerUsableOn(self, ent, FP_TEAM_FORCE) &&
 			trap->InPVS(self->client->ps.origin, ent->client->ps.origin) && 
 			(((self->client->sess.amrpgmode == 0 || self->client->pers.player_settings & (1 << 10) || zyk_is_ally(self, ent) == qtrue) && 
@@ -1603,22 +1598,16 @@ void ForceTeamForceReplenish( gentity_t *self )
 
 	while (i < numpl)
 	{
-		// zyk: Team Energize now can recover ammo if the player has full force and improvements skill
-		if (self->client->sess.amrpgmode == 2 && !g_entities[pl[i]].NPC && g_entities[pl[i]].client->ps.fd.forcePower == g_entities[pl[i]].client->ps.fd.forcePowerMax)
-		{
-			Add_Ammo(&g_entities[pl[i]], AMMO_BLASTER, (self->client->pers.skill_levels[55] * 10));
-			Add_Ammo(&g_entities[pl[i]], AMMO_POWERCELL, (self->client->pers.skill_levels[55] * 10));
-			G_Sound(&g_entities[pl[i]], CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-		}
-		else
-		{
-			g_entities[pl[i]].client->ps.fd.forcePower += poweradd;
+		// GalaxyRP fix: [Skills] this used to branch here: if the target's force power was already
+		// full, recover their blaster pack/power cell ammo instead (scaled off the now-removed
+		// Improvements skill). Since only targets below full force power are selected above now, this
+		// branch is always taken -- restore force power unconditionally.
+		g_entities[pl[i]].client->ps.fd.forcePower += poweradd;
 
-			if (g_entities[pl[i]].client->sess.amrpgmode == 2 && g_entities[pl[i]].client->ps.fd.forcePower > g_entities[pl[i]].client->pers.max_force_power)
-				g_entities[pl[i]].client->ps.fd.forcePower = g_entities[pl[i]].client->pers.max_force_power;
-			else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > zyk_max_force_power.integer) // zyk: now it must be the cvar, because this cvar is the max force
-				g_entities[pl[i]].client->ps.fd.forcePower = zyk_max_force_power.integer;
-		}
+		if (g_entities[pl[i]].client->sess.amrpgmode == 2 && g_entities[pl[i]].client->ps.fd.forcePower > g_entities[pl[i]].client->pers.max_force_power)
+			g_entities[pl[i]].client->ps.fd.forcePower = g_entities[pl[i]].client->pers.max_force_power;
+		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > zyk_max_force_power.integer) // zyk: now it must be the cvar, because this cvar is the max force
+			g_entities[pl[i]].client->ps.fd.forcePower = zyk_max_force_power.integer;
 
 		//At this point we know we got one, so add him into the collective event client bitflag
 		if (!te)

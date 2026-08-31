@@ -5405,8 +5405,9 @@ void magic_sense(gentity_t *ent, int duration)
 	// zyk: Magic Sense gets more duration based on Sense skill level
 	duration += (ent->client->pers.skill_levels[4] * 1000);
 
-	// zyk: Magic Sense gets more duration based on Improvements skill level
-	duration += (ent->client->pers.skill_levels[55] * 1000);
+	// GalaxyRP fix: [Skills] this used to also add duration based on pers.skill_levels[55]
+	// (Improvements) -- that skill is now reserved/unused (see the matching fix comment in
+	// do_upgrade_skill() in g_cmds.c), so this bonus has been removed outright.
 
 	ent->client->ps.forceAllowDeactivateTime = level.time + duration;
 	ent->client->ps.fd.forcePowerLevel[FP_SEE] = ent->client->pers.skill_levels[4];
@@ -6835,15 +6836,14 @@ qboolean magic_master_has_this_power(gentity_t *ent, int selected_power)
 	{
 		return qfalse;
 	}
-	else if (selected_power == MAGIC_HEALING_AREA && ent->client->pers.skill_levels[55] < 1)
-	{
-		return qfalse;
-	}
-	else if (selected_power == MAGIC_MAGIC_EXPLOSION && ent->client->pers.skill_levels[55] < 2)
-	{
-		return qfalse;
-	}
-	else if (selected_power == MAGIC_LIGHTNING_DOME && ent->client->pers.skill_levels[55] < 3)
+	// GalaxyRP fix: [Skills] Healing Area/Magic Explosion/Lightning Dome used to unlock at
+	// pers.skill_levels[55] (Improvements) levels 1/2/3 respectively. Improvements is now a
+	// reserved/unused skill players can no longer gain levels in (see the matching fix comment in
+	// do_upgrade_skill() in g_cmds.c), so rather than leave these 3 powers permanently locked behind
+	// a skill nobody can level, or silently unlock them for everyone, they're blocked outright here --
+	// same treatment as the other removed-feature skills, left as dead/unreachable content rather than
+	// half-working.
+	else if (selected_power == MAGIC_HEALING_AREA || selected_power == MAGIC_MAGIC_EXPLOSION || selected_power == MAGIC_LIGHTNING_DOME)
 	{
 		return qfalse;
 	}

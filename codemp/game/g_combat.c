@@ -4800,13 +4800,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			damage = (int)ceil(damage * 1.08);
 	}
 
-	if (attacker && attacker->client && attacker->client->sess.amrpgmode == 2)
-	{ // zyk: bonus damage of each RPG class
-		// zyk: Free Warrior (GalaxyRP fix: [Dead Code] rpg_class==0 condition dropped, always true since rpg_class is always 0)
-		damage = (int)ceil(damage * (1.0 + (0.03 * attacker->client->pers.skill_levels[55])));
-
-		// GalaxyRP fix: [Dead Code] removed rpg_class==1/2/4/5/6/7/8 bonus-damage else-if chain (rpg_class always 0)
-	}
+	// GalaxyRP fix: [Skills] this block used to add a +3%-per-level damage bonus based on
+	// pers.skill_levels[55] (Improvements) here (originally the "Free Warrior" RPG-class bonus, from
+	// back when rpg_class still varied; the class check itself had already been dropped as dead code
+	// since rpg_class is permanently 0). Improvements is now a reserved/unused skill (see the matching
+	// fix comment in do_upgrade_skill() in g_cmds.c), so this bonus has been removed outright rather
+	// than left keyed off a skill players can no longer gain or lose levels in.
 
 	if (attacker && attacker->client && (attacker->NPC || attacker->client->sess.amrpgmode == 2) && attacker->client->pers.quest_power_status & (1 << 15))
 	{ // zyk: Dark Power increases damage of every attack
