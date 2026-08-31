@@ -11657,7 +11657,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_CREATEITEM)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/createitem <itemname> ^7to create an item with a given name. Items containing more than one word need " " around the argument\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/createitem <itemname> ^7to create an item with a given name. Items containing more than one word need double quotes around the argument\n\n\"");
 		}
 		else if (command_number == ADM_GOD)
 		{
