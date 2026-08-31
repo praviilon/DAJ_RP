@@ -2893,6 +2893,11 @@ void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, s
 		rc = sqlite3_step(stmt);
 	}
 
+	// GalaxyRP fix: [Char] a bare /char only ever printed the character list above, with no reminder
+	// of the subcommands that act on it -- print the same usage tip Cmd_Char_f's own malformed-input
+	// fallback already uses right below the list, so a player doesn't have to already know the syntax.
+	trap->SendServerCommand(ent - g_entities, "print \"^2Usage: /char <new/use/remove> <character name>\n\"");
+
 	sqlite3_finalize(stmt);
 }
 
