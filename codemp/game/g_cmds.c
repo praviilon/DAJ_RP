@@ -48,6 +48,11 @@ extern void Cmd_ZykChars_f(gentity_t* ent);
 // character before switching/creating/removing one -- same pattern already used above for
 // Cmd_GalaxyRpUi_f/Cmd_ZykChars_f, whose own definitions also sit later in this file.
 extern void save_account(gentity_t *ent, qboolean save_char_file);
+// GalaxyRP fix: [Account] forward-declared, same pattern as save_account() just above, so
+// select_player_character() and Cmd_Login_F() (both further up this file than initialize_rpg_skills()'s
+// own definition) can call it directly and synchronously instead of relying solely on the G_Kill()
+// respawn cycle -- matches the extern declaration g_client.c already carries for the same function.
+extern void initialize_rpg_skills(gentity_t *ent);
 
 // GalaxyRP (Alex): [Skills] This is used to display everything about a skill in various places throughout the mod.
 const skill_t skills[] = {
@@ -2790,6 +2795,21 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		update_saber_colors(ent);
 	}
 
+	// GalaxyRP fix: [Account] borrowed from a newer fork of this mod -- call initialize_rpg_skills()
+	// directly here, synchronously, instead of relying solely on the G_Kill() respawn below to trigger
+	// it (via ClientSpawn). This closes two real gaps in the old kill-only approach: (1) G_Kill() silently
+	// no-ops for a paralyzed target (see its own player_statuses bit 6 check) and in GT_DUEL/GT_POWERDUEL
+	// when g_allowDuelSuicide is off, so a player who is paralyzed or mid-duel when running /new or
+	// /char use would otherwise never get this character's force powers/weapons applied at all; (2) even
+	// when G_Kill() does succeed, the respawn it triggers is deferred until the client's next spawn tick,
+	// leaving the previous character's loadout visibly equipped for a brief window right after the
+	// command returns. initialize_rpg_skills() only touches force powers/weapons/health-shield-force caps
+	// derived from pers.skill_levels[] (already loaded above), so calling it here is safe regardless of
+	// whether this player is about to be killed. The respawn below, when it does fire, calls
+	// initialize_rpg_skills() again via ClientSpawn -- that second call is idempotent (same skill_levels[]
+	// in, same result out), so there's no double-apply side effect from calling it twice.
+	initialize_rpg_skills(ent);
+
 	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
 		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", ent->team));
@@ -3531,11 +3551,22 @@ void Cmd_Login_F(gentity_t * ent)
 		return;
 	}
 
+	// GalaxyRP fix: [Account] this used to call G_Kill() first and load the account/character data
+	// afterward -- so the kill (and whatever respawn eventually followed it) always ran against the
+	// *previous* amrpgmode/skill state, relying entirely on the deferred respawn cycle to pick up the
+	// newly loaded account once select_account_and_default_character_data() below had finished. Reordered
+	// so the account data (and the amrpgmode = 2 it ends with) is loaded first, then applied synchronously
+	// via initialize_rpg_skills() below, and only then does the kill run -- same borrowed-from-a-newer-
+	// fork pattern as select_player_character() above, for the same reason (G_Kill() silently no-ops
+	// while paralyzed or mid-duel with g_allowDuelSuicide off, and even when it doesn't, its respawn is
+	// deferred, leaving stale force powers/weapons equipped in the meantime).
+	select_account_and_default_character_data(ent, username, db, zErrMsg, rc, stmt);
+
+	initialize_rpg_skills(ent);
+
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
 		G_Kill(ent);
 	}
-
-	select_account_and_default_character_data(ent, username, db, zErrMsg, rc, stmt);
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2You have sucessfully logged in.\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2You have sucessfully logged in.\n\"");
@@ -8589,16 +8620,23 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	if (ent->client->ps.stats[STAT_ARMOR] > 100)
 		ent->client->ps.stats[STAT_ARMOR] = 100;
 
-	// zyk: resetting force powers
-	WP_InitForcePowers( ent );
+	// GalaxyRP fix: [Account] logging out only ever re-initialized force powers here (WP_InitForcePowers)
+	// and then additively OR'd the baseline saber/Bryar Pistol bits into STAT_WEAPONS -- it never cleared
+	// STAT_WEAPONS first, so any weapon (and its ammo) unlocked by RPG skills via /give or
+	// initialize_rpg_skills() stayed equipped forever after logout. zyk_remove_guns() is the same helper
+	// /give's toggle-off path already uses to strip RPG weapons back to the logged-out baseline (melee +
+	// conditional saber/Bryar Pistol) and to re-init force powers, so reuse it here instead of duplicating
+	// half of it inline.
+	zyk_remove_guns(ent);
 
-	if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0 &&
-		level.gametype != GT_JEDIMASTER && level.gametype != GT_SIEGE
-		)
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
-
-	if (level.gametype != GT_JEDIMASTER && level.gametype != GT_SIEGE)
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
+	// zyk_remove_guns() always grants saber (conditional on force level) and Bryar Pistol unconditionally,
+	// with no gametype exclusion -- strip them back out for Jedi Master/Siege, matching this function's
+	// pre-existing exclusion for those gametypes.
+	if (level.gametype == GT_JEDIMASTER || level.gametype == GT_SIEGE)
+	{
+		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
+		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_BRYAR_PISTOL);
+	}
 
 	ent->client->sess.loggedin = qfalse;
 
