@@ -1903,17 +1903,8 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 		return;
 	}
 
-	// zyk: Bounty Hunter class has more max ammo
-	if (activator->client->sess.amrpgmode == 2 && activator->client->pers.rpg_class == 2)
-	{
-		max_blasterpack_ammo += max_blasterpack_ammo/6 * activator->client->pers.skill_levels[55];
-		max_powercell_ammo += max_powercell_ammo/6 * activator->client->pers.skill_levels[55];
-		max_metalbolt_ammo += max_metalbolt_ammo/6 * activator->client->pers.skill_levels[55];
-		max_rocket_ammo += max_rocket_ammo/6 * activator->client->pers.skill_levels[55];
-		max_thermal_ammo += max_thermal_ammo/6 * activator->client->pers.skill_levels[55];
-		max_tripmine_ammo += max_tripmine_ammo/6 * activator->client->pers.skill_levels[55];
-		max_detpack_ammo += max_detpack_ammo/6 * activator->client->pers.skill_levels[55];
-	}
+	// GalaxyRP fix: [RPG Class] removed the Bounty Hunter (rpg_class==2) max-ammo bonus block;
+	// pers.rpg_class is permanently 0, so this was dead code.
 
 	if (self->setTime < level.time)
 	{
@@ -1959,19 +1950,9 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 				// zyk: changed this. Now it will use Add_Ammo function
 				// activator->client->ps.ammo[i] += add;
 
-				// zyk: some RPG classes cannot get ammo
-				if (activator->client->sess.amrpgmode == 2 && (activator->client->pers.rpg_class == 1 || activator->client->pers.rpg_class == 4 || 
-					activator->client->pers.rpg_class == 6 || activator->client->pers.rpg_class == 8))
-				{
-					break;
-				}
-
-				if (activator->client->sess.amrpgmode == 2 && activator->client->pers.rpg_class == 9 && 
-					(i == AMMO_THERMAL || i == AMMO_TRIPMINE || i == AMMO_DETPACK))
-				{ // zyk: Force Guardian cannot get explosive weapons
-					i++;
-					continue;
-				}
+				// GalaxyRP fix: [RPG Class] removed the "some RPG classes cannot get ammo" early-break
+				// (rpg_class == 1/4/6/8) and the Force Guardian (rpg_class==9) explosive-weapon skip;
+				// pers.rpg_class is permanently 0, so both were dead code.
 
 				if (level.gametype != GT_SIEGE)
 				{

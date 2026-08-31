@@ -2176,10 +2176,8 @@ static qboolean PM_CheckJump( void )
 		pm->ps->fd.forcePowerLevel[FP_LEVITATION] > FORCE_LEVEL_0 &&
 		!(pm->ps->pm_flags&PMF_JUMP_HELD) &&
 		(
-#if defined( _GAME ) // zyk: Force Gunner class can use wall runs and wall flips with any weapon
-		(g_entities[pm->ps->clientNum].client->sess.amrpgmode == 2 && 
-		 g_entities[pm->ps->clientNum].client->pers.rpg_class == 7) || 
-#endif
+		// GalaxyRP fix: [RPG classes] removed a dead Force Gunner wall-run/wall-flip weapon
+		// exception gated on pers.rpg_class == 7, which is server-side-only and permanently 0
 		(pm->ps->weapon == WP_SABER || pm->ps->weapon == WP_MELEE)) &&
 		!PM_IsRocketTrooper() &&
 		!BG_HasYsalamiri(pm->gametype, pm->ps) &&
@@ -7554,21 +7552,11 @@ static void PM_Weapon( void )
 		PM_InRollComplete(pm->ps, pm->ps->legsAnim))
 	{
 #if defined (_GAME)
-		gentity_t *player_ent = &g_entities[pm->ps->clientNum];
-		qboolean is_a_force_gunner = qfalse;
-
-		// zyk: Force Gunner class can use weapon even if it is doing some special move
-		if (player_ent && player_ent->client && player_ent->client->sess.amrpgmode == 2 && player_ent->client->pers.rpg_class == 7)
+		// GalaxyRP fix: [RPG classes] removed a dead Force Gunner weapon-time exception
+		// gated on pers.rpg_class == 7, which is server-side-only and permanently 0
+		if (pm->ps->weaponTime < pm->ps->legsTimer)
 		{
-			is_a_force_gunner = qtrue;
-		}
-
-		if (is_a_force_gunner == qfalse)
-		{
-			if (pm->ps->weaponTime < pm->ps->legsTimer)
-			{
-				pm->ps->weaponTime = pm->ps->legsTimer;
-			}
+			pm->ps->weaponTime = pm->ps->legsTimer;
 		}
 #else
 		if (pm->ps->weaponTime < pm->ps->legsTimer)
@@ -8259,16 +8247,8 @@ static void PM_Weapon( void )
 			}
 			addTime = weaponData[pm->ps->weapon].altFireTime;
 
-#if defined (_GAME)
-			gentity_t *player_ent = &g_entities[pm->ps->clientNum];
-
-			// zyk: Armored Soldier using Unique Ability 3. Decreases altfiretime
-			if (player_ent && player_ent->client && player_ent->client->sess.amrpgmode == 2 && player_ent->client->pers.rpg_class == 3 &&
-				player_ent->client->pers.player_statuses & (1 << 23) && pm->ps->weapon == WP_BLASTER)
-			{
-				addTime -= 40;
-			}
-#endif
+			// GalaxyRP fix: [RPG classes] removed a dead Armored Soldier altfiretime-decrease
+			// exception gated on pers.rpg_class == 3, which is server-side-only and permanently 0
 		}
 	}
 	else {
@@ -10812,8 +10792,6 @@ void PmoveSingle (pmove_t *pmove) {
 
 #if defined( _GAME )
 	gentity_t *player_ent = NULL;
-
-	int rpg_class = -1;
 #endif
 
 	pm = pmove;
@@ -10877,11 +10855,8 @@ void PmoveSingle (pmove_t *pmove) {
 
 #if defined( _GAME )
 	player_ent = &g_entities[pm->ps->clientNum];
-
-	if (player_ent && player_ent->client && player_ent->client->sess.amrpgmode == 2)
-	{
-		rpg_class = player_ent->client->pers.rpg_class;
-	}
+	// GalaxyRP fix: [RPG classes] removed the dead local rpg_class mirror of
+	// pers.rpg_class, which is server-side-only and permanently 0
 #endif
 
 	switch (pm->ps->saberMove)
@@ -10979,20 +10954,11 @@ void PmoveSingle (pmove_t *pmove) {
 	{
 		qboolean stop_meditate_anim = qtrue;
 
-#if defined( _GAME )
-		if (rpg_class == 4 &&
-			player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 21))
-		{ // zyk: Monk Meditation Strength ability does not allow stop the meditate anim
-			stop_meditate_anim = qfalse;
-		}
-		else if (rpg_class == 4 &&
-				 player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 23))
-		{ // zyk: Monk Meditation Drain ability does not allow stop the meditate anim
-			stop_meditate_anim = qfalse;
-		}
-#endif
+		// GalaxyRP fix: [RPG classes] removed dead Monk Meditation Strength/Drain
+		// exceptions gated on the local rpg_class mirror == 4, which could only ever
+		// hold 0 or -1 (pers.rpg_class is server-side-only and permanently 0)
 
-		if (stop_meditate_anim == qtrue && 
+		if (stop_meditate_anim == qtrue &&
 			((pm->cmd.buttons&BUTTON_ATTACK)
 			|| (pm->cmd.buttons&BUTTON_ALT_ATTACK)
 			|| (pm->cmd.buttons&BUTTON_FORCEPOWER)
@@ -11140,36 +11106,16 @@ void PmoveSingle (pmove_t *pmove) {
 	*/
 
 #if defined( _GAME )
-	if (rpg_class == 0 &&
+	// GalaxyRP fix: [RPG classes] rewritten from the local rpg_class mirror (which could only
+	// ever be 0 when amrpgmode == 2, or -1 otherwise, since pers.rpg_class is server-side-only
+	// and permanently 0) to test the live amrpgmode condition it actually stood in for
+	if (player_ent->client->sess.amrpgmode == 2 &&
 		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 22))
 	{ // zyk: Free Warrior Super Beam ability does not allow him to move
 		stiffenedUp = qtrue;
 	}
-	else if (rpg_class == 1 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 21))
-	{ // zyk: Force User Force Maelstrom ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
-	else if (rpg_class == 1 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 23))
-	{ // zyk: Force User Force Storm ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
-	else if (rpg_class == 4 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 21))
-	{ // zyk: Monk Meditation Strength ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
-	else if (rpg_class == 4 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 23))
-	{ // zyk: Monk Meditation Drain ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
-	else if (rpg_class == 9 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 22))
-	{ // zyk: Force Guardian Force Scream ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
+	// GalaxyRP fix: [RPG classes] removed dead rpg_class == 1 / 4 / 9 branches (Force User,
+	// Monk, Force Guardian) - the local rpg_class mirror could never hold those values
 	else if (player_ent->client->pers.player_statuses & (1 << 24))
 	{ // zyk: hit by Ice Bomb
 		stiffenedUp = qtrue;

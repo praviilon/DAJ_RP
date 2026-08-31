@@ -229,11 +229,10 @@ void NPC_ChoosePainAnimation( gentity_t *self, gentity_t *other, vec3_t point, i
 		return;
 	}
 
-	// zyk: guardians resist attack, they just take the damage but will not have pain anim
-	if (self->client->pers.guardian_mode > 0)
-	{
-		return;
-	}
+	// GalaxyRP fix: [Guardian] a "guardians resist attack" pain-immunity guard, gated on
+	// pers.guardian_mode, used to live here. spawn_boss() (its only setter) was deleted as
+	// unreachable dead code, and pers.guardian_mode is being removed along with it, so this
+	// guard is removed too.
 
 	// GalaxyRP fix: [Quests] a "Guardian of Map also resists attack" pain-immunity guard, gated on
 	// level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only setter) was deleted as

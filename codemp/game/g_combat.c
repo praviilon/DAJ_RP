@@ -508,10 +508,7 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 		return;
 	}
 
-	if (self && self->client && self->NPC && self->client->pers.guardian_invoked_by_id != -1)
-	{ // zyk: guardians cant lose their guns
-		return;
-	}
+	// GalaxyRP fix: [Dead Code] removed guardian-guns weapon-drop guard (guardian_invoked_by_id was always -1)
 
 	// find the item type for this weapon
 	item = BG_FindItemForWeapon( weapon );
@@ -2161,27 +2158,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	self->client->pers.player_statuses &= ~(1 << 22);
 	self->client->pers.player_statuses &= ~(1 << 23);
 
-	// zyk: resetting boss battle music to default one if needed
-	if (self->client->pers.guardian_invoked_by_id != -1 && self->client->pers.guardian_mode != 15 && self->client->pers.guardian_mode != 17 && self->client->pers.guardian_mode != 18)
-	{
-		level.boss_battle_music_reset_timer = level.time + 1000;
-	}
-	else if (self->client->sess.amrpgmode == 2 && self->client->pers.guardian_mode > 0 && self->client->pers.can_play_quest == 1)
-	{ // zyk: quest player died. Reset boss battle music and guardian_mode of his allies
-		int ally_it = 0;
-
-		level.boss_battle_music_reset_timer = level.time + 1000;
-
-		for (ally_it = 0; ally_it < level.maxclients; ally_it++)
-		{
-			gentity_t *this_ent = &g_entities[ally_it];
-
-			if (zyk_is_ally(self,this_ent) == qtrue)
-			{
-				this_ent->client->pers.guardian_mode = 0;
-			}
-		}
-	}
+	// GalaxyRP fix: [Dead Code] removed boss-battle-music-reset guardian logic (guardian_invoked_by_id/guardian_mode always dead)
 
 	if (self->client->pers.race_position > 0) // zyk: if a player dies during a race, he loses the race
 	{
@@ -2256,22 +2233,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		self->client->pers.being_mind_controlled = -1;
 	}
 
-	if (!self->NPC && self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && self->client->pers.mind_controlled1_id > -1)
-	{
-		gentity_t *controlled_ent = &g_entities[self->client->pers.mind_controlled1_id];
-		self->client->pers.mind_controlled1_id = -1;
-		controlled_ent->client->pers.being_mind_controlled = -1;
-	}
+	// GalaxyRP fix: [Dead Code] removed rpg_class==1 mind-control-release block (rpg_class always 0)
 
-	if (self->client->pers.guardian_invoked_by_id != -1)
-	{ // zyk: rpg mode boss. Getting the quest player
-		quest_player = &g_entities[self->client->pers.guardian_invoked_by_id];
-
-		if (quest_player && quest_player->client && quest_player->client->pers.guardian_mode == 0)
-		{ // zyk: player died before. Do not give anything to quest_player
-			quest_player = NULL;
-		}
-	}
+	// GalaxyRP fix: [Dead Code] removed guardian_invoked_by_id quest_player lookup (guardian_invoked_by_id always -1)
 
 	if (self->client->pers.universe_quest_messages == -10000 && self->NPC)
 	{ // zyk: Ymir or Thor defeated
@@ -2344,42 +2308,15 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	}
 	
 	if (self->client->sess.amrpgmode == 2)
-	{ 
-		if (self->client->pers.guardian_mode > 0)
-		{ // zyk: player lost to a guardian
-			self->client->pers.guardian_mode = 0;
-		}
+	{
+		// GalaxyRP fix: [Dead Code] removed guardian_mode>0 reset (guardian_mode always 0)
 
 		// zyk: removing the crystals from the player
 		self->client->pers.player_statuses &= ~(1 << 10);
 		self->client->pers.player_statuses &= ~(1 << 11);
 
-		// zyk: player has the Resurrection Power, after completing quests in Challenge Mode. Uses mp. Not allowed in CTF gametype
-		if (self->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && self->client->pers.universe_quest_counter & (1 << 29) && g_gametype.integer != GT_CTF && 
-			!(self->client->ps.eFlags2 & EF2_HELD_BY_MONSTER) && self->client->pers.magic_power >= 5 && zyk_enable_resurrection_power.integer == 1 && 
-			!(self->client->sess.magic_more_disabled_powers & (1 << 1)))
-		{
-			qboolean zyk_allow_vehicle_resurrect = qtrue; // zyk: if player is riding a ship, do not allow resurrection to avoid invisible player bug
-
-			if (self->client->NPC_class != CLASS_VEHICLE
-				&& self->client->ps.m_iVehicleNum)
-			{ //I'm riding a vehicle
-				//tell it I'm getting off
-				gentity_t *veh = &g_entities[self->client->ps.m_iVehicleNum];
-
-				if (veh->inuse && veh->client && veh->m_pVehicle && veh->m_pVehicle->m_pVehicleInfo->type == VH_FIGHTER)
-				{
-					zyk_allow_vehicle_resurrect = qfalse;
-				}
-			}
-
-			if (zyk_allow_vehicle_resurrect == qtrue)
-			{
-				self->client->pers.magic_power -= 5;
-				self->client->pers.quest_power_status |= (1 << 10);
-				self->client->pers.quest_power1_timer = level.time + 3000;
-			}
-		}
+		// GalaxyRP fix: [Challenge Mode] removed Resurrection Power grant (universe_quest_progress could never
+		// reach NUM_OF_UNIVERSE_QUEST_OBJ, and it was Challenge-Mode-only via universe_quest_counter bit 29)
 	}
 
 	//check player stuff
@@ -2731,18 +2668,14 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			attacker->client->pers.credits_modifier = -10;
 			attacker->client->pers.score_modifier = -1;
 		}
-		else if (self->NPC && self->client->pers.guardian_invoked_by_id != -1)
-		{ // zyk: guardians give more score and credits
-			attacker->client->pers.credits_modifier = 490;
-			attacker->client->pers.score_modifier = 6;
-		}
+		// GalaxyRP fix: [Dead Code] removed guardian score/credits else-if (guardian_invoked_by_id always -1)
 		else if (self->NPC && self->client->ps.fd.forcePowerMax > 0 && self->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))
 		{ // zyk: force-user saber npcs give more score and credits
 			attacker->client->pers.credits_modifier = 10;
 			attacker->client->pers.score_modifier = 1;
 		}
 
-		if (self->NPC && self->client->ps.stats[STAT_MAX_HEALTH] >= 500 && self->client->pers.guardian_invoked_by_id == -1)
+		if (self->NPC && self->client->ps.stats[STAT_MAX_HEALTH] >= 500)
 		{ // zyk: npcs with more than 500 hp gives more score
 			attacker->client->pers.score_modifier += 1;
 			attacker->client->pers.credits_modifier += 20;
@@ -2758,10 +2691,7 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 		// as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and level.guardian_quest/
 		// level.guardian_quest_timer have been removed along with it, so this block is removed too.
 
-		if (attacker->client->pers.rpg_class == 2)
-		{ // zyk: Bounty Hunter class receives more credits
-			attacker->client->pers.credits_modifier += 5 * (attacker->client->pers.skill_levels[55] + 1);
-		}
+		// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter credits bonus (rpg_class always 0)
 
 		// GalaxyRP fix: [Quests] the "Bounty Quest manager" credit-bonus block used to live here.
 		// Cmd_BountyQuest_f (its only setter for level.bounty_quest_choose_target/target_id) was
@@ -4748,16 +4678,9 @@ qboolean zyk_can_damage_saber_only_entities(gentity_t *attacker, gentity_t *infl
 			return qtrue;
 		}
 
-		if (mod == MOD_MELEE && attacker->client->pers.rpg_class == 4)
-		{ // zyk: Monk melee
-			return qtrue;
-		}
+		// GalaxyRP fix: [Dead Code] removed rpg_class==4 Monk melee saber-only-damage grant (rpg_class always 0)
 
-		if (mod == MOD_MELEE && attacker->client->pers.rpg_class == 8 &&
-			inflictor && inflictor->s.weapon == WP_CONCUSSION)
-		{ // zyk: Magic Master bolts, the Ultra Bolt
-			return qtrue;
-		}
+		// GalaxyRP fix: [Dead Code] removed rpg_class==8 Magic Master Ultra Bolt saber-only-damage grant (rpg_class always 0)
 
 		if (mod == MOD_DET_PACK_SPLASH && attacker->client->pers.secrets_found & (1 << 14))
 		{ // zyk: detpacks
@@ -4949,49 +4872,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 
 	if (attacker && attacker->client && attacker->client->sess.amrpgmode == 2)
 	{ // zyk: bonus damage of each RPG class
-		if (attacker->client->pers.rpg_class == 0)
-		{ // zyk: Free Warrior
-			damage = (int)ceil(damage * (1.0 + (0.03 * attacker->client->pers.skill_levels[55])));
-		}
-		else if (attacker->client->pers.rpg_class == 1 && (mod == MOD_SABER || mod == MOD_FORCE_DARK))
-		{ // zyk: Force User
-			damage = (int)ceil(damage * (1.0 + (0.05 * attacker->client->pers.skill_levels[55])));
-		}
-		else if (attacker->client->pers.rpg_class == 2 && mod != MOD_SABER && mod != MOD_MELEE && mod != MOD_FORCE_DARK)
-		{ // zyk: Bounty Hunter
-			damage = (int)ceil(damage * (1.0 + (0.05 * attacker->client->pers.skill_levels[55])));
-		}
-		else if (attacker->client->pers.rpg_class == 4 && mod == MOD_MELEE)
-		{ // zyk: Monk
-			damage = damage * (1.0 + (attacker->client->pers.skill_levels[55]*0.5));
-			can_damage_heavy_things = qtrue;
-		}
-		else if (attacker->client->pers.rpg_class == 5 && (mod == MOD_STUN_BATON || mod == MOD_DISRUPTOR || mod == MOD_DISRUPTOR_SNIPER || 
-			     mod == MOD_REPEATER || mod == MOD_REPEATER_ALT || mod == MOD_REPEATER_ALT_SPLASH || mod == MOD_DEMP2 || mod == MOD_DEMP2_ALT || 
-				 mod == MOD_LAVA || mod == MOD_TRIP_MINE_SPLASH || mod == MOD_TIMED_MINE_SPLASH || mod == MOD_DET_PACK_SPLASH || 
-				 mod == MOD_CONC || mod == MOD_CONC_ALT || mod == MOD_DISRUPTOR_SPLASH))
-		{ // zyk: Stealth Attacker has more gun damage
-			float stealth_attacker_bonus_damage = 0.0;
+		// zyk: Free Warrior (GalaxyRP fix: [Dead Code] rpg_class==0 condition dropped, always true since rpg_class is always 0)
+		damage = (int)ceil(damage * (1.0 + (0.03 * attacker->client->pers.skill_levels[55])));
 
-			// zyk: Stealth Attacker Upgrade increases damage
-			if (attacker->client->pers.secrets_found & (1 << 7))
-				stealth_attacker_bonus_damage = 0.2;
-
-			damage = (int)ceil(damage * (1.05 + (0.15 * attacker->client->pers.skill_levels[55]) + stealth_attacker_bonus_damage));
-		}
-		else if (attacker->client->pers.rpg_class == 6 && (mod == MOD_SABER || mod == MOD_MELEE))
-		{ // zyk: Duelist has higher damage in saber and melee
-			damage = (int)ceil(damage * (1.2 + (0.2 * attacker->client->pers.skill_levels[55])));
-		}
-		else if (attacker->client->pers.rpg_class == 7)
-		{ // zyk: Force Gunner bonus damage
-			damage = (int)ceil(damage * (1.0 + (0.06 * attacker->client->pers.skill_levels[55])));
-		}
-		else if (attacker->client->pers.rpg_class == 8 && mod == MOD_MELEE)
-		{ // zyk: Magic Master bolts can damage heavy things
-			if (inflictor && (inflictor->s.weapon == WP_BOWCASTER || inflictor->s.weapon == WP_DEMP2 || inflictor->s.weapon == WP_CONCUSSION))
-				can_damage_heavy_things = qtrue;
-		}
+		// GalaxyRP fix: [Dead Code] removed rpg_class==1/2/4/5/6/7/8 bonus-damage else-if chain (rpg_class always 0)
 	}
 
 	if (attacker && attacker->client && (attacker->NPC || attacker->client->sess.amrpgmode == 2) && attacker->client->pers.quest_power_status & (1 << 15))
@@ -5009,40 +4893,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		damage = (int)ceil(damage*zyk_scale_siege_damage.value);
 	}
 
-	if (attacker && attacker->client && attacker->NPC && attacker->client->pers.guardian_invoked_by_id != -1)
-	{ // zyk: attacker is a RPG boss. Increase damage based in the number of allies of the quest player
-		gentity_t *quest_player_ent = &g_entities[attacker->client->pers.guardian_invoked_by_id];
+	// GalaxyRP fix: [Dead Code] removed ally-count Challenge-Mode damage bonus (guardian_invoked_by_id always -1)
 
-		if (quest_player_ent && quest_player_ent->client && quest_player_ent->client->sess.amrpgmode == 2 && 
-			quest_player_ent->client->pers.universe_quest_counter & (1 << 29))
-		{ // zyk: Challenge Mode increases more damage
-			damage += ((int)ceil(damage * 0.08 * (1 + zyk_number_of_allies(quest_player_ent, qtrue))));
-		}
-		else
-		{
-			damage += ((int)ceil(damage * 0.04 * zyk_number_of_allies(quest_player_ent, qtrue)));
-		}
-	}
-
-	if (targ && targ->client && targ->NPC && targ->client->pers.guardian_invoked_by_id != -1)
-	{ // zyk: targ is a RPG mode boss
-		// zyk: chaos power, map entities and telefrag cannot hit the boss
-		if (!attacker || !attacker->client || mod == MOD_TELEFRAG)
-			return;
-
-		if (targ->client->pers.guardian_invoked_by_id != (attacker-g_entities))
-		{			
-			if (attacker->client->sess.amrpgmode != 2 || attacker->client->pers.guardian_mode == 0)
-				return;
-		}
-
-		// zyk: guardians remove cloak of the player when hit by him
-		if (attacker->client->ps.powerups[PW_CLOAKED])
-		{
-			Jedi_Decloak(attacker);
-			attacker->client->cloakToggleTime = level.time + Q_irand( 5000, 10000 );
-		}
-	}
+	// GalaxyRP fix: [Dead Code] removed "targ is a RPG mode boss" block, including its decloak-on-hit logic
+	// (guardian_invoked_by_id always -1)
 
 	if (targ && targ->client && targ->NPC)
 	{
@@ -5052,11 +4906,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 	}
 
-	if (targ && targ->client && targ->client->sess.amrpgmode == 2 && targ->client->pers.can_play_quest == 1 && 
-		targ->client->pers.universe_quest_counter & (1 << 29) && targ->client->pers.guardian_mode == 0)
-	{ // zyk: Challenge Mode increases damage taken from anything
-		damage = (int)ceil(damage*1.15);
-	}
+	// GalaxyRP fix: [Challenge Mode] removed the +15% damage-taken Challenge Mode penalty (already dead via
+	// can_play_quest, and doubly dead now that Challenge Mode itself is removed)
 
 	if (targ && targ->client && (targ->NPC || targ->client->sess.amrpgmode == 2) && targ->client->pers.quest_power_status & (1 << 16))
 	{ // zyk: Eternity Power reduces damage of every attack
@@ -5365,21 +5216,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		if (targ->client->pers.secrets_found & (1 << 9))
 			new_knockback -= knockback * 0.8;
 
-		if (targ->client->pers.rpg_class == 9 && targ->client->pers.secrets_found & (1 << 19))
-			new_knockback -= knockback * 0.15;
+		// GalaxyRP fix: [Dead Code] removed rpg_class==9 knockback reduction (rpg_class always 0)
 
 		knockback = new_knockback;
 	}
 
-	// zyk: these npcs will not have knockback
-	if (targ && targ->client && targ->NPC && (targ->client->pers.guardian_mode == 2 || (targ->client->pers.guardian_mode == 17 && Q_stricmp(targ->NPC_type, "guardian_boss_2") == 0) ||
-		targ->client->pers.guardian_mode == 3 || (targ->client->pers.guardian_mode == 17 && Q_stricmp(targ->NPC_type, "guardian_boss_3") == 0) ||
-		targ->client->pers.guardian_mode == 7 || (targ->client->pers.guardian_mode == 17 && Q_stricmp(targ->NPC_type, "guardian_boss_7") == 0) ||
-		targ->client->pers.guardian_mode == 11 || (targ->client->pers.guardian_mode == 17 && Q_stricmp(targ->NPC_type, "guardian_boss_8") == 0) ||
-		targ->client->pers.guardian_mode == 21))
-	{
-		knockback = 0;
-	}
+	// GalaxyRP fix: [Dead Code] removed guardian_mode-based no-knockback npc list (guardian_mode always 0)
 
 	// figure momentum add, even if the damage won't be taken
 	if ( knockback && targ->client ) {
@@ -5693,9 +5535,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 
 		if (targ->client->sess.amrpgmode == 2) // zyk: Shield Strength skill
 		{
-			// zyk: if player is Bounty Hunter and has the Bounty Hunter Upgrade, absorbs more damage
-			if (targ->client->pers.rpg_class == 2 && targ->client->pers.secrets_found & (1 << 1))
-				bounty_hunter_shield_resistance = 0.07;
+			// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter shield-resistance bonus (rpg_class always 0)
 
 			scaled_damage = (int)ceil(take * (1.0 - bounty_hunter_shield_resistance - (0.07 * targ->client->pers.skill_levels[31])));
 		}
@@ -5910,7 +5750,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	// zyk: Electric Bolts of Magic Master can disable jetpacks. Except Stealth Attacker ones
 	if (mod == MOD_MELEE && inflictor && inflictor->s.weapon == WP_DEMP2 && client)
 	{
-		if (client->jetPackOn && (client->sess.amrpgmode != 2 || client->pers.rpg_class != 5 || !(client->pers.secrets_found & (1 << 7))))
+		// GalaxyRP fix: [Dead Code] simplified condition to unconditional jetPackOn check (the parenthesized
+		// OR was always true since rpg_class is always 0, never 5)
+		if (client->jetPackOn)
 		{ //disable jetpack temporarily
 			Jetpack_Off(targ);
 			client->jetPackToggleTime = level.time + Q_irand(3000, 10000);
@@ -5959,9 +5801,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 							client->NPC_class == CLASS_ATST )
 				{
 					// DEMP2 does way more damage to these guys.
-					// zyk: Guardian of Wind takes less DEMP2 damage
-					if (!(client->pers.guardian_mode == 7 || (client->pers.guardian_mode == 17 && Q_stricmp(targ->NPC_type, "guardian_boss_7") == 0)))
-						take *= 4; // zyk: changed from 5 to 4
+					// GalaxyRP fix: [Dead Code] removed guardian_mode==7 exemption condition (guardian_mode always 0)
+					take *= 4; // zyk: changed from 5 to 4
 				}
 				else
 				{
@@ -6231,21 +6072,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		{ // zyk: Health Strength skill decreases damage taken
 			float bonus_resistance = 0.0;
 
-			// zyk: if player is a Bounty Hunter and has the Bounty Hunter Upgrade, absorbs some damage taken
-			if (targ->client->pers.rpg_class == 2 && targ->client->pers.secrets_found & (1 << 1))
-				bonus_resistance = 0.07;
+			// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter damage-resistance bonus (rpg_class always 0)
 
 			take = (int)ceil(take * (1.0 - bonus_resistance - (0.07 * targ->client->pers.skill_levels[32])));
 
-			// zyk: Improvements skill makes Force Guardian regen some force with Rage when taking damage
-			if (targ->client->pers.rpg_class == 9 && targ->client->pers.skill_levels[55] > 0 && 
-				(targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)) && (inflictor->client || attacker->client))
-			{
-				targ->client->ps.fd.forcePower += (int)ceil((take * 0.1 * targ->client->pers.skill_levels[55]));
-
-				if (targ->client->ps.fd.forcePower > targ->client->ps.fd.forcePowerMax)
-					targ->client->ps.fd.forcePower = targ->client->ps.fd.forcePowerMax;
-			}
+			// GalaxyRP fix: [Dead Code] removed rpg_class==9 Force Guardian Rage force-regen (rpg_class always 0)
 		}
 
 		targ->health = targ->health - take;
@@ -6625,77 +6456,25 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 					gentity_t *quest_power_user = &g_entities[level.special_power_effects[attacker->s.number]];
 
 					// zyk: if the power user and the target are allies (player or npc), or the target is the quest power user himself, heal him
-					if (quest_power_user && quest_power_user->client && ent && ent->client && ent->health > 0 && 
-						(level.special_power_effects[attacker->s.number] == ent->s.number || OnSameTeam(quest_power_user, ent) == qtrue || 
-						npcs_on_same_team(quest_power_user, ent) == qtrue || zyk_is_ally(quest_power_user,ent) == qtrue) && 
-						quest_power_user->client->pers.guardian_mode == ent->client->pers.guardian_mode)
+					// GalaxyRP fix: [Dead Code] dropped trailing guardian_mode==guardian_mode conjunct (guardian_mode always 0, always true)
+					if (quest_power_user && quest_power_user->client && ent && ent->client && ent->health > 0 &&
+						(level.special_power_effects[attacker->s.number] == ent->s.number || OnSameTeam(quest_power_user, ent) == qtrue ||
+						npcs_on_same_team(quest_power_user, ent) == qtrue || zyk_is_ally(quest_power_user,ent) == qtrue))
 					{
-						if (quest_power_user->client->sess.amrpgmode == 2 && quest_power_user->client->pers.rpg_class == 8 && 
-							quest_power_user->client->pers.unique_skill_duration > level.time &&
-							!(quest_power_user->client->pers.player_statuses & (1 << 21)) && 
-							!(quest_power_user->client->pers.player_statuses & (1 << 22)))
-						{ // zyk: Magic Master Unique Skill increases amount of health recovered
-							int heal_amount = 8;
-							int shield_amount = 8;
+						// GalaxyRP fix: [Dead Code] removed rpg_class==8 Magic Master Unique Skill healing-bonus
+						// branch (rpg_class always 0); only the base heal amount below is ever reached
+						int heal_amount = 6;
 
-							// zyk: Universe Power
-							if (quest_power_user->client->pers.quest_power_status & (1 << 13))
-							{
-								heal_amount += 2;
-								shield_amount += 2;
-							}
-
-							// zyk: Magic Master Healing Improvement unique ability. Increases healing
-							if (quest_power_user->client->pers.player_statuses & (1 << 23))
-							{
-								heal_amount *= 2;
-								shield_amount *= 2;
-
-								// zyk: restores force too
-								if (ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax)
-									ent->client->ps.fd.forcePower += 1;
-							}
-
-							if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
-								ent->health += heal_amount;
-							else
-								ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-
-							if (ent->health == ent->client->ps.stats[STAT_MAX_HEALTH])
-							{ // zyk: Unique Skill makes it possible to heal shield too, if hp is full
-								int max_shield = ent->client->ps.stats[STAT_MAX_HEALTH];
-
-								if (ent->client->sess.amrpgmode == 2)
-									max_shield = ent->client->pers.max_rpg_shield;
-
-								if (!ent->NPC)
-								{
-									if ((ent->client->ps.stats[STAT_ARMOR] + shield_amount) < max_shield)
-									{
-										ent->client->ps.stats[STAT_ARMOR] += shield_amount;
-									}
-									else
-									{
-										ent->client->ps.stats[STAT_ARMOR] = max_shield;
-									}
-								}
-							}
-						}
-						else
+						// zyk: Universe Power
+						if (quest_power_user->client->pers.quest_power_status & (1 << 13))
 						{
-							int heal_amount = 6;
-
-							// zyk: Universe Power
-							if (quest_power_user->client->pers.quest_power_status & (1 << 13))
-							{
-								heal_amount += 2;
-							}
-
-							if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
-								ent->health += heal_amount;
-							else
-								ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
+							heal_amount += 2;
 						}
+
+						if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
+							ent->health += heal_amount;
+						else
+							ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
 					}
 				}
 				
@@ -6726,15 +6505,9 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 						continue;
 					}
 
-					if (quest_power_user && quest_power_user->client && ent && ent->client && 
-						quest_power_user->client->pers.guardian_mode != ent->client->pers.guardian_mode &&
-						!(quest_power_user->NPC && quest_power_user->client->pers.guardian_mode == 0) && 
-						!(!quest_power_user->NPC && quest_power_user->client->pers.guardian_mode > 0 && ent->NPC))
-					{ // zyk: validating boss battles
-						continue;
-					}
+					// GalaxyRP fix: [Dead Code] removed guardian_mode boss-battle-validation continue (guardian_mode always 0, always false)
 
-					if (Q_stricmp(attacker->targetname, "zyk_quest_effect_drain") == 0 || 
+					if (Q_stricmp(attacker->targetname, "zyk_quest_effect_drain") == 0 ||
 						Q_stricmp(attacker->targetname, "zyk_quest_effect_watersplash") == 0)
 					{ // zyk: Ultra Drain heals the power user
 						if (quest_power_user && quest_power_user->client && quest_power_user->health > 0 && 

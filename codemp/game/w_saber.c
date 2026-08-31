@@ -118,10 +118,9 @@ qboolean G_CanBeEnemy( gentity_t *self, gentity_t *enemy )
 		return qfalse;
 	}
 
-	if (self->client->pers.guardian_mode == 0 && enemy->client->pers.guardian_mode > 0)
-	{ // zyk: cannot grab quest player or bosses if self is not in quest
-		return qfalse;
-	}
+	// GalaxyRP fix: [Guardian] removed a "cannot grab quest player or bosses" guard here; both
+	// pers.guardian_mode fields are permanently 0, so the enemy->...guardian_mode > 0 half was
+	// always false and the guard never fired.
 
 	if (level.gametype < GT_TEAM)
 		return qtrue;
@@ -4352,17 +4351,8 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 				dmg = 0;
 		}
 
-		// zyk: Duelist Unique Abilities. Heavily increases saber damage
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 6 && 
-			self->client->pers.unique_skill_duration > level.time)
-		{
-			if (self->client->ps.torsoAnim == BOTH_PULL_IMPALE_STAB) // zyk: Impale Stab
-				dmg = 55;
-			else if (self->client->ps.torsoAnim == BOTH_FORCELEAP2_T__B_) // zyk: Vertical DFA
-				dmg = 28;
-			else if (self->client->ps.torsoAnim == BOTH_ALORA_SPIN_THROW) // zyk: Super Throw
-				dmg = 75;
-		}
+		// GalaxyRP fix: [Dead Code] removed the Duelist (rpg_class==6) saber-damage boost here;
+		// pers.rpg_class is permanently 0, so this never applied.
 
 		idleDamage = qtrue;
 	}
@@ -6727,13 +6717,11 @@ qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, vec3_t 
 		return qfalse;
 	}
 
-	// zyk: Force Guardian with Upgrade cannot lose saber
-	if (saberOwner->client->sess.amrpgmode == 2 && saberOwner->client->pers.rpg_class == 9 && saberOwner->client->pers.secrets_found & (1 << 19))
-		return qfalse;
+	// GalaxyRP fix: [Dead Code] removed the Force Guardian with Upgrade (rpg_class==9) saber-loss
+	// immunity here; pers.rpg_class is permanently 0, so this never applied.
 
-	// zyk: guardians cannot lose saber
-	if (saberOwner->NPC && saberOwner->client->pers.guardian_invoked_by_id != -1)
-		return qfalse;
+	// GalaxyRP fix: [Guardian] removed a "guardians cannot lose saber" guard here;
+	// pers.guardian_invoked_by_id is permanently -1, so this never applied.
 
 	saberOwner->client->ps.saberInFlight = qtrue;
 	saberOwner->client->ps.saberEntityState = 1;
@@ -7627,10 +7615,11 @@ static void G_TossTheMofo(gentity_t *ent, vec3_t tossDir, float tossStr)
 
 	VectorMA(ent->client->ps.velocity, tossStr, tossDir, ent->client->ps.velocity);
 	ent->client->ps.velocity[2] = 200;
+	// GalaxyRP fix: [Dead Code] dropped the Guardian of Resistance knockdown-immunity clause here;
+	// pers.guardian_mode is permanently 0, so it was never == 11 or == 17.
 	if (ent->health > 0 && ent->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN &&
 		BG_KnockDownable(&ent->client->ps) &&
-		G_KickDownable(ent) && 
-		!(ent->client->pers.guardian_mode == 11 || (ent->client->pers.guardian_mode == 17 && Q_stricmp(ent->NPC_type, "guardian_boss_8") == 0))) // zyk: added Guardian of Resistance condition. This guardian cant be knocked down by melee kick
+		G_KickDownable(ent))
 	{ //if they are alive, knock them down I suppose
 		ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 		ent->client->ps.forceHandExtendTime = level.time + 700;
@@ -7774,11 +7763,8 @@ static void G_KickSomeMofos(gentity_t *ent)
 	VectorSet(kickEnd, 0.0f, 0.0f, 0.0f);
 	VectorSet(fwdAngs, 0.0f, ent->client->ps.viewangles[YAW], 0.0f);
 
-	// zyk: Monk class in RPG Mode causes more kick damage
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 4)
-	{
-		kickDamage = kickDamage * 2.5;
-	}
+	// GalaxyRP fix: [Dead Code] removed the Monk (rpg_class==4) kick-damage boost here;
+	// pers.rpg_class is permanently 0, so this never applied.
 
 	//HMM... or maybe trace from origin to footRBolt/footLBolt?  Which one?  G2 trace?  Will do hitLoc, if so...
 	if ( ent->client->ps.torsoAnim == BOTH_A7_HILT )

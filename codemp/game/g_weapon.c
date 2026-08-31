@@ -739,46 +739,7 @@ void WP_DisruptorAltFire( gentity_t *ent )
 
 	//VectorCopy( muzzle, muzzle2 ); // making a backup copy
 
-	if (ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 5 && ent->client->pers.player_statuses & (1 << 23))
-	{ // zyk: Stealth Attacker Aimed Shot ability
-		if (ent->client->pers.unique_skill_user_id > -1)
-		{ // zyk: if we have a target, shoot at him
-			gentity_t *target_ent = &g_entities[ent->client->pers.unique_skill_user_id];
-			vec3_t zyk_dir, zyk_enemy_origin;
-
-			// zyk: make it a full charged shot
-			ent->client->ps.weaponChargeTime = level.time - 2000;
-
-			VectorCopy(ent->client->ps.origin, muzzle);
-			muzzle[2] += 18;
-
-			VectorCopy(target_ent->client->ps.origin, zyk_enemy_origin);
-			if (target_ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-			{
-				zyk_enemy_origin[2] -= 24;
-			}
-
-			VectorSubtract(zyk_enemy_origin, muzzle, zyk_dir);
-			VectorNormalize(zyk_dir);
-
-			VectorCopy(zyk_dir, forward);
-		}
-		else
-		{ // zyk if no target, shoot forward
-			vec3_t zyk_dir;
-
-			// zyk: make it a full charged shot
-			ent->client->ps.weaponChargeTime = level.time - 2000;
-
-			VectorCopy(ent->client->ps.origin, muzzle);
-			muzzle[2] += 18;
-
-			AngleVectors(ent->client->ps.viewangles, zyk_dir, NULL, NULL);
-			VectorNormalize(zyk_dir);
-
-			VectorCopy(zyk_dir, forward);
-		}
-	}
+	// GalaxyRP fix: [RPG Class] removed Stealth Attacker (rpg_class==5) Aimed Shot ability block; rpg_class is permanently 0
 
 	if (ent->client)
 	{
@@ -1449,12 +1410,9 @@ void DEMP2_AltRadiusDamage( gentity_t *ent )
 				}
 				if ( gent->client->ps.powerups[PW_CLOAKED] )
 				{//disable cloak temporarily
-					if (myOwner->client->pers.guardian_mode == gent->client->pers.guardian_mode && 
-						(gent->client->sess.amrpgmode < 2 || gent->client->pers.rpg_class != 5))
-					{ // zyk: Stealth Attacker cloak does not decloak by DEMP2 attack. Also, non-quest players cant decloak quest players in boss battle and vice-versa
-						Jedi_Decloak( gent );
-						gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-					}
+					// GalaxyRP fix: [Guardian] removed always-true guardian_mode/rpg_class decloak-immunity check (both fields permanently dead)
+					Jedi_Decloak( gent );
+					gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
 				}
 			}
 		}
@@ -1691,7 +1649,8 @@ void zyk_lightning_dome_radius_damage( gentity_t *ent )
 
 		if (gent != myOwner)
 		{
-			if (gent->client && myOwner->client->pers.rpg_class != 3 && zyk_check_immunity_power(gent))
+			// GalaxyRP fix: [RPG Class] removed always-true rpg_class!=3 check (rpg_class permanently dead)
+			if (gent->client && zyk_check_immunity_power(gent))
 			{ // zyk: Immunity Power users cannot be hit by Lightning Dome, but can be hit by Lightning Shield discharge
 				continue;
 			}
@@ -1724,12 +1683,9 @@ void zyk_lightning_dome_radius_damage( gentity_t *ent )
 				}
 				if ( gent->client->ps.powerups[PW_CLOAKED] )
 				{//disable cloak temporarily
-					if (myOwner->client->pers.guardian_mode == gent->client->pers.guardian_mode && 
-						(gent->client->sess.amrpgmode < 2 || gent->client->pers.rpg_class != 5))
-					{ // zyk: Stealth Attacker cloak does not decloak by DEMP2 attack. Also, non-quest players cant decloak quest players in boss battle and vice-versa
-						Jedi_Decloak( gent );
-						gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-					}
+					// GalaxyRP fix: [Guardian] removed always-true guardian_mode/rpg_class decloak-immunity check (both fields permanently dead)
+					Jedi_Decloak( gent );
+					gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
 				}
 			}
 		}
@@ -3680,11 +3636,7 @@ static void WP_FireConcussionAlt( gentity_t *ent )
 						ent->client->accuracy_hits++;
 					}
 
-					if (traceEnt->client && ent->client->pers.guardian_mode != traceEnt->client->pers.guardian_mode &&
-						!(ent->client->pers.guardian_mode > 0 && traceEnt->NPC && traceEnt->client->pers.guardian_mode == 0))
-					{ // zyk: non quest player cant hit quest players in boss battles and vice-versa
-						break;
-					}
+					// GalaxyRP fix: [Guardian] removed always-false guardian_mode mismatch check (guardian_mode permanently 0)
 
 					noKnockBack = (traceEnt->flags&FL_NO_KNOCKBACK);//will be set if they die, I want to know if it was on *before* they died
 					if ( traceEnt && traceEnt->client && traceEnt->client->NPC_class == CLASS_GALAKMECH )
@@ -3717,10 +3669,7 @@ static void WP_FireConcussionAlt( gentity_t *ent )
 								break;
 							}
 
-							if (traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->pers.rpg_class == 9)
-							{ // zyk: Force Guardian cannot be knocked down
-								break;
-							}
+							// GalaxyRP fix: [RPG Class] removed always-false Force Guardian (rpg_class==9) knockdown-immunity check
 
 							if (traceEnt->client->ps.duelInProgress == qtrue)
 							{ // zyk: players in private duels cannot be knocked down
@@ -3918,8 +3867,8 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	trap->Trace ( &tr, muzzleStun, mins, maxs, end, ent->s.number, MASK_SHOT, qfalse, 0, 0 );
 
 	// zyk: starts flame thrower
-	if (ent->client && ent->client->sess.amrpgmode == 2 && alt_fire == qtrue && ent->client->pers.rpg_class != 1 && ent->client->pers.rpg_class != 4 && 
-		ent->client->pers.rpg_class != 6 && ent->client->pers.rpg_class != 8 && ent->client->pers.rpg_class != 9 && 
+	// GalaxyRP fix: [RPG Class] removed always-true rpg_class!=1/4/6/8/9 conjuncts (rpg_class permanently dead)
+	if (ent->client && ent->client->sess.amrpgmode == 2 && alt_fire == qtrue &&
 		ent->client->pers.skill_levels[57] > 0 && ent->client->ps.cloakFuel > 0 && ent->waterlevel < 3)
 	{ // zyk: do not use flame thrower when underwater
 		int flame_thrower_fuel_usage = 2;
@@ -3995,19 +3944,10 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 			{
 				tr_ent->client->ps.electrifyTime = level.time + 700;
 
-				if (ent->client->pers.guardian_mode != tr_ent->client->pers.guardian_mode)
-				{ // zyk: non quest players cant hit quest players and vice-versa
-					if (!((ent->client->pers.guardian_mode == 12 || ent->client->pers.guardian_mode == 13) && tr_ent->NPC && 
-							(Q_stricmp(tr_ent->NPC_type, "guardian_of_universe") || Q_stricmp(tr_ent->NPC_type, "quest_reborn") || 
-							Q_stricmp(tr_ent->NPC_type, "quest_reborn_blue") || Q_stricmp(tr_ent->NPC_type, "quest_reborn_red") || 
-							Q_stricmp(tr_ent->NPC_type, "quest_reborn_boss")))
-						)
-					{
-						return;
-					}
-				}
+				// GalaxyRP fix: [Guardian] removed always-false guardian_mode mismatch check (guardian_mode permanently 0)
 
-				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 15) && (tr_ent->client->sess.amrpgmode < 2 || tr_ent->client->pers.rpg_class != 5) && tr_ent->client->ps.powerups[PW_CLOAKED])
+				// GalaxyRP fix: [RPG Class] removed always-true guardian_mode/rpg_class decloak-immunity check
+				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 15) && tr_ent->client->ps.powerups[PW_CLOAKED])
 				{ // zyk: stun baton upgrade decloaks players except Stealth Attacker
 					Jedi_Decloak(tr_ent);
 				}
@@ -4021,17 +3961,9 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 						return;
 					}
 
-					// zyk: guardians cant be hit by it
-					if (tr_ent->client->pers.guardian_invoked_by_id != -1)
-					{
-						return;
-					}
+					// GalaxyRP fix: [Guardian] removed always-true guardian_invoked_by_id!=-1 check (guardian_invoked_by_id permanently -1)
 
-					// zyk: Stealth Attacker Upgrade protects against it
-					if (tr_ent->client->sess.amrpgmode == 2 && tr_ent->client->pers.rpg_class == 5 && tr_ent->client->pers.secrets_found & (1 << 7))
-					{
-						return;
-					}
+					// GalaxyRP fix: [RPG Class] removed always-false Stealth Attacker (rpg_class==5) protection check
 
 					if (zyk_can_hit_target(ent, tr_ent) == qfalse)
 					{ // zyk: testing if the target player can get hit by the stun baton
@@ -4090,412 +4022,7 @@ void WP_FireMelee( gentity_t *ent, qboolean alt_fire )
 	}
 	else
 	{
-		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 8)
-		{ // zyk: Magic Master fist attacks
-			if (ent->client->sess.magic_fist_selection == 0 && ent->client->pers.magic_power >= zyk_magic_fist_mp_cost.integer)
-			{ // zyk: Magic Bolt
-				vec3_t origin, dir, zyk_forward;
-				gentity_t *missile = NULL;
-
-				if (ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 12);
-				else
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 36);
-
-				VectorSet(dir, ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], 0);
-
-				AngleVectors(dir, zyk_forward, NULL, NULL);
-
-				missile = CreateMissile(origin, zyk_forward, magic_fist_velocity(ent), 10000, ent, qfalse);
-
-				missile->classname = "bowcaster_proj";
-				missile->s.weapon = WP_BOWCASTER;
-
-				VectorSet(missile->r.maxs, BOWCASTER_SIZE, BOWCASTER_SIZE, BOWCASTER_SIZE);
-				VectorScale(missile->r.maxs, -1, missile->r.mins);
-
-				if (ent->client->pers.unique_skill_duration > level.time && !(ent->client->pers.player_statuses & (1 << 21)) &&
-					!(ent->client->pers.player_statuses & (1 << 22)) && !(ent->client->pers.player_statuses & (1 << 23)))
-				{// zyk: Unique Skill increases damage
-					missile->damage = zyk_magic_fist_damage.integer * 2;
-				}
-				else
-				{
-					missile->damage = zyk_magic_fist_damage.integer;
-				}
-
-				missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-				missile->methodOfDeath = MOD_MELEE;
-				missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-
-				// we don't want it to bounce
-				missile->bounceCount = 0;
-
-				ent->client->pers.magic_power -= zyk_magic_fist_mp_cost.integer;
-
-				G_Sound(ent, CHAN_WEAPON, G_SoundIndex("sound/weapons/noghri/fire.mp3"));
-
-				send_rpg_events(2000);
-			}
-			else if (ent->client->sess.magic_fist_selection == 1 && ent->client->pers.magic_power >= (zyk_magic_fist_mp_cost.integer * 2))
-			{ // zyk: Electric Bolt
-				gentity_t	*missile;
-				vec3_t origin, dir, zyk_forward;
-				int fist_damage = (int)ceil(zyk_magic_fist_damage.integer * (1.6 + ((ent->client->pers.level * 1.0) / 200.0)));
-
-				if (ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 12);
-				else
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 36);
-			
-				VectorSet(dir, ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], 0);
-
-				AngleVectors(dir, zyk_forward, NULL, NULL);
-
-				VectorNormalize(zyk_forward);
-
-				missile = CreateMissile(origin, zyk_forward, magic_fist_velocity(ent), 10000, ent, qfalse);
-
-				missile->classname = "demp2_proj";
-				missile->s.weapon = WP_DEMP2;
-
-				VectorSet(missile->r.maxs, 2, 2, 2);
-				VectorScale(missile->r.maxs, -1, missile->r.mins);
-
-				if (ent->client->pers.unique_skill_duration > level.time && !(ent->client->pers.player_statuses & (1 << 21)) &&
-					!(ent->client->pers.player_statuses & (1 << 22)) && !(ent->client->pers.player_statuses & (1 << 23)))
-				{ // zyk: Unique Skill increases damage
-					missile->damage = fist_damage * 2;
-				}
-				else
-				{
-					missile->damage = fist_damage;
-				}
-
-				missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-				missile->methodOfDeath = MOD_MELEE;
-				missile->clipmask = MASK_SHOT;
-
-				// we don't want it to ever bounce
-				missile->bounceCount = 0;
-
-				ent->client->pers.magic_power -= (zyk_magic_fist_mp_cost.integer * 2);
-
-				G_Sound(ent, CHAN_WEAPON, G_SoundIndex("sound/weapons/demp2/fire.mp3"));
-
-				send_rpg_events(2000);
-			}
-			else if (ent->client->sess.magic_fist_selection == 2 && ent->client->pers.magic_power >= (zyk_magic_fist_mp_cost.integer * 2))
-			{ // zyk: Instant-Hit Bolt
-				int skip, traces = DISRUPTOR_ALT_TRACES;
-				qboolean	render_impact = qtrue;
-				vec3_t		start, end;
-				vec3_t		origin, muzzle2, dir;
-				trace_t		tr;
-				gentity_t	*traceEnt, *tent;
-				float		shotRange = 8192.0f;
-				vec3_t shot_mins, shot_maxs;
-				int			i;
-				int damage = zyk_magic_fist_damage.integer * 1.2;
-
-				if (ent->client->pers.unique_skill_duration > level.time && !(ent->client->pers.player_statuses & (1 << 21)) &&
-					!(ent->client->pers.player_statuses & (1 << 22)) && !(ent->client->pers.player_statuses & (1 << 23)))
-				{// zyk: Unique Skill increases damage
-					damage *= 2;
-				}
-
-				if (ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-					VectorSet(origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 12);
-				else
-					VectorSet(origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 36);
-
-				VectorCopy( origin, muzzle2 ); // making a backup copy
-
-				VectorCopy(origin, start );
-				WP_TraceSetStart( ent, start, vec3_origin, vec3_origin );
-
-				skip = ent->s.number;
-
-				//Make it a little easier to hit guys at long range
-				VectorSet( shot_mins, -1, -1, -1 );
-				VectorSet( shot_maxs, 1, 1, 1 );
-
-				for ( i = 0; i < traces; i++ )
-				{
-					VectorMA( start, shotRange, forward, end );
-
-					//NOTE: if you want to be able to hit guys in emplaced guns, use "G2_COLLIDE, 10" instead of "G2_RETURNONHIT, 0"
-					//alternately, if you end up hitting an emplaced_gun that has a sitter, just redo this one trace with the "G2_COLLIDE, 10" to see if we it the sitter
-					//trap->trace( &tr, start, NULL, NULL, end, skip, MASK_SHOT, G2_COLLIDE, 10 );//G2_RETURNONHIT, 0 );
-					if (d_projectileGhoul2Collision.integer)
-					{
-						trap->Trace( &tr, start, shot_mins, shot_maxs, end, skip, MASK_SHOT, qfalse, G2TRFLAG_DOGHOULTRACE|G2TRFLAG_GETSURFINDEX|G2TRFLAG_HITCORPSES, g_g2TraceLod.integer );
-					}
-					else
-					{
-						trap->Trace( &tr, start, shot_mins, shot_maxs, end, skip, MASK_SHOT, qfalse, 0, 0 );
-					}
-
-					traceEnt = &g_entities[tr.entityNum];
-
-					if (d_projectileGhoul2Collision.integer && traceEnt->inuse && traceEnt->client)
-					{ //g2 collision checks -rww
-						if (traceEnt->inuse && traceEnt->client && traceEnt->ghoul2)
-						{ //since we used G2TRFLAG_GETSURFINDEX, tr.surfaceFlags will actually contain the index of the surface on the ghoul2 model we collided with.
-							traceEnt->client->g2LastSurfaceHit = tr.surfaceFlags;
-							traceEnt->client->g2LastSurfaceTime = level.time;
-						}
-
-						if (traceEnt->ghoul2)
-						{
-							tr.surfaceFlags = 0; //clear the surface flags after, since we actually care about them in here.
-						}
-					}
-					if ( tr.surfaceFlags & SURF_NOIMPACT )
-					{
-						render_impact = qfalse;
-					}
-
-					if ( tr.entityNum == ent->s.number )
-					{
-						// should never happen, but basically we don't want to consider a hit to ourselves?
-						// Get ready for an attempt to trace through another person
-						VectorCopy( tr.endpos, muzzle2 );
-						VectorCopy( tr.endpos, start );
-						skip = tr.entityNum;
-
-						continue;
-					}
-
-					if ( tr.fraction >= 1.0f )
-					{
-						// draw the beam but don't do anything else
-						break;
-					}
-
-					if ( render_impact )
-					{
-						if (( tr.entityNum < ENTITYNUM_WORLD && traceEnt->takedamage )
-							|| !Q_stricmp( traceEnt->classname, "misc_model_breakable" )
-							|| traceEnt->s.eType == ET_MOVER )
-						{
-							qboolean noKnockBack;
-
-							if ( traceEnt->client && LogAccuracyHit( traceEnt, ent ))
-							{//NOTE: hitting multiple ents can still get you over 100% accuracy
-								ent->client->accuracy_hits++;
-							}
-
-							noKnockBack = (traceEnt->flags&FL_NO_KNOCKBACK);//will be set if they die, I want to know if it was on *before* they died
-
-							if (traceEnt->client && ent->client->pers.guardian_mode != traceEnt->client->pers.guardian_mode &&
-								!(ent->client->pers.guardian_mode > 0 && traceEnt->NPC && traceEnt->client->pers.guardian_mode == 0))
-							{ // zyk: non quest player cant hit quest players in boss battles and vice-versa
-								break;
-							}
-
-							G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, DAMAGE_NO_KNOCKBACK|DAMAGE_NO_HIT_LOC, MOD_MELEE );
-
-							//do knockback and knockdown manually
-							if ( traceEnt->client )
-							{//only if we hit a client
-								vec3_t pushDir;
-								VectorCopy( forward, pushDir );
-								if ( pushDir[2] < 0.2f )
-								{
-									pushDir[2] = 0.2f;
-								}//hmm, re-normalize?  nah...
-
-								if ( traceEnt->health > 0 )
-								{//alive
-									// zyk: allies cant be knocked back
-									if (zyk_is_ally(ent,traceEnt) == qtrue)
-									{
-										break;
-									}
-
-									if (traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->pers.rpg_class == 9)
-									{ // zyk Force Guardian cannot be knocked down
-										break;
-									}
-
-									if (traceEnt->client->ps.duelInProgress == qtrue)
-									{ // zyk: players in private duels cannot be knocked down
-										break;
-									}
-
-									if (zyk_can_hit_target(ent, traceEnt) == qfalse)
-									{ // zyk: cannot hit this target
-										break;
-									}
-
-									//if ( G_HasKnockdownAnims( traceEnt ) )
-									if (!noKnockBack && !traceEnt->localAnimIndex && traceEnt->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN &&
-										BG_KnockDownable(&traceEnt->client->ps)) //just check for humanoids..
-									{//knock-downable
-										//G_Knockdown( traceEnt, ent, pushDir, 400, qtrue );
-										vec3_t plPDif;
-										float pStr;
-
-										//cap it and stuff, base the strength and whether or not we can knockdown on the distance
-										//from the shooter to the target
-										VectorSubtract(traceEnt->client->ps.origin, ent->client->ps.origin, plPDif);
-										pStr = 500.0f-VectorLength(plPDif);
-										if (pStr < 150.0f)
-										{
-											pStr = 150.0f;
-										}
-										if (pStr > 200.0f)
-										{
-											traceEnt->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-											traceEnt->client->ps.forceHandExtendTime = level.time + 1100;
-											traceEnt->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
-										}
-										traceEnt->client->ps.otherKiller = ent->s.number;
-										traceEnt->client->ps.otherKillerTime = level.time + 5000;
-										traceEnt->client->ps.otherKillerDebounceTime = level.time + 100;
-
-										traceEnt->client->ps.velocity[0] += pushDir[0]*pStr;
-										traceEnt->client->ps.velocity[1] += pushDir[1]*pStr;
-										traceEnt->client->ps.velocity[2] = pStr;
-									}
-								}
-							}
-
-							if ( traceEnt->s.eType == ET_MOVER )
-							{//stop the traces on any mover
-								break;
-							}
-						}
-						else
-						{
-							//mmm..no..don't do this more than once for no reason whatsoever.
-							break; // hit solid, but doesn't take damage, so stop the shot...we _could_ allow it to shoot through walls, might be cool?
-						}
-					}
-					else // not rendering impact, must be a skybox or other similar thing?
-					{
-						break; // don't try anymore traces
-					}
-
-					// Get ready for an attempt to trace through another person
-					VectorCopy( tr.endpos, muzzle2 );
-					VectorCopy( tr.endpos, start );
-					skip = tr.entityNum;
-				}
-
-				// now go along the trail and make sight events
-				VectorSubtract( tr.endpos, origin, dir );
-
-				//let's pack all this junk into a single tempent, and send it off.
-				tent = G_TempEntity(tr.endpos, EV_CONC_ALT_IMPACT);
-				tent->s.eventParm = DirToByte(tr.plane.normal);
-				tent->s.owner = ent->s.number;
-				VectorCopy(dir, tent->s.angles);
-				VectorCopy(origin, tent->s.origin2);
-				VectorCopy(forward, tent->s.angles2);
-
-				ent->client->pers.magic_power -= (zyk_magic_fist_mp_cost.integer * 2);
-
-				G_Sound(ent, CHAN_WEAPON, G_SoundIndex("sound/movers/objects/green_beam_start.mp3"));
-
-				send_rpg_events(2000);
-			}
-			else if (ent->client->sess.magic_fist_selection == 3 && ent->client->pers.magic_power >= (zyk_magic_fist_mp_cost.integer * 2))
-			{ // zyk: Ultra Bolt
-				gentity_t	*missile;
-				vec3_t origin, dir, zyk_forward;
-				int fist_damage = (int)ceil(zyk_magic_fist_damage.integer * (1.5 + ((ent->client->pers.level * 1.0) / 200.0)));
-
-				if (ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 12);
-				else
-					VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 36);
-			
-				VectorSet(dir, ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], 0);
-
-				AngleVectors( dir, zyk_forward, NULL, NULL );
-
-				VectorNormalize(zyk_forward);
-
-				missile = CreateMissile( origin, zyk_forward, magic_fist_velocity(ent), 10000, ent, qfalse);
-
-				missile->classname = "conc_proj";
-				missile->s.weapon = WP_CONCUSSION;
-				missile->mass = 10;
-
-				// Make it easier to hit things
-				VectorSet( missile->r.maxs, ROCKET_SIZE, ROCKET_SIZE, ROCKET_SIZE );
-				VectorScale( missile->r.maxs, -1, missile->r.mins );
-
-				if (ent->client->pers.unique_skill_duration > level.time && !(ent->client->pers.player_statuses & (1 << 21)) &&
-					!(ent->client->pers.player_statuses & (1 << 22)) && !(ent->client->pers.player_statuses & (1 << 23)))
-				{ // zyk: Unique Skill increases damage
-					fist_damage *= 2;
-				}
-
-				missile->damage = fist_damage;
-
-				missile->dflags = DAMAGE_EXTRA_KNOCKBACK;
-				missile->methodOfDeath = MOD_MELEE;
-				missile->splashMethodOfDeath = MOD_MELEE;
-				missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-
-				missile->splashDamage = fist_damage;
-
-				missile->splashRadius = CONC_SPLASH_RADIUS/2;
-
-				// we don't want it to ever bounce
-				missile->bounceCount = 0;
-
-				ent->client->pers.magic_power -= (zyk_magic_fist_mp_cost.integer * 2);
-
-				G_Sound(ent, CHAN_WEAPON, G_SoundIndex("sound/weapons/concussion/fire.mp3"));
-
-				send_rpg_events(2000);
-			}
-		}
-		else if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2 && 
-				 ent->client->pers.unique_skill_duration > level.time &&
-				 !(ent->client->pers.player_statuses & (1 << 21)) && 
-				 !(ent->client->pers.player_statuses & (1 << 22)) && 
-				 !(ent->client->pers.player_statuses & (1 << 23)) &&
-				 ent->client->ps.ammo[AMMO_METAL_BOLTS] > 0)
-		{ // zyk: Bounty Hunter Unique Skill, fire poison darts
-			vec3_t		fwd, dir, origin;
-			gentity_t	*missile;
-
-			ent->client->ps.ammo[AMMO_METAL_BOLTS] -= 1;
-
-			VectorSet(dir, ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], 0);
-
-			AngleVectors( dir, fwd, NULL, NULL );
-
-			if (ent->client->ps.pm_flags & PMF_DUCKED) // zyk: crouched
-				VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 10);
-			else
-				VectorSet(origin,ent->client->ps.origin[0],ent->client->ps.origin[1],ent->client->ps.origin[2] + 35);
-
-			missile = CreateMissile( origin, fwd, 7500, 10000, ent, qfalse);
-
-			missile->classname = "flech_proj";
-			missile->s.weapon = WP_FLECHETTE;
-
-			VectorSet( missile->r.maxs, FLECHETTE_SIZE, FLECHETTE_SIZE, FLECHETTE_SIZE );
-			VectorScale( missile->r.maxs, -1, missile->r.mins );
-
-			missile->damage = 1;
-			missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-			missile->methodOfDeath = MOD_MELEE;
-			missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-
-			// we don't want it to bounce forever
-			missile->bounceCount = 2;
-
-			missile->flags |= FL_BOUNCE_SHRAPNEL;
-
-			G_Sound(ent, CHAN_WEAPON, G_SoundIndex("sound/weapons/tusken_rifle/fire_gun.wav"));
-		}
+		// GalaxyRP fix: [RPG Class] removed dead Magic Master (rpg_class==8) and Bounty Hunter (rpg_class==2) unique-skill fist attack code; rpg_class permanently 0, both branches unreachable
 
 		VectorCopy(ent->client->ps.origin, muzzlePunch);
 		muzzlePunch[2] += ent->client->ps.viewheight-6;
@@ -5497,11 +5024,7 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 		}
 	}
 
-	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 8 && 
-		ent->client->sess.selected_special_power == 0 && ent->s.weapon == WP_MELEE)
-	{ // zyk: Magic Master can shoot from his hands
-		ent->client->accuracy_shots++;
-	}
+	// GalaxyRP fix: [RPG Class] removed dead Magic Master (rpg_class==8) accuracy-shot tracking block; rpg_class permanently 0
 
 	if ( ent && ent->client && ent->client->NPC_class == CLASS_VEHICLE )
 	{

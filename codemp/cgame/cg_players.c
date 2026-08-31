@@ -11118,43 +11118,11 @@ void CG_Player( centity_t *cent ) {
 		}
 	}
 
-	if (cent->currentState.number < MAX_CLIENTS && 
-		cent->currentState.powerups & (1 << PW_NEUTRALFLAG))
-	{ 
-		if (cg.rpg_class[cent->currentState.number] == 1) // zyk: Force User, draws the Force Shield effect
-			CG_DrawPlayerSphere(cent, cent->lerpOrigin, 1.4f, cgs.media.ysaliblueShader );
-		else if (cg.rpg_class[cent->currentState.number] == 9) // zyk: Force Guardian, draws the resistance shield around him
-			CG_DrawPlayerSphere(cent, cent->lerpOrigin, 1.4f, cgs.media.ysaliredShader );
-
-		if (cg.snap->ps.clientNum == cent->currentState.number && cg.rpg_class[cent->currentState.number] >= 0 && cg.unique_cooldown_timer == 0)
-		{ // zyk: classes that are using Unique Skill must show the cooldown time
-			int unique_cooldown_duration = 0;
-
-			if (cg.rpg_class[cent->currentState.number] == 0)
-				unique_cooldown_duration = 50000;
-			else if (cg.rpg_class[cent->currentState.number] == 1)
-				unique_cooldown_duration = 50000;
-			else if (cg.rpg_class[cent->currentState.number] == 2)
-				unique_cooldown_duration = 35000;
-			else if (cg.rpg_class[cent->currentState.number] == 3)
-				unique_cooldown_duration = 30000;
-			else if (cg.rpg_class[cent->currentState.number] == 4)
-				unique_cooldown_duration = 30000;
-			else if (cg.rpg_class[cent->currentState.number] == 5)
-				unique_cooldown_duration = 45000;
-			else if (cg.rpg_class[cent->currentState.number] == 6)
-				unique_cooldown_duration = 45000;
-			else if (cg.rpg_class[cent->currentState.number] == 7)
-				unique_cooldown_duration = 40000;
-			else if (cg.rpg_class[cent->currentState.number] == 8)
-				unique_cooldown_duration = 50000;
-			else if (cg.rpg_class[cent->currentState.number] == 9)
-				unique_cooldown_duration = 50000;
-
-			cg.unique_cooldown_timer = cg.time + unique_cooldown_duration;
-			cg.unique_cooldown_duration = unique_cooldown_duration;
-		}
-	}
+	// GalaxyRP fix: [RPG Class] removed dead Force Shield / resistance shield draws (mirror var never reached class 1 or 9)
+	// GalaxyRP fix: [RPG Class] removed the unique-skill cooldown trigger that depended on them; its "confirmed RPG Mode 2"
+	// guard (cg.rpg_class[num] >= 0) has no live cgame-side replacement now that the mirror is gone -- sess.amrpgmode is
+	// server-only and was only ever bridged to cgame via that mirror (EV_USE_ITEM13, eventParm 104/114) -- flagged for
+	// follow-up (a new networked signal is needed to restore this HUD feature), not guessed
 
 	if (cent->currentState.powerups & (1 << PW_FORCE_BOON))
 	{

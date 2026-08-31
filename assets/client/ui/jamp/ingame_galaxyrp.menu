@@ -6138,23 +6138,11 @@
 			decoration
 		}
 
-		itemDef 
-		{
-			name				setting0Value
-			group				settingsControls
-			rect				410 50 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_0_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
+		// Removed setting0Value (no setting0Button existed in this menu) 2026-08-31: server-side
+		// /settings 0 command was removed; this edit field only ever displayed
+		// ui_zyk_setting_0_value and never called exec, but is removed for consistency.
 
-		itemDef 
+		itemDef
 		{
 			name				setting1Value
 			group				settingsControls
@@ -6530,79 +6518,10 @@
 			visible				0
 		}
 
-		itemDef 
-		{
-			name				setting14Button
-			group				settingsControls
-			text				"Boss Battle Music"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 260 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action 
-			{ 
-				exec			"settings 14"
-				play			"sound/interface/button1.wav" ;
-			}  	  
-		}
-
-		itemDef 
-		{
-			name				setting14Value
-			group				settingsControls
-			rect				410 260 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_14_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting15Button
-			group				settingsControls
-			text				"Difficulty"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 275 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action 
-			{ 
-				exec			"settings 15"
-				play			"sound/interface/button1.wav" ;
-			}  	  
-		}
-
-		itemDef 
-		{
-			name				setting15Value
-			group				settingsControls
-			rect				410 275 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_15_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
+		// Removed setting14Button/setting14Value ("Boss Battle Music", exec "settings 14") and
+		// setting15Button/setting15Value ("Difficulty", exec "settings 15") 2026-08-31:
+		// server-side /settings 0, 14 and 15 commands were removed, so these buttons would
+		// now trigger "Invalid settings value" from the server. See also setting0Value below.
 
 //----------------------------------------------------------------------------------------------
 // List Tab Beginning

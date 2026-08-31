@@ -2780,10 +2780,10 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	ent->playerState = &ent->client->ps;
 
 	// zyk: initializing attributes used in RPG mode
-	client->pers.guardian_mode = 0;
+	// GalaxyRP fix: [Guardian] guardian_mode init removed - field is permanently 0, sole writer spawn_boss() had zero callers
 	client->pers.being_mind_controlled = -1;
 	client->pers.mind_controlled1_id = -1;
-	client->pers.guardian_invoked_by_id = -1;
+	// GalaxyRP fix: [Guardian] guardian_invoked_by_id init removed - field is permanently -1, sole writer spawn_boss() had zero callers
 
 	// zyk: cooldown time between magic powers
 	client->pers.quest_power_usage_timer = 0;
@@ -3390,7 +3390,7 @@ Initializes all non-persistant parts of playerState
 */
 extern saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
 extern qboolean WP_HasForcePowers( const playerState_t *ps );
-extern void clean_guardians(gentity_t *ent);
+// GalaxyRP fix: [Guardian] clean_guardians extern declaration removed - function was a permanent no-op and its definition was deleted from g_cmds.c
 extern void zyk_add_force_powers( gentity_t *ent );
 extern void zyk_add_guns( gentity_t *ent );
 extern void zyk_remove_force_powers( gentity_t *ent );
@@ -4137,7 +4137,7 @@ void ClientSpawn(gentity_t *ent) {
 	// zyk: if player is logged at spawn, load his skills
 	if (ent->client->sess.amrpgmode == 2)
 	{
-		clean_guardians(ent);
+		// GalaxyRP fix: [Guardian] clean_guardians() call removed - function was a permanent no-op
 
 		initialize_rpg_skills(ent);
 
@@ -4552,11 +4552,11 @@ void ClientDisconnect( int clientNum ) {
 	ent->client->sess.amrpgmode = 0;
 
 	// zyk: if this player was playing a quest, find a new one to play quests in this map
-	ent->client->pers.guardian_mode = 0;
+	// GalaxyRP fix: [Guardian] guardian_mode reset removed - field is permanently 0, sole writer spawn_boss() had zero callers
 
 	if (ent->client->pers.can_play_quest == 1)
 	{
-		clean_guardians(ent);
+		// GalaxyRP fix: [Guardian] clean_guardians() call removed - function was a permanent no-op
 		level.boss_battle_music_reset_timer = level.time + 1000;
 		// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see the
 		// GalaxyRP fix comment on its old location in g_cmds.c).

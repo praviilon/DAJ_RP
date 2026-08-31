@@ -1060,8 +1060,7 @@ Ghoul2 Insert End
 	// zyk: used to change the Unique bar timer
 	int using_unique_boost;
 
-	// zyk: RPG Mode class of the players
-	int rpg_class[MAX_CLIENTS];
+	// GalaxyRP fix: [RPG Class] removed unused client-side rpg_class array (server-side pers.rpg_class never varied meaningfully)
 
 	// zyk: sets clients which must have some RPG stuff set for this cg player to see the stuff on them
 	// Possible bitvalues:

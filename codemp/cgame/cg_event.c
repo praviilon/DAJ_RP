@@ -2690,15 +2690,13 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			}
 		}
 
-		if (es->number < MAX_CLIENTS)
-		{
-			if (es->eventParm >= 104 && es->eventParm <= 114)
-			{
-				if (es->eventParm == 114) // zyk: is not in RPG Mode
-					cg.rpg_class[es->number] = -1;
-				else // zyk: set the RPG class
-					cg.rpg_class[es->number] = es->eventParm - 104;
-			}
+		if (cg.snap->ps.clientNum == es->number && es->eventParm == 104 && cg.unique_cooldown_timer == 0)
+		{ // GalaxyRP fix: [RPG Class] restored the unique-skill cooldown trigger using the surviving EV_USE_ITEM13
+			// signal (eventParm 104 == confirmed RPG Mode 2) in place of the deleted cg.rpg_class[num] >= 0 check;
+			// duration matches the original cg_players.c formula (50000 -- the only branch ever reachable, since the
+			// server-side class value baked into eventParm was always 0 in practice)
+			cg.unique_cooldown_duration = 50000;
+			cg.unique_cooldown_timer = cg.time + cg.unique_cooldown_duration;
 		}
 
 		break;

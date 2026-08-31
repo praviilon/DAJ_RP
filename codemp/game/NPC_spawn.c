@@ -1768,8 +1768,9 @@ finish:
 		newent->client->sess.amrpgmode = 0;
 		newent->client->pers.being_mind_controlled = -1;
 		newent->client->pers.mind_controlled1_id = -1;
-		newent->client->pers.guardian_invoked_by_id = -1;
-		newent->client->pers.guardian_mode = 0;
+		// GalaxyRP fix: [Guardian] guardian_invoked_by_id/guardian_mode resets removed;
+		// spawn_boss() (their only setter) was deleted as unreachable dead code, so
+		// these fields are permanently 0/-1 and are being removed from g_local.h.
 		newent->client->pers.player_statuses = 0;
 		newent->client->pers.universe_quest_objective_control = -1;
 		newent->client->pers.universe_quest_artifact_holder_id = -1;
@@ -4943,8 +4944,6 @@ qboolean	showBBoxes = qfalse;
 void Cmd_NPC_f( gentity_t *ent )
 {
 	char	cmd[1024];
-	int player_it = 0;
-	gentity_t *this_ent = NULL;
 
 	if (!(ent->client->pers.bitvalue & (1 << ADM_NPC)))
 	{ // zyk: npc admin command
@@ -4958,16 +4957,10 @@ void Cmd_NPC_f( gentity_t *ent )
 		return;
 	}
 
-	for (player_it = 0; player_it < level.maxclients; player_it++)
-	{ // zyk: cant spawn guardians if a player is in a guardian battle
-		this_ent = &g_entities[player_it];
-
-		if (this_ent && this_ent->client && this_ent->client->sess.amrpgmode == 2 && this_ent->client->pers.guardian_mode > 0)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"Cannot spawn npcs while someone is in a guardian battle.\n\"" );
-			return;
-		}
-	}
+	// GalaxyRP fix: [Guardian] a "cant spawn npcs while someone is in a guardian
+	// battle" loop, gated on client->pers.guardian_mode > 0, used to live here.
+	// guardian_mode is permanently 0 (its only setter, spawn_boss(), was deleted
+	// as unreachable dead code), so the loop was dead and has been removed.
 
 	trap->Argv( 1, cmd, 1024 );
 
@@ -5037,11 +5030,11 @@ void Cmd_NPC_f( gentity_t *ent )
 
 			if (thisent->NPC)
 			{
-				if (thisent->client && thisent->client->pers.guardian_invoked_by_id != -1)
-				{
-					trap->SendServerCommand( ent-g_entities, "print \"NPC team cannot be used in bosses.\n\"" );
-					return;
-				}
+				// GalaxyRP fix: [Guardian] a "NPC team cannot be used in bosses" guard, gated
+				// on client->pers.guardian_invoked_by_id != -1, used to live here.
+				// guardian_invoked_by_id is permanently -1 (its only setter, spawn_boss(),
+				// was deleted as unreachable dead code), so the guard was dead and has been
+				// removed.
 
 				// GalaxyRP fix: [Quests] a "NPC team cannot be used in the Guardian of Map" guard,
 				// gated on level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only

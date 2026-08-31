@@ -544,13 +544,8 @@ void ItemUse_Binoculars(gentity_t *ent)
 	}
 	*/
 
-	// zyk: with Thermal Vision, sets the cooldown between activating and deactivating Binoculars to avoid problem in which it gets instantly on and off
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2 && ent->client->pers.secrets_found & (1 << 1) && 
-		ent->client->pers.thermal_vision_cooldown_time > level.time)
-	{
-		return;
-	}
-
+	// GalaxyRP fix: [RPG classes] removed a dead Thermal Vision cooldown check gated on
+	// pers.rpg_class == 2 (Bounty Hunter), which is permanently 0 now.
 	if (ent->client->ps.zoomMode == 0) // not zoomed or currently zoomed with the disruptor
 	{
 		ent->client->ps.zoomMode = 2;
@@ -606,11 +601,9 @@ void pas_fire( gentity_t *ent )
 	myOrg[2] += fwd[2]*16;
 
 	// zyk: changed sentry gun shotspeed from 2300 to 2800
-	// zyk: Bounty Hunter Upgrade makes sentry gun have more damage
-	if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.rpg_class == 2 && ent->parent->client->pers.secrets_found & (1 << 1))
-		WP_FireTurretMissile(&g_entities[ent->genericValue3], myOrg, fwd, qfalse, 12, 2800, MOD_SENTRY, ent );
-	else
-		WP_FireTurretMissile(&g_entities[ent->genericValue3], myOrg, fwd, qfalse, 10, 2800, MOD_SENTRY, ent );
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade damage bonus branch
+	// gated on pers.rpg_class == 2, which is permanently 0 now.
+	WP_FireTurretMissile(&g_entities[ent->genericValue3], myOrg, fwd, qfalse, 10, 2800, MOD_SENTRY, ent );
 
 	G_RunObject(ent);
 }
@@ -643,14 +636,8 @@ static qboolean pas_find_enemies( gentity_t *self )
 
 	VectorCopy(self->s.pos.trBase, org2);
 
-	// zyk: Bounty Hunter Upgrade allows it to find enemies in a greater distance
-	if (self->parent && self->parent->client && self->parent->client->sess.amrpgmode == 2 && 
-		self->parent->client->pers.rpg_class == 2 && self->parent->client->pers.secrets_found & (1 << 1))
-	{
-		distance_to_find_enemies *= 2;
-		bestDist = distance_to_find_enemies*distance_to_find_enemies;
-	}
-
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade detection-range
+	// doubling branch gated on pers.rpg_class == 2, which is permanently 0 now.
 	count = G_RadiusList( org2, distance_to_find_enemies, self, qtrue, entity_list );
 
 	for ( i = 0; i < count; i++ )
@@ -703,11 +690,9 @@ static qboolean pas_find_enemies( gentity_t *self )
 				continue;
 			}
 
-			if (self->parent && self->parent->client && self->parent->client->pers.guardian_mode != target->client->pers.guardian_mode && 
-				!target->NPC)
-			{ // zyk: sentry of players in boss battle can only hit the boss and his npcs, and players outside boss battle cannot hit players in boss battle
-				continue;
-			}
+			// GalaxyRP fix: [Guardian] removed a dead boss-battle sentry-targeting restriction
+			// comparing pers.guardian_mode to itself (always equal; pers.guardian_mode is
+			// permanently 0 now).
 
 			VectorCopy( target->client->ps.origin, org );
 		}
@@ -1093,11 +1078,8 @@ void turret_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 
 	g_entities[self->genericValue3].client->ps.fd.sentryDeployed = qfalse;
 
-	// zyk: Bounty Hunter with Upgrade can place more sentries
-	if (g_entities[self->genericValue3].client->sess.amrpgmode == 2 && g_entities[self->genericValue3].client->pers.rpg_class == 2)
-	{
-		g_entities[self->genericValue3].client->pers.bounty_hunter_placed_sentries--;
-	}
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter placed-sentries decrement
+	// gated on pers.rpg_class == 2, which is permanently 0 now.
 
 	//ExplodeDeath( self );
 	G_FreeEntity( self );
@@ -1236,20 +1218,9 @@ void ItemUse_Sentry( gentity_t *ent )
 
 	SP_PAS( sentry );
 
-	// zyk: Bounty Hunter sentry gun has more HP and with the Upgrade, player can place more sentry guns
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2)
-	{
-		sentry->health = 50 * (ent->client->pers.skill_levels[55] + 1);
-
-		// zyk: validating quantity of sentry guns that the Bounty Hunter can place
-		ent->client->pers.bounty_hunter_placed_sentries++;
-		ent->client->pers.bounty_hunter_sentries--;
-
-		if (ent->client->pers.secrets_found & (1 << 1) && ent->client->pers.bounty_hunter_placed_sentries < MAX_BOUNTY_HUNTER_SENTRIES)
-		{
-			ent->client->ps.fd.sentryDeployed = qfalse;
-		}
-	}
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter sentry-HP-bonus /
+	// placed-sentries-bookkeeping block gated on pers.rpg_class == 2, which is permanently
+	// 0 now. sentry->health keeps the default of 50 set inside SP_PAS() above.
 }
 
 extern gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
@@ -1279,11 +1250,9 @@ void ItemUse_Seeker(gentity_t *ent)
 	else
 	{
 		ent->client->ps.eFlags |= EF_SEEKERDRONE;
-		// zyk: Bounty Hunter Upgrade increases seeker drone lifetime
-		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2 && ent->client->pers.secrets_found & (1 << 1))
-			ent->client->ps.droneExistTime = level.time + 80000;
-		else
-			ent->client->ps.droneExistTime = level.time + 60000; // zyk: the seeker drone lifetime, changed from 30000 to 60000
+		// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade seeker-drone
+		// lifetime-extension branch gated on pers.rpg_class == 2, which is permanently 0 now.
+		ent->client->ps.droneExistTime = level.time + 60000; // zyk: the seeker drone lifetime, changed from 30000 to 60000
 		ent->client->ps.droneFireTime = level.time + 500;   // zyk: fire time of seeker drone changed from 1500 to 500
 	}
 }
@@ -1392,12 +1361,13 @@ void ItemUse_Jetpack( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [RPG classes] removed a dead Magic Master fuel-restore exception
+	// (pers.rpg_class != 8 was always true, so the OR'd clause was always true and never
+	// blocked this return).
 	if (!ent->client->jetPackOn &&
 		// ent->client->ps.jetpackFuel < 5
-		ent->client->pers.jetpack_fuel < JETPACK_SCALE && 
-		(ent->client->sess.amrpgmode != 2 || ent->client->pers.rpg_class != 8 || ent->client->pers.magic_power < 10 || ent->client->pers.skill_levels[55] == 0))
+		ent->client->pers.jetpack_fuel < JETPACK_SCALE)
 	{ //too low on fuel to start it up
-		// zyk: Magic Master can use magic to restore fuel so allow him to activate jetpack
 		return;
 	}
 
@@ -1826,11 +1796,9 @@ void EWebFire(gentity_t *owner, gentity_t *eweb)
 	missile->classname = "generic_proj";
 	missile->s.weapon = WP_TURRET;
 
-	// zyk: Bounty Hunter EWeb has more damage
-	if (owner && owner->client && owner->client->sess.amrpgmode == 2 && owner->client->pers.rpg_class == 2 && owner->client->pers.secrets_found & (1 << 1))
-		missile->damage = EWEB_MISSILE_DAMAGE + 5;
-	else
-		missile->damage = EWEB_MISSILE_DAMAGE;
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter EWeb damage-bonus branch
+	// gated on pers.rpg_class == 2, which is permanently 0 now.
+	missile->damage = EWEB_MISSILE_DAMAGE;
 
 	missile->dflags = DAMAGE_DEATH_KNOCKBACK;
 	missile->methodOfDeath = MOD_TURBLAST;
@@ -2106,11 +2074,8 @@ gentity_t *EWeb_Create(gentity_t *spawner)
 
 	ent->takedamage = qtrue;
 
-	// zyk: Bounty Hunter EWeb has more health
-	if (spawner->client->sess.amrpgmode == 2 && spawner->client->pers.rpg_class == 2)
-	{
-		eweb_health = eweb_health * (spawner->client->pers.skill_levels[55] + 1);
-	}
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter EWeb health-multiplier block
+	// gated on pers.rpg_class == 2, which is permanently 0 now.
 
 	if (spawner->client->ewebHealth <= 0)
 	{ //refresh the owner's e-web health if its last e-web did not exist or was killed
@@ -2319,17 +2284,8 @@ void Add_Ammo (gentity_t *ent, int weapon, int count)
 	int max_tripmine_ammo = zyk_max_tripmine_ammo.integer;
 	int max_detpack_ammo = zyk_max_detpack_ammo.integer;
 
-	// zyk: Bounty Hunter class has more max ammo
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2)
-	{
-		max_blasterpack_ammo += max_blasterpack_ammo/6 * ent->client->pers.skill_levels[55];
-		max_powercell_ammo += max_powercell_ammo/6 * ent->client->pers.skill_levels[55];
-		max_metalbolt_ammo += max_metalbolt_ammo/6 * ent->client->pers.skill_levels[55];
-		max_rocket_ammo += max_rocket_ammo/6 * ent->client->pers.skill_levels[55];
-		max_thermal_ammo += max_thermal_ammo/6 * ent->client->pers.skill_levels[55];
-		max_tripmine_ammo += max_tripmine_ammo/6 * ent->client->pers.skill_levels[55];
-		max_detpack_ammo += max_detpack_ammo/6 * ent->client->pers.skill_levels[55];
-	}
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter max-ammo-bonus block gated
+	// on pers.rpg_class == 2, which is permanently 0 now.
 
 	if (weapon == AMMO_BLASTER){
 		if (max_blasterpack_ammo - ent->client->ps.ammo[weapon] > count)
@@ -2688,38 +2644,12 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	// zyk: Some RPG classes cant pickup some items
 	if (other->client->sess.amrpgmode == 2)
 	{
-		if (other->client->pers.rpg_class == 1 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || ent->item->giType == IT_AMMO ||
-			ent->item->giType == IT_HOLDABLE))
-		{
-			return;
-		}
-		else if (other->client->pers.rpg_class == 3 && ent->item->giType == IT_HOLDABLE && ent->item->giTag == HI_CLOAK)
-		{
-			return;
-		}
-		else if (other->client->pers.rpg_class == 4 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || 
-				 ent->item->giType == IT_AMMO || ent->item->giType == IT_HOLDABLE))
-		{
-			return;
-		}
-		else if (other->client->pers.rpg_class == 6 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || 
-				 ent->item->giType == IT_AMMO || ent->item->giType == IT_HOLDABLE))
-		{
-			return;
-		}
-		else if (other->client->pers.rpg_class == 8 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON) || ent->item->giType == IT_AMMO || 
-			     (ent->item->giType == IT_HOLDABLE && ent->item->giTag != HI_MEDPAC && ent->item->giTag != HI_CLOAK && ent->item->giTag != HI_JETPACK)))
-		{ // zyk: Magic Master can only pickup some items
-			return;
-		}
-		else if (other->client->pers.rpg_class == 9 && ((ent->item->giType == IT_WEAPON && ent->item->giTag != WP_STUN_BATON && ent->item->giTag != WP_BLASTER) ||
-			(ent->item->giType == IT_AMMO && ent->item->giTag != AMMO_BLASTER) || 
-			(ent->item->giType == IT_HOLDABLE && ent->item->giTag != HI_MEDPAC_BIG && ent->item->giTag != HI_CLOAK && ent->item->giTag != HI_JETPACK)))
-		{
-			return;
-		}
+		// GalaxyRP fix: [RPG classes] removed a dead six-way pers.rpg_class pickup
+		// restriction chain (classes 1/3/4/6/8/9); pers.rpg_class is permanently 0 now,
+		// so pickup restriction never applies for any class -- falls through to normal
+		// pickup logic below unconditionally.
 	}
-	else if (other->client->pers.player_statuses & (1 << 12) && (ent->item->giType == IT_WEAPON || ent->item->giType == IT_AMMO || 
+	else if (other->client->pers.player_statuses & (1 << 12) && (ent->item->giType == IT_WEAPON || ent->item->giType == IT_AMMO ||
 			ent->item->giType == IT_HOLDABLE))
 	{ // zyk: players with all force powers given by admin cannot pickup some things
 		return;
@@ -2758,14 +2688,8 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 		}
 	}
 
-	if (other->client->sess.amrpgmode == 2 && other->client->pers.rpg_class == 2 && 
-		ent->item->giType == IT_HOLDABLE && ent->item->giTag == HI_SENTRY_GUN && 
-		other->client->pers.secrets_found & (1 << 1) && other->client->pers.bounty_hunter_sentries < MAX_BOUNTY_HUNTER_SENTRIES)
-	{ // zyk: Bounty Hunter can grab more sentries when he has the Bounty Hunter Upgrade
-		other->client->ps.stats[STAT_HOLDABLE_ITEMS] &= ~(1 << HI_SENTRY_GUN);
-		other->client->pers.bounty_hunter_sentries++;
-		zyk_bounty_sentry_validation = qtrue;
-	}
+	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade extra-sentry-grab
+	// block gated on pers.rpg_class == 2, which is permanently 0 now.
 
 	// the same pickup rules are used for client side and server side
 	if ( !BG_CanItemBeGrabbed( level.gametype, &ent->s, &other->client->ps ) && zyk_bounty_sentry_validation == qfalse) {

@@ -849,16 +849,13 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			}
 			else if ( other && other->client && other->client->ps.powerups[PW_CLOAKED] )
 			{
-				if (other->client->sess.amrpgmode < 2 || other->client->pers.rpg_class != 5)
-				{ // zyk: Stealth Attacker cloak does not decloak by DEMP2 attack
-					if (!ent->parent || !ent->parent->client || ent->parent->client->pers.guardian_mode == other->client->pers.guardian_mode)
-					{
-						Jedi_Decloak( other );
-						// zyk: now always temp disable
-						//temp disable
-						other->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-					}
-				}
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, so rpg_class != 5 was always true (making
+				// this whole condition always true regardless of amrpgmode); guardian_mode permanently 0 made
+				// the nested guardian_mode == guardian_mode check a tautology -- both if-wrappers removed, body unconditional
+				Jedi_Decloak( other );
+				// zyk: now always temp disable
+				//temp disable
+				other->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
 			}
 		}
 	}

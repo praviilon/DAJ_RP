@@ -696,7 +696,8 @@ typedef struct clientPersistant_s {
 
 	// zyk: turn on or off features of this player in his account file. It is a bit value attribute
 	// Possible bit values are:
-	// 0 - RPG quests
+	// GalaxyRP fix: [Settings] bit 0 ("RPG quests") documentation removed here — that setting has
+	// been removed from the game entirely.
 	// 1 - Light Power
 	// 2 - Dark Power
 	// 3 - Eternity Power
@@ -709,27 +710,16 @@ typedef struct clientPersistant_s {
 	// 11 - Start With Saber
 	// 12 - Jetpack
 	// 13 - Admin Protect
-	// 14 - Boss Battle Music
-	// 15 - Difficulty
+	// GalaxyRP fix: [Settings] bits 14 ("Boss Battle Music") and 15 ("Difficulty") documentation
+	// removed here — those settings have been removed from the game entirely.
 	// 26 - Saber Starts with Single Yellow/Dual style
 	// 27 - Saber Starts with Single Red/Dual/Staff style
 	// 28 - Saber Starts with Desann/Dual/Staff style
 	// 29 - Saber Starts with Tavion/Dual/Staff style
 	int player_settings;
 
-	// zyk: used to set the player class in the RPG Mode
-	// Possible values are:
-	// 0 - Free Warrior (default)
-	// 1 - Force User
-	// 2 - Bounty Hunter
-	// 3 - Armored Soldier
-	// 4 - Monk
-	// 5 - Stealth Attacker
-	// 6 - Duelist
-	// 7 - Force Gunner
-	// 8 - Magic Master
-	// 9 - Force Guardian
-	int rpg_class;
+	// GalaxyRP fix: [RPG Class] rpg_class field (and its class-value documentation) removed here —
+	// it is permanently 0 with zero live readers/writers left anywhere in the codebase.
 
 	// zyk: this is the cooldown timer of the Unique Skill used by some RPG classes
 	int unique_skill_timer;
@@ -998,37 +988,16 @@ typedef struct clientPersistant_s {
 	// zyk: used to show the riddles from time to time
 	int eternity_quest_timer;
 
-	// zyk: this attribute sets the player as fighting a guardian
-	// the values of guardian_mode are:
-	// 0 - Player is not fighting a guardian
-	// 1 - Guardian of Water
-	// 2 - Guardian of Earth
-	// 3 - Guardian of Forest
-	// 4 - Guardian of Intelligence
-	// 5 - Guardian of Agility
-	// 6 - Guardian of Fire
-	// 7 - Guardian of Wind
-	// 8 - Guardian of Light
-	// 9 - Guardian of Darkness
-	// 10 - Guardian of Eternity
-	// 11 - Guardian of Resistance
-	// 12 - Master of Evil
-	// 13 - Guardian of Universe
-	// 14 - Guardian of Chaos
-	// 15 - Ymir and Thor
-	// 16 - Guardian of Ice
-	// 17 - Guardian Trials Bosses
-	// 18 - Guardian Trials Final Bosses
-	// 19 - Ymir
-	// 20 - Guardian of Time
-	// 21 - Soul of Sorrow
-	int guardian_mode; 
+	// GalaxyRP fix: [Guardian] guardian_mode field (and its boss-value documentation) removed here —
+	// it is permanently 0 with zero live readers/writers left anywhere in the codebase (spawn_boss,
+	// its sole setter, has no callers).
 
 	// zyk: used by the last guardians in quests for their special abilities
 	int guardian_timer;
 
-	// zyk: player id that is fighting this guardian
-	int guardian_invoked_by_id;
+	// GalaxyRP fix: [Guardian] guardian_invoked_by_id field removed here — it is permanently -1
+	// with zero live readers/writers left anywhere in the codebase (spawn_boss, its sole setter,
+	// has no callers).
 
 	// Tr!Force: [Plugin] Client plugin check
 	qboolean		clientPlugin;	
@@ -1629,9 +1598,9 @@ typedef struct level_locals_s {
 	// zyk: sets the map in which the player must complete a quest objective
 	int quest_map;
 
-	// zyk: has the quest effect id of the fx_runner entity in the guardian area. Default -1.
-	// gets cleaned when the player arrives at it
-	int quest_effect_id;
+	// GalaxyRP fix: [Guardian] quest_effect_id field removed here — its sole reader/writer,
+	// clean_effect() in g_cmds.c, was already deleted as unreachable; the matching level.quest_effect_id
+	// init line in g_main.c is removed alongside this one.
 
 	// zyk: id of the portal effect entity at last universe quest mission, so players can go through the teleport
 	int chaos_portal_id;

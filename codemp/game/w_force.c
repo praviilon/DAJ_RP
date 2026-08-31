@@ -458,14 +458,7 @@ void WP_SpawnInitForcePowers( gentity_t *ent )
 	ent->client->ps.fd.forceMindtrickTargetIndex3 = 0;
 	ent->client->ps.fd.forceMindtrickTargetIndex4 = 0;
 
-	// zyk: remove mind control from these players or npcs
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 1 && ent->client->pers.mind_controlled1_id != -1)
-	{
-		gentity_t *tricked_entity = &g_entities[ent->client->pers.mind_controlled1_id];
-		ent->client->pers.mind_controlled1_id = -1;
-		tricked_entity->client->pers.being_mind_controlled = -1;
-	}
-
+	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, mind control block unreachable
 	ent->client->ps.holocronBits = 0;
 
 	i = 0;
@@ -571,34 +564,18 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 		return 0;
 	}
 
-	// zyk: players that are not in boss battle cannot hit a boss
-	if (attacker && attacker->client && other && other->client && other->NPC && other->client->pers.guardian_invoked_by_id != -1 &&
-		(attacker->client->sess.amrpgmode != 2 || attacker->client->pers.guardian_mode == 0))
-	{
-		return 0;
-	}
+	// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, boss-battle check unreachable
 
-	if (other && other->client && (other->NPC || other->client->sess.amrpgmode == 2) && 
+	if (other && other->client && (other->NPC || other->client->sess.amrpgmode == 2) &&
 		(forcePower == FP_PUSH || forcePower == FP_PULL || forcePower == FP_GRIP) && 
 		other->client->pers.quest_power_status & (1 << 11))
 	{ // zyk: Magic Shield protects against some force powers
 		return 0;
 	}
 
-	if (other && other->client && other->client->sess.amrpgmode == 2 && 
-		other->client->pers.rpg_class == 1 && other->client->pers.unique_skill_duration > level.time)
-	{ // zyk: Force User Unique Skill protects against force powers
-		return 0;
-	}
+	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User Unique Skill / Force Guardian Force Armor checks unreachable
 
-	if (other && other->client && other->client->sess.amrpgmode == 2 &&
-		other->client->pers.rpg_class == 9 && other->client->pers.unique_skill_duration > level.time &&
-		other->client->pers.player_statuses & (1 << 21))
-	{ // zyk: Force Guardian Force Armor protects against force powers
-		return 0;
-	}
-
-	if (forcePower != FP_TEAM_HEAL && forcePower != FP_TEAM_FORCE && attacker && attacker->client && other && other->client && 
+	if (forcePower != FP_TEAM_HEAL && forcePower != FP_TEAM_FORCE && attacker && attacker->client && other && other->client &&
 		attacker->client->sess.amrpgmode > 0 && other->client->sess.amrpgmode > 0 && other->client->pers.player_settings & (1 << 6) && 
 		zyk_is_ally(attacker,other) == qtrue)
 	{ // zyk: allies wont be affected by force powers if they do not allow it
@@ -701,10 +678,7 @@ qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int 
 	{
 		drain = (zyk_max_force_power.integer/2);
 	}
-	else if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1)
-	{ // zyk: Force User class. He spends less force power
-		drain *= 0.75;
-	}
+	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
 
 	if (self->client->ps.fd.forcePowersActive & (1 << forcePower))
 	{ //we're probably going to deactivate it..
@@ -1222,18 +1196,12 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 
 	if ((int)forcePower == FP_SPEED && overrideAmt)
 	{
-		// zyk: Force User class spends less force
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1)
-			overrideAmt = forcePowerNeeded[self->client->ps.fd.forcePowerLevel[forcePower]][forcePower] * 0.75;
-
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
 		BG_ForcePowerDrain( &self->client->ps, forcePower, overrideAmt*0.025 );
 	}
 	else if ((int)forcePower != FP_GRIP && (int)forcePower != FP_DRAIN)
 	{ //grip and drain drain as damage is done
-		// zyk: Force User class spends less force
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1)
-			overrideAmt = forcePowerNeeded[self->client->ps.fd.forcePowerLevel[forcePower]][forcePower] * 0.75;
-
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
 		BG_ForcePowerDrain( &self->client->ps, forcePower, overrideAmt );
 	}
 }
@@ -1407,9 +1375,10 @@ void ForceTeamHeal( gentity_t *self )
 		if (ent && ent->client && ent->client->sess.amrpgmode == 2)
 			max_shield = ent->client->pers.max_rpg_shield;
 
-		if (ent && ent->client && self != ent && 
-			((!ent->NPC && ent->client->pers.connected == CON_CONNECTED && ent->client->sess.sessionTeam != TEAM_SPECTATOR) || 
-			 (ent->client->playerTeam != NPCTEAM_ENEMY && ent->client->pers.guardian_invoked_by_id == -1 && ent->s.NPC_class != CLASS_VEHICLE)) && 
+		// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian_invoked_by_id==-1 conjunct always true
+		if (ent && ent->client && self != ent &&
+			((!ent->NPC && ent->client->pers.connected == CON_CONNECTED && ent->client->sess.sessionTeam != TEAM_SPECTATOR) ||
+			 (ent->client->playerTeam != NPCTEAM_ENEMY && ent->s.NPC_class != CLASS_VEHICLE)) &&
 			 (ent->client->ps.stats[STAT_HEALTH] < ent->client->ps.stats[STAT_MAX_HEALTH] || 
 			 (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[37] > 0 && 
 			 !ent->NPC && ent->client->ps.stats[STAT_HEALTH] >= ent->client->ps.stats[STAT_MAX_HEALTH] && 
@@ -1558,17 +1527,9 @@ void ForceTeamForceReplenish( gentity_t *self )
 	{
 		ent = &g_entities[i];
 
-		// zyk: Bounty Hunter class has more max ammo
-		if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 2)
-		{
-			max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer + zyk_max_blaster_pack_ammo.integer/6 * ent->client->pers.skill_levels[55];
-			max_powercell_ammo = zyk_max_power_cell_ammo.integer + zyk_max_power_cell_ammo.integer/6 * ent->client->pers.skill_levels[55];
-		}
-		else
-		{
-			max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer;
-			max_powercell_ammo = zyk_max_power_cell_ammo.integer;
-		}
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter max-ammo bonus unreachable
+		max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer;
+		max_powercell_ammo = zyk_max_power_cell_ammo.integer;
 
 		// zyk: created new condition so we can use Team Energize in FFA. Also added skill_levels[55] condition to restore ammo of the target
 		if (ent && ent->client && self != ent && 
@@ -1721,21 +1682,9 @@ void ForceGrip( gentity_t *self )
 		ForcePowerUsableOn(self, &g_entities[tr.entityNum], FP_GRIP) &&
 		(g_friendlyFire.integer || !OnSameTeam(self, &g_entities[tr.entityNum])) ) //don't grip someone who's still crippled
 	{
-		// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-		if (g_entities[tr.entityNum].client && g_entities[tr.entityNum].client->sess.amrpgmode == 2 && 
-			g_entities[tr.entityNum].client->pers.rpg_class == 3 && g_entities[tr.entityNum].client->pers.secrets_found & (1 << 16) && 
-			g_entities[tr.entityNum].client->ps.powerups[PW_YSALAMIRI] < level.time && Q_irand(0,4) < 2)
-		{
-			g_entities[tr.entityNum].client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
-			return;
-		}
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist check unreachable
 
-		// zyk: bosses cannot be gripped by players who are not in the boss battle
-		if (g_entities[tr.entityNum].client && g_entities[tr.entityNum].NPC && g_entities[tr.entityNum].client->pers.guardian_invoked_by_id != -1 &&
-			(self->client->sess.amrpgmode != 2 || self->client->pers.guardian_mode == 0))
-		{
-			return;
-		}
+		// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, boss-grip check unreachable
 
 		if (g_entities[tr.entityNum].s.number < MAX_CLIENTS && g_entities[tr.entityNum].client->ps.m_iVehicleNum)
 		{ //a player on a vehicle
@@ -2074,16 +2023,8 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 				if (dmg)
 				{
 					//rww - Shields can now absorb lightning too.
-					if (traceEnt && traceEnt->client && traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->pers.rpg_class == 5)
-					{ // zyk: Stealth Attacker absorbs electric damage
-						if (!(traceEnt->client->pers.secrets_found & (1 << 7)))
-						{ // zyk: only takes damage if he does not have the upgrade
-							dmg = (int)ceil(dmg * (1 - (0.25 * traceEnt->client->pers.skill_levels[55])));
-							G_Damage( traceEnt, self, self, dir, impactPoint, dmg, 0, MOD_FORCE_DARK );
-						}
-					}
-					else
-						G_Damage( traceEnt, self, self, dir, impactPoint, dmg, 0, MOD_FORCE_DARK );
+					// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Stealth Attacker electric-absorb branch unreachable
+					G_Damage( traceEnt, self, self, dir, impactPoint, dmg, 0, MOD_FORCE_DARK );
 				}
 				if ( traceEnt->client )
 				{
@@ -2098,33 +2039,21 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 					}
 					if ( traceEnt->client->ps.powerups[PW_CLOAKED] )
 					{//disable cloak temporarily
-						if (traceEnt->client->sess.amrpgmode < 2 || traceEnt->client->pers.rpg_class != 5)
-						{ // zyk: Stealth Attacker cloak does not decloak by lightning attack
-							Jedi_Decloak( traceEnt );
-							traceEnt->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-						}
+						// GalaxyRP fix: [Dead Code] rpg_class permanently 0, condition always true (amrpgmode<2 || rpg_class!=5)
+						Jedi_Decloak( traceEnt );
+						traceEnt->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
 					}
 
-					// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-					if (traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->pers.rpg_class == 3 && 
-						traceEnt->client->pers.secrets_found & (1 << 16) && traceEnt->client->ps.powerups[PW_YSALAMIRI] < level.time && Q_irand(0,10) == 0)
-					{
-						traceEnt->client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
+					// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
+					if (!traceEnt->NPC && traceEnt->client->jetPackOn)
+					{ //disable jetpack temporarily
+						// GalaxyRP fix: [Dead Code] rpg_class permanently 0, condition always true (amrpgmode!=2 || rpg_class!=5 || ...)
+						Jetpack_Off(traceEnt);
+						traceEnt->client->jetPackToggleTime = level.time + Q_irand(3000, 10000);
 					}
-					else
-					{
-						if (!traceEnt->NPC && traceEnt->client->jetPackOn)
-						{ //disable jetpack temporarily
-							if (traceEnt->client->sess.amrpgmode != 2 || traceEnt->client->pers.rpg_class != 5 || !(traceEnt->client->pers.secrets_found & (1 << 7)))
-							{ // zyk: do not disable jetpack of Stealth Attacker with Upgrade
-								Jetpack_Off(traceEnt);
-								traceEnt->client->jetPackToggleTime = level.time + Q_irand(3000, 10000);
-							}
-						}
-						else if (traceEnt->NPC && traceEnt->client->NPC_class == CLASS_BOBAFETT)
-						{ // zyk: also disables npc jetpack
-							Boba_FlyStop(traceEnt);
-						}
+					else if (traceEnt->NPC && traceEnt->client->NPC_class == CLASS_BOBAFETT)
+					{ // zyk: also disables npc jetpack
+						Boba_FlyStop(traceEnt);
 					}
 				}
 			}
@@ -2315,13 +2244,7 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 				}
 			}
 
-			// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-			if (traceEnt->client && traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->pers.rpg_class == 3 &&
-				traceEnt->client->pers.secrets_found & (1 << 16) && traceEnt->client->ps.powerups[PW_YSALAMIRI] < level.time && 
-				Q_irand(0, 10) == 0)
-			{
-				traceEnt->client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
-			}
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
 
 			if (ForcePowerUsableOn(self, traceEnt, FP_DRAIN))
 			{
@@ -2847,14 +2770,7 @@ qboolean ForceTelepathyCheckDirectNPCTarget( gentity_t *self, trace_t *tr, qbool
 
 	traceEnt = &g_entities[tr->entityNum];
 
-	if (traceEnt && traceEnt->client && traceEnt->NPC)
-	{
-		// zyk: cant use Mind trick on guardians of RPG Mode
-		if (traceEnt->client->pers.guardian_invoked_by_id != -1)
-		{
-			return qfalse;
-		}
-	}
+	// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian mind-trick block unreachable
 
 	return qtrue; // zyk: now always returns here
 
@@ -3127,20 +3043,9 @@ void ForceTelepathy(gentity_t *self)
 
 			tricked_entity = &g_entities[tr.entityNum];
 
-			// zyk: cant use Mind trick on guardians of RPG Mode
-			if (tricked_entity && tricked_entity->client && tricked_entity->client->pers.guardian_invoked_by_id != -1)
-			{
-				return;
-			}
+			// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian mind-trick check unreachable
 
-			// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-			if (tricked_entity && tricked_entity->client && tricked_entity->client->sess.amrpgmode == 2 && 
-				tricked_entity->client->pers.rpg_class == 3 && tricked_entity->client->pers.secrets_found & (1 << 16) && 
-				tricked_entity->client->ps.powerups[PW_YSALAMIRI] < level.time && Q_irand(0,4) < 2)
-			{
-				tricked_entity->client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
-				return;
-			}
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
 
 			if (!ForcePowerUsableOn(self, tricked_entity, FP_TELEPATHY))
 			{
@@ -3154,23 +3059,7 @@ void ForceTelepathy(gentity_t *self)
 				return;
 			}
 
-			// zyk: mind control this player, if he is not being mind controlled by someone else
-			if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && 
-				(tricked_entity->NPC || (tricked_entity->client->sess.sessionTeam != TEAM_SPECTATOR && tricked_entity->inuse == qtrue)) && 
-				tricked_entity->s.NPC_class != CLASS_VEHICLE && tricked_entity->client->pers.being_mind_controlled == -1 && 
-				self->client->pers.being_mind_controlled == -1 && 
-				((tricked_entity->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[11] > tricked_entity->client->pers.skill_levels[4]) || 
-				(tricked_entity->client->sess.amrpgmode != 2 && self->client->pers.skill_levels[11] > tricked_entity->client->ps.fd.forcePowerLevel[FP_SEE])) && tricked_entity->health > 0 && 
-				self->client->ps.hasLookTarget && self->client->ps.lookTarget == tricked_entity->s.number)
-			{
-				if (self->client->pers.mind_controlled1_id == -1)
-				{
-					self->client->pers.mind_controlled1_id = tricked_entity-g_entities;
-					tricked_entity->client->pers.being_mind_controlled = self-g_entities;
-
-					trap->SendServerCommand( tricked_entity-g_entities, va("cp \"^7You are being Mind-Controlled by ^7%s\n\"", self->client->pers.netname ) );
-				}
-			}
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, mind-control-target block unreachable
 
 			if ( !tookPower )
 			{
@@ -3240,40 +3129,14 @@ void ForceTelepathy(gentity_t *self)
 			{
 				gotatleastone = qtrue;
 
-				// zyk: cant use Mind trick on guardians of RPG Mode
-				if (ent && ent->client && ent->client->pers.guardian_invoked_by_id != -1)
-				{
-					return;
-				}
+				// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian mind-trick check unreachable
 
-				// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-				if (ent && ent->client && ent->client->sess.amrpgmode == 2 && 
-					ent->client->pers.rpg_class == 3 && ent->client->pers.secrets_found & (1 << 16) && 
-					ent->client->ps.powerups[PW_YSALAMIRI] < level.time && Q_irand(0,4) < 2)
-				{
-					ent->client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
-					return;
-				}
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
 
 				if (!ent->NPC) // zyk: NPCs wont have the glowing head effect of mind trick because of how the game handles the tricked entities
 					WP_AddAsMindtricked(&self->client->ps.fd, ent->s.number);
 
-				// zyk: mind control this player, if he is not being mind controlled by someone else
-				if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && 
-					(ent->NPC || (ent->client->sess.sessionTeam != TEAM_SPECTATOR && ent->inuse == qtrue)) && ent->s.NPC_class != CLASS_VEHICLE && 
-					ent->client->pers.being_mind_controlled == -1 && self->client->pers.being_mind_controlled == -1 && 
-					((ent->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[11] > ent->client->pers.skill_levels[4]) || 
-					(ent->client->sess.amrpgmode != 2 && self->client->pers.skill_levels[11] > ent->client->ps.fd.forcePowerLevel[FP_SEE])) && 
-					ent->health > 0 && self->client->ps.hasLookTarget && self->client->ps.lookTarget == ent->s.number)
-				{
-					if (self->client->pers.mind_controlled1_id == -1)
-					{
-						self->client->pers.mind_controlled1_id = ent-g_entities;
-						ent->client->pers.being_mind_controlled = self-g_entities;
-
-						trap->SendServerCommand( ent-g_entities, va("cp \"^7You are being Mind-Controlled by ^7%s\n\"", self->client->pers.netname ) );
-					}
-				}
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, mind-control-target block unreachable
 			}
 			e++;
 		}
@@ -3766,13 +3629,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 			continue;
 		}
 
-		// zyk: Armored Soldier Upgrade has a chance of setting ysalamiri and resist the force power
-		if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 3 && 
-			ent->client->pers.secrets_found & (1 << 16) && ent->client->ps.powerups[PW_YSALAMIRI] < level.time && Q_irand(0,3) == 0)
-		{
-			ent->client->ps.powerups[PW_YSALAMIRI] = level.time + 1500;
-			continue;
-		}
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
 
 		if ( ent->s.eType != ET_MISSILE )
 		{
@@ -3938,12 +3795,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					}
 				}
 
-				// zyk: Armored Soldier can resist Push and Pull if he has the Upgrade
-				if (push_list[x]->client->sess.amrpgmode == 2 && push_list[x]->client->pers.rpg_class == 3 && 
-					push_list[x]->client->pers.secrets_found & (1 << 16) && Q_irand(0,3) == 0)
-				{
-					canPullWeapon = qfalse;
-				}
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier push/pull resist branch unreachable
 
 				pushPowerMod = pushPower;
 
@@ -4036,16 +3888,9 @@ void ForceThrow( gentity_t *self, qboolean pull )
 							randfact = 10;
 						}
 
-						// zyk: Stealth Attacker Upgrade protects from losing weapon to force pull
-						if (push_list[x]->client->sess.amrpgmode == 2 && push_list[x]->client->pers.rpg_class == 5 && push_list[x]->client->pers.secrets_found & (1 << 7))
-						{
-							canPullWeapon = qfalse;
-						}
+						// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Stealth Attacker pull-protect branch unreachable
 
-						if (push_list[x]->NPC && push_list[x]->client->pers.guardian_invoked_by_id != -1)
-						{ // zyk: guardians cannot have their weapon pulled from them
-							canPullWeapon = qfalse;
-						}
+						// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian pull-protect branch unreachable
 
 						if (push_list[x]->NPC && push_list[x]->client->NPC_class == CLASS_VEHICLE)
 						{ // zyk: cannot pull anything from vehicles
@@ -4081,18 +3926,12 @@ void ForceThrow( gentity_t *self, qboolean pull )
 						if (BG_KnockDownable(&push_list[x]->client->ps) &&
 							dirLen <= (64*((modPowerLevel - otherPushPower)-1)))
 						{ //can only do a knockdown if fairly close
-							// zyk: Armored Soldier will not be knocked down if he has the Upgrade
-							if (push_list[x]->client->sess.amrpgmode != 2 || push_list[x]->client->pers.rpg_class != 3 || 
-								!(push_list[x]->client->pers.secrets_found & (1 << 16)))
-							{
-								if (!(push_list[x]->NPC && push_list[x]->client->pers.guardian_invoked_by_id != -1 && Q_irand(0,4) > 0))
-								{ // zyk: bosses have a small chance of getting knockdown
-									push_list[x]->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-									push_list[x]->client->ps.forceHandExtendTime = level.time + 700;
-									push_list[x]->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
-									push_list[x]->client->ps.quickerGetup = qtrue;
-								}
-							}
+							// GalaxyRP fix: [Dead Code] rpg_class permanently 0, condition always true (amrpgmode!=2 || rpg_class!=3 || ...)
+							// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, condition always true
+							push_list[x]->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+							push_list[x]->client->ps.forceHandExtendTime = level.time + 700;
+							push_list[x]->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
+							push_list[x]->client->ps.quickerGetup = qtrue;
 						}
 						else if (push_list[x]->s.number < MAX_CLIENTS && push_list[x]->client->ps.m_iVehicleNum &&
 							dirLen <= 128.0f )
@@ -4355,7 +4194,6 @@ void ForceThrow( gentity_t *self, qboolean pull )
 void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 {
 	int wasActive = self->client->ps.fd.forcePowersActive;
-	gentity_t *tricked_entity; // zyk: used to stop mind control
 
 	self->client->ps.fd.forcePowersActive &= ~( 1 << forcePower );
 
@@ -4378,13 +4216,7 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 	case FP_PULL:
 		break;
 	case FP_TELEPATHY:
-		// zyk: remove mind control from these players or npcs
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && self->client->pers.mind_controlled1_id != -1)
-		{
-			tricked_entity = &g_entities[self->client->pers.mind_controlled1_id];
-			self->client->pers.mind_controlled1_id = -1;
-			tricked_entity->client->pers.being_mind_controlled = -1;
-		}
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, mind control block unreachable
 
 		if (wasActive & (1 << FP_TELEPATHY))
 		{
@@ -4400,17 +4232,9 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 		{
 			G_MuteSound(self->client->ps.fd.killSoundEntIndex[TRACK_CHANNEL_5-50], CHAN_VOICE);
 
-			if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 2 && self->client->pers.secrets_found & (1 << 1) && 
-				self->client->ps.zoomMode == 2)
-			{ // zyk: Bounty Hunter with Upgrade that stops Thermal Vision. In this case, stop binoculars
-				self->client->ps.zoomMode = 0;
-				self->client->ps.zoomTime = level.time;
-			}
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter stop-binoculars branch unreachable
 
-			if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 8)
-			{ // zyk: removing Sense level so he can use holdable items with force keys again
-				self->client->ps.fd.forcePowerLevel[FP_SEE] = FORCE_LEVEL_0;
-			}
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Sense-level-reset branch unreachable
 		}
 		break;
 	case FP_GRIP:
@@ -4877,11 +4701,9 @@ static void WP_UpdateMindtrickEnts(gentity_t *self)
 				if (trap->InPVS(ent->client->ps.origin, self->client->ps.origin) &&
 					OrgVisible(ent->client->ps.origin, self->client->ps.origin, ent->s.number))
 				{
-					if (self->client->sess.amrpgmode < 2 || (self->client->pers.rpg_class != 1 && self->client->pers.rpg_class != 5))
-					{ // zyk: Force User wont stop Mind Trick (specially because it may be a Mind Control) and Stealth Attacker Ultra Cloak
-						if (ent && !ent->NPC) // zyk: remove tricked entity only for players
-							RemoveTrickedEnt(&self->client->ps.fd, i);
-					}
+					// GalaxyRP fix: [Dead Code] rpg_class permanently 0, condition always true (amrpgmode<2 || (rpg_class!=1 && rpg_class!=5))
+					if (ent && !ent->NPC) // zyk: remove tricked entity only for players
+						RemoveTrickedEnt(&self->client->ps.fd, i);
 				}
 			}
 			else if (BG_HasYsalamiri(level.gametype, &ent->client->ps))
@@ -5520,19 +5342,13 @@ void SeekerDroneUpdate(gentity_t *self)
 				VectorNormalize(endir);
 
 				// zyk: changed shot speed from 2000 to 4000
-				// zyk: changed damage when a Bounty Hunter uses the seeker drone
-				if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 2 && self->client->pers.secrets_found & (1 << 1))
-					WP_FireGenericBlasterMissile(self, org, endir, qfalse, 20, 4000, MOD_BLASTER);
-				else
-					WP_FireGenericBlasterMissile(self, org, endir, qfalse, 15, 4000, MOD_BLASTER);
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter damage-bonus branch unreachable
+				WP_FireGenericBlasterMissile(self, org, endir, qfalse, 15, 4000, MOD_BLASTER);
 
 				G_SoundAtLoc( org, CHAN_WEAPON, G_SoundIndex("sound/weapons/bryar/fire.wav") );
 
-				// zyk: Bounty Hunter Upgrade has fast-shooting seeker drone
-				if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 2 && self->client->pers.secrets_found & (1 << 1))
-					self->client->ps.droneFireTime = level.time + Q_irand(200, 300);
-				else
-					self->client->ps.droneFireTime = level.time + Q_irand(400, 700);
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter fast-shoot branch unreachable
+				self->client->ps.droneFireTime = level.time + Q_irand(400, 700);
 			}
 		}
 	}
@@ -6117,13 +5933,7 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		self->client->ps.fd.forceMindtrickTargetIndex3 = 0;
 		self->client->ps.fd.forceMindtrickTargetIndex4 = 0;
 
-		// zyk: remove mind control from these players or npcs
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && self->client->pers.mind_controlled1_id != -1)
-		{
-			gentity_t *tricked_entity = &g_entities[self->client->pers.mind_controlled1_id];
-			self->client->pers.mind_controlled1_id = -1;
-			tricked_entity->client->pers.being_mind_controlled = -1;
-		}
+		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, mind control block unreachable
 	}
 
 	if (self->health < 1)
@@ -6228,9 +6038,8 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		}
 	}
 
-	if ( ucmd->buttons & BUTTON_FORCE_LIGHTNING || 
-		(self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 1 && 
-		 self->client->pers.player_statuses & (1 << 21) && self->client->pers.unique_skill_duration > level.time))
+	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, unique-skill disjunct always false
+	if ( ucmd->buttons & BUTTON_FORCE_LIGHTNING )
 	{ //lightning
 		WP_DoSpecificPower(self, ucmd, FP_LIGHTNING);
 	}
@@ -6286,7 +6095,8 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 				self->client->ps.fd.forcePowerDuration[i] = 0;
 			}
 			// zyk: using Sense Health skill of RPG Mode
-			else if (i == FP_SEE && self->client->sess.amrpgmode == 2 && (self->client->pers.skill_levels[35] > 0 || self->client->pers.rpg_class == 8) && 
+			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, rpg_class==8 disjunct always false
+			else if (i == FP_SEE && self->client->sess.amrpgmode == 2 && (self->client->pers.skill_levels[35] > 0) &&
 					 self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) && self->client->pers.sense_health_timer < level.time && self->client->ps.hasLookTarget)
 			{
 				// zyk: if you are looking at someone (player or npc), this will be the client id
@@ -6315,16 +6125,11 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		{
 			if (level.gametype != GT_HOLOCRON || g_maxHolocronCarry.value)
 			{
+				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Monk Meditation / Force User-Duelist / Force Gunner regen branches unreachable
 				if ( self->client->ps.powerups[PW_FORCE_BOON] )
 					WP_ForcePowerRegenerate( self, 6 );
-				else if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 4 && self->client->pers.player_statuses & (1 << 21) && self->client->ps.legsAnim == BOTH_MEDITATE)
-					WP_ForcePowerRegenerate(self, 6); // zyk: Monk Meditation Strength makes him regen force faster
 				else if ( self->client->ps.isJediMaster && level.gametype == GT_JEDIMASTER )
 					WP_ForcePowerRegenerate( self, 4 ); //jedi master regenerates 4 times as fast
-				else if (self->client->sess.amrpgmode == 2 && (self->client->pers.rpg_class == 1 || self->client->pers.rpg_class == 6))
-					WP_ForcePowerRegenerate( self, (1 + self->client->pers.skill_levels[55]) ); // zyk: Force User and Duelist classes regen force faster
-				else if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 7 && self->client->pers.secrets_found & (1 << 8))
-					WP_ForcePowerRegenerate( self, 2); // zyk: Force Gunner with Upgrade regens force a bit faster
 				else
 					WP_ForcePowerRegenerate( self, 0 );
 			}
@@ -6461,11 +6266,7 @@ qboolean Jedi_DodgeEvasion( gentity_t *self, gentity_t *shooter, trace_t *tr, in
 		}
 	}
 
-	// zyk: Bounty Hunter with Thermal Vision cannot dodge
-	if (self->client->sess.amrpgmode == 2 && self->client->pers.rpg_class == 2)
-	{
-		return qfalse;
-	}
+	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Bounty Hunter no-dodge branch unreachable
 
 	switch( hitLoc )
 	{

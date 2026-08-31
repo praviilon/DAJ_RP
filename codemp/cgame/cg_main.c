@@ -2501,7 +2501,7 @@ Ghoul2 Insert End
 	for (j = 0; j < MAX_CLIENTS; j++)
 	{
 		cg.zyk_rpg_stuff[j] = 0;
-		cg.rpg_class[j] = -1;
+		// GalaxyRP fix: [RPG Class] removed unused rpg_class init (client-side array deleted)
 	}
 
 	cgs.processedSnapshotNum = serverMessageNum;

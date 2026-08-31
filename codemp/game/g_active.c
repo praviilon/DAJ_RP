@@ -174,8 +174,9 @@ void P_WorldEffects( gentity_t *ent ) {
 		if ( ent->client->airOutTime < level.time) {
 			// drown!
 			ent->client->airOutTime += 1000;
-			if ( ent->health > 0 && ent->client->tempSpectate < level.time && 
-				!(ent->client->sess.amrpgmode == 2 && ent->client->pers.rpg_class == 3 && ent->client->pers.secrets_found & (1 << 16))) 
+			// GalaxyRP fix: [Dead Code] dropped a `!(amrpgmode==2 && rpg_class==3 && ...)` clause here;
+			// pers.rpg_class is always 0 server-side, so the clause was tautologically always true.
+			if ( ent->health > 0 && ent->client->tempSpectate < level.time)
 			{ // zyk: Armored Soldier Upgrade protects from drowning
 				// take more damage the longer underwater
 				ent->damage += 2;
@@ -958,54 +959,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 		if (client->sess.amrpgmode == 2 && !(client->pers.quest_power_status & (1 << 2)))
 		{ // zyk: auto-healing abilities will only work if player is not hit by Time Power
-			if (client->pers.rpg_class == 4 && ent->health > 0)
-			{ // zyk: Monk auto-healing ability
-				if (client->pers.unique_skill_duration > level.time && !(client->pers.player_statuses & (1 << 22)) &&
-					!(client->pers.player_statuses & (1 << 23)))
-				{ // zyk: Monk Unique Skill
-					int heal_amount = 4;
-
-					if (client->pers.player_statuses & (1 << 21) && client->ps.legsAnim == BOTH_MEDITATE)
-					{ // zyk: Meditation Strength
-						heal_amount = 60;
-					}
-
-					if ((ent->health + heal_amount) < client->pers.max_rpg_health)
-					{
-						ent->health += heal_amount;
-					}
-					else
-					{
-						ent->health = client->pers.max_rpg_health;
-					}
-				}
-				else
-				{
-					if (ent->health < client->pers.max_rpg_health)
-					{ // zyk: Monk class auto-healing
-						ent->health += 1;
-					}
-				}
-			}
-			else if (client->pers.rpg_class == 3 && ent->health > 0)
-			{ // zyk: Armored Soldier auto-shield-healing ability
-				if (client->pers.unique_skill_duration > level.time && !(client->pers.player_statuses & (1 << 21)) &&
-					!(client->pers.player_statuses & (1 << 22)) && !(client->pers.player_statuses & (1 << 23)))
-				{ // zyk: Armored Soldier Unique Skill
-					if ((client->ps.stats[STAT_ARMOR] + 4) < client->pers.max_rpg_shield)
-					{
-						client->ps.stats[STAT_ARMOR] += 4;
-					}
-					else
-					{
-						client->ps.stats[STAT_ARMOR] = client->pers.max_rpg_shield;
-					}
-				}
-				else if (client->ps.stats[STAT_ARMOR] < client->pers.max_rpg_shield)
-				{
-					client->ps.stats[STAT_ARMOR] += 1;
-				}
-			}
+			// GalaxyRP fix: [Dead Code] removed the Monk (rpg_class==4) and Armored Soldier
+			// (rpg_class==3) auto-heal branches here; pers.rpg_class is always 0 server-side,
+			// so neither branch could ever be taken.
 
 			if (client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && client->pers.universe_quest_counter & (1 << 0) &&
 				client->pers.magic_power < zyk_max_magic_power(ent) && !(client->sess.magic_more_disabled_powers & (1 << 1)))
@@ -1141,12 +1097,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		else if (!(client->pers.player_statuses & (1 << 2)))
 		{ // zyk: send this event after some seconds in map and if the player did not received this event yet
 			// must wait some seconds because after a map change, sometimes the event is not received by the client-side game right away
-			if (client->sess.amrpgmode == 2 && client->pers.rpg_class == 2 && client->pers.secrets_found & (1 << 1))
-			{
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 5);
-			}
-			else // zyk: removing rpg stuff from client-side game
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 6);
+			// GalaxyRP fix: [Dead Code] collapsed to the unconditional else-branch; the
+			// rpg_class==2 guard was tautologically false (pers.rpg_class is always 0).
+			G_AddEvent(ent, EV_ITEMUSEFAIL, 6);
 
 			client->pers.player_statuses |= (1 << 2);
 		}
@@ -1162,8 +1115,10 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		}
 		else if (!(client->pers.player_statuses & (1 << 7)))
 		{ // zyk: tells the RPG class to the client-side mod to render the Force Shield effect and the resistance shield
+			// GalaxyRP fix: [Dead Code] dropped "+ client->pers.rpg_class"; pers.rpg_class is
+			// always 0 server-side, so the sent value was tautologically always 104.
 			if (client->sess.amrpgmode == 2)
-				G_AddEvent(ent, EV_USE_ITEM13, (104 + client->pers.rpg_class));
+				G_AddEvent(ent, EV_USE_ITEM13, 104);
 			else
 				G_AddEvent(ent, EV_USE_ITEM13, 114);
 
@@ -1172,10 +1127,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		else
 		{
 			// zyk: event to set the stealth attacker upgrade
-			if (client->sess.amrpgmode == 2 && client->pers.rpg_class == 5 && client->pers.secrets_found & (1 << 7))
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 9);
-			else
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 10);
+			// GalaxyRP fix: [Dead Code] collapsed to the unconditional else-branch; the
+			// rpg_class==5 guard was tautologically false (pers.rpg_class is always 0).
+			G_AddEvent(ent, EV_ITEMUSEFAIL, 10);
 
 			client->pers.player_statuses &= ~(1 << 2);
 			client->pers.player_statuses &= ~(1 << 3);
@@ -2976,10 +2930,8 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.speed = zyk_player_speed;
 		client->ps.basespeed = zyk_player_speed;
 
-		if (client->sess.amrpgmode == 2 && client->pers.rpg_class == 7 && client->pers.player_statuses & (1 << 23))
-		{ // zyk: using Force Dash
-			zyk_do_force_dash(ent);
-		}
+		// GalaxyRP fix: [Dead Code] removed the Force Dash trigger (rpg_class==7); pers.rpg_class
+		// is always 0 server-side, so this was unreachable.
 	}
 
 	if ( !ent->NPC || !(ent->NPC->aiFlags&NPCAI_CUSTOM_GRAVITY) )
@@ -3809,7 +3761,10 @@ void ClientThink_real( gentity_t *ent ) {
 				{ // zyk: Unique Skill, used by each RPG class
 					if (ent->client->pers.unique_skill_timer < level.time && ent->client->pers.skill_levels[38] > 0)
 					{
-						if (ent->client->pers.rpg_class == 0)
+						// GalaxyRP fix: [Dead Code] dropped the rpg_class dispatch here: rpg_class is
+						// always 0 server-side, so only the "Free Warrior" (class 0) body below could
+						// ever run; the rpg_class==1 through rpg_class==9 branches (~290 lines) were
+						// deleted as unreachable.
 						{ // zyk: Free Warrior
 							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
 							{
@@ -3844,299 +3799,6 @@ void ClientThink_real( gentity_t *ent ) {
 								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
 							}
 						}
-						else if (ent->client->pers.rpg_class == 1)
-						{ // zyk: Force User
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 10000;
-								ent->client->pers.unique_skill_duration = level.time + 10000;
-
-								ent->client->pers.unique_skill_timer = level.time + 50000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
-						else if (ent->client->pers.rpg_class == 2)
-						{ // zyk: Bounty Hunter
-							if (ent->client->ps.ammo[AMMO_METAL_BOLTS] >= 2)
-							{
-								ent->client->ps.ammo[AMMO_METAL_BOLTS] -= 2;
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-								ent->client->pers.unique_skill_duration = level.time + 25000;
-
-								ent->client->pers.unique_skill_timer = level.time + 35000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, "chat \"^3Unique Skill: ^7needs 2 metal bolts ammo to use it\"");
-							}
-						}
-						else if (ent->client->pers.rpg_class == 3)
-						{ // zyk: Armored Soldier
-							if (ent->client->ps.ammo[AMMO_POWERCELL] >= 2)
-							{
-								ent->client->ps.ammo[AMMO_POWERCELL] -= 2;
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 15000;
-								ent->client->pers.unique_skill_duration = level.time + 15000;
-
-								ent->client->pers.unique_skill_timer = level.time + 30000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, "chat \"^3Unique Skill: ^7needs 2 power cell ammo to use it\"");
-							}
-						}
-						else if (ent->client->pers.rpg_class == 4)
-						{ // zyk: Monk
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								int player_it = 0;
-
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								// zyk: disable grip of the enemy
-								for (player_it = 0; player_it < level.num_entities; player_it++)
-								{
-									gentity_t *player_ent = &g_entities[player_it];
-
-									if (ent->s.number != player_it && player_ent && player_ent->client && 
-										player_ent->client->ps.fd.forcePowersActive & (1 << FP_GRIP) && 
-										player_ent->client->ps.fd.forceGripEntityNum == ent->s.number)
-									{
-										WP_ForcePowerStop(player_ent, FP_GRIP);
-										break;
-									}
-								}
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 15000;
-								ent->client->pers.unique_skill_duration = level.time + 15000;
-
-								ent->client->pers.unique_skill_timer = level.time + 30000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
-						else if (ent->client->pers.rpg_class == 5)
-						{ // zyk: Stealth Attacker
-							if (ent->client->ps.ammo[AMMO_POWERCELL] >= 2)
-							{
-								ent->client->ps.ammo[AMMO_POWERCELL] -= 2;
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-								ent->client->pers.unique_skill_duration = level.time + 10000;
-
-								ent->client->pers.unique_skill_timer = level.time + 45000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, "chat \"^3Unique Skill: ^7needs 2 power cell ammo to use it\"");
-							}
-						}
-						else if (ent->client->pers.rpg_class == 6)
-						{ // zyk: Duelist
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								int player_it = 0;
-
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								for (player_it = 0; player_it < level.num_entities; player_it++)
-								{
-									gentity_t *player_ent = &g_entities[player_it];
-
-									if (ent->s.number != player_it && player_ent && player_ent->client)
-									{
-										int player_distance = (int)Distance(ent->client->ps.origin,player_ent->client->ps.origin);
-
-										if (player_distance < 370)
-										{
-											int found = 0;
-
-											// zyk: allies will not be hit by this power
-											if (player_it < level.maxclients && zyk_is_ally(ent,player_ent) == qtrue)
-											{
-												found = 1;
-											}
-
-											if (player_it < level.maxclients && zyk_can_hit_target(ent, player_ent) == qfalse)
-											{
-												found = 1;
-											}
-
-											if (found == 0 && ent->client->pers.guardian_mode == player_ent->client->pers.guardian_mode)
-											{
-												if (!player_ent->NPC)
-												{ //disable jetpack temporarily
-													if (player_ent->client->jetPackOn)
-														Jetpack_Off(player_ent);
-													player_ent->client->jetPackToggleTime = level.time + 8000;
-													player_ent->client->ps.powerups[PW_QUAD] = level.time + 8000;
-												}
-												else if (player_ent->NPC && player_ent->client->NPC_class == CLASS_BOBAFETT)
-												{ // zyk: also disables npc jetpack
-													Boba_FlyStop(player_ent);
-													player_ent->client->ps.powerups[PW_QUAD] = level.time + 8000;
-												}
-
-												if (player_ent->client->ps.powerups[PW_CLOAKED] && 
-													!(player_ent->client->sess.amrpgmode == 2 && player_ent->client->pers.rpg_class == 5))
-												{ // zyk: disables cloak of enemies, except Stealth Attacker
-													Jedi_Decloak(player_ent);
-												}
-
-												if (player_ent->client->ps.fd.forcePowerMax > 0)
-												{ // zyk: disables force regen
-													player_ent->client->ps.powerups[PW_QUAD] = level.time + 8000;
-
-													if (player_ent->client->ps.fd.forcePowersActive & (1 << FP_SPEED))
-													{ // zyk: disables force Speed
-														WP_ForcePowerStop(player_ent, FP_SPEED);
-													}
-												}
-											}
-										}
-									}
-								}
-
-								// zyk: recovers some MP
-								if ((ent->client->pers.magic_power + 10) < zyk_max_magic_power(ent))
-									ent->client->pers.magic_power += 10;
-								else
-									ent->client->pers.magic_power = zyk_max_magic_power(ent);
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 1000;
-
-								send_rpg_events(2000);
-
-								ent->client->pers.unique_skill_timer = level.time + 45000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
-						else if (ent->client->pers.rpg_class == 7)
-						{ // zyk: Force Gunner
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								int zyk_it = 0;
-								gentity_t *this_ent = NULL;
-								vec3_t uorg, vecnorm, thispush_org, vel;
-
-								VectorCopy(ent->client->ps.origin, thispush_org);
-
-								VectorCopy(ent->client->ps.origin, uorg);
-								uorg[2] += 64;
-
-								VectorSubtract(uorg, thispush_org, vecnorm);
-								VectorNormalize(vecnorm);
-
-								for (zyk_it = 0; zyk_it < level.num_entities; zyk_it++)
-								{ // zyk: finds enemies nearby and disarms them
-									this_ent = &g_entities[zyk_it];
-
-									if (this_ent && this_ent->client && ent != this_ent && 
-										((zyk_it < MAX_CLIENTS && this_ent->client->ps.duelInProgress == qfalse) || 
-										(this_ent->NPC && this_ent->client->NPC_class != CLASS_VEHICLE)))
-									{ // zyk: does not disarm a vehicle
-										int player_distance = (int)Distance(ent->client->ps.origin,this_ent->client->ps.origin);
-
-										if (player_distance < 300)
-										{
-											int found = 0;
-
-											// zyk: allies will not be hit by this power
-											if (zyk_it < level.maxclients && zyk_is_ally(ent,this_ent) == qtrue)
-											{
-												found = 1;
-											}
-
-											if (zyk_it < level.maxclients && zyk_can_hit_target(ent, this_ent) == qfalse)
-											{
-												found = 1;
-											}
-
-											if (found == 0 && ent->client->pers.guardian_mode == this_ent->client->pers.guardian_mode)
-											{
-												if (this_ent->client->ps.weapon == WP_SABER)
-												{
-													vel[0] = vecnorm[0]*100;
-													vel[1] = vecnorm[1]*100;
-													vel[2] = vecnorm[2]*100;
-													saberKnockOutOfHand(&g_entities[this_ent->client->ps.saberEntityNum],this_ent,vel);
-												}
-												else
-												{
-													TossClientWeapon(this_ent, vecnorm, 200);
-												}
-											}
-										}
-									}
-								}
-
-								if (ent->client->pers.secrets_found & (1 << 8) && ent->client->ps.stats[STAT_ARMOR] < ent->client->pers.max_rpg_shield)
-								{ // zyk: Force Gunner Upgrade restores some shield by spending some force power
-									if ((ent->client->ps.stats[STAT_ARMOR] + 25) < ent->client->pers.max_rpg_shield)
-										ent->client->ps.stats[STAT_ARMOR] += 25;
-									else
-										ent->client->ps.stats[STAT_ARMOR] = ent->client->pers.max_rpg_shield;
-
-									G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
-								}
-
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 1000;
-
-								ent->client->pers.unique_skill_timer = level.time + 40000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
-						else if (ent->client->pers.rpg_class == 8)
-						{ // zyk: Magic Master
-							if (ent->client->pers.magic_power >= 2)
-							{
-								ent->client->pers.magic_power -= 2;
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 15000;
-								ent->client->pers.unique_skill_duration = level.time + 15000;
-
-								send_rpg_events(2000);
-
-								ent->client->pers.unique_skill_timer = level.time + 50000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, "chat \"^3Unique Skill: ^7needs at least 2 MP to use it\"");
-							}
-						}
-						else if (ent->client->pers.rpg_class == 9)
-						{ // zyk: Force Guardian
-							if (ent->client->ps.fd.forcePower >= (zyk_max_force_power.integer/4))
-							{
-								ent->client->ps.fd.forcePower -= (zyk_max_force_power.integer/4);
-
-								ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 15000;
-								ent->client->pers.unique_skill_duration = level.time + 15000;
-
-								ent->client->pers.unique_skill_timer = level.time + 50000;
-							}
-							else
-							{
-								trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7needs %d force to use it\"", (zyk_max_force_power.integer/4)));
-							}
-						}
 
 						zyk_unique_boost(ent);
 					}
@@ -4145,78 +3807,13 @@ void ClientThink_real( gentity_t *ent ) {
 						trap->SendServerCommand( ent->s.number, va("chat \"^3Unique Skill: ^7%d seconds left\"", ((ent->client->pers.unique_skill_timer - level.time)/1000)));
 					}
 				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_SEEING && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects next power
-					// zyk: Magic Master can choose his power here
-					zyk_show_left_magic_master_powers(ent, qtrue);
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_SPEED && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects previous power
-					// zyk: Magic Master can choose his power here
-					zyk_show_left_magic_master_powers(ent, qfalse);
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_PROTECT && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects next power
-					// zyk: Magic Master can choose his power here
-					zyk_show_magic_master_powers(ent, qtrue);
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_HEAL && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects previous power
-					// zyk: Magic Master can choose his power here
-					zyk_show_magic_master_powers(ent, qfalse);
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_DISTRACT && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects next power
-					// zyk: Magic Master can choose his power here
-					zyk_show_right_magic_master_powers(ent, qtrue);
-				}
-				else if (pmove.cmd.generic_cmd == GENCMD_FORCE_ABSORB && ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-				{ // zyk: Magic Master, selects previous power
-					// zyk: Magic Master can choose his power here
-					zyk_show_right_magic_master_powers(ent, qfalse);
-				}
 				else if (pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE)
-				{ 
-					if (ent->client->pers.rpg_class == 2 && ent->client->pers.secrets_found & (1 << 1) && 
-						ent->client->ps.droneExistTime >= (level.time + 5000))
-					{ // zyk: Bounty Hunter Upgrade allows getting seeker drone back with saber style key
-						ent->client->ps.droneExistTime = 0;
-						ent->client->ps.eFlags &= ~EF_SEEKERDRONE;
-						ent->client->ps.genericEnemyIndex = -1;
-						ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_SEEKER);
-
-						G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/weapons/w_pkup.wav"));
-					}
-					else if (ent->client->ps.weapon == WP_MELEE && ent->client->pers.rpg_class == 8)
-					{ // zyk: Magic Master Fist attacks
-						if (ent->client->sess.magic_fist_selection < 4 && ent->client->sess.magic_fist_selection < ent->client->pers.skill_levels[55])
-							ent->client->sess.magic_fist_selection++;
-						else if (ent->client->sess.magic_fist_selection == 4)
-							ent->client->sess.magic_fist_selection = 0;
-						else
-							ent->client->sess.magic_fist_selection = 4;
-
-						if (ent->client->sess.magic_fist_selection == 0)
-						{
-							trap->SendServerCommand(ent->s.number, va("chat \"^7Normal Bolt       ^3MP: ^7%d\"", ent->client->pers.magic_power));
-						}
-						else if (ent->client->sess.magic_fist_selection == 1)
-						{
-							trap->SendServerCommand(ent->s.number, va("chat \"^7Electric Bolt     ^3MP: ^7%d\"", ent->client->pers.magic_power));
-						}
-						else if (ent->client->sess.magic_fist_selection == 2)
-						{
-							trap->SendServerCommand(ent->s.number, va("chat \"^7Instant-Hit Bolt  ^3MP: ^7%d\"", ent->client->pers.magic_power));
-						}
-						else if (ent->client->sess.magic_fist_selection == 3)
-						{
-							trap->SendServerCommand(ent->s.number, va("chat \"^7Ultra Bolt        ^3MP: ^7%d\"", ent->client->pers.magic_power));
-						}
-						else
-						{
-							trap->SendServerCommand(ent->s.number, va("chat \"^7None              ^3MP: ^7%d\"", ent->client->pers.magic_power));
-						}
-					}
+				{
+					// GalaxyRP fix: [Dead Code] removed the Bounty Hunter seeker-drone-recovery
+					// (rpg_class==2) and Magic Master fist-selection-cycling (rpg_class==8) branches
+					// here; pers.rpg_class is always 0 server-side, so both guards were tautologically
+					// false. Branch intentionally left empty (harmless no-op) rather than removing the
+					// enclosing else-if, to avoid disturbing the surrounding if/else-if chain.
 				}
 			}
 
