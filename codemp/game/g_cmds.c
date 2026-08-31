@@ -10103,6 +10103,7 @@ void Cmd_Settings_f( gentity_t *ent ) {
 	if (trap->Argc() == 1)
 	{
 		char message[1024];
+		int len = 0;
 		strcpy(message,"");
 
 		// GalaxyRP fix: [Quests] the status line for setting 0 (RPG quests) used to be printed here.
@@ -10115,70 +10116,77 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// old location in this file), so /settings 1-4 have been removed below and their status lines
 		// removed here to match.
 
+		// GalaxyRP fix: [Sprintf Overlap] every sprintf() below used to write into message while also
+		// reading message as its own %s argument (e.g. sprintf(message, "%s\n...", message)). Passing
+		// the same object as both destination and source to sprintf is undefined behavior per the C
+		// standard (it's unspecified whether the read happens before, during, or after the write) --
+		// GCC already flagged this with -Wrestrict. Fixed by writing to message+len instead, so each
+		// call's destination no longer overlaps anything it reads, and tracking the appended length in
+		// len rather than re-reading it back out of message.
 		if (ent->client->pers.player_settings & (1 << 5))
 		{
-			sprintf(message, "%s\n^3 5 - Language - ^1Custom", message);
+			len += sprintf(message + len, "\n^3 5 - Language - ^1Custom");
 		}
 		else
 		{
-			sprintf(message, "%s\n^3 5 - Language - ^3English", message);
+			len += sprintf(message + len, "\n^3 5 - Language - ^3English");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 6))
 		{
-			sprintf(message, "%s\n^3 6 - Allow Force Powers from allies - ^1OFF", message);
+			len += sprintf(message + len, "\n^3 6 - Allow Force Powers from allies - ^1OFF");
 		}
 		else
 		{
-			sprintf(message, "%s\n^3 6 - Allow Force Powers from allies - ^2ON", message);
+			len += sprintf(message + len, "\n^3 6 - Allow Force Powers from allies - ^2ON");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 7))
 		{
-			sprintf(message, "%s\n^3 7 - Show magic cast in chat - ^1OFF", message);
+			len += sprintf(message + len, "\n^3 7 - Show magic cast in chat - ^1OFF");
 		}
 		else
 		{
-			sprintf(message, "%s\n^3 7 - Show magic cast in chat - ^2ON", message);
+			len += sprintf(message + len, "\n^3 7 - Show magic cast in chat - ^2ON");
 		}
 
 		// zyk: Saber Style flags
 		if (ent->client->pers.player_settings & (1 << 26))
-			sprintf(message,"%s\n^3 8 - Starting Single Saber Style - ^3Yellow", message);
+			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^3Yellow");
 		else if (ent->client->pers.player_settings & (1 << 27))
-			sprintf(message,"%s\n^3 8 - Starting Single Saber Style - ^1Red", message);
+			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^1Red");
 		else if (ent->client->pers.player_settings & (1 << 28))
-			sprintf(message,"%s\n^3 8 - Starting Single Saber Style - ^1Desann", message);
+			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^1Desann");
 		else if (ent->client->pers.player_settings & (1 << 29))
-			sprintf(message,"%s\n^3 8 - Starting Single Saber Style - ^5Tavion", message);
+			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^5Tavion");
 		else
-			sprintf(message,"%s\n^3 8 - Starting Single Saber Style - ^5Blue", message);
+			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^5Blue");
 
 		if (ent->client->pers.player_settings & (1 << 9))
 		{
-			sprintf(message,"%s\n^3 9 - Allow Screen Message - ^1OFF", message);
+			len += sprintf(message + len, "\n^3 9 - Allow Screen Message - ^1OFF");
 		}
 		else
 		{
-			sprintf(message,"%s\n^3 9 - Allow Screen Message - ^2ON", message);
+			len += sprintf(message + len, "\n^3 9 - Allow Screen Message - ^2ON");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 10))
 		{
-			sprintf(message,"%s\n^310 - Use healing force only at allied players - ^1OFF", message);
+			len += sprintf(message + len, "\n^310 - Use healing force only at allied players - ^1OFF");
 		}
 		else
 		{
-			sprintf(message,"%s\n^310 - Use healing force only at allied players - ^2ON", message);
+			len += sprintf(message + len, "\n^310 - Use healing force only at allied players - ^2ON");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 11))
 		{
-			sprintf(message,"%s\n^311 - Start With Saber ^1OFF", message);
+			len += sprintf(message + len, "\n^311 - Start With Saber ^1OFF");
 		}
 		else
 		{
-			sprintf(message,"%s\n^311 - Start With Saber ^2ON", message);
+			len += sprintf(message + len, "\n^311 - Start With Saber ^2ON");
 		}
 
 		// GalaxyRP fix: [Settings] the status line for setting 12 (Jetpack) used to be printed here.
@@ -10189,11 +10197,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		if (ent->client->pers.player_settings & (1 << 13))
 		{
-			sprintf(message,"%s\n^313 - Admin Protect ^1OFF", message);
+			len += sprintf(message + len, "\n^313 - Admin Protect ^1OFF");
 		}
 		else
 		{
-			sprintf(message,"%s\n^313 - Admin Protect ^2ON", message);
+			len += sprintf(message + len, "\n^313 - Admin Protect ^2ON");
 		}
 
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
@@ -11608,6 +11616,7 @@ void Cmd_EntList_f( gentity_t *ent ) {
 	gentity_t *target_ent;
 	char arg1[MAX_STRING_CHARS];
 	char message[1024];
+	int len = 0;
 
 	strcpy(message,"");
 
@@ -11632,7 +11641,11 @@ void Cmd_EntList_f( gentity_t *ent ) {
 			if (i >= ((page_number - 1) * 10) && i < (page_number * 10))
 			{ // zyk: this command lists 10 entities per page
 				target_ent = &g_entities[i];
-				sprintf(message,"%s\n%d - %s - %s - %s",message,i,target_ent->classname,target_ent->targetname,target_ent->target);
+				// GalaxyRP fix: [Sprintf Overlap] was sprintf(message, "%s\n...", message, ...) --
+				// message was both destination and a %s source argument, which is undefined behavior
+				// (see the matching fix in Cmd_Settings_f above for the full explanation). Fixed the
+				// same way: write to message+len and track the appended length in len.
+				len += sprintf(message + len, "\n%d - %s - %s - %s", i, target_ent->classname, target_ent->targetname, target_ent->target);
 			}
 		}
 	}
@@ -11649,7 +11662,8 @@ void Cmd_EntList_f( gentity_t *ent ) {
 				 (target_ent->targetname && strstr(target_ent->targetname, G_NewString(arg1))) ||
 				 (target_ent->target && strstr(target_ent->target, G_NewString(arg1)))))
 			{
-				sprintf(message,"%s\n%d - %s - %s - %s",message,i,target_ent->classname,target_ent->targetname,target_ent->target);
+				// GalaxyRP fix: [Sprintf Overlap] same message-overlaps-itself issue as above, same fix.
+				len += sprintf(message + len, "\n%d - %s - %s - %s", i, target_ent->classname, target_ent->targetname, target_ent->target);
 				found_entities++;
 			}
 
