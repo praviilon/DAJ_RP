@@ -2924,8 +2924,13 @@ void ClientThink_real( gentity_t *ent ) {
 		}
 
 		// GalaxyRP (Alex): [Armor Skill] Armor reduces your movement based on your level. Better the armor, slower the wearer.
-		if (client->pers.skill_levels[56] > 0) 
-		{ 
+		// GalaxyRP fix: [Armor Skill] this ran unconditionally, unlike the matching damage-resistance
+		// half of this same skill in g_combat.c (which is correctly gated on amrpgmode == 2). Since
+		// skill_levels[] is never reset on logout, a player's last character's Armor level kept
+		// slowing them down indefinitely after /logout (even through /kill and respawn) until they
+		// logged into a character with Armor level 0. Added the same amrpgmode == 2 gate.
+		if (client->sess.amrpgmode == 2 && client->pers.skill_levels[56] > 0)
+		{
 			zyk_player_speed = zyk_player_speed - (client->pers.skill_levels[56] * zyk_player_speed * 0.1);
 		}
 
@@ -3747,7 +3752,13 @@ void ClientThink_real( gentity_t *ent ) {
 		{ //these are the only two where you wouldn't care about a delay between
 			if (ent->client->sess.amrpgmode == 2)
 			{
-				if (ent->client->pers.secrets_found & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum)
+				// GalaxyRP fix: [Cloak Item] GENCMD_SABERATTACKCYCLE is also what the client sends for
+				// alt-fire on weapons that have no dedicated alt-fire generic_cmd (e.g. Disruptor
+				// zoom, Repeater alt-fire) -- see Cmd_SaberAttackCycle_f's own ps.weapon == WP_SABER
+				// guard just above. This vehicle-cloak branch had no such guard, so alt-firing any
+				// weapon while riding/gunning a vehicle (with this secret unlocked) toggled the
+				// vehicle's cloak as a side effect. Added the same weapon check.
+				if (ent->client->pers.secrets_found & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
 				{ // zyk: RPG Mode Cloak Item can cloak vehicles
 					if (!g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED])
 					{

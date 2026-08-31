@@ -1727,7 +1727,14 @@ static void CG_SaberColorUpdate_f(void)
 static void CG_ZykChars(void)
 {
 	char arg[1024] = { 0 };
-	int char_count = 0;
+	// GalaxyRP fix: [UI] this wrote ui_zyk_rpg_char_0 through _14 (0-indexed), but
+	// ingame_galaxyrp.menu's 15 character-slot itemDefs read ui_zyk_rpg_char_1 through _15
+	// (1-indexed) -- so the first character in the list (the account's first-ever created
+	// character, e.g. "admin" for the admin account, since the server query has no ORDER BY
+	// and SQLite returns rows in creation order) was always written to the never-displayed
+	// slot 0 and silently vanished from the UI list, even though it was still fully usable via
+	// /char use. Made this 1-indexed to match the menu file instead.
+	int char_count = 1;
 
 	trap->Cmd_Argv(1, arg, sizeof(arg));
 
@@ -1736,20 +1743,19 @@ static void CG_ZykChars(void)
 
 	while (value != NULL)
 	{
-		if (char_count >= 15) {
+		if (char_count > 15) {
 			break;
 		}
 		trap->Cvar_Set(va("ui_zyk_rpg_char_%d", char_count), va("%s", value));
 		char_count++;
-		
+
 		value = strtok(NULL, "&");
 	}
 
 	// zyk: cleaning cvars that will not render a charname
-	char_count--;
-	while (char_count < 15)
+	while (char_count <= 15)
 	{
-		trap->Cvar_Set(va("ui_zyk_rpg_char_%d", char_count + 1), "");
+		trap->Cvar_Set(va("ui_zyk_rpg_char_%d", char_count), "");
 		char_count++;
 	}
 }

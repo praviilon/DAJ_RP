@@ -807,6 +807,7 @@ void zyk_remove_force_powers( gentity_t *ent )
 	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
 }
 
+void zyk_adjust_holdable_items(gentity_t *ent);
 void zyk_remove_guns( gentity_t *ent )
 {
 	int i = 0;
@@ -827,6 +828,14 @@ void zyk_remove_guns( gentity_t *ent )
 	ent->client->ps.ammo[AMMO_TRIPMINE] = 0;
 	ent->client->ps.ammo[AMMO_DETPACK] = 0;
 	ent->client->ps.stats[STAT_HOLDABLE_ITEMS] = (1 << HI_NONE);
+
+	// GalaxyRP fix: [Items] this cleared the holdable-items ownership bitmask above, but never told
+	// the client to deselect its currently-selected holdable item or decloak it -- so /logout left a
+	// holdable item (e.g. the Cloak Item) visibly still selected/active, even though it was no longer
+	// owned, until something else happened to refresh STAT_HOLDABLE_ITEM. zyk_adjust_holdable_items()
+	// already exists for exactly this cleanup (it was only ever called from one item-drop path); call
+	// it here too now that ownership has actually changed.
+	zyk_adjust_holdable_items(ent);
 
 	if (ent->client->jetPackOn)
 	{
@@ -2929,7 +2938,17 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 	// va("...Username = '%s'...Username = '%s'...", username, username) -- splicing the raw username
 	// straight into the SQL string, twice. This is the main query /login runs once the password has
 	// already been verified. Bind both placeholders as parameters instead.
-	char select_account_table_row[356] = "SELECT *\
+	// GalaxyRP fix: [Account] this always looked up the account's DefaultChar, ignoring whichever
+	// character was actually active -- harmless the first time this runs (a genuine /login, where no
+	// character is active yet), but this same function is also called from ClientBegin() on every map
+	// change for any already-logged-in player, which silently reverted an earlier /char use switch to
+	// a non-default character back to the default one every time the map changed. That in turn made
+	// pers.CharID (and therefore which character's row commands like /createcredits write to) wrong
+	// until the player did /char use again. Added a third parameter for the currently-selected
+	// character's name (sess.rpgchar): COALESCE/NULLIF picks it over the DefaultChar subquery whenever
+	// it's non-empty, and falls back to DefaultChar exactly as before when it's empty (a true first
+	// login, or right after /logout -- see the sess.rpgchar reset added to Cmd_LogoutAccount_f).
+	char select_account_table_row[480] = "SELECT *\
 		FROM Accounts, Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
@@ -2938,10 +2957,10 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		WHERE Accounts.Username = ? AND Characters.CharID = (\
 			SELECT CharID\
 			FROM Characters\
-			Where Characters.Name = (\
+			Where Characters.Name = COALESCE(NULLIF(?, ''), (\
 				SELECT DefaultChar\
 				FROM Accounts\
-				WHERE Accounts.Username = ?)\
+				WHERE Accounts.Username = ?))\
 			)";
 
 	rc = sqlite3_prepare(db, select_account_table_row, -1, &stmt, NULL);
@@ -2953,7 +2972,8 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		return;
 	}
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
-	sqlite3_bind_text(stmt, 2, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, ent->client->sess.rpgchar, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 3, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -8615,6 +8635,15 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 
 	// zyk: saving the not logged player mode in session
 	ent->client->sess.amrpgmode = 0;
+
+	// GalaxyRP fix: [Account] sess.rpgchar (the name of the currently-selected character) was never
+	// cleared here, unlike amrpgmode right above it -- so it kept naming whatever character was active
+	// when this account logged out. Harmless while amrpgmode stays 0 (nothing reads rpgchar in that
+	// state), but a second /login on the same connection (Cmd_Login_F only blocks a re-login while
+	// still logged in, not after a /logout) would otherwise carry a stale character name from the
+	// previous account straight into select_account_and_default_character_data()'s sess.rpgchar-aware
+	// lookup below. Reset it here so a fresh login always falls back to the account's DefaultChar.
+	ent->client->sess.rpgchar[0] = '\0';
 
 	// GalaxyRP fix: [Guardian] removed the `if (can_play_quest == 1) { boss_battle_music_reset_timer
 	// = ...; }` block here -- can_play_quest can no longer become 1 anywhere (see the GalaxyRP fix
