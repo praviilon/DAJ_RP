@@ -3794,6 +3794,14 @@ void ClientThink_real( gentity_t *ent ) {
 								send_rpg_events(2000);
 
 								ent->client->pers.unique_skill_timer = level.time + 50000;
+
+								// GalaxyRP fix: [Skills] this ability shares unique_skill_timer/the 50-second
+								// cooldown with Cmd_Unique_f's three Unique Abilities (g_cmds.c), but never sent
+								// the client-side event those do -- so using it only ever showed chat text, with
+								// no cooldown-bar UI at all. Send the same dedicated eventParm 105 they use, to
+								// the same CGUNIQUEBAR cooldown bar (cg_draw.c), so this ability's reuse timer is
+								// visible too.
+								G_AddEvent(ent, EV_USE_ITEM13, 105);
 							}
 							else
 							{

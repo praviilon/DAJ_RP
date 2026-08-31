@@ -8450,7 +8450,10 @@ static void CG_Draw2D( void ) {
 
 	if (cg_drawStatus.integer && cg.snap->ps.stats[STAT_MAX_HEALTH] > 100)
 	{
-		if (cg.magic_power < 100)
+		// GalaxyRP fix: [Skills] added the same STAT_HEALTH < 1 guard the Immunity/Ultra Strength/Ultra
+		// Resistance bars right below already have, so this bar hides while dead instead of lingering
+		// on screen (possibly showing a stale value) between a kill and the respawn that follows it.
+		if (cg.magic_power < 100 && cg.snap->ps.stats[STAT_HEALTH] > 0)
 		{ // zyk: draw magic power bar if it is not full and it is a rpg player
 			CG_DrawMagicPower();
 		}

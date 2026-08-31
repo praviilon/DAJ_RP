@@ -8285,6 +8285,16 @@ void initialize_rpg_skills(gentity_t *ent)
 
 		ent->client->pers.magic_power = zyk_max_magic_power(ent);
 
+		// GalaxyRP fix: [Skills] cg.magic_power (cgame's mirror of this, drawn by CG_DrawMagicPower)
+		// only updates when it receives this event -- normally sent by the periodic per-player sync
+		// cascade in g_active.c's ClientThink, which can take several ticks to get back around to
+		// resending it, or may not run again at all this life if its window already closed. That let
+		// the Magic Power bar keep showing a stale (sometimes near-empty) value from the player's
+		// previous life right after login/character-select/respawn, even though the real value was
+		// already reset to full above. Send the correct value (always 100% here) immediately instead
+		// of waiting on the cascade.
+		G_AddEvent(ent, EV_USE_ITEM13, 100);
+
 		ent->client->pers.monk_unique_timer = 0;
 		ent->client->pers.unique_skill_duration = 0;
 
