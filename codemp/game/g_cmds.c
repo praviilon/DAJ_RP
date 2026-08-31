@@ -3480,6 +3480,19 @@ void Cmd_Register_F(gentity_t * ent)
 		return;
 	}
 
+	// GalaxyRP fix: [Account] this had no equivalent of Cmd_Login_F's own "already logged in" guard --
+	// an already-logged-in player running /new sailed straight through and got switched onto the
+	// brand new account, with whatever progress they'd made on their previous character since its
+	// last save silently discarded (this function never calls save_account() the way /char and
+	// /logout do). Same check, same message, same order as Cmd_Login_F above: require /logout first.
+	if (ent->client->sess.loggedin == qtrue)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You are already logged in to your account.\n\"");
+		trap->SendServerCommand(ent - g_entities, "cp \"^1You are already logged in to your account.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
 	trap->Argv(1, username, sizeof(username));
 	trap->Argv(2, password, sizeof(password));
 
