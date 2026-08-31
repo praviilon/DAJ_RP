@@ -708,7 +708,9 @@ typedef struct clientPersistant_s {
 	// 9 - Allow Screen Message
 	// 10 - Use healing force only at allied players
 	// 11 - Start With Saber
-	// 12 - Jetpack
+	// GalaxyRP fix: [Settings] bit 12 ("Jetpack") documentation removed here -- that setting has been
+	// removed from the game entirely (its bit was only ever read back by its own status line, never by
+	// anything gating actual jetpack availability).
 	// 13 - Admin Protect
 	// GalaxyRP fix: [Settings] bits 14 ("Boss Battle Music") and 15 ("Difficulty") documentation
 	// removed here — those settings have been removed from the game entirely.

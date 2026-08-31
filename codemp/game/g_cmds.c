@@ -10181,14 +10181,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			sprintf(message,"%s\n^311 - Start With Saber ^2ON", message);
 		}
 
-		if (ent->client->pers.player_settings & (1 << 12))
-		{
-			sprintf(message,"%s\n^312 - Jetpack ^1OFF", message);
-		}
-		else
-		{
-			sprintf(message,"%s\n^312 - Jetpack ^2ON", message);
-		}
+		// GalaxyRP fix: [Settings] the status line for setting 12 (Jetpack) used to be printed here.
+		// /settings 12 has been removed below (see the range-check comment further down) -- its bit was
+		// only ever read back by this same status line, never by anything gating actual jetpack
+		// availability (that's Cmd_Jetpack_f, which checks unrelated fields), so toggling it never did
+		// anything.
 
 		if (ent->client->pers.player_settings & (1 << 13))
 		{
@@ -10224,7 +10221,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// Mode) used to be valid values here as well. Everything downstream of Challenge Mode
 		// activation is dead, so both are excluded from the valid range too, matching the removed
 		// status lines above.
-		if (value <= 0 || value > 13 || (value >= 1 && value <= 4))
+		// GalaxyRP fix: [Settings] setting 12 (Jetpack) used to be a valid value here too. Its bit was
+		// never read by anything that gates actual jetpack availability (Cmd_Jetpack_f checks unrelated
+		// fields), only by this command's own status line, so it's excluded from the valid range now,
+		// matching the removed status line above.
+		if (value <= 0 || value > 13 || (value >= 1 && value <= 4) || value == 12)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid settings value.\n\"" );
 			return;
