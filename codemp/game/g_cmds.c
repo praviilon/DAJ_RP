@@ -654,7 +654,50 @@ qboolean check_admin_command(gentity_t* ent, int admin_command, qboolean with_me
 		}
 		return qfalse;
 	}
-	
+
+	return qtrue;
+}
+
+// GalaxyRP: [security] adapted from the newer Zyk mod's own zyk_check_user_input() (found while
+// comparing that mod's entity-manipulation commands against ours). Rejects any string that is empty,
+// too long, or contains anything outside A-Z/a-z/0-9. Use this on any raw player-typed argument that
+// is later going to be spliced into a filesystem path (or, worse, a system() call) -- e.g. the
+// <filename> argument of /entsave, /entload and /entdeletefile, and a new character's name in
+// create_new_character() -- so a value like "../../whatever" or a shell metacharacter can't reach
+// fopen()/remove()/system() and escape the folder (or command) it was meant to stay inside.
+qboolean zyk_check_user_input(char *user_input, int user_input_size) {
+	int i = 0;
+
+	static const char allowed_chars[] =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"abcdefghijklmnopqrstuvwxyz"
+		"0123456789";
+
+	if (user_input_size > MAX_STRING_CHARS)
+	{ // zyk: somehow the string is bigger than the max
+		return qfalse;
+	}
+
+	if (user_input[0] == '\0')
+	{ // zyk: empty string
+		return qfalse;
+	}
+
+	while (user_input[i] != '\0' && i < user_input_size)
+	{
+		if (strchr(allowed_chars, user_input[i]) == NULL)
+		{ // zyk: char is not one of the allowed ones
+			return qfalse;
+		}
+
+		i++;
+	}
+
+	if (user_input[i] != '\0' && i == user_input_size)
+	{ // zyk: string did not terminate with NULL
+		return qfalse;
+	}
+
 	return qtrue;
 }
 
@@ -3189,6 +3232,17 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 
 	if (strchr(char_name, '&') != NULL) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot contain the '&' character.\n\"");
+		return qfalse;
+	}
+
+	// GalaxyRP: [security] sess.rpgchar (this name, once accepted) is later spliced raw into several
+	// fopen()/system() calls elsewhere in this file -- zyk_config_filename(), description_add(), and
+	// zyk_remove_configs()'s system("rm -f ...")/system("DEL /F ...") calls -- so an unvalidated
+	// character name could escape the folder those are meant to stay inside, or, in
+	// zyk_remove_configs()'s case, inject extra shell commands. This also subsumes the '&' check
+	// above, but that one is left in place for its own, more specific message.
+	if (zyk_check_user_input(char_name, strlen(char_name)) == qfalse) {
+		trap->SendServerCommand(ent - g_entities, "print \"^1Character name can only contain letters and numbers.\n\"");
 		return qfalse;
 	}
 
@@ -10972,6 +11026,15 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP: [security] arg1 is spliced straight into the GalaxyRP/entities/<map>/<arg1>.txt path
+	// below -- reject anything but letters and digits so a crafted value (e.g. containing "../")
+	// can't write outside the intended folder.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent->s.number, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -11038,6 +11101,15 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP: [security] arg1 is spliced straight into the GalaxyRP/entities/<map>/<arg1>.txt path
+	// below -- reject anything but letters and digits so a crafted value (e.g. containing "../")
+	// can't read from outside the intended folder.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -11094,6 +11166,15 @@ void Cmd_EntDeleteFile_f( gentity_t *ent ) {
 	}
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	// GalaxyRP: [security] arg1 is spliced straight into the GalaxyRP/entities/<map>/<arg1>.txt path
+	// below -- reject anything but letters and digits so a crafted value (e.g. containing "../")
+	// can't read or delete files outside the intended folder.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
 
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
