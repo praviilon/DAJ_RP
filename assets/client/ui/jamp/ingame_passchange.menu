@@ -158,14 +158,14 @@
 				play			"sound/interface/button1.wav" ;
 				close			ingame_passchange
 			}
-			mouseEnter 
-			{ 
-				show			registerDoneButton_glow
+			mouseEnter
+			{
+				show			changepassDoneButton_glow
 			}
-			mouseExit 
-			{ 
-				hide			registerDoneButton_glow
-			}	  	
+			mouseExit
+			{
+				hide			changepassDoneButton_glow
+			}
 		}
 	}
 }

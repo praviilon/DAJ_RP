@@ -6461,6 +6461,12 @@ static void UI_RunMenuScript(char **args)
 					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("new \"%s\" \"%s\"\n", zyk_login, zyk_password) );
+
+					// GalaxyRP fix: [UI] the loginEntry/passEntry fields (ingame_register.menu) kept
+					// whatever was typed here after pressing Register, same stale-field issue the
+					// zykcharnew handler above was fixed for -- clear both the same way.
+					trap->Cvar_Set("accLogin", "");
+					trap->Cvar_Set("accPassword", "");
 				}
 				else if (Q_stricmp( "login", arg ) == 0)
 				{ // zyk: login the account
@@ -6473,6 +6479,11 @@ static void UI_RunMenuScript(char **args)
 					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("login \"%s\" \"%s\"\n", zyk_login, zyk_password) );
+
+					// GalaxyRP fix: [UI] same stale-field issue as the "new" branch above, for
+					// ingame_login.menu's own loginEntry/passEntry fields.
+					trap->Cvar_Set("accLogin", "");
+					trap->Cvar_Set("accPassword", "");
 				}
 				else if (Q_stricmp( "changepassword", arg ) == 0)
 				{ // zyk: change password of the account
@@ -6482,6 +6493,10 @@ static void UI_RunMenuScript(char **args)
 					UI_SanitizeAccountArg(zyk_password);
 
 					trap->Cmd_ExecuteText( EXEC_APPEND, va("changepassword \"%s\"\n", zyk_password) );
+
+					// GalaxyRP fix: [UI] same stale-field issue as the "new"/"login" branches above, for
+					// ingame_passchange.menu's own passEntry field (accLogin isn't used on that screen).
+					trap->Cvar_Set("accPassword", "");
 				}
 				else if (strstr(arg, "actionchange"))
 				{ // zyk: sets the action (upgrade or downgrade)
