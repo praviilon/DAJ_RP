@@ -28,9 +28,10 @@
 		visible						0
 		fullscreen					0
 		outOfBoundsClick										// this closes the window if it gets a click out of the rectangle
-		rect						195 140 250 142		// GalaxyRP: [Profile UI] Join/Auto team/Red/Blue/Spectate moved back to the top-bar Join menu --
-											// shrunk to center the remaining Register+Login / Logout+Change Pass rows (y=40/70,
-											// 62px tall) with equal 40px margins above and below
+		rect						195 140 250 172		// GalaxyRP: [Profile UI] Join/Auto team/Red/Blue/Spectate moved back to the top-bar Join menu;
+											// a "Join or Spectate" button below Logout/Change Pass reopens that same menu from here.
+											// Sized to center the three rows (y=40/70/100, 92px tall) with equal 40px margins above
+											// and below
 		focusColor					1 1 1 1					// Focus color for text and items
 		style						1
 		border						1
@@ -63,7 +64,7 @@
 			name				background_pic
 			group				none
 			style				WINDOW_STYLE_SHADER
-			rect				0 0 250 142
+			rect				0 0 250 172
 			background			"gfx/menus/menu_box_ingame"
 			forecolor			1 1 1 1
 			visible				1
@@ -289,6 +290,59 @@
 			mouseExit
 			{
 				hide			changepassButton
+			}
+		}
+
+//JOIN OR SPECTATE BUTTON (slot 3, always available regardless of login state)
+		itemDef
+		{
+			name				joinOrSpectateButton
+			group				highlights
+			style				WINDOW_STYLE_SHADER
+			rect				73 100 105 32
+			background			"gfx/menus/menu_buttonback"			// Frame around button
+			forecolor			1 1 1 1
+			decoration
+			visible			0
+		}
+
+		// GalaxyRP: [Profile UI] mirrors the top-bar "Join" button in ingame.menu -- same
+		// ui_singleplayeractive disable gate, same target (the vanilla ingame_join popup with its own
+		// Join/Auto team/Red/Blue/Spectate buttons), just reachable from the Account menu as well.
+		itemDef
+		{
+			name				joinOrSpectate
+			group				none
+			text				"Join or Spectate"
+			type				1
+			style				WINDOW_STYLE_EMPTY
+			rect				73 100 105 32
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			52
+			textaligny			2
+			font				2
+			textscale			1
+			forecolor			1 .682 0 1
+			descText			"Join or spectate a match"
+			cvarTest			"ui_singleplayeractive"
+			disableCvar
+			{
+				"1"
+			}
+			visible			1
+			action
+			{
+				play			"sound/interface/button1"
+				open			ingame_join
+				close 			ingame_player
+			}
+			mouseEnter
+			{
+				show			joinOrSpectateButton
+			}
+			mouseExit
+			{
+				hide			joinOrSpectateButton
 			}
 		}
 
