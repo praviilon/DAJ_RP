@@ -960,7 +960,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 85 50 15
+			rect				170 80 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -977,7 +977,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 105 50 15
+			rect				170 100 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	
@@ -994,7 +994,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 125 50 15
+			rect				170 120 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1011,7 +1011,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 145 50 15
+			rect				170 140 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1028,7 +1028,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 165 50 15
+			rect				170 160 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1045,7 +1045,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 185 100 15
+			rect				170 180 100 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1062,7 +1062,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 205 105 15
+			rect				170 200 105 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -1079,7 +1079,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 225 90 15
+			rect				170 220 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -1096,7 +1096,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 245 60 15
+			rect				170 240 60 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	
@@ -1113,7 +1113,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 85 50 15
+			rect				320 80 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -1130,7 +1130,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 105 60 15
+			rect				320 100 60 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	 
@@ -1147,7 +1147,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 125 90 15
+			rect				320 120 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1164,7 +1164,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 145 90 15
+			rect				320 140 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	  
@@ -1181,7 +1181,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 165 90 15
+			rect				320 160 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1198,7 +1198,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 185 50 15
+			rect				320 180 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	  
@@ -1215,7 +1215,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 205 50 15
+			rect				320 200 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	  
@@ -1232,7 +1232,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 225 50 15
+			rect				320 220 50 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1249,7 +1249,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 245 100 15
+			rect				320 240 100 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  	
@@ -1260,7 +1260,7 @@
 		{
 			name				jumpSkillValue
 			group				forceLoginSkillsControls
-			rect				280 85 30 30
+			rect				280 80 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1277,7 +1277,7 @@
 		{
 			name				pushSkillValue
 			group				forceLoginSkillsControls
-			rect				280 105 30 30
+			rect				280 100 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1294,7 +1294,7 @@
 		{
 			name				pullSkillValue
 			group				forceLoginSkillsControls
-			rect				280 125 30 30
+			rect				280 120 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1311,7 +1311,7 @@
 		{
 			name				speedSkillValue
 			group				forceLoginSkillsControls
-			rect				280 145 30 30
+			rect				280 140 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1328,7 +1328,7 @@
 		{
 			name				senseSkillValue
 			group				forceLoginSkillsControls
-			rect				280 165 30 30
+			rect				280 160 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1345,7 +1345,7 @@
 		{
 			name				saberAttackSkillValue
 			group				forceLoginSkillsControls
-			rect				280 185 30 30
+			rect				280 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1362,7 +1362,7 @@
 		{
 			name				saberDefenseSkillValue
 			group				forceLoginSkillsControls
-			rect				280 205 30 30
+			rect				280 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1379,7 +1379,7 @@
 		{
 			name				saberThrowSkillValue
 			group				forceLoginSkillsControls
-			rect				280 225 30 30
+			rect				280 220 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1396,7 +1396,7 @@
 		{
 			name				absorbSkillValue
 			group				forceLoginSkillsControls
-			rect				280 245 30 30
+			rect				280 240 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1413,7 +1413,7 @@
 		{
 			name				healSkillValue
 			group				forceLoginSkillsControls
-			rect				430 85 30 30
+			rect				430 80 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1430,7 +1430,7 @@
 		{
 			name				protectSkillValue
 			group				forceLoginSkillsControls
-			rect				430 105 30 30
+			rect				430 100 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1447,7 +1447,7 @@
 		{
 			name				mindTrickSkillValue
 			group				forceLoginSkillsControls
-			rect				430 125 30 30
+			rect				430 120 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1464,7 +1464,7 @@
 		{
 			name				teamHealSkillValue
 			group				forceLoginSkillsControls
-			rect				430 145 30 30
+			rect				430 140 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1481,7 +1481,7 @@
 		{
 			name				lightningSkillValue
 			group				forceLoginSkillsControls
-			rect				430 165 30 30
+			rect				430 160 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1498,7 +1498,7 @@
 		{
 			name				gripSkillValue
 			group				forceLoginSkillsControls
-			rect				430 185 30 30
+			rect				430 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1515,7 +1515,7 @@
 		{
 			name				drainSkillValue
 			group				forceLoginSkillsControls
-			rect				430 205 30 30
+			rect				430 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1532,7 +1532,7 @@
 		{
 			name				rageSkillValue
 			group				forceLoginSkillsControls
-			rect				430 225 30 30
+			rect				430 220 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1549,7 +1549,7 @@
 		{
 			name				teamEnergizeSkillValue
 			group				forceLoginSkillsControls
-			rect				430 245 30 30
+			rect				430 240 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""

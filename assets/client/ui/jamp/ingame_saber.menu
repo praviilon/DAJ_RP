@@ -1738,7 +1738,11 @@
 				uiScript  		"saber_color"
 				uiScript  		"saber2_color"
 				hide			highlights
-				close			ingame_saber
+				// GalaxyRP: [Saber RGB] was "close ingame_saber", which only closed this submenu and
+				// left the top-bar menu open underneath (had to press Escape to actually get back into
+				// gameplay). uiScript closeingame releases the UI key-catcher and tears down the whole
+				// menu stack in one call, matching the Force-select and Account menus' own Apply buttons.
+				uiScript		closeingame
 			}
 			mouseEnter
 			{
