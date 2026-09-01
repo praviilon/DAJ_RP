@@ -7670,17 +7670,18 @@ void Cmd_FlipCoin_f(gentity_t *ent) {
 // which is itself fully unreachable now that quest_get_new_player's sole gate is permanently disabled
 // (see the GalaxyRP fix comment further down in this file). Deleted outright along with their callers.
 
-// GalaxyRP fix: [Jetpack] shared gate for zyk_allow_jetpack_command, used by both the RPG-mode
+// GalaxyRP fix: [Jetpack] shared gate for rp_allow_jetpack_command, used by both the RPG-mode
 // auto-grant below (initialize_rpg_skills) and the /jetpack command handler (Cmd_Jetpack_f) so the
 // two stay in sync. 0 disables the jetpack command entirely, 1 enables it for everyone, and 2
 // enables it only for players currently logged into an account (sess.loggedin -- set qtrue by
-// Cmd_Login_f/Cmd_Register_f/Cmd_GalaxyRpUi_f, cleared qfalse by Cmd_Logout_f).
+// Cmd_Login_f/Cmd_Register_f/Cmd_GalaxyRpUi_f, cleared qfalse by Cmd_Logout_f). Formerly
+// zyk_allow_jetpack_command -- renamed to the rp_ prefix used by GalaxyRP's own cvars.
 qboolean jetpack_command_allowed(gentity_t *ent)
 {
-	if (zyk_allow_jetpack_command.integer <= 0)
+	if (rp_allow_jetpack_command.integer <= 0)
 		return qfalse;
 
-	if (zyk_allow_jetpack_command.integer == 2 && ent->client->sess.loggedin == qfalse)
+	if (rp_allow_jetpack_command.integer == 2 && ent->client->sess.loggedin == qfalse)
 		return qfalse;
 
 	return qtrue;
@@ -8016,8 +8017,11 @@ void initialize_rpg_skills(gentity_t *ent)
 		if (ent->client->pers.skill_levels[53] > 0)
 			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_CLOAK);
 
+		// GalaxyRP fix: [Jetpack] zyk_allow_jetpack_in_siege has been removed -- jetpack is now never
+		// allowed in Siege, full stop (this is exactly the cvar's old default, "0"/never-allow, just no
+		// longer configurable).
 		if (jetpack_command_allowed(ent) &&
-			(level.gametype != GT_SIEGE || zyk_allow_jetpack_in_siege.integer) && level.gametype != GT_JEDIMASTER &&
+			level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER &&
 			(ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[34] > 0))
 			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
 
@@ -10523,9 +10527,12 @@ void Cmd_Jetpack_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Jetpack] zyk_allow_jetpack_in_siege has been removed -- jetpack is now never
+	// allowed in Siege, full stop (this is exactly the cvar's old default, "0"/never-allow, just no
+	// longer configurable).
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_JETPACK)) && jetpack_command_allowed(ent) &&
 		(ent->client->sess.amrpgmode < 2 || ent->client->pers.skill_levels[34] > 0) &&
-		(level.gametype != GT_SIEGE || zyk_allow_jetpack_in_siege.integer) && level.gametype != GT_JEDIMASTER &&
+		level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER &&
 		!(ent->client->pers.player_statuses & (1 << 12)))
 	{ // zyk: gets jetpack if player does not have it. RPG players need jetpack skill to get it
 		// zyk: Jedi Master gametype will not allow jetpack
