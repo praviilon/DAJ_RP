@@ -2399,6 +2399,13 @@
 		}
 
 
+		// GalaxyRP fix: [Skills] Armor (skill 57) moved from the Items panel into this Protection panel,
+		// between Health Strength (33) and Shield Regen (59) -- fits the protective-gear theme of this
+		// panel better than Items' consumables. Shield Regen/Health Regen below are shifted down (rect y
+		// 160/180 -> 180/200) to make room. FlameThrower (58) in the Items panel is shifted up (rect y
+		// 300 -> 280) to close the gap Armor's move left there.
+
+
 		// GalaxyRP fix: [Skills] Jetpack (skill 35) moved out of this panel into the Items panel, as
 		// the first entry (above Binoculars) -- it fits the "equippable item" theme of that panel better
 		// than a generic "Other" bucket. Shield Regen/Health Regen below are shifted up (rect y 180/200
@@ -2420,6 +2427,23 @@
 
 		itemDef
 		{
+			name				armorSkillButton
+			group				otherSkillsControls
+			text				"[57] Armor"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 160 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
 			name				shieldRegenSkillButton
 			group				otherSkillsControls
 			text				"[59] Shield Regen"
@@ -2428,7 +2452,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 160 130 15
+			rect				270 180 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2445,7 +2469,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 180 130 15
+			rect				270 200 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2772,23 +2796,6 @@
 
 		itemDef 
 		{
-			name				armorSkillButton
-			group				itemsSkillsControls
-			text				"[57] Armor"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 280 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
 			name				flameThrowerSkillButton
 			group				itemsSkillsControls
 			text				"[58] FlameThrower"
@@ -2797,7 +2804,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 300 130 15
+			rect				270 280 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -3066,9 +3073,26 @@
 
 		itemDef
 		{
-			name				shieldRegenSkillValue
+			name				armorSkillValue
 			group				levelother
 			rect				410 160 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_rp_skill_57_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				shieldRegenSkillValue
+			group				levelother
+			rect				410 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3085,7 +3109,7 @@
 		{
 			name				healthRegenSkillValue
 			group				levelother
-			rect				410 180 30 30
+			rect				410 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3308,26 +3332,9 @@
 
 		itemDef 
 		{
-			name				armorSkillValue
-			group				levelitem
-			rect				400 280 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_rp_skill_57_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
-		{
 			name				flameThrowerSkillValue
 			group				levelitem
-			rect				400 300 30 30
+			rect				400 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
