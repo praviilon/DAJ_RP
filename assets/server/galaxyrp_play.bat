@@ -1,5 +1,7 @@
 @echo off
 
+:: galaxyrp_play.bat -- Windows client launcher
+
 :: Main settings
 set jk_executable_64=taystjk.x86_64.exe
 set jk_executable_32=taystjk.x86.exe

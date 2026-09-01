@@ -1,5 +1,7 @@
 @echo off
 
+:: galaxyrp_host.bat -- Windows dedicated server launcher
+
 :: Main settings
 set jk_dedicated=2
 set jk_net_port=29070
