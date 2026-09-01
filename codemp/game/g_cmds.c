@@ -15073,7 +15073,12 @@ command_t commands[] = {
 	{ "training",			Cmd_TrainingMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "trashitem",			Cmd_TrashItem_f,			CMD_LOGGEDIN },
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
-	{ "zykmod",				Cmd_GalaxyRpUi_f,			CMD_ALIVE | CMD_NOINTERMISSION },
+	// GalaxyRP fix: no CMD_ALIVE -- Cmd_GalaxyRpUi_f's supdateloggedin push is meant to reach the
+	// client unconditionally (see its own comment above the send), including while spectating, so a
+	// player who quit logged in and reconnected logged out/spectating gets corrected as soon as the
+	// menu's "exec zykmod" fires on open, instead of being stuck showing the logged-in menu state
+	// until they're alive again.
+	{ "zykmod",				Cmd_GalaxyRpUi_f,			CMD_NOINTERMISSION },
 	{ "zykchars",			Cmd_ZykChars_f,			CMD_ALIVE | CMD_NOINTERMISSION }
 //	{ "meleearena",			Cmd_MeleeArena_f,			CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "thedestroyer",		Cmd_TheDestroyer_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },

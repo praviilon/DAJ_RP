@@ -155,7 +155,13 @@ XCVAR_DEF( ui_team_timelimit,				"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 // the "supdateloggedin" server command (see CG_LoggedInUpdate_f / Cmd_GalaxyRpUi_f). Registered
 // with an explicit "0" default, same as the other zyk rpg fields below, so the Profile menu's
 // cvarTest gating has a defined (logged-out) value even before the first server response arrives.
-XCVAR_DEF( ui_loggedin,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP fix: must be CVAR_ROM (matching cgame's own registration of the same cvar in
+// cg_xcvar.h), not CVAR_ARCHIVE -- cvar flags OR together across modules (see Cvar_Get() in
+// cvar.cpp), so an ARCHIVE flag here alone was enough to make the whole cvar archive to the
+// client's config and reload stale on the next launch, showing a logged-in menu for a player who
+// quit, reconnected, and stayed logged out/spectating (see the CMD_ALIVE fix on "zykmod" in
+// g_cmds.c for the other half of this bug).
+XCVAR_DEF( ui_loggedin,					"0",					NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level_up_score,		"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_skillpoints,			"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
