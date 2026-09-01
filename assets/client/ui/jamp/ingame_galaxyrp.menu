@@ -3410,6 +3410,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "1"
+				uiScript		closeingame
 			}
 		}
 
@@ -3450,6 +3451,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "2"
+				uiScript		closeingame
 			}
 		}
 
@@ -3490,6 +3492,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "3"
+				uiScript		closeingame
 			}
 		}
 
@@ -3530,6 +3533,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "4"
+				uiScript		closeingame
 			}
 		}
 
@@ -3570,6 +3574,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "5"
+				uiScript		closeingame
 			}
 		}
 
@@ -3610,6 +3615,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "6"
+				uiScript		closeingame
 			}
 		}
 
@@ -3650,6 +3656,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "7"
+				uiScript		closeingame
 			}
 		}
 
@@ -3690,6 +3697,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "8"
+				uiScript		closeingame
 			}
 		}
 
@@ -3730,6 +3738,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "9"
+				uiScript		closeingame
 			}
 		}
 
@@ -3770,6 +3779,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "10"
+				uiScript		closeingame
 			}
 		}
 
@@ -3810,6 +3820,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "11"
+				uiScript		closeingame
 			}
 		}
 
@@ -3850,6 +3861,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "12"
+				uiScript		closeingame
 			}
 		}
 
@@ -3890,6 +3902,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "13"
+				uiScript		closeingame
 			}
 		}
 
@@ -3930,6 +3943,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "14"
+				uiScript		closeingame
 			}
 		}
 
@@ -3970,6 +3984,7 @@
 			{ 
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharuse "15"
+				uiScript		closeingame
 			}
 		}
 
@@ -4037,7 +4052,7 @@
 			{
 				play			"sound/interface/button1.wav" ;
 				uiScript		zykcharnew "" ;
-				close			ingame_galaxyrp
+				uiScript		closeingame
 			}
 		}
 
