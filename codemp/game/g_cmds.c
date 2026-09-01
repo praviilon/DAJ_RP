@@ -3579,6 +3579,20 @@ void Cmd_Register_F(gentity_t * ent)
 		return;
 	}
 
+	// GalaxyRP: [security] sess.filename (this username, once accepted) is later spliced raw into
+	// several fopen()/system() calls elsewhere in this file -- zyk_config_filename(),
+	// zyk_legacy_config_filename(), and zyk_remove_configs()'s system("rm -f ...")/system("DEL /F
+	// ...") calls -- the same gap the character-name check in create_new_character() closes for
+	// sess.rpgchar. Reject anything but letters and digits here too, so a crafted username can't
+	// escape those folders or, in zyk_remove_configs()'s case, inject extra shell commands. This also
+	// catches a username that stripped down to nothing (Q_StripColor() above could reduce an
+	// all-color-codes input to an empty string, which was never explicitly checked before).
+	if (zyk_check_user_input(username, strlen(username)) == qfalse) {
+		trap->SendServerCommand(ent - g_entities, "print \"^1Username can only contain letters and numbers.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
 	// GalaxyRP fix: [cosmetic] this used to print comparisonName here instead of username --
 	// comparisonName was declared but never assigned anywhere in this function, so both messages
 	// always printed an empty name where the rejected username was supposed to appear ("Username
