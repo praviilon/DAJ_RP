@@ -12782,18 +12782,32 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 	// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string (e.g. "dfd"
 	// would parse as gametype 0 / FFA instead of being rejected), so require the argument to
 	// actually be an integer first using this file's existing StringIsInteger() helper.
+	//
+	// GalaxyRP fix: [Admin] the old check only rejected values outside 0..GT_MAX_GAME_TYPE-1,
+	// which let an admin "successfully" switch the server to a gametype Jedi Academy doesn't
+	// actually support (GT_HOLOCRON, GT_JEDIMASTER, GT_SINGLE_PLAYER, GT_CTY -- 1, 2, 5, 9),
+	// leaving the server in a broken/inert state. Only the six gametypes this game actually
+	// implements are accepted now.
 	if (!StringIsInteger(gametype))
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Invalid gametype. Must be a number between 0 and %d.\n\"", GT_MAX_GAME_TYPE - 1) );
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid gametype. Choose: 0 - Free For All, 3 - Duel, 4 - Power Duel, 6 - Team Free For All, 7 - Siege, 8 - Capture the Flag.\n\"" );
 		return;
 	}
 
 	gtype = atoi(gametype);
 
-	if (gtype < 0 || gtype >= GT_MAX_GAME_TYPE)
+	switch (gtype)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Invalid gametype. Must be between 0 and %d.\n\"", GT_MAX_GAME_TYPE - 1) );
-		return;
+		case GT_FFA:
+		case GT_DUEL:
+		case GT_POWERDUEL:
+		case GT_TEAM:
+		case GT_SIEGE:
+		case GT_CTF:
+			break;
+		default:
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid gametype. Choose: 0 - Free For All, 3 - Duel, 4 - Power Duel, 6 - Team Free For All, 7 - Siege, 8 - Capture the Flag.\n\"" );
+			return;
 	}
 
 	{ // zyk: make sure the requested map actually exists before changing to it
