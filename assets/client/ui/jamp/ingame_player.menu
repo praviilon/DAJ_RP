@@ -35,11 +35,10 @@
 		focusColor					1 1 1 1					// Focus color for text and items
 		style						1
 		border						1
-		descX						320
-		descY						428
-		descScale					1
-		descColor				1 .682 0 .8
-		descAlignment					ITEM_ALIGN_CENTER		
+		// GalaxyRP fix: [UI] descX/descY/descScale/descColor/descAlignment removed -- they positioned
+		// tooltip (descText) content at fixed coordinates that landed well outside this menu's own
+		// 250x172 window rect. Since descText has been removed from every itemDef below, these settings
+		// no longer do anything and are dropped rather than left as unused dead config.
 		onOpen
 		{
 			uiScript				updateForceStatus
@@ -122,7 +121,6 @@
 			font				2
 			textscale			1
 			forecolor			1 .682 0 1
-			descText			@MENUS_APPLY_CHANGES_BUT_REMAIN
 			visible			1
 			cvartest			"ui_loggedin"
 			showcvar			{ "0" }
@@ -171,7 +169,6 @@
 			font				2
 			textscale			1
 			forecolor			1 .682 0 1
-			descText			@MENUS_APPLY_CHANGES_BUT_REMAIN
 			visible			1
 			cvartest			"ui_loggedin"
 			showcvar			{ "0" }
@@ -223,7 +220,6 @@
 			font				2
 			textscale			1
 			forecolor			1 .682 0 1
-			descText			"Logout your account"
 			visible			1
 			cvartest			"ui_loggedin"
 			showcvar			{ "1" }
@@ -273,7 +269,6 @@
 			font				2
 			textscale			1
 			forecolor			1 .682 0 1
-			descText			@MENUS_APPLY_CHANGES_BUT_REMAIN
 			visible			1
 			cvartest			"ui_loggedin"
 			showcvar			{ "1" }
@@ -306,9 +301,11 @@
 			visible			0
 		}
 
-		// GalaxyRP: [Profile UI] mirrors the top-bar "Join" button in ingame.menu -- same
-		// ui_singleplayeractive disable gate, same target (the vanilla ingame_join popup with its own
-		// Join/Auto team/Red/Blue/Spectate buttons), just reachable from the Account menu as well.
+		// GalaxyRP: [Profile UI] mirrors the top-bar "Join" button in ingame.menu -- same target (the
+		// vanilla ingame_join popup with its own Join/Auto team/Red/Blue/Spectate buttons), just
+		// reachable from the Account menu as well. GalaxyRP fix: [UI] the cvarTest "ui_singleplayeractive"
+		// / disableCvar {"1"} block that used to gray this out in Solo Game mode has been removed to
+		// match the top-bar Join button, which was never actually gated the same way (see ingame.menu).
 		itemDef
 		{
 			name				joinOrSpectate
@@ -323,12 +320,6 @@
 			font				2
 			textscale			1
 			forecolor			1 .682 0 1
-			descText			"Join or spectate a match"
-			cvarTest			"ui_singleplayeractive"
-			disableCvar
-			{
-				"1"
-			}
 			visible			1
 			action
 			{

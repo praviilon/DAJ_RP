@@ -119,15 +119,17 @@
 			visible			0
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				join
 			text				@MENUS_JOIN
-			cvarTest			"ui_singleplayeractive"
-			disableCvar 
-			{ 
-				"1" 
-			}
+			// GalaxyRP fix: [UI] this itemDef used to also carry a first cvarTest "ui_singleplayeractive"
+			// / disableCvar {"1"} block meant to gray this button out in Solo Game mode. itemDef_t has
+			// only one cvarTest field and one shared value-list field used by enableCvar/disableCvar/
+			// showCvar/hideCvar alike, each parsed with a plain (non-merging) overwrite -- so the
+			// cvarTest/showcvar pair below silently erased that block's effect and the disable never
+			// actually worked. Removed rather than fixed: Join stays enabled in Solo Game mode, as it
+			// has always effectively behaved.
 			rect				65 0 70 32
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_FILLED
