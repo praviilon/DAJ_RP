@@ -1579,7 +1579,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 300 100 15
+			rect				170 280 100 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1596,7 +1596,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 320 100 15
+			rect				170 300 100 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1613,7 +1613,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				170 360 90 15
+			rect				170 340 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -1630,7 +1630,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 300 90 15
+			rect				320 280 90 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -1647,7 +1647,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				320 320 100 15
+			rect				320 300 100 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0  
@@ -1658,7 +1658,7 @@
 		{
 			name				drainShieldSkillValue
 			group				forceLoginSkillsControls
-			rect				280 300 30 30
+			rect				280 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1675,7 +1675,7 @@
 		{
 			name				senseHealthSkillValue
 			group				forceLoginSkillsControls
-			rect				280 320 30 30
+			rect				280 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1692,7 +1692,7 @@
 		{
 			name				forcePowerSkillValue
 			group				forceLoginSkillsControls
-			rect				280 360 30 30
+			rect				280 340 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1709,7 +1709,7 @@
 		{
 			name				shieldHealSkillValue
 			group				forceLoginSkillsControls
-			rect				430 300 30 30
+			rect				430 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -1726,7 +1726,7 @@
 		{
 			name				teamShieldHealSkillValue
 			group				forceLoginSkillsControls
-			rect				430 320 30 30
+			rect				430 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
