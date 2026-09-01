@@ -2308,7 +2308,7 @@
 		{
 			name				otherSkillsButton
 			group				upControls
-			text				"Other"
+			text				"Protection"
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
 			rect				160 130 100 30
@@ -2320,7 +2320,7 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
-			descText			"Other skills"
+			descText			"Protection skills"
 
 			mouseEnter 
 			{ 
@@ -2399,24 +2399,11 @@
 		}
 
 
-		itemDef 
-		{
-			name				jetpackSkillButton
-			group				otherSkillsControls
-			text				"[35] Jetpack"
-			descText			""
-			type				1
-			font				3
-			textscale			.5
-			style				WINDOW_STYLE_FILLED
-			rect				270 160 130 15
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0 	
-			decoration  
-		}
-
-
+		// GalaxyRP fix: [Skills] Jetpack (skill 35) moved out of this panel into the Items panel, as
+		// the first entry (above Binoculars) -- it fits the "equippable item" theme of that panel better
+		// than a generic "Other" bucket. Shield Regen/Health Regen below are shifted up (rect y 180/200
+		// -> 160/180) to close the gap left by its removal, same pattern used for the earlier removals
+		// documented below.
 
 
 		// GalaxyRP: [Skills] Drain Shield [34], Sense Health [36], Shield Heal [37], Team Shield Heal
@@ -2441,7 +2428,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 180 130 15
+			rect				270 160 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2458,7 +2445,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 200 130 15
+			rect				270 180 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2631,6 +2618,24 @@
 
 		itemDef 
 		{
+			name				jetpackSkillButton
+			group				itemsSkillsControls
+			text				"[35] Jetpack"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 100 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0 	
+			decoration  
+		}
+
+
+		itemDef 
+		{
 			name				binocularsSkillButton
 			group				itemsSkillsControls
 			text				"[47] Binoculars"
@@ -2639,7 +2644,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 100 130 15
+			rect				270 120 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	
@@ -2656,7 +2661,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 120 130 15
+			rect				270 140 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 
@@ -2673,7 +2678,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 140 130 15
+			rect				270 160 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 
@@ -2690,7 +2695,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 160 130 15
+			rect				270 180 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0 	
@@ -2707,7 +2712,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 180 130 15
+			rect				270 200 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0	  
@@ -2724,7 +2729,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 200 130 15
+			rect				270 220 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2741,7 +2746,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 220 130 15
+			rect				270 240 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2758,7 +2763,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 240 130 15
+			rect				270 260 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2775,7 +2780,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 260 130 15
+			rect				270 280 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2792,7 +2797,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 280 130 15
+			rect				270 300 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -3056,24 +3061,6 @@
 		}
 
 
-		itemDef 
-		{
-			name				jetpackSkillValue
-			group				levelother
-			rect				410 160 30 30
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_skill_35_level" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.5
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-
 
 
 
@@ -3081,7 +3068,7 @@
 		{
 			name				shieldRegenSkillValue
 			group				levelother
-			rect				410 180 30 30
+			rect				410 160 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3098,7 +3085,7 @@
 		{
 			name				healthRegenSkillValue
 			group				levelother
-			rect				410 200 30 30
+			rect				410 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3167,9 +3154,27 @@
 
 		itemDef 
 		{
-			name				binocularsSkillValue
+			name				jetpackSkillValue
 			group				levelitem
 			rect				400 100 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_35_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+
+		itemDef 
+		{
+			name				binocularsSkillValue
+			group				levelitem
+			rect				400 120 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3186,7 +3191,7 @@
 		{
 			name				bactaCanisterSkillValue
 			group				levelitem
-			rect				400 120 30 30
+			rect				400 140 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3203,7 +3208,7 @@
 		{
 			name				sentryGunSkillValue
 			group				levelitem
-			rect				400 140 30 30
+			rect				400 160 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3220,7 +3225,7 @@
 		{
 			name				seekerDroneSkillValue
 			group				levelitem
-			rect				400 160 30 30
+			rect				400 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3237,7 +3242,7 @@
 		{
 			name				eWebSkillValue
 			group				levelitem
-			rect				400 180 30 30
+			rect				400 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3254,7 +3259,7 @@
 		{
 			name				bigBactaSkillValue
 			group				levelitem
-			rect				400 200 30 30
+			rect				400 220 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3271,7 +3276,7 @@
 		{
 			name				forceFieldSkillValue
 			group				levelitem
-			rect				400 220 30 30
+			rect				400 240 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3288,7 +3293,7 @@
 		{
 			name				cloakItemSkillValue
 			group				levelitem
-			rect				400 240 30 30
+			rect				400 260 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3305,7 +3310,7 @@
 		{
 			name				armorSkillValue
 			group				levelitem
-			rect				400 260 30 30
+			rect				400 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3322,7 +3327,7 @@
 		{
 			name				flameThrowerSkillValue
 			group				levelitem
-			rect				400 280 30 30
+			rect				400 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
