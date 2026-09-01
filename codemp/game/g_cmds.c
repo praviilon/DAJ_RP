@@ -3792,6 +3792,16 @@ void Cmd_Char_f(gentity_t *ent) {
 
 		//Switch character
 		if (Q_stricmp(command, "use") == 0) {
+			// GalaxyRP fix: [Char] mirrors the same "already active" guard remove_character() has
+			// (further down) -- without it, a player could re-select the character they already have
+			// loaded, which just wastefully re-runs the whole load path (DB re-query, stat/gear
+			// reapply, kill+respawn) for no actual change.
+			if (Q_stricmp(charName, ent->client->sess.rpgchar) == 0) {
+				trap->SendServerCommand(ent - g_entities, va("print \"^1You are already using character %s.\n\"", charName));
+				sqlite3_close(db);
+				return;
+			}
+
 			select_player_character(ent, charName, db, zErrMsg, rc, stmt, qtrue);
 			sqlite3_close(db);
 
