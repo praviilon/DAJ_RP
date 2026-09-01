@@ -2063,6 +2063,12 @@ void SetLeader(int team, int client);
 void CheckTeamLeader( int team );
 void G_RunThink (gentity_t *ent);
 void AddTournamentQueue(gclient_t *client);
+// GalaxyRP fix: restores the prototype for G_Printf (defined in g_syscalls.c), dropped from this
+// header by upstream OpenJK commit ce073087 ("Stripping the QVM layer for MP", 2013) alongside
+// G_Error's -- G_Printf's lone remaining caller (g_misc.c's misc_model_breakable_die) has been
+// calling it as an implicitly-declared function ever since, which GCC only warns about but Clang
+// (15+) treats as a hard error, breaking the Clang build.
+void QDECL G_Printf( const char *msg, ... );
 void QDECL G_LogPrintf( const char *fmt, ... );
 void QDECL G_SecurityLogPrintf( const char *fmt, ... );
 void SendScoreboardMessageToAllClients( void );
