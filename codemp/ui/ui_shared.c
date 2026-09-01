@@ -4284,6 +4284,19 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 		}
 	}
 
+	// GalaxyRP fix: [UI] a mouse click only ever fires the action of whichever item currently holds
+	// WINDOW_HASFOCUS (set below), and that flag is only (re)computed on an actual mouse-move event --
+	// see Display_MouseMove()/Menu_HandleMouseMove(). If the cursor is sitting still at click time (the
+	// player didn't perceptibly move the mouse since the last movement event -- e.g. clicking the same
+	// spot again after an earlier click that appeared to do nothing), focus can be stale and the click
+	// is silently swallowed. Leaving an actively-edited text field already forces a fresh, click-time
+	// Display_MouseMove() call for exactly this reason (see the g_editingField block above); do the
+	// same for every ordinary mouse-down so a click always reflects what's actually under the cursor.
+	// Cheap when focus is already correct -- Item_SetFocus() no-ops on an item that already has focus.
+	if (down && (key == A_MOUSE1 || key == A_MOUSE2 || key == A_MOUSE3)) {
+		Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+	}
+
 	// get the item with focus
 	for (i = 0; i < menu->itemCount; i++) {
 		if (menu->items[i]->window.flags & WINDOW_HASFOCUS) {
