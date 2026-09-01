@@ -28,7 +28,7 @@
 		visible						0
 		fullscreen					0
 		outOfBoundsClick										// this closes the window if it gets a click out of the rectangle
-		rect						195 140 250 180
+		rect						195 140 250 215		// GalaxyRP: [Profile UI] grown taller (was 180) to fit the Join Red/Join Blue buttons below Join/Spectate
 		focusColor					1 1 1 1					// Focus color for text and items
 		style						1
 		border						1
@@ -58,7 +58,7 @@
 			name				background_pic
 			group				none
 			style				WINDOW_STYLE_SHADER
-			rect				0 0 250 180
+			rect				0 0 250 215
 			background			"gfx/menus/menu_box_ingame"
 			forecolor			1 1 1 1
 			visible				1
@@ -282,10 +282,16 @@
 			appearance_slot		3
 		}
 
-		itemDef 
+		// GalaxyRP: [Profile UI] simplified from the old two-clone playerapply/playerforcejoin setup
+		// (which routed through uiScript setForce, and so silently did nothing whenever gTouchedForce
+		// happened to be false) down to a single button with the exact same plain team-join command
+		// the top-bar Join menu's own Join button uses, so it now works reliably every time.
+		// GalaxyRP: [Team modes] hidden for Team FFA/CTF (g_gametype 6/8) in favor of the "Auto team"
+		// variant below, matching the now-hidden top-bar Join menu's own labeling convention.
+		itemDef
 		{
-			name				applycurrent
-			group				"playerapply"
+			name				applyjoin
+			group				none
 			text				"Join Game"
 			type				1
 			style				WINDOW_STYLE_EMPTY
@@ -297,29 +303,34 @@
 			textscale			1
 			forecolor			1 .682 0 1
 			descText			@MENUS_APPLY_CHANGES_AND_JOIN
+			cvartest			"g_gametype"
+			hidecvar			{ "6", "8" }
 			visible			1
-			action 
-			{ 
+			action
+			{
 				play			"sound/interface/button1"
-				uiScript		setForce "none"
+				exec			"cmd team free"
 				hide			highlights
-				uiScript		closeingame
+				uiScript 		closeingame
 			}
-			mouseEnter 
-			{ 
+			mouseEnter
+			{
 				show			applyjoinButton
 			}
-			mouseExit 
-			{ 
+			mouseExit
+			{
 				hide			applyjoinButton
 			}
 		}
 
-		itemDef 
+		// GalaxyRP: [Team modes] "Auto team" variant of applyjoin, shown only for Team FFA/CTF -- same
+		// rect/button and same "cmd team free" action (which auto-balances via PickTeam() server-side
+		// for these gametypes), just relabeled to match the now-hidden top-bar Join menu's convention.
+		itemDef
 		{
-			name				applyjoin
-			group				"playerforcejoin"
-			text				"Join Game"
+			name				applyjoinauto
+			group				none
+			text				"Auto team"
 			type				1
 			style				WINDOW_STYLE_EMPTY
 			rect				5 140 105 32
@@ -330,21 +341,125 @@
 			textscale			1
 			forecolor			1 .682 0 1
 			descText			@MENUS_APPLY_CHANGES_AND_JOIN
+			cvartest			"g_gametype"
+			showcvar			{ "6", "8" }
 			visible			1
-			action 
-			{ 
+			action
+			{
 				play			"sound/interface/button1"
-				uiScript 		setForce "free"
+				exec			"cmd team free"
 				hide			highlights
 				uiScript 		closeingame
 			}
-			mouseEnter 
-			{ 
+			mouseEnter
+			{
 				show			applyjoinButton
 			}
-			mouseExit 
-			{ 
+			mouseExit
+			{
 				hide			applyjoinButton
+			}
+		}
+
+// JOIN RED / JOIN BLUE BUTTONS (Team FFA / CTF only)
+		itemDef
+		{
+			name				applyjoinredButton
+			group				highlights
+			style				WINDOW_STYLE_SHADER
+			rect				5 175 105 32
+			background			"gfx/menus/menu_buttonback"			// Frame around button
+			forecolor			1 1 1 1
+			decoration
+			visible			0
+			cvartest			"g_gametype"
+			showcvar			{ "6", "8" }
+		}
+
+		// GalaxyRP: [Team modes] manual Red team pick for Team FFA/CTF -- restores the functionality the
+		// now-hidden top-bar Join menu used to provide, now reachable from the Account menu instead.
+		itemDef
+		{
+			name				applyjoinred
+			group				none
+			text				@MENUS_TEAM_RED
+			type				1
+			style				WINDOW_STYLE_EMPTY
+			rect				5 175 105 32
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			52
+			textaligny			2
+			font				2
+			textscale			1
+			forecolor			1 0.2 0.2 1
+			descText			@MENUS_APPLY_CHANGES_AND_JOIN
+			cvartest			"g_gametype"
+			showcvar			{ "6", "8" }
+			visible			1
+			action
+			{
+				play			"sound/interface/button1"
+				exec			"cmd team red"
+				hide			highlights
+				uiScript 		closeingame
+			}
+			mouseEnter
+			{
+				show			applyjoinredButton
+			}
+			mouseExit
+			{
+				hide			applyjoinredButton
+			}
+		}
+
+		itemDef
+		{
+			name				applyjoinblueButton
+			group				highlights
+			style				WINDOW_STYLE_SHADER
+			rect				150 175 105 32
+			background			"gfx/menus/menu_buttonback"			// Frame around button
+			forecolor			1 1 1 1
+			decoration
+			visible			0
+			cvartest			"g_gametype"
+			showcvar			{ "6", "8" }
+		}
+
+		// GalaxyRP: [Team modes] manual Blue team pick for Team FFA/CTF -- same purpose as applyjoinred above.
+		itemDef
+		{
+			name				applyjoinblue
+			group				none
+			text				@MENUS_TEAM_BLUE
+			type				1
+			style				WINDOW_STYLE_EMPTY
+			rect				150 175 105 32
+			textalign			ITEM_ALIGN_CENTER
+			textalignx			52
+			textaligny			2
+			font				2
+			textscale			1
+			forecolor			0.2 0.2 1 1
+			descText			@MENUS_APPLY_CHANGES_AND_JOIN
+			cvartest			"g_gametype"
+			showcvar			{ "6", "8" }
+			visible			1
+			action
+			{
+				play			"sound/interface/button1"
+				exec			"cmd team blue"
+				hide			highlights
+				uiScript 		closeingame
+			}
+			mouseEnter
+			{
+				show			applyjoinblueButton
+			}
+			mouseExit
+			{
+				hide			applyjoinblueButton
 			}
 		}
 
@@ -361,10 +476,13 @@
 			visible			0
 		}
 
-		itemDef 
+		// GalaxyRP: [Profile UI] same simplification as applyjoin above -- plain team-spectate command
+		// instead of routing through uiScript setForce, which is why this used to silently fail to
+		// work for a player who was already in-game (see the matching comment on applyjoin).
+		itemDef
 		{
 			name				applyspectate
-			group				"playerforcespectate"
+			group				none
 			text				@MENUS_SPECTATE
 			type				1
 			style				WINDOW_STYLE_EMPTY
@@ -377,19 +495,19 @@
 			forecolor			1 .682 0 1
 			descText			@MENUS_APPLY_CHANGES_BUT_REMAIN
 			visible			1
-			action 
-			{ 
+			action
+			{
 				play			"sound/interface/button1"
-				uiScript 		setForce "s"
+				exec			"cmd team s"
 				hide			highlights
 				uiScript 		closeingame
 			}
-			mouseEnter 
-			{ 
+			mouseEnter
+			{
 				show			applyspectateButton
 			}
-			mouseExit 
-			{ 
+			mouseExit
+			{
 				hide			applyspectateButton
 			}
 		}
