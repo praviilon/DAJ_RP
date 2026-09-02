@@ -206,7 +206,11 @@
 			{
 				uiScript		zykmod "login"
 				play			"sound/interface/button1.wav" ;
-				close			ingame_login
+				// GalaxyRP fix: [UI] was "close ingame_login", which only closed this submenu and left
+				// the top-bar menu open underneath (had to press Escape to actually get back into
+				// gameplay) -- same class of bug fixed for the saber menu's Apply button (987bccf9).
+				// uiScript closeingame releases the UI key-catcher and tears down the whole menu stack.
+				uiScript		closeingame
 			}
 			mouseEnter
 			{
