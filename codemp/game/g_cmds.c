@@ -117,7 +117,14 @@ const skill_t skills[] = {
 	{1, "Seeker Drone",			"a flying ball that flies around you, shooting anyone in its range",																																																											"items",	"merc",		HI_SEEKER},
 	{1, "E-Web",				"allows you to shoot at people with it, it has a good fire rate",																																																												"items",	"merc",		HI_EWEB},
 	{1, "Big Bacta",			"allows you to recover 50 HP",																																																																					"items",	"merc",		HI_MEDPAC_BIG},
-	{1, "Force Field",			"a powerful shield that protects you from enemy attacks, it can resist a lot against any weapon",																																																				"items",	"merc",		0},
+	// GalaxyRP fix: [Skills] value_internal was 0 here -- the same collision Heal (skill_id 9, see the
+	// FP_HEAL comment in apply_skill_change_in_game() below) hit, except unguarded: apply_skill_change_
+	// in_game()'s "items" branch is gated on value_internal != 0, so with this at 0 it silently skipped
+	// Force Field on every live /skillup or /skilldown. initialize_rpg_skills() (the respawn-time full
+	// reload) grants HI_SHIELD off pers.skill_levels[52] directly and was never affected -- which is
+	// exactly why the item only ever showed up after a /kill or respawn, never immediately. Corrected
+	// to HI_SHIELD, matching every other items-category skill in this table.
+	{1, "Force Field",			"a powerful shield that protects you from enemy attacks, it can resist a lot against any weapon",																																																				"items",	"merc",		HI_SHIELD},
 	{1, "Cloak Item",			"makes you almost invisible to players and invisible to npcs.",																																																													"items",	"merc",		HI_CLOAK},
 	{5, "Force Power",			"increases the max force power you have. Necessary to allow you to use force powers and force-based skills",																																																	"force",	"neutral",	0},
 	{3, "Improvements",			"placeholder, does nothing",																																																																					"items",	"merc",		0},
@@ -12067,11 +12074,27 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 	case 30:
 		//GalaxyRP (Alex): [Skill] Reset max shield immediately.
 		set_max_shield(ent);
+		// GalaxyRP fix: [Skills] set_max_shield() only recalculates pers.max_rpg_shield -- it never
+		// touches the player's current shield. Downgrading Max Shield could leave ps.stats[STAT_ARMOR]
+		// sitting above the new, lower cap, where it would stay until spent in combat (every shield-gain
+		// path already clamps against max_rpg_shield before adding, but nothing clamped an already-too-
+		// high value down). Clamp it here too so a downgrade takes full effect immediately, not just for
+		// future gains.
+		if (ent->client->ps.stats[STAT_ARMOR] > ent->client->pers.max_rpg_shield) {
+			ent->client->ps.stats[STAT_ARMOR] = ent->client->pers.max_rpg_shield;
+		}
 		break;
 	case 54:
 		//GalaxyRP (Alex): [Skill] Reset max force power immediately.
 		ent->client->pers.max_force_power = (int)ceil((zyk_max_force_power.value / 4.0) * ent->client->pers.skill_levels[skill_id]);
 		ent->client->ps.fd.forcePowerMax = ent->client->pers.max_force_power;
+		// GalaxyRP fix: [Skills] same gap as Max Shield above -- downgrading Force Power lowers
+		// forcePowerMax immediately but never clamped the player's current forcePower down to match,
+		// so they could keep a force pool above their new cap until it was spent. Clamped here for the
+		// same reason.
+		if (ent->client->ps.fd.forcePower > ent->client->ps.fd.forcePowerMax) {
+			ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax;
+		}
 		break;
 	case 34:
 		// GalaxyRP fix: [Skills] the client-side blue/yellow jetpack flame effect (cg_players.c's
@@ -12310,10 +12333,21 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 	trap->Argv( 2,  arg2, sizeof( arg2 ) );
 	trap->Argv( 3,  arg3, sizeof( arg3 ) );
 
-	client_id = ClientNumberFromString( ent, arg1, qfalse ); 
+	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
 	if (trap->Argc() == 4) {
 		number_of_upgrades = atoi(arg3);
+
+		// GalaxyRP fix: [Skills] this optional count argument was never validated -- a zero or negative
+		// value still made it all the way to do_upgrade_skill(), whose internal for-loop just silently
+		// never executed (no skill_levels/skillpoints change), yet the function still returned qtrue and
+		// printed a "You upgraded the X skill by [0 or negative] points" success message despite nothing
+		// having actually changed. Rejected outright here instead.
+		if (number_of_upgrades <= 0)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid number of upgrades. Must be a positive number.\n\"" );
+			return;
+		}
 	}
 
 	if (client_id == -1)
@@ -12365,12 +12399,21 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 	trap->Argv( 2,  arg2, sizeof( arg2 ) );
 	trap->Argv( 3,  arg3, sizeof( arg3 ) );
 
-	client_id = ClientNumberFromString( ent, arg1, qfalse ); 
+	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
 	if (trap->Argc() == 4) {
 		number_of_downgrades = atoi(arg3);
+
+		// GalaxyRP fix: [Skills] see the matching fix comment in Cmd_RpModeUp_f above -- this optional
+		// count argument was never validated, letting a zero or negative value through to
+		// do_downgrade_skill() with the same silent-no-op-but-still-"success" outcome. Rejected here.
+		if (number_of_downgrades <= 0)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid number of downgrades. Must be a positive number.\n\"" );
+			return;
+		}
 	}
-				
+
 	if (client_id == -1)
 	{
 		return;
