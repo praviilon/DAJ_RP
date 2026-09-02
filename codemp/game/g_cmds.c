@@ -1119,7 +1119,7 @@ void display_scale_help(gentity_t *ent) {
 	return;
 }
 
-extern void update_current_character_scale(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
+extern void update_current_character_scale(gentity_t* ent, sqlite3* db);
 void Cmd_Scale_f( gentity_t *ent ) {
 	char arg1[MAX_TOKEN_CHARS] = {0};
 	char arg2[MAX_TOKEN_CHARS] = {0};
@@ -1196,23 +1196,31 @@ void Cmd_Scale_f( gentity_t *ent ) {
 	}
 
 	do_scale(&g_entities[client_id], new_size);
-	
-	sqlite3* db;
-	char* zErrMsg = 0;
-	int rc;
-	sqlite3_stmt* stmt = NULL;
 
-	rc = RP_DB_Open(&db);
-	if (rc != SQLITE_OK)
+	// GalaxyRP fix: [Database] this used to save with `ent` (the admin issuing the command) instead of
+	// the actual target -- so scaling someone else applied the new size live but persisted the admin's
+	// own (unchanged) scale to the admin's own row, silently discarding the target's new scale. Their
+	// next /login then reloaded ModelScale from the DB and reset them back to whatever was last actually
+	// saved (100 by default), even though they still looked correctly resized until then. Save to the
+	// real target instead, and only when they're logged in -- a connected-but-not-logged-in target has
+	// no character row to save to (CharID 0, same reasoning as the /giveitem login check).
+	if (g_entities[client_id].client->sess.loggedin == qtrue)
 	{
-		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
+		sqlite3* db;
+		int rc;
+
+		rc = RP_DB_Open(&db);
+		if (rc != SQLITE_OK)
+		{
+			trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
+			sqlite3_close(db);
+			return;
+		}
+
+		update_current_character_scale(&g_entities[client_id], db);
+
 		sqlite3_close(db);
-		return;
 	}
-
-	update_current_character_scale(ent, db, zErrMsg, rc, stmt);
-
-	sqlite3_close(db);
 
 	trap->SendServerCommand( -1, va("print \"Scaled player %s ^7to ^3%d^7\n\"", g_entities[client_id].client->pers.netname, new_size) );
 }
@@ -2721,19 +2729,30 @@ void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* 
 }
 
 // GalaxyRP (Alex): [Database] This method saves the player's scale to the database. All the information is taken from ent. (Characters tables)
-void update_current_character_scale(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char userinfo[MAX_INFO_STRING], modelName[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+// GalaxyRP fix: [Database] this used to compute clientNum/userinfo/modelName via GetUserinfo() on every
+// call and never use modelName for anything -- the UPDATE below only ever touched ModelScale. Dropped
+// the dead lookup. Also converted from run_db_query()/va()-spliced text to a parameterized statement,
+// matching the rest of the DB layer -- both values here were always plain ints (iModelScale, CharID) so
+// this wasn't exploitable, but it was the last scale-related query still splicing instead of binding.
+void update_current_character_scale(gentity_t* ent, sqlite3* db) {
+	int rc;
+	sqlite3_stmt* stmt = 0;
 
-	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
-	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
-
-	char update_character_query[1248] = "UPDATE Characters SET ModelScale='%i' WHERE CharID='%i';";
-
-	run_db_query(va(update_character_query,
-		ent->client->ps.iModelScale,
-		ent->client->pers.CharID
-	), db, zErrMsg, rc, stmt);
+	rc = sqlite3_prepare(db, "UPDATE Characters SET ModelScale=? WHERE CharID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return;
+	}
+	sqlite3_bind_int(stmt, 1, ent->client->ps.iModelScale);
+	sqlite3_bind_int(stmt, 2, ent->client->pers.CharID);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	sqlite3_finalize(stmt);
 
 	return;
 }
@@ -8314,6 +8333,15 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 
 	// zyk: resetting the forcePowerMax to the cvar value
 	ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
+
+	// GalaxyRP fix: [Scale] every other logged-in-only effect here (bitvalue, player_settings, force
+	// powers, health/armor caps, RPG weapons via zyk_remove_guns() below) gets reset to its baseline on
+	// logout, but /scale's size was never among them -- a scaled player stayed whatever size they were
+	// left at while logged in, all the way through logout, instead of visually returning to default like
+	// everything else. This only resets the in-memory/visual state (do_scale() never touches the DB) --
+	// the character's actually-saved ModelScale is untouched and gets restored correctly on the next
+	// /login via select_account_and_default_character_data().
+	do_scale(ent, 100);
 
 	// zyk: resetting max hp and shield to 100
 	ent->client->ps.stats[STAT_MAX_HEALTH] = 100;
