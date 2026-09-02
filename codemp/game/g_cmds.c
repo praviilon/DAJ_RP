@@ -2510,9 +2510,14 @@ void select_news_channels(gentity_t* ent) {
 	trap->SendServerCommand(ent - g_entities, "print \"^3Existing channels:\n\"");
 
 	// GalaxyRP (Alex): [Database] Select all info from all character related tables.
-	char select_channels_query[300] = "SELECT DISTINCT channel \
+	// GalaxyRP fix: [logic] select_news_from_channel() matches channel names case-insensitively
+	// (COLLATE NOCASE), so /news treats "general" and "General" as the same channel -- but this DISTINCT
+	// had no collation, so /newschannels could list them as two separate channels even though /news
+	// merges their entries. Collate the same way here so the channel list matches what /news actually
+	// groups together.
+	char select_channels_query[300] = "SELECT DISTINCT channel COLLATE NOCASE \
 		from News\
-		ORDER BY channel";
+		ORDER BY channel COLLATE NOCASE";
 
 	rc = sqlite3_prepare(db, select_channels_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
@@ -2613,27 +2618,50 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 }
 
 // GalaxyRP (Alex): [Database] DELETE This method deletes a news table row which is associated with the ID given.
-void delete_news_table_row_with_id(gentity_t* ent, int newsID) {
+// GalaxyRP fix: [security/Database] this used to build the query text via va("...newsID='%i'...", newsID)
+// and run it through run_db_query() (a bare sqlite3_exec() wrapper). newsID always comes from atoi(), so
+// this wasn't actually exploitable, but it was the last news-table query still splicing instead of
+// binding, inconsistent with the rest of this file's DB layer -- fixed for consistency and in case this
+// function is ever changed to take a raw string. run_db_query() also never reported success/failure or
+// rows-affected back to the caller, so Cmd_NewsRemove_f couldn't tell whether anything was actually
+// deleted; this now returns qtrue only when a row was actually removed (via sqlite3_changes()).
+qboolean delete_news_table_row_with_id(gentity_t* ent, int newsID) {
 	sqlite3* db;
-	char* zErrMsg = 0;
 	int rc;
 	sqlite3_stmt* stmt = 0;
+	qboolean deleted = qfalse;
 
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
 		sqlite3_close(db);
-		return;
+		return qfalse;
 	}
 
-	char delete_weapons_query[41] = "DELETE FROM News WHERE newsID='%i'";
-
-	run_db_query(va(delete_weapons_query, newsID), db, zErrMsg, rc, stmt);
+	rc = sqlite3_prepare(db, "DELETE FROM News WHERE newsID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		sqlite3_close(db);
+		return qfalse;
+	}
+	sqlite3_bind_int(stmt, 1, newsID);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	else
+	{
+		deleted = (sqlite3_changes(db) > 0) ? qtrue : qfalse;
+	}
+	sqlite3_finalize(stmt);
 
 	sqlite3_close(db);
 
-	return;
+	return deleted;
 }
 
 /*
@@ -14522,8 +14550,14 @@ void Cmd_News_f(gentity_t *ent) {
 	{
 		trap->Argv(2, arg2, sizeof(arg2));
 		numberOfEntries = atoi(arg2);
+		// GalaxyRP fix: [validation] this used to print the error and fall through anyway, so
+		// /news <channel> <count> would still run with the out-of-range count -- e.g. a count over 10
+		// bypassed the cap entirely (the display loop's only bound is numberOfEntries), and a negative
+		// count got bound straight into the SQL LIMIT, which SQLite treats as "no limit" and fetches
+		// every row in the channel for nothing.
 		if (numberOfEntries < 1 || numberOfEntries > 10) {
 			trap->SendServerCommand(ent->s.number, "print \"Error: Can only display between one and ten entries at a time.\n\"");
+			return;
 		}
 	}
 
@@ -14554,13 +14588,26 @@ void Cmd_NewsRemove_f(gentity_t* ent) {
 
 	trap->Argv(1, arg1, sizeof(arg1));
 	newsID = atoi(arg1);
-	if (newsID < 0) {
+	// GalaxyRP fix: [validation] newsID is the News table's INTEGER PRIMARY KEY, which (like CharID)
+	// auto-starts at 1 -- 0 is never a real row, so this used to let "ID must be positive" through for
+	// an ID of exactly 0.
+	if (newsID <= 0) {
 		trap->SendServerCommand(ent->s.number, "print \"ID must be positive.\n\"");
 		return;
 	}
 
-	delete_news_table_row_with_id(ent, newsID);
-	trap->SendServerCommand(ent->s.number, va("print \"Removed news entry with ID %i!\n\"", newsID));
+	// GalaxyRP fix: [Database] delete_news_table_row_with_id used to go through run_db_query(), which
+	// is a bare sqlite3_exec() wrapper that reports neither rows-affected nor failure back to the
+	// caller -- so this command claimed "Removed news entry with ID %i!" unconditionally, even for an
+	// ID that matched nothing. It now reports whether a row was actually deleted.
+	if (delete_news_table_row_with_id(ent, newsID))
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Removed news entry with ID %i!\n\"", newsID));
+	}
+	else
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"No news entry found with ID %i.\n\"", newsID));
+	}
 
 	return;
 }
@@ -14588,10 +14635,19 @@ void Cmd_UpdateNews_f(gentity_t *ent) {
 	trap->Argv(1, arg1, sizeof(arg1));
 	trap->Argv(2, arg2, sizeof(arg2));
 
+	// GalaxyRP fix: [validation] nothing stopped an admin from posting a blank news entry (e.g.
+	// /newsadd general "" or a channel name that trims to nothing) -- reject empty channel/text instead
+	// of silently inserting an empty row.
+	if (arg1[0] == '\0' || arg2[0] == '\0')
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Usage: /newsadd <channel> <news text>\n\"");
+		return;
+	}
+
 	insert_news_table_row(ent, arg1, arg2);
 
 	trap->SendServerCommand(ent->s.number, va("print \"Added news to channel %s\n\"", arg1));
-	
+
 }
 
 void description_display_beginning(gentity_t *ent, char netname[MAX_STRING_CHARS]) {
@@ -15386,9 +15442,9 @@ command_t commands[] = {
 	{ "modversion",			Cmd_ModVersion_f,			CMD_NOINTERMISSION },
 	{ "new",				Cmd_Register_F,				CMD_NOINTERMISSION },
 	{ "news",				Cmd_News_f,					0 },
-	{ "newsadd",			Cmd_UpdateNews_f,					0 },
+	{ "newsadd",			Cmd_UpdateNews_f,					CMD_LOGGEDIN },
 	{ "newschannels",		Cmd_NewsChannels_f,					0 },
-	{ "newsremove",			Cmd_NewsRemove_f,					0 },
+	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "nofight",			Cmd_NoFight_f,				CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_ALIVE | CMD_NOINTERMISSION },
