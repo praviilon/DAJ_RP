@@ -9826,20 +9826,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// len rather than re-reading it back out of message.
 		if (ent->client->pers.player_settings & (1 << 5))
 		{
-			len += sprintf(message + len, "\n^3 5 - Language - ^1Custom");
+			len += sprintf(message + len, "\n^3 1 - Language - ^1Custom");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 5 - Language - ^3English");
+			len += sprintf(message + len, "\n^3 1 - Language - ^3English");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 6))
 		{
-			len += sprintf(message + len, "\n^3 6 - Allow Force Powers from allies - ^1OFF");
+			len += sprintf(message + len, "\n^3 2 - Allow Force Powers from allies - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 6 - Allow Force Powers from allies - ^2ON");
+			len += sprintf(message + len, "\n^3 2 - Allow Force Powers from allies - ^2ON");
 		}
 
 		// GalaxyRP fix: [Magic] the status line for setting 7 (Show magic cast in chat) used to be
@@ -9851,41 +9851,41 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		// zyk: Saber Style flags
 		if (ent->client->pers.player_settings & (1 << 26))
-			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^3Yellow");
+			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^3Yellow");
 		else if (ent->client->pers.player_settings & (1 << 27))
-			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^1Red");
+			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^1Red");
 		else if (ent->client->pers.player_settings & (1 << 28))
-			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^1Desann");
+			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^1Desann");
 		else if (ent->client->pers.player_settings & (1 << 29))
-			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^5Tavion");
+			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^5Tavion");
 		else
-			len += sprintf(message + len, "\n^3 8 - Starting Single Saber Style - ^5Blue");
+			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^5Blue");
 
 		if (ent->client->pers.player_settings & (1 << 9))
 		{
-			len += sprintf(message + len, "\n^3 9 - Allow Screen Message - ^1OFF");
+			len += sprintf(message + len, "\n^3 4 - Allow Screen Message - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 9 - Allow Screen Message - ^2ON");
+			len += sprintf(message + len, "\n^3 4 - Allow Screen Message - ^2ON");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 10))
 		{
-			len += sprintf(message + len, "\n^310 - Use healing force only at allied players - ^1OFF");
+			len += sprintf(message + len, "\n^3 5 - Use healing force only at allied players - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^310 - Use healing force only at allied players - ^2ON");
+			len += sprintf(message + len, "\n^3 5 - Use healing force only at allied players - ^2ON");
 		}
 
 		if (ent->client->pers.player_settings & (1 << 11))
 		{
-			len += sprintf(message + len, "\n^311 - Start With Saber ^1OFF");
+			len += sprintf(message + len, "\n^3 6 - Start With Saber ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^311 - Start With Saber ^2ON");
+			len += sprintf(message + len, "\n^3 6 - Start With Saber ^2ON");
 		}
 
 		// GalaxyRP fix: [Settings] the status line for setting 12 (Jetpack) used to be printed here.
@@ -9896,11 +9896,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		if (ent->client->pers.player_settings & (1 << 13))
 		{
-			len += sprintf(message + len, "\n^313 - Admin Protect ^1OFF");
+			len += sprintf(message + len, "\n^3 7 - Admin Protect ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^313 - Admin Protect ^2ON");
+			len += sprintf(message + len, "\n^3 7 - Admin Protect ^2ON");
 		}
 
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
@@ -9919,29 +9919,23 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		trap->Argv(1, arg1, sizeof( arg1 ));
 		value = atoi(arg1);
 
-		// GalaxyRP fix: [Quests] settings 0 (RPG quests) and 1-4 (Light/Dark/Eternity/Universe Power)
-		// used to be valid values here, toggling quest-related state that can no longer be earned now
-		// that the general quest system is gone (see the GalaxyRP fix comment on quest_get_new_player's
-		// old location in this file). Excluded from the valid range so they now report as invalid,
-		// matching the removed status lines above.
-		// GalaxyRP fix: [Challenge Mode] settings 14 (Boss Battle Music) and 15 (Difficulty/Challenge
-		// Mode) used to be valid values here as well. Everything downstream of Challenge Mode
-		// activation is dead, so both are excluded from the valid range too, matching the removed
-		// status lines above.
-		// GalaxyRP fix: [Settings] setting 12 (Jetpack) used to be a valid value here too. Its bit was
-		// never read by anything that gates actual jetpack availability (Cmd_Jetpack_f checks unrelated
-		// fields), only by this command's own status line, so it's excluded from the valid range now,
-		// matching the removed status line above.
-		// GalaxyRP fix: [Magic] setting 7 (Show magic cast in chat) used to be a valid value here too.
-		// The chat line it toggled, zyk_show_magic_in_chat(), has been removed as dead (it lost its
-		// only callers when the seven magic/ultimate powers it announced were removed as permanently
-		// unreachable), so it's excluded from the valid range now, matching the removed status line
-		// above.
-		if (value <= 0 || value > 13 || (value >= 1 && value <= 4) || value == 7 || value == 12)
+		// GalaxyRP fix: [Settings] player-facing /settings numbers renumbered to a clean 1-7 sequence
+		// (previously 5,6,8,9,10,11,13 -- gaps left behind by settings 0-4,7,12,14,15, which were
+		// removed in earlier passes of this same cleanup; see the status-line comments above for why
+		// each one is gone). The underlying player_settings bit positions below are NOT renumbered --
+		// doing that would mean migrating every already-saved player_settings value in the database,
+		// plus updating every other reader of these bits in g_main.c/g_client.c/w_force.c. Instead this
+		// table translates the number the player types into the real bit index those readers still
+		// expect; everything below continues to operate on that real bit index exactly as before.
+		static const int settings_number_to_bit[] = { 0, 5, 6, 8, 9, 10, 11, 13 }; // index 0 unused (rejected below)
+
+		if (value <= 0 || value >= (int)ARRAY_LEN(settings_number_to_bit))
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid settings value.\n\"" );
 			return;
 		}
+
+		value = settings_number_to_bit[value];
 
 		if (value != 8)
 		{

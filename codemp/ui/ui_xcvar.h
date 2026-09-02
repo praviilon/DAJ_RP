@@ -231,22 +231,20 @@ XCVAR_DEF( ui_rp_skill_59_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNA
 XCVAR_DEF( ui_rp_skill_60_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_61_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_62_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
-XCVAR_DEF( ui_zyk_setting_0_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_1_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_2_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_3_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_4_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP fix: [Settings] ui_zyk_setting_0_value through _4_value, _7_value, _12_value, _14_value and
+// _15_value were removed here -- those settings themselves were removed from Cmd_Settings_f (g_cmds.c)
+// and their /settings-panel bindings from ingame_galaxyrp.menu in earlier passes of this cleanup, and
+// no C code anywhere in codemp/game, codemp/cgame or codemp/ui ever read or wrote these cvars (they
+// only ever displayed a value the player-facing UI set back into itself). Only the still-live settings
+// (5,6,8,9,10,11,13 -- see settings_number_to_bit in Cmd_Settings_f for how these bit indices now map
+// to the player-facing /settings 1-7 numbers) keep a cvar declaration below.
 XCVAR_DEF( ui_zyk_setting_5_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_6_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_7_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_8_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_9_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_10_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_11_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_12_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_13_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_14_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_15_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_0_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_1_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_2_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )

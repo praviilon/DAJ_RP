@@ -5972,15 +5972,96 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				settingsButton_glow
 			style				WINDOW_STYLE_SHADER
-			rect				5 278 140 30
+			// GalaxyRP fix: [Profile UI] repositioned to sit directly above cameraButton (rect y 350),
+			// spaced by the same 30px interval the top group of tabs use with each other (Skills 78,
+			// Characters 108, Shop 138, Games 168) -- 350 - 30 = 320.
+			rect				5 320 140 30
 			background			"gfx/menus/menu_blendbox2"
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+			// GalaxyRP: [Profile UI] Settings only makes sense for a logged-in account, same as
+			// Skills/Characters/Shop/Games above.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+		}
+
+		itemDef
+		{
+			name				settingsButton
+			group				mainButtons
+			text				"Settings"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				10 320 140 30
+			font				3
+			textscale			0.8
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			// GalaxyRP fix: [Profile UI] this button and its cvarTest/showCvar login gate below were
+			// added new -- settingsButton_glow (above) already existed, but nothing in this file had
+			// ever declared the actual clickable settingsButton itemDef, so the Settings panel
+			// (settingsControls group, below) was unreachable in-game since the section was first added.
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+			descText			"Adjust your account settings"
+
+			mouseEnter
+			{
+				show			settingsButton_glow
+			}
+			mouseExit
+			{
+				hide			settingsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				show 			settingsControls ;
+				hide			charControls ;
+				hide			changePassControls ;
+				hide 			rpgClassControls ;
+				hide 			upControls ;
+				hide 			forceLoginSkillsControls ;
+				hide			weaponSkillsControls ;
+				hide			otherSkillsControls ;
+				hide			ammoSkillsControls ;
+				hide			itemsSkillsControls ;
+				hide			questControls ;
+				hide			universeControls ;
+				hide			lightControls ;
+				hide			darkControls ;
+				hide			eternityControls ;
+				hide			questMapsControls ;
+				hide 			listControls ;
+				hide 			commandsControls ;
+				hide			levelweapon ;
+				hide			levelother ;
+				hide			levelammo ;
+				hide			levelitem ;
+				hide 			buyControls ;
+				hide 			buyAmmoControls ;
+				hide 			buyWeaponsControls ;
+				hide 			buyMiscControls ;
+				hide 			cameraControls ;
+				hide 			gamesControls ;
+				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
+				setitemcolor		settingsButton		forecolor 1 1 1 1 ;
+			}
 		}
 
 		// Removed setting0Value (no setting0Button existed in this menu) 2026-08-31: server-side
@@ -6009,7 +6090,7 @@
 			visible				0
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting6Button
 			group				settingsControls
@@ -6023,11 +6104,15 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 6"
+			action
+			{
+				// GalaxyRP fix: [Settings] /settings renumbered to a clean 1-7 sequence (this is now
+				// player-facing number 2) -- see settings_number_to_bit in Cmd_Settings_f (g_cmds.c).
+				// The itemDef name and cvar binding below are left as setting6* since that still matches
+				// the underlying player_settings bit position, which is unchanged.
+				exec			"settings 2"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -6067,11 +6152,13 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 8"
+			action
+			{
+				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 3 (see setting6Button
+				// above for the full explanation). Name/cvar left as setting8* (real bit unchanged).
+				exec			"settings 3"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -6104,11 +6191,13 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 9"
+			action
+			{
+				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 4 (see setting6Button
+				// above for the full explanation). Name/cvar left as setting9* (real bit unchanged).
+				exec			"settings 4"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -6141,11 +6230,13 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 10"
+			action
+			{
+				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 5 (see setting6Button
+				// above for the full explanation). Name/cvar left as setting10* (real bit unchanged).
+				exec			"settings 5"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -6178,11 +6269,13 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 11"
+			action
+			{
+				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 6 (see setting6Button
+				// above for the full explanation). Name/cvar left as setting11* (real bit unchanged).
+				exec			"settings 6"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -6201,44 +6294,14 @@
 			visible				0
 		}
 
-		itemDef 
-		{
-			name				setting12Button
-			group				settingsControls
-			text				"Jetpack"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 230 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action 
-			{ 
-				exec			"settings 12"
-				play			"sound/interface/button1.wav" ;
-			}  	  
-		}
+		// Removed setting12Button/setting12Value ("Jetpack", exec "settings 12") 2026-09-02: server-side
+		// /settings 12 was already removed from Cmd_Settings_f (its bit was only ever read back by its
+		// own now-removed status line, never gating actual jetpack availability), which left this
+		// button as the last stale binding calling a removed command. Removed for consistency with
+		// setting0Value/setting1-4Value/setting7Button/setting14-15Button above -- see also ui_xcvar.h,
+		// where ui_zyk_setting_12_value's now-unused cvar declaration was removed at the same time.
 
-		itemDef 
-		{
-			name				setting12Value
-			group				settingsControls
-			rect				410 230 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_12_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
+		itemDef
 		{
 			name				setting13Button
 			group				settingsControls
@@ -6252,11 +6315,13 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"settings 13"
+			action
+			{
+				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 7 (see setting6Button
+				// above for the full explanation). Name/cvar left as setting13* (real bit unchanged).
+				exec			"settings 7"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
