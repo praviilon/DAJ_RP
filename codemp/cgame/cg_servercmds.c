@@ -1831,7 +1831,19 @@ char ui_cvars_in_order[100][100] = {
 	"ui_rp_skill_59_level",
 	"ui_rp_skill_60_level",
 	"ui_rp_skill_61_level",
-	"ui_rp_skill_62_level"
+	"ui_rp_skill_62_level",
+	// GalaxyRP fix: [Settings] 6 new entries appended here, in the exact same order the server appends
+	// their values to the zykmod content string (see the settings_to_sync loop added to
+	// Cmd_GalaxyRpUi_f in g_cmds.c) -- this array is parsed positionally via strtok in CG_ZykMod below,
+	// so the order here must match the server's append order exactly. These feed the Settings panel's
+	// *Value itemDefs in ingame_galaxyrp.menu, which previously only ever showed their static "0"
+	// XCVAR_DEF default since nothing wrote to them.
+	"ui_zyk_setting_6_value",
+	"ui_zyk_setting_8_value",
+	"ui_zyk_setting_9_value",
+	"ui_zyk_setting_10_value",
+	"ui_zyk_setting_11_value",
+	"ui_zyk_setting_13_value"
 };
 
 static void CG_ZykMod( void )

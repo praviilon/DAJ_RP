@@ -6031,6 +6031,11 @@
 			action
 			{
 				play			"sound/interface/button1.wav" ;
+				// GalaxyRP fix: [Settings] added exec "zykmod" here 2026-09-02, matching the same call
+				// upButton/listButton already make -- without it the *Value fields below only ever show
+				// whatever was synced the last time some other button was pressed (or nothing at all, if
+				// this is the first tab opened), instead of the player's current settings.
+				exec			"zykmod" ;
 				show 			settingsControls ;
 				hide			charControls ;
 				hide			changePassControls ;
@@ -6074,21 +6079,12 @@
 		// ui_zyk_setting_1_value through ui_zyk_setting_4_value and never called exec, so they were
 		// missed at the time — removed now for consistency with setting0Value above.
 
-		itemDef
-		{
-			name				setting5Value
-			group				settingsControls
-			rect				410 125 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_5_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
+		// GalaxyRP fix: [Settings] removed setting5Value 2026-09-02: unlike the dead-setting removals
+		// above, /settings 1 (Language, the real bit-5 setting) is still fully live server-side -- this
+		// field was its only representation in this panel, and it never had a matching Button next to
+		// it (Language has no in-game toggle button, only the console command), so it rendered as a
+		// bare, unlabeled value with no way to tell what it was for. Removed rather than labeled, per
+		// request, since nothing else in this panel is display-only with no button.
 
 		itemDef
 		{
@@ -6148,7 +6144,7 @@
 			font				3
 			textscale			.4
 			style				WINDOW_STYLE_FILLED
-			rect				180 170 180 12
+			rect				180 155 180 12
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -6161,11 +6157,11 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting8Value
 			group				settingsControls
-			rect				410 170 140 12
+			rect				410 155 140 12
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -6187,7 +6183,7 @@
 			font				3
 			textscale			.4
 			style				WINDOW_STYLE_FILLED
-			rect				180 185 180 12
+			rect				180 170 180 12
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -6200,11 +6196,11 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting9Value
 			group				settingsControls
-			rect				410 185 140 12
+			rect				410 170 140 12
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -6226,7 +6222,7 @@
 			font				3
 			textscale			.4
 			style				WINDOW_STYLE_FILLED
-			rect				180 200 180 12
+			rect				180 185 180 12
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -6239,11 +6235,11 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting10Value
 			group				settingsControls
-			rect				410 200 140 12
+			rect				410 185 140 12
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -6265,7 +6261,7 @@
 			font				3
 			textscale			.4
 			style				WINDOW_STYLE_FILLED
-			rect				180 215 180 12
+			rect				180 200 180 12
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -6278,11 +6274,11 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting11Value
 			group				settingsControls
-			rect				410 215 140 12
+			rect				410 200 140 12
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -6300,6 +6296,11 @@
 		// button as the last stale binding calling a removed command. Removed for consistency with
 		// setting0Value/setting1-4Value/setting7Button/setting14-15Button above -- see also ui_xcvar.h,
 		// where ui_zyk_setting_12_value's now-unused cvar declaration was removed at the same time.
+		// GalaxyRP fix: [Profile UI] 2026-09-02: the row below (setting13Button/Value, "Admin Protect")
+		// used to stay at its original rect y 245, leaving a lopsided 30px gap where this removed row's
+		// own slot (y 230) used to sit, while every other row is a uniform 15px apart. Pulled up to
+		// y 215 -- directly following setting11 (Start With Saber) at y 200 -- to close that gap and
+		// match the uniform spacing every other settings row uses.
 
 		itemDef
 		{
@@ -6311,7 +6312,7 @@
 			font				3
 			textscale			.4
 			style				WINDOW_STYLE_FILLED
-			rect				180 245 180 12
+			rect				180 215 180 12
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -6324,11 +6325,11 @@
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting13Value
 			group				settingsControls
-			rect				410 245 140 12
+			rect				410 215 140 12
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""

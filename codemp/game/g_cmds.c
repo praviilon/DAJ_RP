@@ -15003,6 +15003,52 @@ void Cmd_TrainingMode_f(gentity_t* ent) {
 	return;
 }
 
+// GalaxyRP fix: [Settings] plain-text status words for the ui_zyk_setting_N_value cvars used by the
+// Settings panel in ingame_galaxyrp.menu. Those cvars (declared via XCVAR_DEF in ui_xcvar.h) were
+// never written by any code anywhere in the repo -- they only ever displayed their static "0"
+// default, which is meaningless to a player looking at the panel. This piggybacks on the existing
+// zykmod server->cgame sync (see the content string built in Cmd_GalaxyRpUi_f just below, and
+// CG_ZykMod/ui_cvars_in_order in cg_servercmds.c) to push the exact same words Cmd_Settings_f already
+// prints to console when run with no arguments, so the panel and the console command can never say
+// different things. setting_number matches the player-facing /settings <N> numbering (see
+// settings_number_to_bit in Cmd_Settings_f above), not the underlying player_settings bit position.
+// Deliberately NOT sharing code with Cmd_Settings_f's own status-line block -- that block is already
+// correct and tested, and duplicating a handful of comparisons here is lower risk than refactoring it.
+void zyk_setting_status_text(gentity_t *ent, int setting_number, char *out, int out_size) {
+	switch (setting_number) {
+		case 2: // Allow Force Powers from allies
+			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 6)) ? "OFF" : "ON", out_size);
+			break;
+		case 3: // Starting Single Saber Style (multi-bit, spans bits 26-29)
+			if (ent->client->pers.player_settings & (1 << 26))
+				Q_strncpyz(out, "Yellow", out_size);
+			else if (ent->client->pers.player_settings & (1 << 27))
+				Q_strncpyz(out, "Red", out_size);
+			else if (ent->client->pers.player_settings & (1 << 28))
+				Q_strncpyz(out, "Desann", out_size);
+			else if (ent->client->pers.player_settings & (1 << 29))
+				Q_strncpyz(out, "Tavion", out_size);
+			else
+				Q_strncpyz(out, "Blue", out_size);
+			break;
+		case 4: // Allow Screen Message
+			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 9)) ? "OFF" : "ON", out_size);
+			break;
+		case 5: // Use healing force only at allied players
+			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 10)) ? "OFF" : "ON", out_size);
+			break;
+		case 6: // Start With Saber
+			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 11)) ? "OFF" : "ON", out_size);
+			break;
+		case 7: // Admin Protect
+			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 13)) ? "OFF" : "ON", out_size);
+			break;
+		default:
+			Q_strncpyz(out, "", out_size);
+			break;
+	}
+}
+
 void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	// zyk: sends info to the client-side menu if player has the client-side plugin
 	char userinfo[MAX_INFO_STRING];
@@ -15046,6 +15092,23 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 		for (int i = 0; i < ARRAY_LEN(skills); i++) {
 			strcpy(content, va("%s%d/%d~", content, ent->client->pers.skill_levels[i], skills[i].max_level));
 		}
+
+		// GalaxyRP fix: [Settings] appended after the skills loop and before the packet is sent, in the
+		// same fixed order as the 6 new entries added to ui_cvars_in_order[] in cg_servercmds.c
+		// (ui_zyk_setting_6/8/9/10/11/13_value). See zyk_setting_status_text() above for what each word
+		// means and why this piggybacks on the zykmod sync instead of its own command.
+		{
+			char setting_text[16];
+			int setting_number;
+			int settings_to_sync[] = { 2, 3, 4, 5, 6, 7 };
+
+			for (int i = 0; i < ARRAY_LEN(settings_to_sync); i++) {
+				setting_number = settings_to_sync[i];
+				zyk_setting_status_text(ent, setting_number, setting_text, sizeof(setting_text));
+				strcpy(content, va("%s%s~", content, setting_text));
+			}
+		}
+
 		trap->SendServerCommand(ent->s.number, va("zykmod \"%s\"", content));
 	}
 	else
