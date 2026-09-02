@@ -2363,6 +2363,17 @@ void ClientThink_real( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Model] fire any forced kill deferred by select_player_character()/
+	// select_account_and_default_character_data() (see pending_relog_kill_time's declaration in
+	// g_local.h for the full race this avoids) once the buffer window has elapsed.
+	if (client->pers.pending_relog_kill_time > 0 && level.time >= client->pers.pending_relog_kill_time)
+	{
+		extern void G_Kill(gentity_t* ent);
+
+		client->pers.pending_relog_kill_time = 0;
+		G_Kill(ent);
+	}
+
 	// This code was moved here from clientThink to fix a problem with g_synchronousClients
 	// being set to 1 when in vehicles.
 	if ( ent->s.number < MAX_CLIENTS && ent->client->ps.m_iVehicleNum )

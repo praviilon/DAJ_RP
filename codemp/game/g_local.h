@@ -994,7 +994,17 @@ typedef struct clientPersistant_s {
 	// has no callers).
 
 	// Tr!Force: [Plugin] Client plugin check
-	qboolean		clientPlugin;	
+	qboolean		clientPlugin;
+
+	// GalaxyRP fix: [Model] non-zero while a forced kill triggered by /login, /char use, or /new is
+	// waiting to fire -- set by select_player_character()/select_account_and_default_character_data()
+	// in g_cmds.c instead of calling G_Kill() immediately, and consumed by ClientThink_real() in
+	// g_active.c once level.time reaches it. The delay gives the client time to finish reloading the
+	// new Ghoul2 model (triggered by set_model()'s configstring update, which is asynchronous on the
+	// client) before the death animation's playerState update reaches it -- calling G_Kill() in the
+	// same frame as set_model() could otherwise race the model reload and render as a T-pose instead
+	// of the intended death animation.
+	int				pending_relog_kill_time;
 
 } clientPersistant_t;
 

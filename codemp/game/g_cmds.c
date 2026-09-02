@@ -2963,7 +2963,12 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
 		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", ent->team));
-		G_Kill(ent);
+
+		// GalaxyRP fix: [Model] don't call G_Kill() in the same frame as the set_model() call above --
+		// see pending_relog_kill_time's declaration in g_local.h for why (T-pose race with the client's
+		// asynchronous model/animation reload). ClientThink_real() in g_active.c fires the actual kill
+		// once this buffer elapses.
+		ent->client->pers.pending_relog_kill_time = level.time + 300;
 	}
 
 	// GalaxyRP (Alex): [Database] Assign the player the info from Accounts table.
@@ -3780,7 +3785,11 @@ void Cmd_Login_F(gentity_t * ent)
 	initialize_rpg_skills(ent);
 
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
-		G_Kill(ent);
+		// GalaxyRP fix: [Model] don't call G_Kill() in the same frame as the model change performed by
+		// select_account_and_default_character_data() above -- see pending_relog_kill_time's declaration
+		// in g_local.h for why (T-pose race with the client's asynchronous model/animation reload).
+		// ClientThink_real() in g_active.c fires the actual kill once this buffer elapses.
+		ent->client->pers.pending_relog_kill_time = level.time + 300;
 	}
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2You have sucessfully logged in.\n\"");
