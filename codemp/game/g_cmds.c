@@ -11830,22 +11830,27 @@ void Cmd_Silence_f( gentity_t *ent ) {
 }
 
 // zyk: shows admin commands of this player. Shows info to the target_ent player
-void zyk_show_admin_commands(gentity_t *ent, gentity_t *target_ent)
+// GalaxyRP fix: [cleanup] renamed params to match their actual roles -- whose_commands is whose
+// bitvalue is read to build the list, shown_to is who the resulting messages are sent to. The old
+// names ("ent" / "target_ent") read backwards at the self-listing call site (where both happen to
+// be the same entity) and made the "show" call site error-prone to reason about.
+void zyk_show_admin_commands(gentity_t *whose_commands, gentity_t *shown_to)
 {
 	char message[1024];
 	// GalaxyRP fix: [cleanup] removed an unused 'char message_content[ADM_NUM_CMDS + 1][80]' local
 	// (never read anywhere in this function).
-	int i = 0;
 	strcpy(message,"");
 
+	// GalaxyRP fix: [cleanup] removed a dead outer 'int i = 0;' that was immediately shadowed by
+	// this loop's own 'int i' -- the outer one was never read.
 	for (int i = 0; i < ADM_NUM_CMDS; i++) {
-		if ((ent->client->pers.bitvalue & (1 << admin_commands[i].number)))
+		if ((whose_commands->client->pers.bitvalue & (1 << admin_commands[i].number)))
 		{
-			trap->SendServerCommand(target_ent - g_entities, va("print \"^3%d ^7- %s: ^2yes\n\"", admin_commands[i].number, admin_commands[i].title));
+			trap->SendServerCommand(shown_to - g_entities, va("print \"^3%d ^7- %s: ^2yes\n\"", admin_commands[i].number, admin_commands[i].title));
 		}
 		else
 		{
-			trap->SendServerCommand(target_ent - g_entities, va("print \"^3%d ^7- %s: ^1no\n\"", admin_commands[i].number, admin_commands[i].title));
+			trap->SendServerCommand(shown_to - g_entities, va("print \"^3%d ^7- %s: ^1no\n\"", admin_commands[i].number, admin_commands[i].title));
 		}
 	}
 
@@ -11858,17 +11863,74 @@ Cmd_AdminList_f
 ==================
 */
 void Cmd_AdminList_f( gentity_t *ent ) {
+	char arg1[MAX_STRING_CHARS];
+
 	if (trap->Argc() == 1)
 	{
 		zyk_show_admin_commands(ent, ent);
+		return;
 	}
-	else if (trap->Argc() == 2)
-	{ // zyk: display help info for an admin command
-		char arg1[MAX_STRING_CHARS];
-		int command_number = 0;
-		
-		trap->Argv( 1,  arg1, sizeof( arg1 ) );
-		command_number = atoi(arg1);
+
+	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	// GalaxyRP fix: [Admin] check for the "show" keyword before treating arg1 as a numeric command
+	// ID -- previously /adminlist show (with no player name, 2 total args) fell into the numeric-
+	// help branch below, atoi()'d "show" into 0, and that collided with the real ADM_NPC (0)
+	// command number: the missing-argument mistake silently printed the NPC command's help text
+	// instead of any error.
+	if (Q_stricmp(arg1, "show") == 0)
+	{
+		gentity_t *player_ent = NULL;
+		char arg2[MAX_STRING_CHARS];
+		int client_id = -1;
+
+		// GalaxyRP fix: [cleanup] route through the shared check_admin_command() helper instead of
+		// a hand-rolled "pers.bitvalue & (1 << ADM_GIVEADM)" check, matching every other admin
+		// command.
+		if (!check_admin_command(ent, ADM_GIVEADM, qtrue))
+		{
+			return;
+		}
+
+		if (trap->Argc() < 3)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You must specify a player name or ID. Usage: /adminlist show <player name or ID>\n\"" );
+			return;
+		}
+
+		trap->Argv( 2, arg2, sizeof( arg2 ) );
+
+		client_id = ClientNumberFromString( ent, arg2, qfalse );
+		if (client_id == -1)
+		{
+			return;
+		}
+
+		player_ent = &g_entities[client_id];
+
+		if (player_ent->client->sess.amrpgmode == 0)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Player %s ^7is not logged in.\n\"", player_ent->client->pers.netname) );
+			return;
+		}
+
+		// zyk: player is logged in. Show his admin commands
+		zyk_show_admin_commands(player_ent, ent);
+		return;
+	}
+
+	// zyk: display help info for an admin command
+	// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string, which collided with
+	// the real ADM_NPC (0) command number -- require the argument to actually be an integer first,
+	// same fix already applied to /admmap's gametype argument.
+	if (!StringIsInteger(arg1))
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid admin command number. Use ^3/adminlist ^7to see your admin commands and their numbers.\n\"" );
+		return;
+	}
+
+	{
+		int command_number = atoi(arg1);
 
 		if (command_number == ADM_NPC)
 		{
@@ -11978,47 +12040,11 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/getup ^7and ^3/helpup <player name> ^7to revive yourself and other players from downed state\n\n\"");
 		}
-	}
-	else
-	{
-		char arg1[MAX_STRING_CHARS];
-		char arg2[MAX_STRING_CHARS];
-		int client_id = -1;
-		
-		trap->Argv( 1,  arg1, sizeof( arg1 ) );
-
-		if (Q_stricmp(arg1, "show") == 0)
-		{
-			gentity_t *player_ent = NULL;
-
-			if (!(ent->client->pers.bitvalue & (1 << ADM_GIVEADM)))
-			{ // zyk: admin command
-				trap->SendServerCommand( ent-g_entities, "print \"You must have GiveAdmin to use this admin command.\n\"" );
-				return;
-			}
-
-			trap->Argv( 2,  arg2, sizeof( arg2 ) );
-
-			client_id = ClientNumberFromString( ent, arg2, qfalse );
-			if (client_id == -1)
-			{
-				return;
-			}
-
-			player_ent = &g_entities[client_id];
-
-			if (player_ent->client->sess.amrpgmode == 0)
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"Player %s ^7is not logged in.\n\"", player_ent->client->pers.netname) );
-				return;
-			}
-
-			// zyk: player is logged in. Show his admin commands
-			zyk_show_admin_commands(player_ent, ent);
-		}
 		else
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"Invalid option.\n\"" );
+			// GalaxyRP fix: [Admin] the numeric-help chain above had no fallback for an
+			// out-of-range command number -- /adminlist 999 previously produced total silence.
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid admin command number. Use ^3/adminlist ^7to see your admin commands and their numbers.\n\"" );
 		}
 	}
 }
@@ -12029,57 +12055,76 @@ Cmd_AdminUp_f
 ==================
 */
 void Cmd_AdminUp_f( gentity_t *ent ) {
-	if (ent->client->pers.bitvalue & (1 << ADM_GIVEADM))
+	char	arg1[MAX_STRING_CHARS];
+	char	arg2[MAX_STRING_CHARS];
+	int client_id = -1;
+	int i = 0;
+	int bitvaluecommand = 0;
+
+	// GalaxyRP fix: [cleanup] route through the shared check_admin_command() helper instead of a
+	// hand-rolled "pers.bitvalue & (1 << ADM_GIVEADM)" check, matching every other admin command.
+	if (!check_admin_command(ent, ADM_GIVEADM, qtrue))
 	{
-		char	arg1[MAX_STRING_CHARS];
-		char	arg2[MAX_STRING_CHARS];
-		int client_id = -1;
-		int i = 0;
-		int bitvaluecommand = 0;
+		return;
+	}
 
-		if ( trap->Argc() != 3 )
-		{ 
-			trap->SendServerCommand( ent-g_entities, "print \"You must write the player name and the admin command number.\n\"" ); 
-			return; 
-		}
-		trap->Argv( 1,  arg1, sizeof( arg1 ) );
-		trap->Argv( 2,  arg2, sizeof( arg2 ) );
-		client_id = ClientNumberFromString( ent, arg1, qfalse );
+	if ( trap->Argc() != 3 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"You must write the player name and the admin command number.\n\"" );
+		return;
+	}
+	trap->Argv( 1,  arg1, sizeof( arg1 ) );
+	trap->Argv( 2,  arg2, sizeof( arg2 ) );
+	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
-		if (client_id == -1)
-		{
-			return;
-		}
+	if (client_id == -1)
+	{
+		return;
+	}
 
-		if (g_entities[client_id].client->sess.amrpgmode == 0)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Player is not logged in\n\"") );
-			return;
-		}
-		if (Q_stricmp (arg2, "all") == 0)
-		{ // zyk: if player wrote all, give all commands to the target player
-			for (i = 0; i < ADM_NUM_CMDS; i++)
-				g_entities[client_id].client->pers.bitvalue |= (1 << i);
-		}
-		else
-		{
-			bitvaluecommand = atoi(arg2);
-			if (bitvaluecommand < 0 || bitvaluecommand >= ADM_NUM_CMDS)
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
-				return; 
-			}
-			g_entities[client_id].client->pers.bitvalue |= (1 << bitvaluecommand);
-		}
+	if (g_entities[client_id].client->sess.amrpgmode == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Player is not logged in\n\"") );
+		return;
+	}
+	if (Q_stricmp (arg2, "all") == 0)
+	{ // zyk: if player wrote all, give all commands to the target player
+		for (i = 0; i < ADM_NUM_CMDS; i++)
+			g_entities[client_id].client->pers.bitvalue |= (1 << i);
 
-		save_account(&g_entities[client_id], qfalse);
-
-		trap->SendServerCommand( ent-g_entities, "print \"Admin commands upgraded successfully.\n\"" );
+		// GalaxyRP fix: [Admin] audit trail -- neither /adminup nor /admindown used to log who
+		// granted/revoked what to whom, even though these two commands can hand out or take away
+		// full server control. Log every grant/revoke to the server log.
+		G_LogPrintf( "AdminUp: %s^7 granted all admin commands to %s^7\n", ent->client->pers.netname, g_entities[client_id].client->pers.netname );
+		// GalaxyRP fix: [Admin] unique success message instead of the generic "Admin commands
+		// upgraded successfully." that both /adminup and /admindown used to share verbatim.
+		trap->SendServerCommand( ent-g_entities, va("print \"You granted all admin commands to %s^7.\n\"", g_entities[client_id].client->pers.netname) );
 	}
 	else
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"You can't use this command.\n\"" );
+		// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string (e.g. a typo
+		// like "abc" would parse as command 0 / ADM_NPC instead of being rejected), so require the
+		// argument to actually be an integer first -- same fix already applied to /admmap's
+		// gametype argument.
+		if (!StringIsInteger(arg2))
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
+			return;
+		}
+
+		bitvaluecommand = atoi(arg2);
+		if (bitvaluecommand < 0 || bitvaluecommand >= ADM_NUM_CMDS)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
+			return;
+		}
+		g_entities[client_id].client->pers.bitvalue |= (1 << bitvaluecommand);
+
+		G_LogPrintf( "AdminUp: %s^7 granted %s ^7to %s^7\n", ent->client->pers.netname, admin_commands[bitvaluecommand].title, g_entities[client_id].client->pers.netname );
+		trap->SendServerCommand( ent-g_entities, va("print \"You granted %s ^7to %s^7.\n\"", admin_commands[bitvaluecommand].title, g_entities[client_id].client->pers.netname) );
 	}
+
+	save_account(&g_entities[client_id], qfalse);
 }
 
 /*
@@ -12088,56 +12133,76 @@ Cmd_AdminDown_f
 ==================
 */
 void Cmd_AdminDown_f( gentity_t *ent ) {
-	if (ent->client->pers.bitvalue & (1 << ADM_GIVEADM))
+	char	arg1[MAX_STRING_CHARS];
+	char	arg2[MAX_STRING_CHARS];
+	int client_id = -1;
+	int bitvaluecommand = 0;
+
+	// GalaxyRP fix: [cleanup] route through the shared check_admin_command() helper instead of a
+	// hand-rolled "pers.bitvalue & (1 << ADM_GIVEADM)" check, matching every other admin command.
+	if (!check_admin_command(ent, ADM_GIVEADM, qtrue))
 	{
-		char	arg1[MAX_STRING_CHARS];
-		char	arg2[MAX_STRING_CHARS];
-		int client_id = -1;
-		int bitvaluecommand = 0;
+		return;
+	}
 
-		if ( trap->Argc() != 3 )
-		{ 
-			trap->SendServerCommand( ent-g_entities, "print \"You must write a player name and the admin command number.\n\"" ); 
-			return; 
-		}
-		trap->Argv( 1,  arg1, sizeof( arg1 ) );
-		trap->Argv( 2,  arg2, sizeof( arg2 ) );
-		client_id = ClientNumberFromString( ent, arg1, qfalse ); 
-				
-		if (client_id == -1)
-		{
-			return;
-		}
+	if ( trap->Argc() != 3 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"You must write a player name and the admin command number.\n\"" );
+		return;
+	}
+	trap->Argv( 1,  arg1, sizeof( arg1 ) );
+	trap->Argv( 2,  arg2, sizeof( arg2 ) );
+	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
-		if (g_entities[client_id].client->sess.amrpgmode == 0)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Player is not logged in\n\"") );
-			return;
-		}
+	if (client_id == -1)
+	{
+		return;
+	}
 
-		if (Q_stricmp (arg2, "all") == 0)
-		{ // zyk: if player wrote all, take away all admin commands from target player
-			g_entities[client_id].client->pers.bitvalue = 0;
-		}
-		else
-		{
-			bitvaluecommand = atoi(arg2);
-			if (bitvaluecommand < 0 || bitvaluecommand >= ADM_NUM_CMDS)
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
-				return; 
-			}
-			g_entities[client_id].client->pers.bitvalue &= ~(1 << bitvaluecommand);
-		}
+	if (g_entities[client_id].client->sess.amrpgmode == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Player is not logged in\n\"") );
+		return;
+	}
 
-		save_account(&g_entities[client_id], qfalse);
+	if (Q_stricmp (arg2, "all") == 0)
+	{ // zyk: if player wrote all, take away all admin commands from target player
+		g_entities[client_id].client->pers.bitvalue = 0;
 
-		trap->SendServerCommand( ent-g_entities, "print \"Admin commands upgraded successfully.\n\"" );
+		// GalaxyRP fix: [Admin] audit trail -- neither /adminup nor /admindown used to log who
+		// granted/revoked what to whom, even though these two commands can hand out or take away
+		// full server control. Log every grant/revoke to the server log.
+		G_LogPrintf( "AdminDown: %s^7 revoked all admin commands from %s^7\n", ent->client->pers.netname, g_entities[client_id].client->pers.netname );
+		// GalaxyRP fix: [Admin] unique success message instead of the generic (and, for this
+		// command, actively wrong -- it said "upgraded" for a downgrade) message that both
+		// /adminup and /admindown used to share verbatim.
+		trap->SendServerCommand( ent-g_entities, va("print \"You revoked all admin commands from %s^7.\n\"", g_entities[client_id].client->pers.netname) );
 	}
 	else
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"You can't use this command.\n\"" );
+		// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string (e.g. a typo
+		// like "abc" would parse as command 0 / ADM_NPC instead of being rejected), so require the
+		// argument to actually be an integer first -- same fix already applied to /admmap's
+		// gametype argument.
+		if (!StringIsInteger(arg2))
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
+			return;
+		}
+
+		bitvaluecommand = atoi(arg2);
+		if (bitvaluecommand < 0 || bitvaluecommand >= ADM_NUM_CMDS)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid admin command\n\"") );
+			return;
+		}
+		g_entities[client_id].client->pers.bitvalue &= ~(1 << bitvaluecommand);
+
+		G_LogPrintf( "AdminDown: %s^7 revoked %s ^7from %s^7\n", ent->client->pers.netname, admin_commands[bitvaluecommand].title, g_entities[client_id].client->pers.netname );
+		trap->SendServerCommand( ent-g_entities, va("print \"You revoked %s ^7from %s^7.\n\"", admin_commands[bitvaluecommand].title, g_entities[client_id].client->pers.netname) );
 	}
+
+	save_account(&g_entities[client_id], qfalse);
 }
 
 void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgrade, qboolean success, int skill_id, int number_of_changes) {
