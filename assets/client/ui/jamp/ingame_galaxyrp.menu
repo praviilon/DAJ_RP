@@ -887,6 +887,13 @@
 	     		action
 			{
 				play			"sound/interface/button1.wav" ;
+				// GalaxyRP fix: [Profile UI] added exec "zykmod" here 2026-09-02, matching upButton
+				// ("Skills") and settingsButton -- Force power levels are server-side account data synced
+				// through the same zykmod payload as regular skills (see the skills[] loop in
+				// Cmd_GalaxyRpUi_f, g_cmds.c), so without this the panel only ever showed whatever was
+				// synced the last time the menu was opened or Skills/Customize/Settings was clicked,
+				// instead of the player's current force power levels.
+				exec			"zykmod" ;
 				hide			listControls ;
 				hide			charControls ;
 				hide			changePassControls ;
