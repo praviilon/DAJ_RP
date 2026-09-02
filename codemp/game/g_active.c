@@ -1054,9 +1054,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		// Tr!Force: [Motd] Show server motd
 		if (client->motdTime)
 		{
-			if (client->motdTime <= zyk_screen_message_timer.integer)
+			if (client->motdTime <= rp_screen_message_timer.integer)
 			{
-				RPMod_StringEscape(zyk_screen_message.string, serverMotd, MAX_STRING_CHARS);
+				RPMod_StringEscape(rp_screen_message.string, serverMotd, MAX_STRING_CHARS);
 				trap->SendServerCommand(ent->s.number, va("cp \"%s\nTime: %d\"", serverMotd, client->motdTime));
 			}
 			

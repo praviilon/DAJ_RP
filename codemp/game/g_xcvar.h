@@ -318,8 +318,13 @@ XCVAR_DEF( zyk_enable_flaming_area, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART
 XCVAR_DEF( zyk_enable_reverse_wind, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_enemy_nerf, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_enable_ice_block, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_screen_message,	"",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_screen_message_timer,	"5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_screen_message/zyk_screen_message_timer to
+// rp_screen_message/rp_screen_message_timer -- matches this codebase's rp_ naming convention for
+// GalaxyRP-authored cvars (see rp_allow_playsound_command/rp_allow_emotes above).
+XCVAR_DEF( rp_screen_message,	"",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [validation] RP_CVU_screenMessageTimer (g_cvar.c) clamps a negative value back to
+// 0 -- see its comment for why.
+XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_list_cmds_results_per_page,	"10",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_start_race_timer,	"15000",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_flame_thrower_cooldown,	"50",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -364,8 +369,10 @@ XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH,		
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_pluginRequired,					"1",	RP_CVU_pluginRequired,	CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( rp_loginRequired,					"0",	NULL,					CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
-XCVAR_DEF( rp_downed_timer,						"30",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
-XCVAR_DEF( rp_downed_invulnerability_timer,		"10",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
+// GalaxyRP fix: [validation] RP_CVU_downedTimer/RP_CVU_downedInvulnerabilityTimer (g_cvar.c) clamp
+// a negative value back to 0 -- see RP_ClampNonNegativeCvar's comment there for why.
+XCVAR_DEF( rp_downed_timer,						"30",	RP_CVU_downedTimer,	CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_downed_invulnerability_timer,		"10",	RP_CVU_downedInvulnerabilityTimer,	CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_allow_passive_regen,				"1",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_ammo_regen_timer,					"5",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_explosives_recharge_timer,		"30",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)

@@ -1508,29 +1508,25 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 
 			return qfalse;
 		}
-		else {
-			trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
-			trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
-			trap->SendServerCommand(target->client->ps.clientNum, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
-			trap->SendServerCommand(target->client->ps.clientNum, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
 
-			return qtrue;
+		// GalaxyRP fix: [Death System] this distance check used to live in unreachable code after
+		// this whole if/else -- every branch here already returned before it could ever run, so
+		// /helpup had no range requirement at all and could revive someone from anywhere on the
+		// map. The admin bypass is already handled by the check_admin_command() return near the top
+		// of this function, so only the distance gate needs to apply here.
+		if (Distance(ent->client->ps.origin, target->client->ps.origin) > 65) {
+			trap->SendServerCommand(ent - g_entities, va("print \"^1You are too far away to help %s up!\n\"", target->client->pers.netname));
+			trap->SendServerCommand(ent - g_entities, va("cp \"^1You are too far away to help %s up!\"", target->client->pers.netname));
+
+			return qfalse;
 		}
-	}
 
-	//GalaxyRP (Alex): [Death System] If player is close enough or has admin permission, allow them to help someone up.
-	if (Distance(ent->client->ps.origin, target->client->ps.origin) <= 65 || check_admin_command(ent, ADM_GETUP, qfalse)) {
 		trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
 		trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
 		trap->SendServerCommand(target->client->ps.clientNum, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
 		trap->SendServerCommand(target->client->ps.clientNum, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
 
 		return qtrue;
-	}
-	else {
-		trap->SendServerCommand(ent - g_entities, va("cp \"^1You are too far away to help them up!\"", target->client->pers.netname));
-		trap->SendServerCommand(ent - g_entities, va("print \"^1You are too far away to help them up!\"", target->client->pers.netname));
-		return qfalse;
 	}
 }
 

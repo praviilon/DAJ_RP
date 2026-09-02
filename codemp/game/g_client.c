@@ -3019,15 +3019,15 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	if (client->sess.sessionTeam != TEAM_SPECTATOR)
 	{
 		// Tr!Force: [Motd] Check screen message
-		if (!client->sess.motdSeen && VALIDSTRINGCVAR(zyk_screen_message.string))
+		if (!client->sess.motdSeen && VALIDSTRINGCVAR(rp_screen_message.string))
 		{
 			// Logged players can disable the screen message if they want to
 			if (ent->client->sess.amrpgmode == 0 || !(ent->client->pers.player_settings & (1 << 9)))
 			{
 				// Delay motd for non-plugin clients
-				int motdDelayed = rp_pluginRequired.integer && !client->pers.clientPlugin ? zyk_screen_message_timer.integer + 2 : 0;
-			
-				client->motdTime = motdDelayed ? motdDelayed : zyk_screen_message_timer.integer;
+				int motdDelayed = rp_pluginRequired.integer && !client->pers.clientPlugin ? rp_screen_message_timer.integer + 2 : 0;
+
+				client->motdTime = motdDelayed ? motdDelayed : rp_screen_message_timer.integer;
 				client->sess.motdSeen = qtrue;
 			}
 		}

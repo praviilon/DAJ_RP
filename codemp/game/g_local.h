@@ -2089,6 +2089,13 @@ void SendScoreboardMessageToAllClients( void );
 const char *G_GetStringEdString(char *refSection, char *refName);
 void RP_CVU_pluginRequired(void);
 
+// GalaxyRP fix: [validation] cvar-update callbacks (see g_cvar.c) that clamp these three timer
+// cvars back to 0 the moment they're set to a negative value -- see RP_ClampNonNegativeCvar's
+// comment in g_cvar.c for the bug this closes.
+void RP_CVU_downedTimer(void);
+void RP_CVU_downedInvulnerabilityTimer(void);
+void RP_CVU_screenMessageTimer(void);
+
 //
 // g_client.c
 //

@@ -33,6 +33,40 @@ static void CVU_Derpity( void ) {
 }
 */
 
+// GalaxyRP fix: [validation] rp_downed_timer, rp_downed_invulnerability_timer and
+// rp_screen_message_timer are all read as plain countdown lengths (a value is copied out of the
+// cvar once, then only ever decremented toward 0 -- see downedTime in g_combat.c/g_active.c and
+// motdTime in g_client.c/g_active.c). None of them validated their value, so a negative setting
+// (e.g. a server admin fat-fingering "set rp_downed_timer -30") produced a counter that counted
+// away from zero forever instead of toward it, since decrementing a negative number never reaches
+// 0 -- permanently soft-locking a downed player (Cmd_Getup_f/can_player_get_up() both gate on
+// downedTime == 0) or leaving a MOTD stuck on-screen indefinitely. Clamp back to 0 the moment the
+// cvar changes, using this codebase's existing XCVAR update-callback mechanism (see
+// G_UpdateCvars() below) rather than re-validating at every read site.
+static void RP_ClampNonNegativeCvar(vmCvar_t* cvar, const char* cvarName)
+{
+	if (cvar->integer < 0)
+	{
+		trap->Cvar_Set(cvarName, "0");
+		trap->Cvar_Update(cvar);
+	}
+}
+
+void RP_CVU_downedTimer(void)
+{
+	RP_ClampNonNegativeCvar(&rp_downed_timer, "rp_downed_timer");
+}
+
+void RP_CVU_downedInvulnerabilityTimer(void)
+{
+	RP_ClampNonNegativeCvar(&rp_downed_invulnerability_timer, "rp_downed_invulnerability_timer");
+}
+
+void RP_CVU_screenMessageTimer(void)
+{
+	RP_ClampNonNegativeCvar(&rp_screen_message_timer, "rp_screen_message_timer");
+}
+
 
 //
 // Cvar table
