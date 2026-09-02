@@ -9622,9 +9622,13 @@ Cmd_CreditSpend_f
 */
 void Cmd_CreditSpend_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
-	long int value = 0;
+	int value = 0;
 
-	if (trap->Argc() > 2)
+	// GalaxyRP fix: [consistency] standardized argument-count validation across all 3 credit
+	// commands (see Cmd_CreditCreate_f/Cmd_CreditGive_f below) -- this used to only reject
+	// Argc() > 2, so "/spendcredits" with no argument at all fell through to the misleading
+	// "Value must be an integer" message further down instead of a clear usage message.
+	if (trap->Argc() != 2)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^3/spendcredits ^2<value>\n^1Example: ^3/spendcredits ^2350\"");
 		return;
@@ -9632,16 +9636,17 @@ void Cmd_CreditSpend_f(gentity_t *ent) {
 
 	trap->Argv(1, arg1, sizeof(arg1));
 
-	if (!strtol(arg1, NULL, 10)) {
-		trap->SendServerCommand(ent - g_entities, "print \"Value must be an integer\n\"");
-		return;
-	}
-
+	// GalaxyRP fix: [consistency] dropped the strtol() pre-check -- it parsed the same string
+	// independently from the atoi() call below (two parses of one value, checked two different
+	// ways) and could report the technically-wrong "Value must be an integer" for a literal "0"
+	// (0 is a valid integer, just not a positive one -- the value < 1 check below already reports
+	// that case correctly). All 3 credit commands now validate their numeric argument the same
+	// way: atoi() followed by a single "must be positive" check.
 	value = atoi(arg1);
 
 	if (value < 1)
 	{
-		trap->SendServerCommand(ent - g_entities, va("print \"Can only use positive values.\n\""));
+		trap->SendServerCommand(ent - g_entities, "print \"Can only use positive values.\n\"");
 		return;
 	}
 
@@ -9654,6 +9659,12 @@ void Cmd_CreditSpend_f(gentity_t *ent) {
 	remove_credits(ent, value);
 
 	update_credits_value(ent);
+
+	// GalaxyRP fix: [Economy] no audit trail existed for any of the 3 credit commands -- the chat
+	// broadcast below is only visible to players online at that moment and isn't persisted
+	// anywhere. Log to the server log too, same convention as AdminUp/AdminDown's grant/revoke
+	// logging elsewhere in this file.
+	G_LogPrintf("CreditSpend: %s^7 spent %d credits\n", ent->client->pers.netname, value);
 
 	trap->SendServerCommand(-1, va("chat \"^3Credit System: ^7%s ^7spent ^2%d ^7credits.\n\"", ent->client->pers.netname, value, g_entities));
 
@@ -9676,6 +9687,16 @@ void Cmd_CreditCreate_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [consistency] standardized argument-count validation across all 3 credit
+	// commands -- this used to fall through with no amount argument at all straight to the
+	// misleading "Can only use positive values" message below, unlike Cmd_CreditGive_f's explicit
+	// "You must specify the amount of credits." check for the same case.
+	if (trap->Argc() == 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"You must specify the amount of credits.\n\"");
+		return;
+	}
+
 	// player must have adminup permissions
 	if (!check_admin_command(ent, ADM_CREATECREDITS, qtrue))
 	{
@@ -9695,13 +9716,33 @@ void Cmd_CreditCreate_f(gentity_t *ent) {
 
 	if (value < 1)
 	{
-		trap->SendServerCommand(ent - g_entities, va("print \"Can only use positive values.\n\""));
+		trap->SendServerCommand(ent - g_entities, "print \"Can only use positive values.\n\"");
 		return;
 	}
 
+	// GalaxyRP fix: [validation] this had no equivalent of Cmd_CreditGive_f's own target check --
+	// ClientNumberFromString(..., qfalse) only requires the target be connected, not logged in, so
+	// a not-yet-logged-in target (pers.CharID == 0) could be "credited" here: add_credits() would
+	// mutate that connection's in-memory pers.credits, but update_credits_value()'s UPDATE ...
+	// WHERE CharID='0' matches no row (CharID is a SQLite INTEGER PRIMARY KEY, always >= 1 for a
+	// real character), so nothing was actually persisted -- yet this command still reported "Done."
+	// and broadcast a server-wide "credits created" message for a transaction that never happened.
+	// Same check, same message, as Cmd_CreditGive_f below.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		return;
+	}
 
 	add_credits(&g_entities[client_id], value);
 	update_credits_value(&g_entities[client_id]);
+
+	// GalaxyRP fix: [Economy] no audit trail existed for any of the 3 credit commands -- the chat
+	// broadcast below is only visible to players online at that moment and isn't persisted
+	// anywhere. Log to the server log too, same convention as AdminUp/AdminDown's grant/revoke
+	// logging elsewhere in this file. This is the one of the three that matters most: it's the
+	// command that creates credits from nothing rather than just moving them between balances.
+	G_LogPrintf("CreditCreate: %s^7 created %d credits and gave them to %s^7\n", ent->client->pers.netname, value, g_entities[client_id].client->pers.netname);
 
 	//broadcast the transaction to the whole server
 
@@ -9745,13 +9786,13 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 
 	if (value < 1)
 	{
-		trap->SendServerCommand( ent - g_entities, va("print \"Can only use positive values.\n\"" ));
+		trap->SendServerCommand( ent - g_entities, "print \"Can only use positive values.\n\"" );
 		return;
 	}
 
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand( ent - g_entities, va("print \"The player is not in RPG Mode\n\"" ));
+		trap->SendServerCommand( ent - g_entities, "print \"The player is not in RPG Mode\n\"" );
 		return;
 	}
 
@@ -9760,13 +9801,19 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 		trap->SendServerCommand(ent - g_entities, va(("print \"^1You can\'t give ^3%i ^1credits.\n^7You only have ^3%i ^7credits.\n\""), value, ent->client->pers.credits));
 		return;
 	}
-	
-	
+
+
 	add_credits(&g_entities[client_id], value);
 	update_credits_value(&g_entities[client_id]);
 
 	remove_credits(ent, value);
 	update_credits_value(ent);
+
+	// GalaxyRP fix: [Economy] no audit trail existed for any of the 3 credit commands -- the chat
+	// broadcast below is only visible to players online at that moment and isn't persisted
+	// anywhere. Log to the server log too, same convention as AdminUp/AdminDown's grant/revoke
+	// logging elsewhere in this file.
+	G_LogPrintf("CreditGive: %s^7 transferred %d credits to %s^7\n", ent->client->pers.netname, value, g_entities[client_id].client->pers.netname);
 
 	//broadcast the transaction to the whole server
 
