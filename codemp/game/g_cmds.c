@@ -12034,6 +12034,34 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 	trap->SendServerCommand(ent - g_entities, va(success_message, skills[skill_id].skill_name, number_of_changes, ent2->client->pers.skill_levels[skill_id]));
 }
 
+// GalaxyRP fix: [Skills] downgrading a weapon-granting skill (Saber Attack, or any of the mercenary
+// weapon/ammo skills below) to 0 correctly cleared the weapon's STAT_WEAPONS bit, but if the player
+// was actively holding that exact weapon at the time, nothing told them to put it away -- they kept
+// using a weapon that no longer showed as owned until they happened to switch weapons themselves.
+// Mirrors the same weapon-removed-while-held handling TossWeapon() (g_combat.c) already does: pick
+// another owned weapon (or none) and switch to it immediately, then fire EV_NOAMMO so the client's
+// HUD and weapon model update right away instead of silently keeping the old one equipped.
+void zyk_deselect_weapon_if_active(gentity_t* ent, int weapon) {
+	int new_weapon = WP_NONE;
+	int i;
+
+	if (ent->client->ps.weapon != weapon) {
+		return;
+	}
+
+	for (i = 0; i < WP_NUM_WEAPONS; i++) {
+		if ((ent->client->ps.stats[STAT_WEAPONS] & (1 << i)) && i != WP_NONE) {
+			new_weapon = i;
+			break;
+		}
+	}
+
+	ent->s.weapon = new_weapon;
+	ent->client->ps.weapon = new_weapon;
+
+	G_AddEvent(ent, EV_NOAMMO, weapon);
+}
+
 void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) {
 	switch (skill_id) {
 	case 30:
@@ -12065,7 +12093,16 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 	}
 
 	//GalaxyRP (Alex): [Skill] Give them the Force Ability.
-	if (strcmp(skills[skill_id].category,"force") == 0 && skills[skill_id].value_internal != 0) {
+	// GalaxyRP fix: [Skills] this used to gate on "value_internal != 0" alone, which silently skipped
+	// Heal (skill_id 9): its value_internal is FP_HEAL, and FP_HEAL == 0 -- the very same 0 this array
+	// also uses as a sentinel for "no linked force power" on entries like Sense Health (skill_id 33,
+	// deliberately not a selectable/togglable force power). That collision meant a live /skillup or
+	// /skilldown on Heal never touched forcePowerLevel[FP_HEAL] or forcePowersKnown at all -- the
+	// change only became visible on the player's next respawn, when initialize_rpg_skills() (which has
+	// no such guard) reloaded every force power from pers.skill_levels[] from scratch. Explicitly
+	// admitting skill_id == 9 here fixes Heal in place, the same way skill_id == 5 is already
+	// special-cased below for the saber weapon bit.
+	if (strcmp(skills[skill_id].category,"force") == 0 && (skills[skill_id].value_internal != 0 || skill_id == 9)) {
 		// GalaxyRP fix: Absorb, Protect and Lightning are capped at ps.fd.forcePowerLevel ==
 		// FORCE_LEVEL_3 in the DB-load path below (see the "loading Absorb/Protect/Lightning
 		// value" blocks a bit further down in this file) -- their levels 4 and 5 are meant to be
@@ -12110,6 +12147,9 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 		else {
 			if (ent->client->pers.skill_levels[skill_id] == 0) {
 				ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << skills[skill_id].value_internal);
+				// GalaxyRP fix: [Skills] see zyk_deselect_weapon_if_active() above -- put the weapon
+				// away immediately if the player was actively holding it when its skill hit 0.
+				zyk_deselect_weapon_if_active(ent, skills[skill_id].value_internal);
 			}
 		}
 	}
@@ -12122,6 +12162,11 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 		else {
 			if (ent->client->pers.skill_levels[skill_id] == 0) {
 				ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
+				// GalaxyRP fix: [Skills] see zyk_deselect_weapon_if_active() above -- downgrading Saber
+				// Attack to 0 correctly removed the saber from STAT_WEAPONS, but a player who was
+				// actively holding it kept swinging it (it no longer showed as owned, but nothing put
+				// it away) until they manually switched weapons themselves. Put it away immediately.
+				zyk_deselect_weapon_if_active(ent, WP_SABER);
 			}
 		}
 	}
