@@ -78,6 +78,22 @@ void RP_CVU_flameThrowerCooldown(void)
 	RP_ClampNonNegativeCvar(&zyk_flame_thrower_cooldown, "zyk_flame_thrower_cooldown");
 }
 
+// GalaxyRP fix: [validation] zyk_list_cmds_results_per_page is read as results_per_page in both
+// Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c), where it gates both pagination loop bounds:
+// results_per_page*(page-1) and results_per_page*page. When results_per_page is 0 (or negative),
+// both bounds evaluate to <= 0, so neither the skip-loop nor the read-loop ever runs for any page
+// number -- the commands silently print a blank page instead of an error, for every page, until the
+// cvar is corrected. Unlike the timer cvars above, 0 is not a safe floor here since it reproduces
+// the exact same bug those loops have with a negative value -- clamp to a minimum of 1 instead.
+void RP_CVU_listCmdsResultsPerPage(void)
+{
+	if (zyk_list_cmds_results_per_page.integer < 1)
+	{
+		trap->Cvar_Set("zyk_list_cmds_results_per_page", "1");
+		trap->Cvar_Update(&zyk_list_cmds_results_per_page);
+	}
+}
+
 
 //
 // Cvar table

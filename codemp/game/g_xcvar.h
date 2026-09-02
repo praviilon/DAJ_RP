@@ -325,7 +325,9 @@ XCVAR_DEF( rp_screen_message,	"",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,				
 // GalaxyRP fix: [validation] RP_CVU_screenMessageTimer (g_cvar.c) clamps a negative value back to
 // 0 -- see its comment for why.
 XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_list_cmds_results_per_page,	"10",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [validation] RP_CVU_listCmdsResultsPerPage (g_cvar.c) clamps a non-positive value
+// back to 1 -- see its comment for why 0 needs its own floor instead of the usual clamp-to-0 pattern.
+XCVAR_DEF( zyk_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_start_race_timer,	"15000",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_flameThrowerCooldown (g_cvar.c) clamps a negative value back to
 // 0 -- see its comment for why.

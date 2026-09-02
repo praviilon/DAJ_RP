@@ -6010,7 +6010,11 @@ void Cmd_MapList_f( gentity_t *ent ) {
 
 		page = atoi(arg1);
 
-		if (page == 0)
+		// GalaxyRP fix: [validation] atoi() only catches a page argument that parses to exactly 0;
+		// a negative page number (e.g. "/maplist -5") passed this check straight through and made
+		// both pagination loop bounds below negative, so neither loop below ever ran and the
+		// command silently printed a blank page instead of reporting the bad input.
+		if (page <= 0)
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid page number\n\"" );
 			return;
@@ -6026,7 +6030,12 @@ void Cmd_MapList_f( gentity_t *ent ) {
 
 			while(i < (results_per_page * page) && fgets(content, sizeof(content), map_list_file) != NULL)
 			{ // zyk: fgets returns NULL at EOF
-				strcpy(file_content,va("%s%s",file_content,content));
+				// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s",
+				// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte)
+				// stack buffer, and that strcpy had no bounds check on the destination at all.
+				// Enough map entries on one page (or zyk_list_cmds_results_per_page set too high)
+				// overflows it. Q_strcat never writes past the destination's declared size.
+				Q_strcat(file_content, sizeof(file_content), content);
 				i++;
 			}
 
@@ -15169,6 +15178,20 @@ void save_quest_file(int quest_number)
 	fclose(quest_file);
 }
 
+// GalaxyRP fix: [validation] the old inline check was content[strlen(content) - 1] == '\n' with no
+// guard for an empty content -- if a leaderboard record was ever short a line (a truncated/malformed
+// leaderboard.txt, or an fgets() call that used to go unchecked -- see the fgets() NULL checks added
+// in Cmd_DuelBoard_f below), content could be empty ("") and strlen(content) - 1 underflows to
+// (size_t)-1, indexing out of bounds. Guard the empty case here once instead of at every call site.
+static void RP_StripTrailingNewline(char *s)
+{
+	size_t len = strlen(s);
+	if (len > 0 && s[len - 1] == '\n')
+	{
+		s[len - 1] = '\0';
+	}
+}
+
 /*
 ==================
 Cmd_DuelBoard_f
@@ -15178,7 +15201,9 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
 	int page = 1; // zyk: page the user wants to see
 	char file_content[MAX_STRING_CHARS];
-	char content[64];
+	char content[512]; // GalaxyRP fix: [cleanup] was 64 -- too small for a player name longer than
+						// 63 characters, which would get split across two fgets() calls and desync
+						// that record's fields. Match Cmd_MapList_f's buffer size.
 	int i = 0;
 	int results_per_page = zyk_list_cmds_results_per_page.integer; // zyk: number of results per page
 	FILE *leaderboard_file;
@@ -15202,7 +15227,11 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 
 	page = atoi(arg1);
 
-	if (page == 0)
+	// GalaxyRP fix: [validation] atoi() only catches a page argument that parses to exactly 0; a
+	// negative page number (e.g. "/duelboard -5") passed this check straight through and made both
+	// pagination loop bounds below negative, so neither loop below ever ran and the command
+	// silently printed a blank page instead of reporting the bad input.
+	if (page <= 0)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Invalid page number\n\"");
 		return;
@@ -15211,35 +15240,42 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 	leaderboard_file = fopen("GalaxyRP/leaderboard.txt", "r");
 	if (leaderboard_file != NULL)
 	{
-		while (i < (results_per_page * (page - 1)) && fgets(content, sizeof(content), leaderboard_file) != NULL)
+		// GalaxyRP fix: [security] each leaderboard record is 3 lines (header, name, wins); this
+		// used to check fgets()'s return value only on the first of the 3 reads per iteration and
+		// ignore it on the other two, so a truncated/malformed leaderboard.txt (a record not a clean
+		// multiple of 3 lines) could read past a real record boundary or operate on stale content.
+		// Bail out of the skip-loop the moment any read fails instead. The 3 discarded lines here
+		// are never used for output, so there's no need to newline-strip them.
+		while (i < (results_per_page * (page - 1)))
 		{ // zyk: reads the file until it reaches the position corresponding to the page number
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
-			fgets(content, sizeof(content), leaderboard_file);
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
-			fgets(content, sizeof(content), leaderboard_file);
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
 			i++;
 		}
 
-		while (i < (results_per_page * page) && fgets(content, sizeof(content), leaderboard_file) != NULL)
+		while (i < (results_per_page * page))
 		{
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
+			// zyk: unused header/separator line for this record
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
 
 			// zyk: player name
-			fgets(content, sizeof(content), leaderboard_file);
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
-			strcpy(file_content, va("%s%s     ", file_content, content));
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+			RP_StripTrailingNewline(content);
+			// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s     ",
+			// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte) stack
+			// buffer, and that strcpy had no bounds check on the destination at all. Enough
+			// entries on one page (or zyk_list_cmds_results_per_page set too high) overflows it.
+			// Q_strcat never writes past the destination's declared size.
+			Q_strcat(file_content, sizeof(file_content), content);
+			Q_strcat(file_content, sizeof(file_content), "     ");
 
 			// zyk: number of tournaments won
-			fgets(content, sizeof(content), leaderboard_file);
-			if (content[strlen(content) - 1] == '\n')
-				content[strlen(content) - 1] = '\0';
-			strcpy(file_content, va("%s^3%s^7\n", file_content, content));
+			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+			RP_StripTrailingNewline(content);
+			Q_strcat(file_content, sizeof(file_content), "^3");
+			Q_strcat(file_content, sizeof(file_content), content);
+			Q_strcat(file_content, sizeof(file_content), "^7\n");
 
 			i++;
 		}

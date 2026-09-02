@@ -2098,6 +2098,11 @@ void RP_CVU_downedInvulnerabilityTimer(void);
 void RP_CVU_screenMessageTimer(void);
 void RP_CVU_flameThrowerCooldown(void);
 
+// GalaxyRP fix: [validation] zyk_list_cmds_results_per_page gates the pagination math in both
+// Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c) -- see RP_CVU_listCmdsResultsPerPage's comment in
+// g_cvar.c for why it needs a minimum of 1 rather than the usual clamp-to-0 pattern.
+void RP_CVU_listCmdsResultsPerPage(void);
+
 //
 // g_client.c
 //
