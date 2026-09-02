@@ -6509,17 +6509,13 @@ static void UI_RunMenuScript(char **args)
 					else
 						trap->Cvar_Set("ui_zyk_action_value", "^2upgrade");
 				}
-				else if (strstr(arg, "buyaction"))
-				{ // zyk: sets the action (upgrade or downgrade)
-					char zyk_action[512];
-
-					trap->Cvar_VariableStringBuffer("ui_zyk_buy_action_value", zyk_action, sizeof(zyk_action));
-
-					if (Q_stricmp(zyk_action, "^2buy") == 0)
-						trap->Cvar_Set("ui_zyk_buy_action_value", "^3sell");
-					else
-						trap->Cvar_Set("ui_zyk_buy_action_value", "^2buy");
-				}
+				// GalaxyRP fix: [Shop] removed the "buyaction" branch here -- it toggled
+				// ui_zyk_buy_action_value between "^2buy" and "^3sell", but no button in the GalaxyRP
+				// shop menu (or any other .menu file in the mod) ever sent "buyaction" or displayed
+				// ui_zyk_buy_action_value, so it was unreachable dead code. Same underlying issue as the
+				// stale "Buy and sell..." Shop tab wording fixed alongside the /buy item|upgrade
+				// refactor: there has never been a working /sell command. See the matching
+				// ui_zyk_buy_action_value removal in ui_xcvar.h.
 			}
 		}
 		else if (Q_stricmp(name, "zykup") == 0)

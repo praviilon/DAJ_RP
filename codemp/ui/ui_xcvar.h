@@ -300,7 +300,9 @@ XCVAR_DEF( ui_zyk_eternity_text,			"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL 
 XCVAR_DEF( ui_zyk_eternity_text2,			"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_quest_player,				"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_action_value,				"^2upgrade",			NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_buy_action_value,			"^2buy",				NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP fix: [Shop] ui_zyk_buy_action_value removed -- it only backed the orphaned "buyaction"
+// uiScript branch removed from ui_main.c (zykmod handler), which no button ever triggered and whose
+// value no menu ever displayed.
 XCVAR_DEF( ui_zyk_rpg_char_1,				"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_char_2,				"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_char_3,				"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
