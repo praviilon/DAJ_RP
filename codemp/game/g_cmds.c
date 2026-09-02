@@ -3884,19 +3884,33 @@ void inventory_display_end(gentity_t *ent) {
 	trap->SendServerCommand(ent->s.number, "print \"^2================================================================================\n\"");
 }
 
-void inventory_add_item(gentity_t *ent, char item_to_add[MAX_STRING_CHARS], sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
-	//trap->Print(va("INSERT INTO Items(CharID, ItemName) VALUES('%i',\"%s\")", ent->client->pers.CharID, item_to_add));
-	rc = sqlite3_exec(db, va("INSERT INTO Items(CharID, ItemName) VALUES('%i',\"%s\")", ent->client->pers.CharID, item_to_add), 0, 0, &zErrMsg);
+// GalaxyRP fix: [security] this used to build its INSERT via va("...VALUES('%i',\"%s\")"...) with the
+// item name spliced straight into the query text -- unlike its siblings update_chars_table_row_with_
+// current_values() and insert_inv_table_row(), which were already hardened the same way, this one was
+// missed. A name containing a double quote (e.g. /createitem Vader"s Saber) broke the query outright
+// with a silently-swallowed SQL error, and a deliberately crafted name could inject arbitrary SQL.
+// Bound as a parameter instead. Also now returns qboolean so Cmd_CreateItem_f can tell whether the
+// item was actually created before logging it as created.
+qboolean inventory_add_item(gentity_t *ent, char item_to_add[MAX_STRING_CHARS], sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
+	rc = sqlite3_prepare(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
-		trap->Print("SQL error: %s\n", zErrMsg);
-		sqlite3_free(zErrMsg);
-		return;
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return qfalse;
+	}
+	sqlite3_bind_int(stmt, 1, ent->client->pers.CharID);
+	sqlite3_bind_text(stmt, 2, item_to_add, -1, SQLITE_TRANSIENT);
+	rc = sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		return qfalse;
 	}
 	trap->SendServerCommand(ent->s.number, "print \"Item added to your inventory.\n\"");
-	sqlite3_finalize(stmt);
 
-	return;
+	return qtrue;
 }
 
 void inventory_remove_item(gentity_t *ent, int id_to_be_removed, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
@@ -3935,6 +3949,13 @@ void inventory_add_create_item_log(gentity_t *ent, char created_item_name[MAX_ST
 	FILE *log_file = NULL;
 
 	log_file = fopen("GalaxyRP/logs/itemlog.txt", "a+");
+
+	// GalaxyRP fix: [Items] fopen() can return NULL (e.g. if GalaxyRP/logs/ doesn't exist yet) --
+	// fputs()/fclose() on a NULL FILE* is undefined behavior. Skip logging instead of crashing.
+	if (log_file == NULL) {
+		trap->Print("Warning: could not open GalaxyRP/logs/itemlog.txt for writing.\n");
+		return;
+	}
 
 	fputs(va("%s created the item: %s\n", ent->client->pers.netname, created_item_name), log_file);
 	fclose(log_file);
@@ -4061,9 +4082,12 @@ void Cmd_CreateItem_f(gentity_t *ent) {
 		return;
 	}
 
-	inventory_add_item(ent, arg1, db, zErrMsg, rc, stmt);
-
-	inventory_add_create_item_log(ent, arg1);
+	// GalaxyRP fix: [Items] inventory_add_item() now reports whether the insert actually succeeded --
+	// only log the creation to itemlog.txt when it did, instead of unconditionally claiming success
+	// even when the SQL failed.
+	if (inventory_add_item(ent, arg1, db, zErrMsg, rc, stmt) == qtrue) {
+		inventory_add_create_item_log(ent, arg1);
+	}
 
 	sqlite3_close(db);
 
@@ -4129,6 +4153,16 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 
 	//player not found, no point in going on
 	if (player_id == -1) {
+		return;
+	}
+
+	// GalaxyRP fix: [Items] a connected-but-not-yet-logged-in player has pers.CharID == 0 -- the whole
+	// client struct is zeroed on connect (see ClientConnect), and real CharIDs are auto-assigned
+	// starting at 1, so 0 is never a real character. Giving an item to someone still at the login
+	// screen silently reassigned it to CharID 0, orphaning it permanently -- no /inventory command
+	// will ever show it again. Reject the transfer instead of letting it through.
+	if (g_entities[player_id].client->sess.loggedin != qtrue) {
+		trap->SendServerCommand(ent->s.number, "print \"That player is not logged into an account.\n\"");
 		return;
 	}
 
@@ -12510,6 +12544,17 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 			trap->Argv(2, arg2, sizeof(arg2));
 
 			number_of_levels = atoi(arg2);
+
+			// GalaxyRP fix: [Levelling] see the matching fix in Cmd_RpModeUp_f above -- this optional
+			// count argument was never validated. A zero or negative value let increase_level()'s
+			// internal loop silently do nothing while the command still printed a "leveled up" success
+			// message (and, before the fix below, still wrote the wrong player's row to the database).
+			// Rejected outright here instead.
+			if (number_of_levels <= 0)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"Invalid number of levels. Must be a positive number.\n\"" );
+				return;
+			}
 		}
 	}
 
@@ -12540,7 +12585,13 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled up. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
 
-		update_chars_table_row_with_current_values(ent);
+		// GalaxyRP fix: [Database] this used to pass ent (the admin issuing the command) instead of the
+		// target -- update_chars_table_row_with_current_values() writes whichever entity it's given, so
+		// the target's new level/skillpoints were applied live in memory but never actually persisted;
+		// only the admin's own (unchanged) row got redundantly rewritten. If the target disconnected
+		// before some unrelated save happened to touch their row, the level-up was silently lost. Fixed
+		// to save the actual target, matching Cmd_GiveXp_f/Cmd_RemoveXp_f below.
+		update_chars_table_row_with_current_values(&g_entities[client_id]);
 
 		return;
 	}
@@ -12551,9 +12602,12 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 }
 
 // GalaxyRP (Alex): [Levelling] Check to see if there's enough free skillpoints to level down. (prevents skillpoints going negative).
-qboolean check_if_player_can_level_down(gentity_t* ent, gentity_t target, int number_of_levels) {
+// GalaxyRP fix: [cleanup] target used to be passed by value (a whole gentity_t copied onto the stack
+// on every /leveldown call, just to read a couple of fields through its client pointer). Passed by
+// pointer instead -- same data, no unnecessary copy.
+qboolean check_if_player_can_level_down(gentity_t* ent, gentity_t* target, int number_of_levels) {
 	int skillpoints_needed = 0;
-	int current_level = target.client->pers.level;
+	int current_level = target->client->pers.level;
 
 	int level_at_end = current_level - number_of_levels;
 
@@ -12565,8 +12619,8 @@ qboolean check_if_player_can_level_down(gentity_t* ent, gentity_t target, int nu
 		}
 	}
 
-	if (target.client->pers.skillpoints < skillpoints_needed) {
-		trap->SendServerCommand(ent - g_entities, va("print \"^1Operation could not be done. Player needs %d skillpoints, but only has %d available.\n\"", skillpoints_needed, target.client->pers.skillpoints));
+	if (target->client->pers.skillpoints < skillpoints_needed) {
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Operation could not be done. Player needs %d skillpoints, but only has %d available.\n\"", skillpoints_needed, target->client->pers.skillpoints));
 
 		return qfalse;
 	}
@@ -12645,6 +12699,14 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 			trap->Argv(2, arg2, sizeof(arg2));
 
 			number_of_levels = atoi(arg2);
+
+			// GalaxyRP fix: [Levelling] see the matching fix in Cmd_LevelGive_f above -- this optional
+			// count argument was never validated. Rejected outright here instead.
+			if (number_of_levels <= 0)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"Invalid number of levels. Must be a positive number.\n\"" );
+				return;
+			}
 		}
 	}
 
@@ -12666,7 +12728,7 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Too many levels selected, operation not done. Cannot lower someone's level below 1. Maximum allowed: %d\n\"", min_possible_value));
 		return;
 	}
-	if (check_if_player_can_level_down(ent, g_entities[client_id], number_of_levels) == qfalse) {
+	if (check_if_player_can_level_down(ent, &g_entities[client_id], number_of_levels) == qfalse) {
 		return;
 	}
 
@@ -12678,7 +12740,10 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled down. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
 
-		update_chars_table_row_with_current_values(ent);
+		// GalaxyRP fix: [Database] see the matching fix in Cmd_LevelGive_f above -- this used to pass
+		// ent (the admin) instead of the target, so the level-down was applied live but never actually
+		// persisted. Fixed to save the actual target.
+		update_chars_table_row_with_current_values(&g_entities[client_id]);
 
 		return;
 	}
