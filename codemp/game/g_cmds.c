@@ -14882,7 +14882,7 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 	char arg2[MAX_STRING_CHARS];
 	int soundIndex;
 
-	if (zyk_allow_zyksound_command.integer < 1)
+	if (rp_allow_playsound_command.integer < 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"This command is not allowed in this server\n\"");
 		return;
