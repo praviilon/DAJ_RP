@@ -8681,8 +8681,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/createcredits <player name> <amount>: ^7Creates credits and gives them to a player. ^1(Admin only)\n\
 ^3/spendcredits <amount>: ^7Deletes credits from your inventory and displays a message (For paying NPCs).\n\
 ^3/givecredits <player name> <amount>: ^7Transfers credits from you to a player.\n\
-^3/buy <merchandise ID>: ^7Exchanges credits for merchandise. Stuff bought from upgrades category is permanent.\n\
-^3/stuff <ammo/misc/upgrades or merchandise ID>: ^7Shows info about merchandise. Use category name to list available options or ID number to see stuff description.\n\n\" ");
+^3/buy item <number> ^7or ^3/buy upgrade <number>: ^7Exchanges credits for merchandise. Stuff bought from the upgrade category is permanent.\n\
+^3/stuff item <number (optional)> ^7or ^3/stuff upgrade <number (optional)>: ^7Shows info about merchandise. Run without a number to list available options in that category.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
 ^3/allychat <text>: ^7Sends message to your allies.\n\
@@ -8810,7 +8810,11 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 			}
 			else if (value == 4)
 			{
-				trap->SendServerCommand( ent-g_entities, "print \"\n^3Rockets: ^7recovers 10 ammo of Rocket Launcher weapon\n\n\"");
+				// GalaxyRP fix: [Shop] description corrected from "10 ammo" -- Cmd_Buy_f's item 4 branch
+				// grants Add_Ammo(ent,AMMO_ROCKETS,5), 5 ammo, not 10. This mismatch predates the /buy
+				// item|upgrade refactor (the old flat id 4 had the same 5-vs-10 mismatch); fixing the
+				// text to match the actual, long-standing behavior rather than changing the grant amount.
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Rockets: ^7recovers 5 ammo of Rocket Launcher weapon\n\n\"");
 			}
 			else if (value == 5)
 			{
@@ -9102,7 +9106,7 @@ void Cmd_Buy_f( gentity_t *ent ) {
 	ent->client->pers.credits -= cost;
 	save_account(ent, qtrue);
 
-	ent->client->pers.buy_sell_timer = level.time + zyk_buying_selling_cooldown.integer;
+	ent->client->pers.buy_sell_timer = level.time + rp_buying_cooldown.integer;
 
 	trap->SendServerCommand( ent-g_entities, va("chat \"^3Jawa Seller: ^7Thanks %s^7!\n\"",ent->client->pers.netname) );
 }

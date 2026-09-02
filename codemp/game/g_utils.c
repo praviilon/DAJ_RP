@@ -1896,7 +1896,10 @@ void TryUse( gentity_t *ent )
 
 	if (ent->client->sess.amrpgmode == 2 && target && target->client && target->NPC && target->health > 0 && Q_stricmp( target->NPC_type, "jawa_seller" ) == 0)
 	{ // zyk: player talked to jawa_seller
-		trap->SendServerCommand( ent->s.number, va("chat \"^3Jawa Seller: ^7%s^7, use the ^3/stuff ^7command to see stuff to buy or sell! :)\"", ent->client->pers.netname));
+		// GalaxyRP fix: [Shop] dropped stale "buy or sell" wording -- there has never been a working
+		// /sell command (see the matching fixes on the Shop tab and category tooltips in
+		// ingame_galaxyrp.menu, and the /list commands help text in Cmd_ListAccount_f).
+		trap->SendServerCommand( ent->s.number, va("chat \"^3Jawa Seller: ^7%s^7, use the ^3/stuff ^7command to see stuff to buy! :)\"", ent->client->pers.netname));
 
 		// zyk: setting use anim
 		ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;

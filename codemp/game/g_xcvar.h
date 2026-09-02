@@ -366,7 +366,10 @@ XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,	
 XCVAR_DEF( zyk_duel_tournament_time_to_start, "12000",  NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_sniper_battle_time_to_start, "12000",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_buying_selling_cooldown, "100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_buying_selling_cooldown to rp_buying_cooldown -- there has
+// never been a working /sell command (see the Shop wording fixes elsewhere), so "selling" no longer
+// belongs in the name, and this moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.
+XCVAR_DEF( rp_buying_cooldown,			"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_rpg_max_level, "100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH,						qtrue )
 

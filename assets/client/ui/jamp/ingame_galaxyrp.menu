@@ -5491,7 +5491,9 @@
 			decoration
 		}
 
-		itemDef 
+		// GalaxyRP fix: [Shop] dropped stale "Buy or sell..." wording -- same "there has never been a
+		// working /sell command" issue already fixed on the Shop tab descText above.
+		itemDef
 		{
 			name				buyAmmoButton
 			group				commandsControls
@@ -5507,7 +5509,7 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
-			descText			"Buy or sell ammo from the jawa seller"
+			descText			"Buy ammo from the jawa seller"
 
 			mouseEnter 
 			{ 
@@ -5740,7 +5742,9 @@
 			decoration
 		}
 
-		itemDef 
+		// GalaxyRP fix: [Shop] dropped stale "Buy or sell..." wording -- same "there has never been a
+		// working /sell command" issue already fixed on the Shop tab descText above.
+		itemDef
 		{
 			name				buyMiscButton
 			group				commandsControls
@@ -5756,7 +5760,7 @@
 			textstyle			3
 			forecolor			1 .682 0 1
 			visible				0
-			descText			"Buy or sell misc items from the jawa seller"
+			descText			"Buy misc items from the jawa seller"
 
 			mouseEnter 
 			{ 
