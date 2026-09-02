@@ -3769,7 +3769,9 @@ void ClientThink_real( gentity_t *ent ) {
 				// guard just above. This vehicle-cloak branch had no such guard, so alt-firing any
 				// weapon while riding/gunning a vehicle (with this secret unlocked) toggled the
 				// vehicle's cloak as a side effect. Added the same weapon check.
-				if (ent->client->pers.secrets_found & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
+				// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
+				// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
 				{ // zyk: RPG Mode Cloak Item can cloak vehicles
 					if (!g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED])
 					{

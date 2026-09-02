@@ -49,7 +49,11 @@ int RP_DB_Open(sqlite3 **db);
 #define MAX_JETPACK_FUEL				10000 // zyk: max jetpack fuel the player can have
 
 #define JETPACK_SCALE					100 // zyk: used to scale the MAX_JETPACK_FUEL to set the jetpackFuel attribute. Dividing MAX_JETPACK_FUEL per JETPACK_SCALE must result in 100
-#define NUMBER_OF_SELLER_ITEMS			56 // zyk: quantity of items at the jawa seller
+// GalaxyRP fix: [Shop] NUMBER_OF_SELLER_ITEMS (56, one flat id space shared by every product the
+// jawa seller ever sold, most of it long dead) replaced by two smaller counts for the surviving
+// /buy item <n> and /buy upgrade <n> subcommands, each freshly numbered from 1.
+#define NUMBER_OF_SHOP_ITEMS			12 // zyk: quantity of items sold via /buy item <n> and /stuff item <n>
+#define NUMBER_OF_SHOP_UPGRADES			3 // zyk: quantity of upgrades sold via /buy upgrade <n> and /stuff upgrade <n>
 #define DUEL_TOURNAMENT_ARENA_SIZE		64 // zyk: default size of the globe model used as the Duel Tournament arena
 #define DUEL_TOURNAMENT_PROTECT_TIME	2000 // zyk: duration of the duelists protection in Duel Tournament
 

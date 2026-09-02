@@ -382,7 +382,7 @@
 			{
 				"1"
 			}
-			descText			"Buy and sell gear, ammunition, and upgrades"
+			descText			"Buy gear, ammunition, and upgrades"
 
 			mouseEnter 
 			{ 
@@ -5415,9 +5415,11 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"buy 40"
+			action
+			{
+				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Holdable Items Upgrade is now
+				// upgrade 1 (was flat product id 40).
+				exec			"buy upgrade 1"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5436,18 +5438,21 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"buy 15"
+			action
+			{
+				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Impact Reducer is now
+				// upgrade 2 (was flat product id 15).
+				exec			"buy upgrade 2"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
 
-		// Removed buy6Button/buy7Button/buy8Button/buy9Button (Power Cell Weapons Upgrade "buy 25",
-		// Blaster Pack Weapons Upgrade "buy 26", Metal Bolts Weapons Upgrade "buy 27", Rocket Upgrade
-		// "buy 28") 2026-08-31: these upgrades and all their supporting code were removed as
-		// inert/non-functional -- GalaxyRP fix: [Upgrades]. product ids 25-28 are now explicitly
-		// rejected server-side by Cmd_Buy_f rather than silently charging credits for a no-op.
+		// Removed buy6Button/buy7Button/buy8Button/buy9Button (Power Cell Weapons Upgrade, Blaster Pack
+		// Weapons Upgrade, Metal Bolts Weapons Upgrade, Rocket Upgrade) 2026-08-31: these upgrades and
+		// all their supporting code were removed as inert/non-functional -- GalaxyRP fix: [Upgrades].
+		// GalaxyRP fix: [Shop] Cmd_Buy_f's /buy item|upgrade refactor dropped the old flat product-id
+		// space (and the "reject this id outright" block it needed) entirely -- only the 3 upgrades
+		// below (renumbered to /buy upgrade 1-3) still exist as buyable products.
 
 		// GalaxyRP fix: [Upgrades] this used to sit at rect y=140, leaving a large gap below
 		// buy4Button (y=65) from the buy6-9Button entries removed above -- moved up to y=80 (the
@@ -5466,9 +5471,11 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				exec			"buy 33"
+			action
+			{
+				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Stun Baton Upgrade is now
+				// upgrade 3 (was flat product id 33).
+				exec			"buy upgrade 3"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5522,7 +5529,13 @@
 			}
 		}
 
-		itemDef 
+		// GalaxyRP fix: [Shop] every zykbuy call below renumbered to /buy item <n> -- the zykbuy
+		// uiScript (ui_main.c) passes its quoted argument straight through as "buy %s", so "item 1"
+		// here becomes the console command "buy item 1", matching Cmd_Buy_f's new item|upgrade
+		// subcommand grammar. Blaster Pack/Power Cell/Metal Bolts/Rockets/Thermals/Trip Mines/Det
+		// Packs keep their old numbers (1-7); Flame Thrower Fuel and Ammo All are renumbered (8/9,
+		// were flat ids 30/48) since the dead ids between them are gone.
+		itemDef
 		{
 			name				buy13Button
 			group				buyAmmoControls
@@ -5536,11 +5549,11 @@
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
-			action 
-			{ 
-				uiScript		zykbuy "1"
+			action
+			{
+				uiScript		zykbuy "item 1"
 				play			"sound/interface/button1.wav" ;
-			}  	  
+			}
 		}
 
 		itemDef 
@@ -5559,7 +5572,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "2"
+				uiScript		zykbuy "item 2"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5580,7 +5593,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "3"
+				uiScript		zykbuy "item 3"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5601,7 +5614,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "4"
+				uiScript		zykbuy "item 4"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5622,7 +5635,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "5"
+				uiScript		zykbuy "item 5"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5643,7 +5656,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "6"
+				uiScript		zykbuy "item 6"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5664,7 +5677,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "7"
+				uiScript		zykbuy "item 7"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5685,7 +5698,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "30"
+				uiScript		zykbuy "item 8"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5706,34 +5719,17 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "48"
+				uiScript		zykbuy "item 9"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
 
-		itemDef 
-		{
-			name				buyWeaponsButton_glow
-			style				WINDOW_STYLE_SHADER
-			rect				160 175 150 24
-			background			"gfx/menus/menu_blendbox2"
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
+		// GalaxyRP fix: [Shop] removed buyWeaponsButton_glow and buyItemsButton_glow -- invisible,
+		// unused decoration itemDefs with no show/hide reference anywhere in this file (unlike
+		// buyButton_glow/buyAmmoButton_glow/buyMiscButton_glow above and below, which are all properly
+		// wired), leftovers from a fuller shop UI that no longer exists.
 
-		itemDef 
-		{
-			name				buyItemsButton_glow
-			style				WINDOW_STYLE_SHADER
-			rect				160 200 150 24
-			background			"gfx/menus/menu_blendbox2"
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-		}
-
-		itemDef 
+		itemDef
 		{
 			name				buyMiscButton_glow
 			style				WINDOW_STYLE_SHADER
@@ -5798,7 +5794,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "14"
+				uiScript		zykbuy "item 11"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5819,7 +5815,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "31"
+				uiScript		zykbuy "item 10"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}
@@ -5840,7 +5836,7 @@
 			visible				0
 			action 
 			{ 
-				uiScript		zykbuy "43"
+				uiScript		zykbuy "item 12"
 				play			"sound/interface/button1.wav" ;
 			}  	  
 		}

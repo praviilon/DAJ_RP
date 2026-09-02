@@ -359,7 +359,9 @@ void CreateShield(gentity_t *ent)
 	if ( level.gametype == GT_SIEGE || level.gametype == GT_CTF)
 	{ // zyk: added CTF condition
 		// zyk: Force Field 2/2 in RPG Mode has double health
-		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.secrets_found & (1 << 0))
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
+		// to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.player_settings & (1 << 0))
 		{
 			ent->health = SHIELD_SIEGE_HEALTH * 2;
 		}
@@ -370,7 +372,9 @@ void CreateShield(gentity_t *ent)
 	}
 	else
 	{ // zyk: Force Field 2/2 in RPG Mode has double health
-		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.secrets_found & (1 << 0))
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
+		// to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.player_settings & (1 << 0))
 		{
 			ent->health = SHIELD_HEALTH * 2;
 		}
@@ -478,7 +482,9 @@ qboolean PlaceShield(gentity_t *playerent)
 			// Set team number.
 			shield->s.otherEntityNum2 = playerent->client->sess.sessionTeam;
 
-			if (level.gametype < GT_TEAM && playerent->client && playerent->client->sess.amrpgmode == 2 && playerent->client->pers.secrets_found & (1 << 0))
+			// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
+			// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+			if (level.gametype < GT_TEAM && playerent->client && playerent->client->sess.amrpgmode == 2 && playerent->client->pers.player_settings & (1 << 0))
 			{
 				// zyk: setting shield red color if it has the upgrade
 				shield->s.otherEntityNum2 = TEAM_RED;
@@ -1287,7 +1293,9 @@ static void MedPackGive(gentity_t *ent, int amount)
 void ItemUse_MedPack_Big(gentity_t *ent)
 {
 	// zyk: RPG Mode Big Bacta. Recover 150 HP
-	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 0))
+	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted) to
+	// player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 0))
 		MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT * 3);
 	else
 		MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT);
@@ -1297,7 +1305,9 @@ extern int zyk_max_magic_power(gentity_t *ent);
 void ItemUse_MedPack(gentity_t *ent)
 {
 	// zyk: RPG Mode Bacta Canister. Recover 75 HP
-	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 0))
+	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted) to
+	// player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 0))
 	{
 		ent->client->pers.magic_power = zyk_max_magic_power(ent);
 		send_rpg_events(2000);

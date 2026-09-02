@@ -6525,7 +6525,10 @@ int PM_ItemUsable(playerState_t *ps, int forcedUse)
 	{
 	case HI_MEDPAC:
 #if defined( _GAME )
-		if (item_user && item_user->client && item_user->client->sess.amrpgmode == 2 && item_user->client->pers.secrets_found & (1 << 0))
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
+		// to player_settings bit 0 (persisted via Accounts.PlayerSettings) -- see the Task 3 fix comment
+		// on pers.player_settings in g_local.h.
+		if (item_user && item_user->client && item_user->client->sess.amrpgmode == 2 && item_user->client->pers.player_settings & (1 << 0))
 		{ // zyk: bacta canister with holdable items upgrade. Must allow even with max health to regen MP
 			if (ps->stats[STAT_HEALTH] >= ps->stats[STAT_MAX_HEALTH] && item_user->client->pers.magic_power == zyk_max_magic_power(item_user))
 				return 0;

@@ -663,8 +663,8 @@ typedef struct clientPersistant_s {
 	int custom_quest_quest_number;
 	int custom_quest_mission_number;
 
-	// zyk: has the player id who called this seller
-	int seller_invoked_by_id;
+	// GalaxyRP fix: [Shop] seller_invoked_by_id removed -- it only supported Cmd_CallSeller_f
+	// (/callseller), which has itself been removed for good (see g_cmds.c).
 
 	// zyk: timer to send events to client game
 	int send_event_timer;
@@ -696,10 +696,17 @@ typedef struct clientPersistant_s {
 
 	// zyk: turn on or off features of this player in his account file. It is a bit value attribute
 	// Possible bit values are:
-	// GalaxyRP fix: [Settings] bit 0 ("RPG quests") documentation removed here — that setting has
-	// been removed from the game entirely.
-	// 1 - Light Power
-	// 2 - Dark Power
+	// GalaxyRP fix: [Shop] bits 0/1/2 (formerly "RPG quests"/"Light Power"/"Dark Power", already
+	// removed and free) are now the 3 permanent shop upgrades kept by the /buy item|upgrade refactor.
+	// Moved here from pers.secrets_found, which had no working save path anywhere in the codebase (no
+	// SQL column, and its one would-be writer, save_config(), is never called) -- player_settings is
+	// the field that's actually persisted (Accounts.PlayerSettings), so this is what makes them real,
+	// go-forward-only permanent upgrades. See the matching GalaxyRP fix comments in Cmd_Buy_f
+	// (g_cmds.c) and every other reader migrated alongside it (g_combat.c, g_weapon.c, bg_pmove.c,
+	// g_active.c, g_items.c).
+	// 0 - Holdable Items Upgrade (RPG Mode)
+	// 1 - Impact Reducer (RPG Mode)
+	// 2 - Stun Baton Upgrade (RPG Mode)
 	// 3 - Eternity Power
 	// 4 - Universe Power
 	// 5 - Custom Language

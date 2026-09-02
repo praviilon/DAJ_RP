@@ -8730,267 +8730,154 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 	}
 }
 
-/*
-==================
-Cmd_CallSeller_f
-==================
-*/
+// GalaxyRP fix: [Shop] Cmd_CallSeller_f (the /callseller command that spawned/despawned the Jawa
+// seller NPC) has been removed for good -- it was already commented out of the command table below
+// (unreachable) since the jawa-seller proximity requirement in Cmd_Buy_f was itself disabled earlier.
+// Its only supporting field, pers.seller_invoked_by_id, has been removed from g_local.h and its
+// NPC_spawn.c initializer along with it. NPC_SpawnType is still used elsewhere in this file (swoop/
+// tauntaun spawning below), so its extern declaration is kept.
 extern gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
-void Cmd_CallSeller_f( gentity_t *ent ) {
-	gentity_t *npc_ent = NULL;
-	int i = 0;
-	int seller_id = -1;
-
-	for (i = MAX_CLIENTS; i < level.num_entities; i++)
-	{
-		npc_ent = &g_entities[i];
-
-		if (npc_ent && npc_ent->client && npc_ent->NPC && Q_stricmp(npc_ent->NPC_type, "jawa_seller") == 0 && 
-			npc_ent->health > 0 && npc_ent->client->pers.seller_invoked_by_id == ent->s.number)
-		{ // zyk: found the seller of this player
-			seller_id = npc_ent->s.number;
-			break;
-		}
-	}
-
-	if (seller_id == -1)
-	{
-		npc_ent = NPC_SpawnType(ent,"jawa_seller",NULL,qfalse);
-		if (npc_ent)
-		{
-			npc_ent->client->pers.seller_invoked_by_id = ent->s.number;
-			npc_ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
-
-			trap->SendServerCommand( ent->s.number, "chat \"^3Jawa Seller: ^7Hello, friend! I have some products to sell.\"");
-		}
-		else
-		{
-			trap->SendServerCommand( ent->s.number, va("chat \"%s: ^7The seller couldn't come...\"", ent->client->pers.netname));
-		}
-	}
-	else
-	{ // zyk: seller of this player is already in the map, remove him
-		npc_ent = &g_entities[seller_id];
-
-		G_FreeEntity(npc_ent);
-
-		trap->SendServerCommand( ent->s.number, "chat \"^3Jawa Seller: ^7See you later, friend!\"");
-	}
-}
 
 /*
 ==================
 Cmd_Stuff_f
 ==================
 */
+// GalaxyRP fix: [Shop] Cmd_Stuff_f rewritten for the /buy item|upgrade refactor. Replaces the old
+// flat 56-id space (mixing 12 still-functional ammo/misc products, 3 still-functional upgrades and
+// over 40 dead ids for weapons/upgrades/classes/quests that no longer exist) with exactly the two
+// categories that survive: "item" (freshly numbered 1-12) and "upgrade" (freshly numbered 1-3). Every
+// dead id from the old table -- already-removed weapon/item buying (17-24, 32, 37), the 9 dead
+// upgrades (8, 25-29, 39, 45, 47), magic power restore (44), Shield Booster (9), Bacta Canister/E-Web/
+// Cloak Item (34/35/42), the already-orphaned ids (10-13/16/38/41/46/49/50), DEMP2 (36), Healing/
+// Energy Crystal (51/52), the three Unique Abilities (53-55, whose /unique activation command is
+// itself already gone) and Book of Riddles (56) -- is gone for good; only the items already reachable
+// from the GalaxyRP shop menu survive.
 void Cmd_Stuff_f( gentity_t *ent ) {
 	if (trap->Argc() == 1)
 	{ // zyk: shows the categories of stuff
-		// GalaxyRP fix: [Shop] this used to also mention "/sell <number> to sell" -- there has never
-		// been a /sell command (only "buy", see the command table below), so that line described
-		// something a player could never actually do. Trimmed to just the real, working /buy usage.
-		trap->SendServerCommand( ent-g_entities, "print \"\n^7Use ^2/stuff <category> ^7to buy stuff\nThe Category may be ^3ammo^7, ^3misc ^7or ^3upgrades\n^7Use ^3/stuff <number> ^7to see info about the item\n\n^7Use ^2/buy <number> ^7to buy\nStuff bought from ^3upgrades ^7category are permanent\n\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"\n^7Use ^2/stuff item ^7or ^2/stuff upgrade ^7to see the list of products in that category\n^7Use ^2/stuff item <number> ^7or ^2/stuff upgrade <number> ^7to see info about a specific product\n\n^7Use ^2/buy item <number> ^7or ^2/buy upgrade <number> ^7to buy\nStuff bought from the ^3upgrade ^7category is permanent\n\n\"");
 		return;
 	}
 	else
 	{
-		char arg1[1024];
-		int i = 0;
+		char arg1[MAX_STRING_CHARS];
+		char arg2[MAX_STRING_CHARS];
+		int value = 0;
+		qboolean has_number = (trap->Argc() > 2) ? qtrue : qfalse;
 
 		trap->Argv(1, arg1, sizeof( arg1 ));
-		i = atoi(arg1);
 
-		if (Q_stricmp(arg1, "ammo" ) == 0)
+		if (has_number)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n"
-				"^31 - Blaster Pack: ^7Buy: 150\n"
-				"^32 - Power Cell: ^7Buy: 200\n"
-				"^33 - Metal Bolts: ^7Buy: 250\n"
-				"^34 - Rockets: ^7Buy: 500\n"
-				"^35 - Thermals: ^7Buy: 50\n"
-				"^36 - Trip Mines: ^7Buy: 100\n"
-				"^37 - Det Packs: ^7Buy: 200\n"
-				"^330 - Flame Thrower Fuel: ^7Buy: 500\n"
-				"^348 - Ammo All: ^7Buy: 1450\n\n\"");
+			trap->Argv(2, arg2, sizeof( arg2 ));
+			value = atoi(arg2);
 		}
-		else if (Q_stricmp(arg1, "misc") == 0)
+
+		if (Q_stricmp(arg1, "item") == 0)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\n"
-				"^314 - Ysalamiri: ^7Buy: 2000\n"
-				"^331 - Jetpack Fuel: ^7Buy: 500\n"
-				"^343 - Force Boon: ^7Buy: 2000\n\n\"");
+			if (!has_number)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n"
+					"^31 - Blaster Pack: ^7Buy: 150\n"
+					"^32 - Power Cell: ^7Buy: 200\n"
+					"^33 - Metal Bolts: ^7Buy: 250\n"
+					"^34 - Rockets: ^7Buy: 500\n"
+					"^35 - Thermals: ^7Buy: 50\n"
+					"^36 - Trip Mines: ^7Buy: 100\n"
+					"^37 - Det Packs: ^7Buy: 200\n"
+					"^38 - Flame Thrower Fuel: ^7Buy: 500\n"
+					"^39 - Ammo All: ^7Buy: 1450\n"
+					"^310 - Jetpack Fuel: ^7Buy: 500\n"
+					"^311 - Ysalamiri: ^7Buy: 2000\n"
+					"^312 - Force Boon: ^7Buy: 2000\n\n\"");
+				return;
+			}
+
+			if (value == 1)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Blaster Pack: ^7recovers 100 ammo of E11 Blaster Rifle, Blaster Pistol and Bryar Pistol weapons\n\n\"");
+			}
+			else if (value == 2)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Power Cell: ^7recovers 100 ammo of Disruptor, Bowcaster and DEMP2 weapons\n\n\"");
+			}
+			else if (value == 3)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Metal Bolts: ^7recovers 100 ammo of Repeater, Flechette and Concussion Rifle weapons\n\n\"");
+			}
+			else if (value == 4)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Rockets: ^7recovers 10 ammo of Rocket Launcher weapon\n\n\"");
+			}
+			else if (value == 5)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Thermals: ^7recovers 4 ammo of thermals\n\n\"");
+			}
+			else if (value == 6)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Trip Mines: ^7recovers 3 ammo of trip mines\n\n\"");
+			}
+			else if (value == 7)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Det Packs: ^7recovers 2 ammo of det packs\n\n\"");
+			}
+			else if (value == 8)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Flame Thrower Fuel: ^7recovers all fuel of the flame thrower\n\n\"");
+			}
+			else if (value == 9)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Ammo All: ^7recovers all ammo types, including flame thrower fuel\n\n\"");
+			}
+			else if (value == 10)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Jetpack Fuel: ^7recovers all fuel of the jetpack\n\n\"");
+			}
+			else if (value == 11)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Ysalamiri: ^7disables the player force powers but also protects the player from enemy force powers\n\n\"");
+			}
+			else if (value == 12)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Force Boon: ^7allows the player to regenerate force faster\n\n\"");
+			}
+			else
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"Invalid item number.\n\"" );
+			}
 		}
-		else if (Q_stricmp(arg1, "upgrades" ) == 0)
+		else if (Q_stricmp(arg1, "upgrade") == 0)
 		{
-			// GalaxyRP fix: [Upgrades] removed 25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
-			// Upgrades) and 28 (Rocket Upgrade) listing lines here — all inert/non-functional
-			trap->SendServerCommand( ent-g_entities, "print \"\n"
-				"^315 - Impact Reducer: ^7Buy: 40000\n"
-				"^333 - Stun Baton Upgrade: ^7Buy: 15000\n"
-				"^340 - Holdable Items Upgrade: ^7Buy: 30000\n\"");
+			if (!has_number)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n"
+					"^31 - Holdable Items Upgrade: ^7Buy: 30000\n"
+					"^32 - Impact Reducer: ^7Buy: 40000\n"
+					"^33 - Stun Baton Upgrade: ^7Buy: 15000\n\n\"");
+				return;
+			}
+
+			if (value == 1)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Holdable Items Upgrade: ^7Bacta Canister recovers more health, Big Bacta recovers more HP, Force Field resists more and Cloak Item will be able to cloak vehicles\n\n\"");
+			}
+			else if (value == 2)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Impact Reducer: ^7reduces the knockback of some weapons attacks by 80 per cent\n\n\"");
+			}
+			else if (value == 3)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, move elevators, and move or destroy other objects. Also makes stun baton decloak enemies and decrease their running speed for some seconds\n\n\"");
+			}
+			else
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"Invalid upgrade number.\n\"" );
+			}
 		}
-		else if (i == 1)
+		else
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Blaster Pack: ^7recovers 100 ammo of E11 Blaster Rifle, Blaster Pistol and Bryar Pistol weapons\n\n\"");
-		}
-		else if (i == 2)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Power Cell: ^7recovers 100 ammo of Disruptor, Bowcaster and DEMP2 weapons\n\n\"");
-		}
-		else if (i == 3)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Metal Bolts: ^7recovers 100 ammo of Repeater, Flechette and Concussion Rifle weapons\n\n\"");
-		}
-		else if (i == 4)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Rockets: ^7recovers 10 ammo of Rocket Launcher weapon\n\n\"");
-		}
-		else if (i == 5)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Thermals: ^7recovers 4 ammo of thermals\n\n\"");
-		}
-		else if (i == 6)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Trip Mines: ^7recovers 3 ammo of trip mines\n\n\"");
-		}
-		else if (i == 7)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Det Packs: ^7recovers 2 ammo of det packs\n\n\"");
-		}
-		// GalaxyRP fix: [Upgrades] removed i==8 (Stealth Attacker Upgrade) info text here — inert/non-functional, removed along with all its supporting code
-		else if (i == 9)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Shield Booster: ^7recovers 50 shield\n\n\"");
-		}
-		else if (i == 14)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Ysalamiri: ^7disables the player force powers but also protects the player from enemy force powers\n\n\"");
-		}
-		else if (i == 15)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Impact Reducer: ^7reduces the knockback of some weapons attacks by 80 per cent\n\n\"");
-		}
-		else if (i == 17)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3E11 Blaster Rifle: ^7Rifle that is used by the stormtroopers. Uses blaster pack ammo\n\n\"");
-		}
-		else if (i == 18)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Disruptor: ^7Sniper rifle which can desintegrate the enemy. Uses power cell ammo\n\n\"");
-		}
-		else if (i == 19)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Repeater: ^7imperial weapon that shoots orbs and a plasma bomb with alt fire. Uses metal bolts ammo\n\n\"");
-		}
-		else if (i == 20)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Rocket Launcher: ^7weapon that shoots rockets and a homing missile with alternate fire. Uses rockets ammo\n\n\"");
-		}
-		else if (i == 21)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Bowcaster: ^7weapon that shoots green bolts, normal fire can be charged, and alt fire shoots a bouncing bolt. Uses power cell ammo\n\n\"");
-		}
-		else if (i == 22)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Blaster Pistol: ^7pistol that can shoot a charged shot with alt fire. Uses blaster pack ammo\n\n\"");
-		}
-		else if (i == 23)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Flechette: ^7it is the shotgun of the game, and can shoot 2 bombs with alt fire. Uses metal bolts ammo\n\n\"");
-		}
-		else if (i == 24)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Concussion Rifle: ^7powerful weapon, alt fire can shoot a beam that gets through force fields. Uses metal bolts ammo\n\n\"");
-		}
-		// GalaxyRP fix: [Upgrades] removed i==25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
-		// Upgrades), i==28 (Rocket Upgrade) and i==29 (Bounty Hunter Upgrade) info text here — all
-		// inert/non-functional, removed along with all their supporting code
-		else if (i == 30)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Flame Thrower Fuel: ^7recovers all fuel of the flame thrower\n\n\"");
-		}
-		else if (i == 31)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Jetpack Fuel: ^7recovers all fuel of the jetpack\n\n\"");
-		}
-		else if (i == 32)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton: ^7weapon that fires a small electric charge\n\n\"");
-		}
-		else if (i == 33)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, move elevators, and move or destroy other objects. Also makes stun baton decloak enemies and decrease their running speed for some seconds\n\n\"");
-		}
-		else if (i == 34)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Bacta Canister: ^7recovers 25 HP\n\n\"");
-		}
-		else if (i == 35)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3E-Web: ^7portable emplaced gun\n\n\"");
-		}
-		else if (i == 36)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3DEMP2: ^7fires an electro magnetic pulse that causes bonus damage against droids. Uses power cell ammo\n\n\"");
-		}
-		else if (i == 37)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Bryar Pistol: ^7similar to blaster pistol, but has a faster fire rate with normal fire. Uses blaster pack ammo\n\n\"");
-		}
-		// GalaxyRP fix: [Upgrades] removed i==39 (Armored Soldier Upgrade) info text here — inert/non-functional, removed along with all its supporting code
-		else if (i == 40)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Holdable Items Upgrade: ^7Bacta Canister recovers more health, Big Bacta recovers more HP, Force Field resists more and Cloak Item will be able to cloak vehicles\n\n\"");
-		}
-		else if (i == 42)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Cloak Item: ^7allows the player to cloak himself\n\n\"");
-		}
-		else if (i == 43)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Force Boon: ^7allows the player to regenerate force faster\n\n\"");
-		}
-		// GalaxyRP fix: [Upgrades] removed i==45 (Force Gunner Upgrade) and i==47 (Force Guardian
-		// Upgrade) info text here — both inert/non-functional, removed along with all their supporting code
-		else if (i == 48)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Ammo All: ^7recovers all ammo types, including flame thrower fuel\n\n\"");
-		}
-		else if (i == 51)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Healing Crystal: ^7regens hp, mp and force. If the player dies, he loses the crystal\n\n\"");
-		}
-		else if (i == 52)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"\n^3Energy Crystal: ^7regens shield, blaster pack ammo and power cell ammo. If the player dies, he loses the crystal\n\n\"");
-		}
-		else if (i == 53)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch
-			// per class, each with its own help text). rpg_class is permanently 0 now that character
-			// classes are gone, so the rpg_class==1..9 branches were unreachable and have been
-			// removed; the rpg_class==0 condition is likewise always true and has been dropped.
-			trap->SendServerCommand(ent - g_entities, "print \"\n^3Unique Ability 1: ^7used with /unique command. You can only have one Unique Ability at a time. Free Warrior gets Mimic Damage. If you take damage, does part of the damage back to the enemy. Spends 50 force and 25 mp\n\n\"");
-		}
-		else if (i == 54)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch
-			// per class, each with its own help text). rpg_class is permanently 0 now that character
-			// classes are gone, so the rpg_class==1..9 branches were unreachable and have been
-			// removed; the rpg_class==0 condition is likewise always true and has been dropped.
-			trap->SendServerCommand(ent - g_entities, "print \"\n^3Unique Ability 2: ^7used with /unique command. You can only have one Unique Ability at a time. Free Warrior gets Super Beam, a powerful beam with high damage. Spends 100 force and 25 mp\n\n\"");
-		}
-		else if (i == 55)
-		{
-			// GalaxyRP fix: [Classes] this chain used to dispatch on rpg_class==0..9 (one branch
-			// per class, each with its own help text). rpg_class is permanently 0 now that character
-			// classes are gone, so the rpg_class==1..9 branches were unreachable and have been
-			// removed; the rpg_class==0 condition is likewise always true and has been dropped.
-			trap->SendServerCommand(ent - g_entities, "print \"\n^3Unique Ability 3: ^7used with /unique command. You can only have one Unique Ability at a time. Free Warrior gets Flee to Safety, which sets an area in the map to where the player will be transported to after using /unique again. Spends 50 force and 20 mp\n\n\"");
-		}
-		else if (i == 56)
-		{
-			trap->SendServerCommand(ent - g_entities, "print \"\n^3Book of Riddles: ^7a legendary book that shows the answers to the riddles created by the Guardian of Eternity\n\n\"");
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid category. Use ^3item ^7or ^3upgrade^7.\n\"" );
 		}
 	}
 }
@@ -9000,76 +8887,62 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 Cmd_Buy_f
 ==================
 */
+// GalaxyRP fix: [Shop] Cmd_Buy_f rewritten for the /buy item|upgrade refactor -- see the matching
+// comment on Cmd_Stuff_f above for the full list of ids removed for good. Two smaller, freshly
+// numbered cost tables (item_costs[NUMBER_OF_SHOP_ITEMS], upgrade_costs[NUMBER_OF_SHOP_UPGRADES])
+// replace the old single 56-slot item_costs[NUMBER_OF_SELLER_ITEMS] table, so there's no longer any
+// need for the separate "reject this id outright" block the old dead ids required -- every id that
+// still exists is functional. The credits check (ent->client->pers.credits < cost) and the CMD_RPG
+// dispatch flag on both "buy" and "stuff" in the command table below (requiring amrpgmode >= 2, a
+// strictly stronger condition than just being logged in) together satisfy the "only logged-in players
+// with enough credits can buy" requirement.
 void Cmd_Buy_f( gentity_t *ent ) {
 	char arg1[MAX_STRING_CHARS];
+	char arg2[MAX_STRING_CHARS];
 	int value = 0;
-	int found = 0;
-	int item_costs[NUMBER_OF_SELLER_ITEMS] = {
-		150,		// id:1
-		200,		// id:2
-		250,		// id:3
-		500,		// id:4
-		50,			// id:5
-		100,		// id:6
-		200,		// id:7
-		5000,		// id:8
-		0,		// id:9
-		0,			// id:10
-		0,			// id:11
-		0,			// id:12
-		0,			// id:13
-		2000,		// id:14
-		40000,		// id:15
-		30000,		// id:16
-		1,		// id:17
-		1,		// id:18
-		1,		// id:19
-		1,		// id:20
-		1,		// id:21
-		1,		// id:22
-		1,		// id:23
-		1,		// id:24
-		2000,		// id:25
-		1800,		// id:26
-		22000,		// id:27
-		25000,		// id:28
-		5000,		// id:29
-		500,		// id:30
-		500,		// id:31
-		1,		// id:32
-		15000,		// id:33
-		0,		// id:34
-		0,		// id:35
-		1,		// id:36
-		1,		// id:37
-		100,		// id:38
-		5000,		// id:39
-		30000,		// id:40
-		2000,		// id:41
-		0,		// id:42
-		2000,		// id:43
-		50,			// id:44
-		5000,		// id:45
-		100000,		// id:46
-		5000,		// id:47
-		1450,		// id:48
-		20000,		// id:49
-		20000,		// id:50
-		2000,		// id:51
-		2000,		// id:52
-		7000,		// id:53
-		7000,		// id:54
-		7000,		// id:55
-		100000 };	// id:56
+	int cost = 0;
+	qboolean is_upgrade = qfalse;
+	int item_costs[NUMBER_OF_SHOP_ITEMS] = {
+		150,	// item 1: Blaster Pack
+		200,	// item 2: Power Cell
+		250,	// item 3: Metal Bolts
+		500,	// item 4: Rockets
+		50,		// item 5: Thermals
+		100,	// item 6: Trip Mines
+		200,	// item 7: Det Packs
+		500,	// item 8: Flame Thrower Fuel
+		1450,	// item 9: Ammo All
+		500,	// item 10: Jetpack Fuel
+		2000,	// item 11: Ysalamiri
+		2000 };	// item 12: Force Boon
+	int upgrade_costs[NUMBER_OF_SHOP_UPGRADES] = {
+		30000,	// upgrade 1: Holdable Items Upgrade
+		40000,	// upgrade 2: Impact Reducer
+		15000 };	// upgrade 3: Stun Baton Upgrade
 
-	if (trap->Argc() == 1)
+	if (trap->Argc() < 3)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"You must specify a product number.\n\"" );
+		trap->SendServerCommand( ent-g_entities, "print \"Use ^2/buy item <number> ^7or ^2/buy upgrade <number>^7.\n\"" );
 		return;
 	}
 
 	trap->Argv(1, arg1, sizeof( arg1 ));
-	value = atoi(arg1);
+	trap->Argv(2, arg2, sizeof( arg2 ));
+	value = atoi(arg2);
+
+	if (Q_stricmp(arg1, "item") == 0)
+	{
+		is_upgrade = qfalse;
+	}
+	else if (Q_stricmp(arg1, "upgrade") == 0)
+	{
+		is_upgrade = qtrue;
+	}
+	else
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid category. Use ^3item ^7or ^3upgrade^7.\n\"" );
+		return;
+	}
 
 	// zyk: tests the cooldown time to buy or sell
 	if (ent->client->pers.buy_sell_timer > level.time)
@@ -9078,90 +8951,72 @@ void Cmd_Buy_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (value < 1 || value > NUMBER_OF_SELLER_ITEMS)
+	if (is_upgrade)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"Invalid product number.\n\"" );
-		return;
-	}
-	/*else
-	{ // zyk: searches for the jawa to see if we are near him to buy or sell to him
-		gentity_t *jawa_ent = NULL;
-		int j = 0;
-
-		for (j = MAX_CLIENTS; j < level.num_entities; j++)
+		if (value < 1 || value > NUMBER_OF_SHOP_UPGRADES)
 		{
-			jawa_ent = &g_entities[j];
-
-			if (jawa_ent && jawa_ent->client && jawa_ent->NPC && jawa_ent->health > 0 && Q_stricmp( jawa_ent->NPC_type, "jawa_seller" ) == 0 && (int)Distance(ent->client->ps.origin, jawa_ent->client->ps.origin) < 90)
-			{
-				found = 1;
-				break;
-			}
-		}
-
-		// GalaxyRP fix: [Classes] this condition used to also check
-		// !(rpg_class==2 && secrets_found&(1<<1)) (Bounty Hunter Upgrade bypass). rpg_class is
-		// permanently 0 now that character classes are gone, so rpg_class==2 is always false, making
-		// that whole negated conjunct always true; simplified to just the found==0 check.
-		if (found == 0)
-		{ // zyk: Bounty Hunter Upgrade allows buying and selling without the need to call the jawa seller
-			trap->SendServerCommand(ent->s.number, "print \"You must be near the jawa seller to buy from him.\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid upgrade number.\n\"" );
 			return;
 		}
-	}*/
 
-	// zyk: general validations. Some items require certain conditions to be bought
-	// GalaxyRP fix: [Upgrades] removed the "already have" duplicate-purchase checks for value==8
-	// (Stealth Attacker), 25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons), 28 (Rocket),
-	// 29 (Bounty Hunter), 39 (Armored Soldier), 45 (Force Gunner) and 47 (Force Guardian) here —
-	// these upgrades and all their supporting code were removed as inert/non-functional.
-	if (value == 15 && ent->client->pers.secrets_found & (1 << 9))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Impact Reducer.\n\"" );
-		return;
-	}
-	else if (value == 33 && ent->client->pers.secrets_found & (1 << 15))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Stun Baton Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 40 && ent->client->pers.secrets_found & (1 << 0))
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"You already have the Holdable Items Upgrade.\n\"" );
-		return;
-	}
-	else if (value == 53 && ent->client->pers.secrets_found & (1 << 2))
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"You already have the Unique Ability 1.\n\"");
-		return;
-	}
-	else if (value == 54 && ent->client->pers.secrets_found & (1 << 3))
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"You already have the Unique Ability 2.\n\"");
-		return;
-	}
-	else if (value == 55 && ent->client->pers.secrets_found & (1 << 4))
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"You already have the Unique Ability 3.\n\"");
-		return;
-	}
+		// GalaxyRP fix: [Shop] duplicate-purchase guards for the 3 kept upgrades, renumbered to match
+		// their new /buy upgrade <n> ids. Storage moved from secrets_found (see the Task 3 fix on
+		// player_settings just below and its matching comment at g_local.h's player_settings field)
+		// to player_settings bits 0/1/2 -- secrets_found was never actually written to the database by
+		// anything, so every player's upgrade state was already lost on every server restart; this is
+		// a pure go-forward change with nothing to migrate.
+		if (value == 1 && ent->client->pers.player_settings & (1 << 0))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You already have the Holdable Items Upgrade.\n\"" );
+			return;
+		}
+		else if (value == 2 && ent->client->pers.player_settings & (1 << 1))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You already have the Impact Reducer.\n\"" );
+			return;
+		}
+		else if (value == 3 && ent->client->pers.player_settings & (1 << 2))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You already have the Stun Baton Upgrade.\n\"" );
+			return;
+		}
 
-	// GalaxyRP fix: [Upgrades] reject these product ids outright before the credit-deduction dispatch
-	// below -- 8/25/26/27/28/29/39/45/47 (Stealth Attacker, Power Cell/Blaster Pack/Metal Bolts
-	// Weapons, Rocket, Bounty Hunter, Armored Soldier, Force Gunner, Force Guardian Upgrades) had
-	// their purchase branches removed as inert/non-functional, but item_costs[] was intentionally
-	// left untouched (see the removal comments below) to avoid renumbering every other product id.
-	// Without this check the credit-deduction/"Thanks!" code at the end of this function would still
-	// fire for these ids and silently charge full price for a purchase that does nothing.
-	if (value == 8 || value == 25 || value == 26 || value == 27 || value == 28 || value == 29 ||
-		value == 39 || value == 45 || value == 47)
+		cost = upgrade_costs[value-1];
+	}
+	else
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"This item is no longer available.\n\"" );
-		return;
+		if (value < 1 || value > NUMBER_OF_SHOP_ITEMS)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"Invalid item number.\n\"" );
+			return;
+		}
+
+		cost = item_costs[value-1];
 	}
 
 	// zyk: buying the item if player has enough credits
-	if (ent->client->pers.credits >= item_costs[value-1])
+	if (ent->client->pers.credits < cost)
+	{
+		trap->SendServerCommand( ent-g_entities, va("chat \"^3Jawa Seller: ^7%s^7, my products are not free! Give me the money!\n\"",ent->client->pers.netname) );
+		return;
+	}
+
+	if (is_upgrade)
+	{
+		if (value == 1)
+		{
+			ent->client->pers.player_settings |= (1 << 0);
+		}
+		else if (value == 2)
+		{
+			ent->client->pers.player_settings |= (1 << 1);
+		}
+		else if (value == 3)
+		{
+			ent->client->pers.player_settings |= (1 << 2);
+		}
+	}
+	else
 	{
 		if (value == 1)
 		{
@@ -9194,100 +9049,11 @@ void Cmd_Buy_f( gentity_t *ent ) {
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_DET_PACK);
 			Add_Ammo(ent,AMMO_DETPACK,1);
 		}
-		// GalaxyRP fix: [Upgrades] removed value==8 (Stealth Attacker Upgrade) purchase branch here — inert/non-functional, removed along with all its supporting code
-		else if (value == 14)
-		{
-			if (ent->client->ps.powerups[PW_YSALAMIRI] < level.time)
-				ent->client->ps.powerups[PW_YSALAMIRI] = level.time + 60000;
-			else
-				ent->client->ps.powerups[PW_YSALAMIRI] += 60000;
-		}
-		else if (value == 15)
-		{
-			ent->client->pers.secrets_found |= (1 << 9);
-		}
-		/*else if (value == 17)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BLASTER);
-		}
-		else if (value == 18)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_DISRUPTOR);
-		}
-		else if (value == 19)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_REPEATER);
-		}
-		else if (value == 20)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_ROCKET_LAUNCHER);
-		}
-		else if (value == 21)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BOWCASTER);
-		}
-		else if (value == 22)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
-		}
-		else if (value == 23)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_FLECHETTE);
-		}
-		else if (value == 24)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_CONCUSSION);
-		}*/
-		// GalaxyRP fix: [Upgrades] removed value==25/26/27 (Power Cell/Blaster Pack/Metal Bolts Weapons
-		// Upgrades), value==28 (Rocket Upgrade) and value==29 (Bounty Hunter Upgrade) purchase branches
-		// here — all inert/non-functional, removed along with all their supporting code
-		else if (value == 30)
+		else if (value == 8)
 		{
 			ent->client->ps.cloakFuel = 100;
 		}
-		else if (value == 31)
-		{
-			ent->client->pers.jetpack_fuel = MAX_JETPACK_FUEL;
-			ent->client->ps.jetpackFuel = 100;
-		}
-		/*else if (value == 32)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_STUN_BATON);
-		}*/
-		else if (value == 33)
-		{
-			ent->client->pers.secrets_found |= (1 << 15);
-		}
-		else if (value == 36)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_DEMP2);
-		}
-		/*else if (value == 37)
-		{
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_OLD);
-		}*/
-		// GalaxyRP fix: [Upgrades] removed value==39 (Armored Soldier Upgrade) purchase branch here — inert/non-functional, removed along with all its supporting code
-		else if (value == 40)
-		{
-			ent->client->pers.secrets_found |= (1 << 0);
-		}
-		else if (value == 43)
-		{
-			if (ent->client->ps.powerups[PW_FORCE_BOON] < level.time)
-				ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 60000;
-			else
-				ent->client->ps.powerups[PW_FORCE_BOON] += 60000;
-		}
-		else if (value == 44)
-		{
-			ent->client->pers.magic_power = zyk_max_magic_power(ent);
-
-			send_rpg_events(2000);
-		}
-		// GalaxyRP fix: [Upgrades] removed value==45 (Force Gunner Upgrade) and value==47 (Force
-		// Guardian Upgrade) purchase branches here — both inert/non-functional, removed along with
-		// all their supporting code
-		else if (value == 48)
+		else if (value == 9)
 		{
 			Add_Ammo(ent,AMMO_BLASTER,100);
 
@@ -9308,52 +9074,35 @@ void Cmd_Buy_f( gentity_t *ent ) {
 
 			ent->client->ps.cloakFuel = 100;
 		}
-		else if (value == 51)
+		else if (value == 10)
 		{
-			ent->client->pers.player_statuses |= (1 << 10);
+			ent->client->pers.jetpack_fuel = MAX_JETPACK_FUEL;
+			ent->client->ps.jetpackFuel = 100;
 		}
-		else if (value == 52)
+		else if (value == 11)
 		{
-			ent->client->pers.player_statuses |= (1 << 11);
+			if (ent->client->ps.powerups[PW_YSALAMIRI] < level.time)
+				ent->client->ps.powerups[PW_YSALAMIRI] = level.time + 60000;
+			else
+				ent->client->ps.powerups[PW_YSALAMIRI] += 60000;
 		}
-		else if (value == 53)
+		else if (value == 12)
 		{
-			ent->client->pers.secrets_found |= (1 << 2);
-			ent->client->pers.secrets_found &= ~(1 << 3);
-			ent->client->pers.secrets_found &= ~(1 << 4);
+			if (ent->client->ps.powerups[PW_FORCE_BOON] < level.time)
+				ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 60000;
+			else
+				ent->client->ps.powerups[PW_FORCE_BOON] += 60000;
 		}
-		else if (value == 54)
-		{
-			ent->client->pers.secrets_found &= ~(1 << 2);
-			ent->client->pers.secrets_found |= (1 << 3);
-			ent->client->pers.secrets_found &= ~(1 << 4);
-		}
-		else if (value == 55)
-		{
-			ent->client->pers.secrets_found &= ~(1 << 2);
-			ent->client->pers.secrets_found &= ~(1 << 3);
-			ent->client->pers.secrets_found |= (1 << 4);
-		}
-		else if (value == 56)
-		{
-			trap->SendServerCommand(ent - g_entities, "chat \"^3Book of Riddles: ^7key clock sword sun fire water time star nature\n\"");
-		}
-
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-
-		ent->client->pers.credits -= item_costs[value-1];
-		save_account(ent, qtrue);
-
-		ent->client->pers.buy_sell_timer = level.time + zyk_buying_selling_cooldown.integer;
-
-		trap->SendServerCommand( ent-g_entities, va("chat \"^3Jawa Seller: ^7Thanks %s^7!\n\"",ent->client->pers.netname) );
-
 	}
-	else
-	{
-		trap->SendServerCommand( ent-g_entities, va("chat \"^3Jawa Seller: ^7%s^7, my products are not free! Give me the money!\n\"",ent->client->pers.netname) );
-		return;
-	}
+
+	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
+
+	ent->client->pers.credits -= cost;
+	save_account(ent, qtrue);
+
+	ent->client->pers.buy_sell_timer = level.time + zyk_buying_selling_cooldown.integer;
+
+	trap->SendServerCommand( ent-g_entities, va("chat \"^3Jawa Seller: ^7Thanks %s^7!\n\"",ent->client->pers.netname) );
 }
 
 // zyk: if an item left the inventory, makes some adjustments on the player
@@ -15682,7 +15431,6 @@ command_t commands[] = {
 	{ "allyremove",			Cmd_AllyRemove_f,			CMD_NOINTERMISSION },
 	{ "attributes",			Cmd_Attributes_f,			CMD_LOGGEDIN },
 	{ "buy",				Cmd_Buy_f,					CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
-	//{ "callseller",			Cmd_CallSeller_f,			CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "changepassword",		Cmd_ChangePassword_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "char",				Cmd_Char_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "clientprint",		Cmd_ClientPrint_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },

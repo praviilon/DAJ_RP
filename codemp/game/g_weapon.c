@@ -3900,7 +3900,9 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	tr_ent = &g_entities[tr.entityNum];
 
 	// zyk: Stun Baton with Stun Baton Upgrade in RPG Mode allows the player to open any door
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 15) && tr_ent->s.eType == ET_MOVER && 
+	// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never persisted) to
+	// player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
+	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
 		zyk_allow_stun_baton_upgrade.integer == 1)
 	{
 		GlobalUse(tr_ent, ent, ent);
@@ -3956,13 +3958,15 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 				// GalaxyRP fix: [Guardian] removed always-false guardian_mode mismatch check (guardian_mode permanently 0)
 
 				// GalaxyRP fix: [RPG Class] removed always-true guardian_mode/rpg_class decloak-immunity check
-				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 15) && tr_ent->client->ps.powerups[PW_CLOAKED])
+				// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never
+				// persisted) to player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
+				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2) && tr_ent->client->ps.powerups[PW_CLOAKED])
 				{ // zyk: stun baton upgrade decloaks players except Stealth Attacker
 					Jedi_Decloak(tr_ent);
 				}
 
 				// zyk: if the player has stun baton upgrade in RPG mode, enemy has its speed decreased
-				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.secrets_found & (1 << 15))
+				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2))
 				{
 					// zyk: allies cant be hit by it
 					if (zyk_is_ally(ent,tr_ent) == qtrue)
