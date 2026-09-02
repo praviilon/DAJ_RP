@@ -788,7 +788,8 @@ typedef struct clientPersistant_s {
 	// 7 - Unused (was Stealth Attacker Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 8 - Unused (was Force Gunner Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 9 - Impact Reducer
-	// 10 - Flame Thrower
+	// 10 - Unused (was Flame Thrower Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades].
+	//      Flamethrower gameplay is entirely gated by skill_levels[57] instead; unrelated to this bitfield.)
 	// 11 - Unused (was Power Cell Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 12 - Unused (was Blaster Pack Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 13 - Unused (was Metal Bolts Weapons Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
@@ -2089,12 +2090,13 @@ void SendScoreboardMessageToAllClients( void );
 const char *G_GetStringEdString(char *refSection, char *refName);
 void RP_CVU_pluginRequired(void);
 
-// GalaxyRP fix: [validation] cvar-update callbacks (see g_cvar.c) that clamp these three timer
+// GalaxyRP fix: [validation] cvar-update callbacks (see g_cvar.c) that clamp these timer/cooldown
 // cvars back to 0 the moment they're set to a negative value -- see RP_ClampNonNegativeCvar's
 // comment in g_cvar.c for the bug this closes.
 void RP_CVU_downedTimer(void);
 void RP_CVU_downedInvulnerabilityTimer(void);
 void RP_CVU_screenMessageTimer(void);
+void RP_CVU_flameThrowerCooldown(void);
 
 //
 // g_client.c

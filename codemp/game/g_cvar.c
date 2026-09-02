@@ -67,6 +67,17 @@ void RP_CVU_screenMessageTimer(void)
 	RP_ClampNonNegativeCvar(&rp_screen_message_timer, "rp_screen_message_timer");
 }
 
+// GalaxyRP fix: [validation] zyk_flame_thrower_cooldown is read unclamped in Player_FireFlameThrower()
+// (g_main.c) as self->client->cloakDebReduce = level.time + zyk_flame_thrower_cooldown.integer -- a
+// negative value pushes cloakDebReduce into the past, so the "cloakDebReduce < level.time" cooldown
+// gate is satisfied on effectively every server frame instead of respecting any cooldown at all,
+// letting the flamethrower re-fire (and re-deal damage) as fast as the server tick rate allows. Clamp
+// back to 0 the moment the cvar changes, same as the timer cvars above.
+void RP_CVU_flameThrowerCooldown(void)
+{
+	RP_ClampNonNegativeCvar(&zyk_flame_thrower_cooldown, "zyk_flame_thrower_cooldown");
+}
+
 
 //
 // Cvar table
