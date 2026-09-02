@@ -346,7 +346,9 @@ XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORE
 XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_stun_baton_upgrade,		"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_rpg_credits, "500000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_emotes,					"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_allow_emotes to rp_allow_emotes -- matches this
+// codebase's rp_ naming convention for GalaxyRP-authored cvars (see rp_allow_playsound_command above).
+XCVAR_DEF( rp_allow_emotes,					"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_allow_zyksound_command to rp_allow_playsound_command --
 // matches the /playsound command name it actually gates instead of the old internal "zyksound" naming,
 // and moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.

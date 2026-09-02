@@ -340,7 +340,10 @@ const chat_modifiers_t chat_modifiers[] = {
 void play_animation(gentity_t *ent, int animation, int time) {
 	ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
 	ent->client->ps.forceDodgeAnim = animation;
-	ent->client->ps.forceHandExtendTime = level.time + 1000;
+	// GalaxyRP fix: [logic] the time parameter was ignored in favor of a hardcoded +1000.
+	// Every current call site happens to pass 1000 so this was previously harmless, but the
+	// function should honor the value it's actually given.
+	ent->client->ps.forceHandExtendTime = level.time + time;
 }
 
 /*
@@ -733,9 +736,7 @@ void Cmd_Emote_f( gentity_t *ent )
 	char arg[MAX_TOKEN_CHARS] = {0};
 	char anim_id[100] = "";
 
-	int anim_id_int = atoi(anim_id);
-
-	if (zyk_allow_emotes.integer < 1)
+	if (rp_allow_emotes.integer < 1)
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"Cannot use emotes in this server\n\"" );
 		return;
@@ -747,7 +748,7 @@ void Cmd_Emote_f( gentity_t *ent )
 		return;
 	}
 
-	if (zyk_allow_emotes.integer != 1 && ent->client->ps.duelInProgress == qtrue)
+	if (rp_allow_emotes.integer != 1 && ent->client->ps.duelInProgress == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use emotes in private duel\n\"");
 		return;
@@ -760,14 +761,10 @@ void Cmd_Emote_f( gentity_t *ent )
 
 	//alex: string magic
 	trap->Argv( 1, arg, sizeof( arg ) );
-	anim_id_int = atoi(arg);
-	strcpy(anim_id, arg);
-
-	if (anim_id_int < 0 || anim_id_int >= MAX_ANIMATIONS)
-	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Usage: anim ID must be between 0 and %d>\n\"",MAX_ANIMATIONS-1) );
-		return;
-	}
+	// GalaxyRP fix: [security] strcpy could overflow the 100-byte anim_id buffer -- arg can be
+	// up to MAX_TOKEN_CHARS-1 (1023) characters long. Use the codebase's own bounded copy
+	// instead, matching how player-supplied strings are copied elsewhere in this file.
+	Q_strncpyz(anim_id, arg, sizeof(anim_id));
 
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking emotes during boss battles used to be
 	// here. guardian_mode is permanently 0 now, so it was unreachable.
@@ -781,7 +778,9 @@ void Cmd_Emote_f( gentity_t *ent )
 	for (int i = 0; i < MAX_WORDED_EMOTES; i++)
 	{
 		//alex: here, the anim_id is the worded animation name
-		if (strcmp(anim_id, animations[i].animation_name) == 0)
+		// GalaxyRP fix: [logic] use Q_stricmp so word-emote matching is case-insensitive,
+		// consistent with show_animation_list()'s category matching below.
+		if (Q_stricmp(anim_id, animations[i].animation_name) == 0)
 		{
 			play_animation(ent, animations[i].animation_code, 1000);
 
@@ -789,16 +788,6 @@ void Cmd_Emote_f( gentity_t *ent )
 
 			return;
 		}
-	}
-
-	// alex: player can select animation id
-	if (anim_id_int > 0 && anim_id_int < MAX_ANIMATIONS)
-	{
-		play_animation(ent, anim_id_int, 1000);
-
-		ent->client->pers.player_statuses |= (1 << 1);
-
-		return;
 	}
 
 	if (strcmp(anim_id, "list") == 0)
@@ -809,8 +798,6 @@ void Cmd_Emote_f( gentity_t *ent )
 
 			if (page == 2) {
 				show_animation_list(ent, 3, MAX_EMOTE_CATEGORIES);
-
-				return;
 			}
 			else {
 				trap->SendServerCommand(ent - g_entities, "print \"That is not a valid emote category!\n\"");
@@ -819,9 +806,37 @@ void Cmd_Emote_f( gentity_t *ent )
 		else {
 			show_animation_list(ent, 0, 3);
 			trap->SendServerCommand(ent - g_entities, "print \"^3Page 1/2. To see the rest of the animations, do /emote list 2\n\"");
+		}
+
+		// GalaxyRP fix: [cleanup] both list branches now return here instead of only the
+		// "page 1" branch doing so -- previously the invalid-page message fell off the end of
+		// the function instead of returning explicitly.
+		return;
+	}
+
+	// GalaxyRP fix: [logic] numeric-id parsing now uses strtol so it can tell "the player typed
+	// 0" apart from "the player typed something that isn't a number" -- atoi() silently returns
+	// 0 for both, which used to make anim id 0 (a real animation, BOTH_DEATH1) unplayable, and
+	// swallowed all garbage/unrecognized input with no error message at all.
+	char* end_ptr = NULL;
+	long anim_id_int = strtol(anim_id, &end_ptr, 10);
+
+	if (end_ptr != anim_id && *end_ptr == '\0')
+	{
+		if (anim_id_int >= 0 && anim_id_int < MAX_ANIMATIONS)
+		{
+			play_animation(ent, (int)anim_id_int, 1000);
+
+			ent->client->pers.player_statuses |= (1 << 1);
+
 			return;
 		}
+
+		trap->SendServerCommand( ent-g_entities, va("print \"Usage: anim ID must be between 0 and %d\n\"",MAX_ANIMATIONS-1) );
+		return;
 	}
+
+	trap->SendServerCommand( ent-g_entities, va("print \"Unknown emote \\\"%s\\\". Use /emote list to see available emotes.\n\"", anim_id) );
 }
 
 /*
@@ -1546,7 +1561,11 @@ void help_up(gentity_t* ent, gentity_t* target) {
 			case FORCE_LEVEL_3:
 			case FORCE_LEVEL_4:
 			case FORCE_LEVEL_5:
+				// GalaxyRP fix: [logic] missing break -- without it, every force-sensitive
+				// skill level fell through into default and got BOTH_GETUP1 anyway, so the
+				// back-flip get-up animation could never actually play.
 				anim_to_play = BOTH_BACK_FLIP_UP;
+				break;
 			default:
 				anim_to_play = BOTH_GETUP1;
 				break;
