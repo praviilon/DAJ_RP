@@ -3311,12 +3311,14 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 		return qfalse;
 	}
 
-	// GalaxyRP: [security] sess.rpgchar (this name, once accepted) is later spliced raw into several
-	// fopen()/system() calls elsewhere in this file -- zyk_config_filename(), description_add(), and
-	// zyk_remove_configs()'s system("rm -f ...")/system("DEL /F ...") calls -- so an unvalidated
-	// character name could escape the folder those are meant to stay inside, or, in
-	// zyk_remove_configs()'s case, inject extra shell commands. This also subsumes the '&' check
-	// above, but that one is left in place for its own, more specific message.
+	// GalaxyRP: [security] sess.rpgchar (this name, once accepted) is later spliced raw into
+	// description_add()'s fopen() call elsewhere in this file, so an unvalidated character name could
+	// escape the folder that's meant to stay inside. (zyk_config_filename() and zyk_remove_configs()'s
+	// system() calls used to be cited here too -- both removed as dead code, see the GalaxyRP fix:
+	// [Dead Code] comments where they used to live. description_add() itself currently has no callers
+	// either, per the same dead-code sweep, but is left in place rather than removed here since that
+	// wasn't part of this pass -- flagged separately.) This also subsumes the '&' check above, but
+	// that one is left in place for its own, more specific message.
 	if (zyk_check_user_input(char_name, strlen(char_name)) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name can only contain letters and numbers.\n\"");
 		return qfalse;
@@ -3655,14 +3657,14 @@ void Cmd_Register_F(gentity_t * ent)
 		return;
 	}
 
-	// GalaxyRP: [security] sess.filename (this username, once accepted) is later spliced raw into
-	// several fopen()/system() calls elsewhere in this file -- zyk_config_filename(),
-	// zyk_legacy_config_filename(), and zyk_remove_configs()'s system("rm -f ...")/system("DEL /F
-	// ...") calls -- the same gap the character-name check in create_new_character() closes for
-	// sess.rpgchar. Reject anything but letters and digits here too, so a crafted username can't
-	// escape those folders or, in zyk_remove_configs()'s case, inject extra shell commands. This also
-	// catches a username that stripped down to nothing (Q_StripColor() above could reduce an
-	// all-color-codes input to an empty string, which was never explicitly checked before).
+	// GalaxyRP: [security] sess.filename (this username, once accepted) used to be spliced raw into
+	// zyk_config_filename()/zyk_legacy_config_filename()/zyk_remove_configs()'s fopen()/system() calls
+	// -- all three have since been removed as dead code (see the GalaxyRP fix: [Dead Code] comments
+	// where they used to live), so that specific splice no longer exists anywhere. Kept anyway as
+	// baseline input hygiene for account usernames (letters and digits only), matching the same-style
+	// check create_new_character() applies to character names. This also catches a username that
+	// stripped down to nothing (Q_StripColor() above could reduce an all-color-codes input to an empty
+	// string, which was never explicitly checked before).
 	if (zyk_check_user_input(username, strlen(username)) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Username can only contain letters and numbers.\n\"");
 		sqlite3_close(db);
@@ -9152,14 +9154,12 @@ void Cmd_ChangePassword_f( gentity_t *ent ) {
 	trap->SendServerCommand( ent-g_entities, "print \"^3Your password was changed successfully.\n\"" );
 }
 
-void zyk_remove_configs(gentity_t *ent)
-{
-#if defined(__linux__)
-	system(va("rm -f GalaxyRP/configs/%s_%s_freewarrior.txt GalaxyRP/configs/%s_%s_forceuser.txt GalaxyRP/configs/%s_%s_bountyhunter.txt GalaxyRP/configs/%s_%s_armoredsoldier.txt GalaxyRP/configs/%s_%s_monk.txt GalaxyRP/configs/%s_%s_stealthattacker.txt GalaxyRP/configs/%s_%s_duelist.txt GalaxyRP/configs/%s_%s_forcegunner.txt GalaxyRP/configs/%s_%s_magicmaster.txt GalaxyRP/configs/%s_%s_forcetank.txt", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar));
-#else
-	system(va("DEL /F \"zykmod\\configs\\%s_%s_freewarrior.txt\" \"zykmod\\configs\\%s_%s_forceuser.txt\" \"zykmod\\configs\\%s_%s_bountyhunter.txt\" \"zykmod\\configs\\%s_%s_armoredsoldier.txt\" \"zykmod\\configs\\%s_%s_monk.txt\" \"zykmod\\configs\\%s_%s_stealthattacker.txt\" \"zykmod\\configs\\%s_%s_duelist.txt\" \"zykmod\\configs\\%s_%s_forcegunner.txt\" \"zykmod\\configs\\%s_%s_magicmaster.txt\" \"zykmod\\configs\\%s_%s_forcetank.txt\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->sess.filename, ent->client->sess.rpgchar));
-#endif
-}
+// GalaxyRP fix: [Dead Code] zyk_remove_configs() removed -- it system("rm -f ...")/system("DEL /F
+// ...")'d a batch of per-character config text files (the freewarrior.txt file save_config() would
+// have written, plus 9 class-specific variants left over from the already-removed RPG class system),
+// but was never called from anywhere -- not registered in the commands[] dispatch table, not invoked
+// from any other function. Removed alongside save_config() (its only would-be writer, also dead) and
+// zyk_config_filename()/zyk_legacy_config_filename() (see below) as one self-contained dead cluster.
 
 extern void zyk_TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles );
 
@@ -10001,63 +10001,18 @@ void Cmd_Settings_f( gentity_t *ent ) {
 	}
 }
 
-char *zyk_config_filename(gclient_t *client)
-{
-	// GalaxyRP fix: [Classes] rpg_class is permanently 0 now that character classes are gone, so this
-	// always resolved to the freewarrior filename. The rpg_class==1..9 branches and the trailing
-	// else were unreachable and have been removed.
-	return va("GalaxyRP/configs/%s_%s_freewarrior.txt", client->sess.filename, client->sess.rpgchar);
-}
-
-char *zyk_legacy_config_filename(gclient_t *client)
-{
-	// GalaxyRP fix: [Classes] rpg_class is permanently 0 now that character classes are gone, so this
-	// always resolved to the freewarrior filename. The rpg_class==1..9 branches and the trailing
-	// else were unreachable and have been removed.
-	return va("GalaxyRP/configs/%s_freewarrior.txt", client->sess.filename);
-}
-
-void save_config(gentity_t *ent)
-{
-	FILE *config_file = NULL;
-	gclient_t *client;
-	int unique_ability_flag = 0;
-
-	client = ent->client;
-
-	zyk_create_dir("configs");
-
-	config_file = fopen(zyk_config_filename(client),"w");
-
-	if (config_file != NULL)
-	{
-		// zyk: saving Unique Ability bought for this class
-		if (client->pers.secrets_found & (1 << 2))
-		{
-			unique_ability_flag = 2;
-		}
-		else if (client->pers.secrets_found & (1 << 3))
-		{
-			unique_ability_flag = 3;
-		}
-		else if (client->pers.secrets_found & (1 << 4))
-		{
-			unique_ability_flag = 4;
-		}
-
-		fprintf(config_file,"%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n",
-		client->pers.level,client->pers.skill_levels[0],client->pers.skill_levels[1],client->pers.skill_levels[2]
-			,client->pers.skill_levels[3],client->pers.skill_levels[4],client->pers.skill_levels[5],client->pers.skill_levels[6],client->pers.skill_levels[7],client->pers.skill_levels[8]
-			,client->pers.skill_levels[9],client->pers.skill_levels[10],client->pers.skill_levels[11],client->pers.skill_levels[12],client->pers.skill_levels[13],client->pers.skill_levels[14]
-			,client->pers.skill_levels[15],client->pers.skill_levels[16],client->pers.skill_levels[17],client->pers.skill_levels[18],client->pers.skill_levels[19],client->pers.skill_levels[20],client->pers.skill_levels[21],client->pers.skill_levels[22]
-			,client->pers.skill_levels[23],client->pers.skill_levels[24],client->pers.skill_levels[25],client->pers.skill_levels[26],client->pers.skill_levels[27],client->pers.skill_levels[28],client->pers.skill_levels[29],client->pers.skill_levels[30],client->pers.skill_levels[31]
-			,client->pers.skill_levels[32],client->pers.skill_levels[33],client->pers.skill_levels[34],client->pers.skill_levels[35],client->pers.skill_levels[36],client->pers.skill_levels[37],client->pers.skill_levels[38],client->pers.skill_levels[39],client->pers.skill_levels[40],client->pers.skill_levels[41]
-			,client->pers.skill_levels[42],client->pers.skill_levels[43],client->pers.skill_levels[44],client->pers.skill_levels[45],client->pers.skill_levels[46],client->pers.skill_levels[47],client->pers.skill_levels[48],client->pers.skill_levels[49]
-			,client->pers.skill_levels[50],client->pers.skill_levels[51],client->pers.skill_levels[52],client->pers.skill_levels[53],client->pers.skill_levels[54],client->pers.skill_levels[55],unique_ability_flag);
-		
-		fclose(config_file);
-	}
-}
+// GalaxyRP fix: [Dead Code] zyk_config_filename(), zyk_legacy_config_filename() and save_config()
+// removed as a self-contained dead cluster, alongside zyk_remove_configs() above. save_config() (the
+// only writer of the per-character "<user>_<char>_freewarrior.txt" config file -- level, all 56
+// skill_levels[], and a derived Unique Ability flag) had zero callers anywhere in the codebase.
+// zyk_config_filename() had exactly one caller -- save_config() itself -- so it was only reachable
+// through dead code. zyk_legacy_config_filename() had zero callers, full stop. No load/read
+// counterpart for this file format exists anywhere in the repo either (checked for fopen(...,"r")/
+// fscanf() against this path pattern), so nothing was ever reading these files back in. Confirmed via
+// a full-repo search that neither function name nor the "freewarrior" filename fragment appears
+// anywhere else. zyk_create_dir(), save_config()'s only helper call, is left in place -- it's still
+// used by several other live callers throughout this file (entities/, remaps/, duelarena/,
+// meleearena/, customquests/ directory creation).
 
 // GalaxyRP fix: [Quests] Cmd_GuardianQuest_f and Cmd_BountyQuest_f used to live here. Both were
 // fully dead -- an unconditional `return;` as their first statement, and Cmd_GuardianQuest_f was not
