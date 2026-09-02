@@ -636,7 +636,9 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Silence",				ADM_SILENCE				},
 	{ "Client Print",			ADM_CLIENTPRINT			},
 	{ "Shake Screen",			ADM_SHAKESCREEN			},
-	{ "Kick",					ADM_KICK				},
+	// GalaxyRP fix: [Admin] title updated to reflect /killother now sharing this bit -- see the
+	// GalaxyRP fix comment in Cmd_KillOther_f.
+	{ "Kick / Kill Other",		ADM_KICK				},
 	{ "Paralyze",				ADM_PARALYZE			},
 	{ "Give",					ADM_GIVE				},
 	{ "Scale",					ADM_SCALE				},
@@ -4285,36 +4287,41 @@ void Cmd_KillOther_f( gentity_t *ent )
 	char		otherindex[MAX_TOKEN_CHARS];
 	gentity_t	*otherEnt = NULL;
 
-	if (ent->client->pers.bitvalue & (1 << ADM_GIVEADM)) {
-
-		if (trap->Argc() < 2) {
-			trap->SendServerCommand(ent - g_entities, "print \"Usage: killother <player id>\n\"");
-			return;
-		}
-
-		trap->Argv(1, otherindex, sizeof(otherindex));
-		i = ClientNumberFromString(ent, otherindex, qfalse);
-		if (i == -1) {
-			return;
-		}
-
-		otherEnt = &g_entities[i];
-		if (!otherEnt->inuse || !otherEnt->client) {
-			return;
-		}
-
-		if ((otherEnt->health <= 0 || otherEnt->client->tempSpectate >= level.time || otherEnt->client->sess.sessionTeam == TEAM_SPECTATOR))
-		{
-			// Intentionally displaying for the command user
-			trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "MUSTBEALIVE")));
-			return;
-		}
-
-		G_Kill(otherEnt);
+	// GalaxyRP fix: [Admin] /killother used to gate on ADM_GIVEADM ("Give Admin") -- an unrelated,
+	// more sensitive flag meant for granting/revoking other players' admin commands -- instead of a
+	// permission of its own. It also had no bit in the ADM_NUM_CMDS table at all, so it couldn't be
+	// granted or revoked independently and never showed up in /adminlist. Share ADM_KICK with
+	// /admkick instead: instantly killing a player is the same severity of action as kicking them,
+	// and this way both commands are granted/revoked together as one permission.
+	if (!check_admin_command(ent, ADM_KICK, qtrue))
+	{
+		return;
 	}
-	else {
-		trap->SendServerCommand(ent - g_entities, "print \"You need to be an admin to use this\n\"");
+
+	if (trap->Argc() < 2) {
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: killother <player id>\n\"");
+		return;
 	}
+
+	trap->Argv(1, otherindex, sizeof(otherindex));
+	i = ClientNumberFromString(ent, otherindex, qfalse);
+	if (i == -1) {
+		return;
+	}
+
+	otherEnt = &g_entities[i];
+	if (!otherEnt->inuse || !otherEnt->client) {
+		return;
+	}
+
+	if ((otherEnt->health <= 0 || otherEnt->client->tempSpectate >= level.time || otherEnt->client->sess.sessionTeam == TEAM_SPECTATOR))
+	{
+		// Intentionally displaying for the command user
+		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "MUSTBEALIVE")));
+		return;
+	}
+
+	G_Kill(otherEnt);
 }
 
 /*
@@ -9426,6 +9433,19 @@ void Cmd_Teleport_f( gentity_t *ent )
 
 	if (trap->Argc() == 1)
 	{
+		// GalaxyRP fix: [validation] pers.saved_origin/saved_view_angles are zeroed every spawn
+		// (see ClientSpawn in g_client.c) and only ever written by Cmd_Telemark_f, so a player who
+		// never ran /telemark since their last spawn had this branch teleport them straight to
+		// world origin (0,0,0) -- almost always inside geometry or the void. Treat an all-zero
+		// saved point as "no telemark set", the same guard TaystJK's /amtele uses for its own
+		// telemark case.
+		if (ent->client->pers.saved_origin[0] == 0 && ent->client->pers.saved_origin[1] == 0 && ent->client->pers.saved_origin[2] == 0 &&
+			ent->client->pers.saved_view_angles[0] == 0 && ent->client->pers.saved_view_angles[1] == 0 && ent->client->pers.saved_view_angles[2] == 0)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"No telemark set. Use /telemark to mark a spot first.\n\"" );
+			return;
+		}
+
 		zyk_TeleportPlayer(ent, ent->client->pers.saved_origin, ent->client->pers.saved_view_angles);
 	}
 	else if (trap->Argc() == 2)
@@ -9443,7 +9463,9 @@ void Cmd_Teleport_f( gentity_t *ent )
 			return;
 		}
 
-		if (g_entities[client_id].client->sess.amrpgmode > 0 && g_entities[client_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client_id].client->pers.player_settings & (1 << 13)))
+		// GalaxyRP fix: [Admin] added the "ent != target" self-exemption already used by /give and
+		// /scale, so an admin with their own Admin Protect enabled can still target themselves.
+		if (ent != &g_entities[client_id] && g_entities[client_id].client->sess.amrpgmode > 0 && g_entities[client_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client_id].client->pers.player_settings & (1 << 13)))
 			{
 				trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
 				return;
@@ -9477,7 +9499,9 @@ void Cmd_Teleport_f( gentity_t *ent )
 			return;
 		}
 
-		if (g_entities[client1_id].client->sess.amrpgmode > 0 && g_entities[client1_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client1_id].client->pers.player_settings & (1 << 13)))
+		// GalaxyRP fix: [Admin] added the "ent != target" self-exemption already used by /give and
+		// /scale, so an admin with their own Admin Protect enabled can still target themselves.
+		if (ent != &g_entities[client1_id] && g_entities[client1_id].client->sess.amrpgmode > 0 && g_entities[client1_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client1_id].client->pers.player_settings & (1 << 13)))
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
 			return;
@@ -9492,7 +9516,9 @@ void Cmd_Teleport_f( gentity_t *ent )
 			return;
 		}
 
-		if (g_entities[client2_id].client->sess.amrpgmode > 0 && g_entities[client2_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client2_id].client->pers.player_settings & (1 << 13)))
+		// GalaxyRP fix: [Admin] added the "ent != target" self-exemption already used by /give and
+		// /scale, so an admin with their own Admin Protect enabled can still target themselves.
+		if (ent != &g_entities[client2_id] && g_entities[client2_id].client->sess.amrpgmode > 0 && g_entities[client2_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client2_id].client->pers.player_settings & (1 << 13)))
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
 			return;
@@ -9535,7 +9561,9 @@ void Cmd_Teleport_f( gentity_t *ent )
 			return;
 		}
 
-		if (g_entities[client_id].client->sess.amrpgmode > 0 && g_entities[client_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client_id].client->pers.player_settings & (1 << 13)))
+		// GalaxyRP fix: [Admin] added the "ent != target" self-exemption already used by /give and
+		// /scale, so an admin with their own Admin Protect enabled can still target themselves.
+		if (ent != &g_entities[client_id] && g_entities[client_id].client->sess.amrpgmode > 0 && g_entities[client_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client_id].client->pers.player_settings & (1 << 13)))
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
 			return;
@@ -9562,6 +9590,14 @@ Cmd_Telemark_f
 */
 void Cmd_Telemark_f(gentity_t* ent)
 {
+	// GalaxyRP fix: [Admin] /telemark had no permission gate of its own (only CMD_LOGGEDIN), even
+	// though the only thing that ever reads what it saves is /teleport, which does require ADM_TELE.
+	// Gate it on the same bit so the two commands depend on one permission consistently.
+	if (!check_admin_command(ent, ADM_TELE, qtrue))
+	{
+		return;
+	}
+
 	VectorCopy(ent->client->ps.origin, ent->client->pers.saved_origin);
 	VectorCopy(ent->client->ps.viewangles, ent->client->pers.saved_view_angles);
 
@@ -11872,7 +11908,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_KICK)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/admkick <player name or ID> ^7to kick a player from the server\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/admkick <player name or ID> ^7to kick a player from the server, or ^3/killother <player name or ID> ^7to instantly kill a player. Both share this admin command\n\n\"" );
 		}
 		else if (command_number == ADM_PARALYZE)
 		{
