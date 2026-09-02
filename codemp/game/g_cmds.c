@@ -14851,7 +14851,11 @@ typedef struct sound_channels_s {
 	int			channel_code;
 } sound_channels_t;
 
-const sound_channels_t sound_channels[14] = {
+// GalaxyRP fix: [cleanup] declared with an explicit size ([14]) that had to be kept in sync by hand with
+// the two hardcoded loop bounds in Cmd_ZykSound_f below -- let the compiler derive it from the
+// initializer instead, and use ARRAY_LEN() at each call site, so adding/removing an entry here can't
+// silently desync from those loops.
+const sound_channels_t sound_channels[] = {
 	{"auto",				CHAN_AUTO			},
 	{"local",				CHAN_LOCAL			},
 	{"weapon",				CHAN_WEAPON			},
@@ -14876,6 +14880,7 @@ Cmd_ZykSound_f
 void Cmd_ZykSound_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
 	char arg2[MAX_STRING_CHARS];
+	int soundIndex;
 
 	if (zyk_allow_zyksound_command.integer < 1)
 	{
@@ -14886,7 +14891,10 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 	if (trap->Argc() < 2 || trap->Argc() > 3)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/playsound <channel> <sound file path>\n ^2Sound channels available: \n\"");
-		for (int i = 0; i < 14; i++) {
+		// GalaxyRP fix: [cleanup] this hardcoded the array length (14) instead of deriving it, so
+		// adding/removing a channel here without also updating this literal (and the matching one
+		// below) would silently desync the printed list from the array, or read past its end.
+		for (int i = 0; i < ARRAY_LEN(sound_channels); i++) {
 			trap->SendServerCommand(ent->s.number, va("print \"^3%s\n\"", sound_channels[i].channel_name));
 		}
 		return;
@@ -14898,9 +14906,31 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 	{
 		trap->Argv(2, arg2, sizeof(arg2));
 
-		for (int i = 0; i < 14; i++) {
+		// GalaxyRP fix: [validation] nothing rejected an empty sound path (e.g. /playsound auto "") --
+		// that fed straight into G_SoundIndex()/G_Sound(), both of which assert() a non-empty/non-zero
+		// value, so this could trip an assertion in a debug build for no reason.
+		if (arg2[0] == '\0')
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/playsound <channel> <sound file path>\n\"");
+			return;
+		}
+
+		for (int i = 0; i < ARRAY_LEN(sound_channels); i++) {
 			if (strcmp(arg1, sound_channels[i].channel_name) == 0) {
-				G_Sound(ent, sound_channels[i].channel_code, G_SoundIndex(G_NewString(arg2)));
+				// GalaxyRP fix: [security] G_SoundIndex() crashes the whole server (ERR_DROP) once its
+				// 256-slot sound table fills up with never-before-seen names -- and this path is a raw
+				// player-typed string with no cap on distinct values, so any connected player could
+				// crash the server with a couple hundred /playsound calls using unique nonsense paths.
+				// G_SoundIndexSafe() returns 0 instead of crashing when the table is full; refuse the
+				// request with a message in that case instead of handing G_Sound() an invalid index.
+				soundIndex = G_SoundIndexSafe(G_NewString(arg2));
+				if (soundIndex == 0)
+				{
+					trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (server's sound table is full).\n\"");
+					return;
+				}
+
+				G_Sound(ent, sound_channels[i].channel_code, soundIndex);
 
 				return;
 			}
@@ -14912,7 +14942,20 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 
 	if (trap->Argc() == 2)
 	{
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex(G_NewString(arg1)));
+		if (arg1[0] == '\0')
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/playsound <channel> <sound file path>\n\"");
+			return;
+		}
+
+		soundIndex = G_SoundIndexSafe(G_NewString(arg1));
+		if (soundIndex == 0)
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (server's sound table is full).\n\"");
+			return;
+		}
+
+		G_Sound(ent, CHAN_AUTO, soundIndex);
 		return;
 	}
 
@@ -14938,6 +14981,14 @@ void Cmd_Music_f(gentity_t* ent) {
 	}
 
 	trap->Argv(1, audioPath, sizeof(audioPath));
+
+	// GalaxyRP fix: [validation] nothing rejected an empty path (e.g. /playmusic ""), which would
+	// silently clear the level's music track instead of doing anything resembling "play a file".
+	if (audioPath[0] == '\0')
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Usage: ^3/playmusic <sound file path>\n\"");
+		return;
+	}
 
 	trap->SendServerCommand(ent - g_entities, va("print \"^2You started playing the music file: ^7%s\n\"", audioPath));
 	trap->SetConfigstring(CS_MUSIC, audioPath);
@@ -15481,7 +15532,11 @@ command_t commands[] = {
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "spawnplatform",		Cmd_SpawnPlatform_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "spawndummy",			Cmd_SpawnDummy_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "playsound",			Cmd_ZykSound_f,				CMD_NOINTERMISSION },
+	// GalaxyRP fix: [validation] this used to have no CMD_LOGGEDIN flag at all -- a connected but not
+	// logged-in player could run /playsound. Adding it here reuses the same central "You must be logged
+	// in" check (and message) every other logged-in-only command already goes through, rather than
+	// duplicating that check inside Cmd_ZykSound_f itself.
+	{ "playsound",			Cmd_ZykSound_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "playmusic",			Cmd_Music_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "players",			Cmd_Players_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "racemode",			Cmd_RaceMode_f,				CMD_ALIVE | CMD_NOINTERMISSION },

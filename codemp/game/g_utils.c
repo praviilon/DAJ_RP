@@ -224,6 +224,44 @@ int G_SoundIndex( const char *name ) {
 	return G_FindConfigstringIndex (name, CS_SOUNDS, MAX_SOUNDS, qtrue);
 }
 
+// GalaxyRP fix: [security] G_SoundIndex() (above) is built on G_FindConfigstringIndex(), which calls
+// trap->Error(ERR_DROP, ...) -- a full server crash -- the instant its backing table (here, the
+// MAX_SOUNDS slots behind CS_SOUNDS) is already full and asked to register one more name it hasn't seen
+// before. That's a reasonable "this should never happen" safety net for the game code's own internal,
+// developer-authored sound references, but /playsound (Cmd_ZykSound_f in g_cmds.c) hands this a raw
+// player-typed string with no cap on how many distinct ones get requested -- any connected player could
+// crash the whole server with a couple hundred rapid /playsound calls using unique nonsense paths.
+// This variant runs the identical scan/reuse logic but returns 0 instead of erroring out when the table
+// is full and the name isn't already registered, so a player-facing caller can print a friendly message
+// and refuse the request instead of taking the whole server down.
+int G_SoundIndexSafe( const char *name ) {
+	int i;
+	char s[MAX_STRING_CHARS];
+
+	if ( !VALIDSTRING( name ) ) {
+		return 0;
+	}
+
+	for ( i = 1; i < MAX_SOUNDS; i++ ) {
+		trap->GetConfigstring( CS_SOUNDS + i, s, sizeof( s ) );
+		if ( !s[0] ) {
+			break;
+		}
+		if ( !strcmp( s, name ) ) {
+			return i;
+		}
+	}
+
+	if ( i == MAX_SOUNDS ) {
+		// zyk: sound table is full and this name isn't already registered -- refuse instead of ERR_DROP
+		return 0;
+	}
+
+	trap->SetConfigstring( CS_SOUNDS + i, name );
+
+	return i;
+}
+
 int G_SoundSetIndex(const char *name)
 {
 	return G_FindConfigstringIndex (name, CS_AMBIENT_SET, MAX_AMBIENT_SETS, qtrue);

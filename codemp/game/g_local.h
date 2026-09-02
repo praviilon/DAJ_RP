@@ -1807,6 +1807,10 @@ int		G_ParseSaberRGB( const char *str );
 void	RPMod_StringEscape(char *in, char *out, int outSize);
 int		G_ModelIndex( const char *name );
 int		G_SoundIndex( const char *name );
+// GalaxyRP fix: [security] see the matching comment on the definition in g_utils.c -- a player-facing
+// caller (like /playsound) should use this instead of G_SoundIndex() so a full sound table degrades to
+// a friendly message instead of crashing the server via G_FindConfigstringIndex's ERR_DROP.
+int		G_SoundIndexSafe( const char *name );
 int		G_SoundSetIndex(const char *name);
 int		G_EffectIndex( const char *name );
 int		G_BSPIndex( const char *name );
