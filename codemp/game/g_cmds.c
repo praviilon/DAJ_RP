@@ -3193,6 +3193,28 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ent->client->pers.CharID = charID;
 		ent->client->pers.credits = credits;
 		ent->client->pers.level = level;
+
+		// GalaxyRP fix: [Account] pers.player_statuses (bits like "was given force powers/guns via admin
+		// /give while logged out") was never reset here, unlike pers.bitvalue and pers.player_settings
+		// in Cmd_LogoutAccount_f -- so a flag set while logged out stayed set through this account's login
+		// and every subsequent map-change reload, even though it's only meant to describe a logged-out
+		// player's state. Reset it here, before do_scale() below, for the same reason bitvalue/
+		// player_settings are reset above.
+		// GalaxyRP fix: [Scale] this reset used to run *after* do_scale() (a few lines below, where the
+		// old comment on this line used to sit, right before "sess.amrpgmode = 2") instead of before it.
+		// do_scale() sets player_statuses bit 4 ("player is scaled") as one of its side effects, so
+		// resetting the whole field afterward silently cleared that bit again moments after it was set.
+		// pers.player_scale itself stayed correct (do_scale() also sets that field, and this reset never
+		// touched it directly), so the custom scale still applied visually right here on login -- but
+		// ClientSpawn()'s own scale-reapply-on-respawn check (g_client.c) gates on this same bit 4, not on
+		// player_scale. The next respawn after login -- the deferred pending_relog_kill_time kill a few
+		// hundred ms later, see Cmd_Login_F below -- saw the bit already cleared and skipped reapplying
+		// the scale, snapping the player back to default size right after the brief correctly-scaled
+		// moment following login. select_player_character() above already resets player_statuses before
+		// its own do_scale() call for exactly this reason; matching that order here fixes the same bug
+		// for /login and for ClientBegin()'s map-change reload of an already-logged-in player.
+		ent->client->pers.player_statuses = 0;
+
 		do_scale(ent, modelScale);
 		// GalaxyRP fix: [security] same fixed-32-byte-buffer overflow risk as the matching strcpy() in
 		// select_player_character() above (this is /login's own version of the same restore) -- bound
@@ -3267,12 +3289,11 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 	// push them into the client's own cvars so its console and saber menu agree with the server.
 	update_saber_colors(ent);
 
-	// GalaxyRP fix: [Account] pers.player_statuses (bits like "was given force powers/guns via admin
-	// /give while logged out") was never reset on login, unlike pers.bitvalue and pers.player_settings
-	// in Cmd_LogoutAccount_f -- so a flag set while logged out stayed set through this account's login
-	// and every subsequent map-change reload, even though it's only meant to describe a logged-out
-	// player's state. Reset it here too, for the same reason and at the same "now logged in" point.
-	ent->client->pers.player_statuses = 0;
+	// GalaxyRP fix: [Scale] the pers.player_statuses reset that used to sit here (see the GalaxyRP fix:
+	// [Scale] comment further up, right before do_scale()) was moved ahead of do_scale() instead --
+	// it was wiping out the "player is scaled" bit do_scale() had just set a few lines above, which
+	// broke scale restoration on the respawn that follows every login. See that comment for the full
+	// explanation.
 
 	ent->client->sess.amrpgmode = 2;
 
