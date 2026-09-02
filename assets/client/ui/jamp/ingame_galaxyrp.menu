@@ -6113,12 +6113,17 @@
 				// player-facing number 2) -- see settings_number_to_bit in Cmd_Settings_f (g_cmds.c).
 				// The itemDef name and cvar binding below are left as setting6* since that still matches
 				// the underlying player_settings bit position, which is unchanged.
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- without it, toggling this setting
+				// updated the server-side value correctly, but setting6Value below kept showing whatever
+				// was synced the last time the Settings tab was opened (matching the same missing-refresh
+				// bug already fixed on upButton/listButton/settingsButton elsewhere in this menu).
 				exec			"settings 2"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
 
-		itemDef 
+		itemDef
 		{
 			name				setting6Value
 			group				settingsControls
@@ -6159,7 +6164,10 @@
 			{
 				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 3 (see setting6Button
 				// above for the full explanation). Name/cvar left as setting8* (real bit unchanged).
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
+				// setting6Button above for why.
 				exec			"settings 3"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -6198,7 +6206,10 @@
 			{
 				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 4 (see setting6Button
 				// above for the full explanation). Name/cvar left as setting9* (real bit unchanged).
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
+				// setting6Button above for why.
 				exec			"settings 4"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -6237,7 +6248,10 @@
 			{
 				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 5 (see setting6Button
 				// above for the full explanation). Name/cvar left as setting10* (real bit unchanged).
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
+				// setting6Button above for why.
 				exec			"settings 5"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -6276,7 +6290,10 @@
 			{
 				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 6 (see setting6Button
 				// above for the full explanation). Name/cvar left as setting11* (real bit unchanged).
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
+				// setting6Button above for why.
 				exec			"settings 6"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -6327,7 +6344,10 @@
 			{
 				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 7 (see setting6Button
 				// above for the full explanation). Name/cvar left as setting13* (real bit unchanged).
+				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
+				// setting6Button above for why.
 				exec			"settings 7"
+				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}

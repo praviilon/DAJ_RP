@@ -1829,9 +1829,21 @@ char ui_cvars_in_order[100][100] = {
 	"ui_rp_skill_57_level",
 	"ui_rp_skill_58_level",
 	"ui_rp_skill_59_level",
+	// GalaxyRP fix: [Settings] ui_rp_skill_61_level and ui_rp_skill_62_level used to sit here, after
+	// ui_rp_skill_60_level -- but NUM_OF_SKILLS (rp_local.h) is 60, and the server's skills[] array
+	// (g_cmds.c) that Cmd_GalaxyRpUi_f's ARRAY_LEN(skills) loop walks to build the zykmod content
+	// string genuinely has only 60 entries; nothing in the menu references skill 61 or 62 either
+	// (ui_rp_skill_60_level is the highest skill cvar ingame_galaxyrp.menu actually reads). Those two
+	// extra slots meant this array had 62 skill-level entries for a 60-skill server payload, so
+	// CG_ZykMod's positional strtok parsing landed the first two of the six setting values below into
+	// ui_rp_skill_61_level/_62_level instead, then every remaining setting value one slot short of
+	// where it belonged -- shifting all six settings on the panel by two positions, with the last two
+	// (ui_zyk_setting_11_value/_13_value, Start With Saber and Admin Protect) never receiving a value
+	// at all and just showing their static "0" XCVAR_DEF default. Removed the two orphaned slots so
+	// this array's skill-cvar count (60) matches the server's actual skill count exactly, putting the
+	// six setting cvars back in alignment with the six setting values the server actually sends right
+	// after them.
 	"ui_rp_skill_60_level",
-	"ui_rp_skill_61_level",
-	"ui_rp_skill_62_level",
 	// GalaxyRP fix: [Settings] 6 new entries appended here, in the exact same order the server appends
 	// their values to the zykmod content string (see the settings_to_sync loop added to
 	// Cmd_GalaxyRpUi_f in g_cmds.c) -- this array is parsed positionally via strtok in CG_ZykMod below,
