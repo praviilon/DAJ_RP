@@ -5027,6 +5027,23 @@ FireWeapon
 */
 int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint);
 void FireWeapon( gentity_t *ent, qboolean altFire ) {
+	// GalaxyRP fix: [Cloak Item] firing any weapon (primary or alt-fire, saber/melee/stun baton
+	// included) is supposed to break cloak -- there was no code anywhere that actually did this, so a
+	// cloaked player firing back stayed invisible indefinitely. FireWeapon is the single dispatcher
+	// for every weapon type (see the switch below), called identically for EV_FIRE_WEAPON and
+	// EV_ALT_FIRE, so this one check covers "any weapon fire" without needing a copy in each of the
+	// per-weapon WP_Fire* functions. Placed before the CLASS_VEHICLE redirect below so a cloaked
+	// vehicle firing its own weapons decloaks too, matching the existing vehicle-cloak feature
+	// (Cmd_GalaxyRpUi_f/g_active.c's GENCMD_SABERATTACKCYCLE vehicle-cloak branch).
+	// Relies on the bg_pmove.c PM_Weapon fix (see its own GalaxyRP fix comment) to only ever reach
+	// here for a shot the server actually authorized -- a blocked alt-fire attempt (insufficient
+	// skill or not logged in) now short-circuits before generating EV_ALT_FIRE at all, so this never
+	// fires for a denied attempt, only for a real one.
+	if ( ent && ent->client && ent->client->ps.powerups[PW_CLOAKED] )
+	{
+		Jedi_Decloak( ent );
+	}
+
 	// track shots taken for accuracy tracking. melee weapons are not tracked.
 	if( ent->s.weapon != WP_SABER && ent->s.weapon != WP_STUN_BATON && ent->s.weapon != WP_MELEE )
 	{

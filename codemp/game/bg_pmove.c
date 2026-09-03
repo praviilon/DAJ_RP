@@ -7257,8 +7257,17 @@ static void PM_Weapon( void )
 	gentity_t* test_ent = &g_entities[pm->ps->clientNum];
 	if (pm->cmd.buttons & BUTTON_ALT_ATTACK) {
 		if (!canAltFireWeapon(test_ent)) {
+			// GalaxyRP fix: [Weapons] this used to be `pm->cmd.buttons |= ~BUTTON_ATTACK;` -- OR-ing in
+			// the bitwise complement of BUTTON_ATTACK (1) sets every other bit in the mask unconditionally,
+			// including BUTTON_ALT_ATTACK itself (undoing the clear on the line above, so a real alt-fire
+			// still went through despite failing the skill/login check just above) and BUTTON_USE_HOLDABLE
+			// (which made the "check for item using" block further down in this function fire the
+			// player's currently-selected holdable every time this branch ran, cloaking them if that
+			// happened to be the Cloak Item -- unrelated to actually wanting to use it). Changed to AND
+			// with the complement so this only clears BUTTON_ATTACK, symmetric with the line above, and
+			// touches nothing else in the mask.
 			pm->cmd.buttons &= ~BUTTON_ALT_ATTACK;
-			pm->cmd.buttons |= ~BUTTON_ATTACK;
+			pm->cmd.buttons &= ~BUTTON_ATTACK;
 		}
 	}
 #endif
