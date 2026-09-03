@@ -6175,7 +6175,20 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			targ->enemy = attacker;
 
 			//GalaxyRP (Alex): [New Death System] Only down non-npcs, and only people who aren't already dead.
-			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD)) {
+			// GalaxyRP fix: [Death System] never down a player who is currently mounted in a vehicle --
+			// paralyze_player() only sets HP/status flags, it never touches a rider's mount state
+			// (ps.m_iVehicleNum) or, for a hideRider vehicle, their Ghost()-applied EF_NODRAW/SVF_NOCLIENT/
+			// zero-collision state. The only code that properly clears all of that (a plain Eject() call)
+			// lives in player_die()'s own rider-dismount block below, which never runs while the player is
+			// merely downed instead of actually dying. Concretely this was leaving a hideRider vehicle's
+			// pilot invisible, non-collidable, and stuck "mounted" to a vehicle that no longer exists once
+			// they got back up -- unable to see themselves or move properly. Excluding mounted players
+			// here forces them straight to targ->die() (the else branch just below), which does run that
+			// eject/unghost cleanup, so a rider who takes a lethal hit while still mounted now always dies
+			// for real instead of being downed -- consistent for every vehicle type, not just hideRider
+			// ones, and regardless of whether the fatal hit came from their vehicle being destroyed or a
+			// direct hit that bypassed the walker/fighter mounted-damage protection.
+			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				if (targ->client->pers.player_statuses & (1 << 6)) {
 					targ->client->pers.player_statuses &= ~(1 << 6);
