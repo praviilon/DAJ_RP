@@ -1455,13 +1455,15 @@ typedef enum
 	GENCMD_BOW,
 	GENCMD_MEDITATE,
 	GENCMD_FLOURISH,
-	GENCMD_GLOAT,
-	// GalaxyRP fix: [Cloak Item] new dedicated key for pairing vehicle+rider cloak (separate from
-	// GENCMD_USE_CLOAK, which is now solo-only regardless of mount state). Appended at the end so no
-	// existing genCmd numeric value shifts; generic_cmd is transmitted as a full byte (see
-	// msg.cpp's MSG_WriteDeltaKey/MSG_ReadDeltaKey calls using width 8), so there's no width-limit
-	// concern with the new value.
-	GENCMD_USE_CLOAK_VEHICLE
+	GENCMD_GLOAT
+	// GalaxyRP fix: [Cloak Item] GENCMD_USE_CLOAK_VEHICLE used to be appended here -- a dedicated
+	// generic-command value for pairing vehicle+rider cloak, separate from GENCMD_USE_CLOAK (solo-only,
+	// unaffected, still above). Removed: it required a client engine with this exact enum value and a
+	// bound key to ever produce it, and the real, actually-distributed TaystJK engine has no such
+	// support (its own GENCMD_* enum stops at GENCMD_GLOAT, matching this one now again), so nothing
+	// could ever set it in practice. Vehicle-cloak is now the "/vehicle_cloak" console command instead
+	// (Cmd_VehicleCloak_f in g_cmds.c), dispatched the same way as every other slash command -- no
+	// engine-side enum or keybind required.
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame

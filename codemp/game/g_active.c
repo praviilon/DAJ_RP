@@ -3769,9 +3769,9 @@ void ClientThink_real( gentity_t *ent ) {
 				// requiring a saber equipped) has been removed completely -- it kept colliding with
 				// unrelated saber/weapon-control behavior on that same input (see the removed guard's own
 				// history: alt-fire cross-trigger concerns, then a real vehicle weapon-control regression
-				// when the saber-equipped guard was lifted). Vehicle-cloak is now triggered by the
-				// dedicated "use_cloak" key instead (GENCMD_USE_CLOAK, below in this same switch), which
-				// has no overlap with saber styles, weapon selection, or vehicle weapon-link toggling.
+				// when the saber-equipped guard was lifted). Vehicle-cloak is now its own dedicated
+				// "/vehicle_cloak" console command (Cmd_VehicleCloak_f in g_cmds.c) instead, which has no
+				// overlap with saber styles, weapon selection, or vehicle weapon-link toggling.
 
 				// GalaxyRP fix: [Skills] removed the GENCMD_ENGAGE_DUEL Unique Skill (skill index 38) heal
 				// branch that used to be here -- skill 38 is being removed the same way as 39-42 (see the
@@ -3960,9 +3960,9 @@ void ClientThink_real( gentity_t *ent ) {
 			break;
 		case GENCMD_USE_CLOAK:
 			// GalaxyRP fix: [Cloak Item] "use_cloak" is now solo-only, on foot OR mounted -- pairing with
-			// a vehicle is exclusively "use_cloak_vehicle"'s job now (see GENCMD_USE_CLOAK_VEHICLE below),
-			// which keeps the two commands' responsibilities clean: this one only ever touches `ent`,
-			// never the vehicle. G_ItemUsable() is deliberately not used here at all (it unconditionally
+			// a vehicle is exclusively the "/vehicle_cloak" console command's job now (Cmd_VehicleCloak_f
+			// in g_cmds.c), which keeps the two commands' responsibilities clean: this one only ever
+			// touches `ent`, never the vehicle. G_ItemUsable() is deliberately not used here at all (it unconditionally
 			// returns 0 while mounted, which would block this on-vehicle case, and its only other
 			// real-world effect for HI_CLOAK is the same "is player alive" check done explicitly below)
 			// -- just possession + alive + off-cooldown. Toggle direction reads `ent`'s own PW_CLOAKED
@@ -3986,64 +3986,13 @@ void ClientThink_real( gentity_t *ent ) {
 				ent->client->cloakToggleTime = level.time + 1000; // matches g_items.c's CLOAK_TOGGLE_TIME
 			}
 			break;
-		case GENCMD_USE_CLOAK_VEHICLE:
-			// GalaxyRP fix: [Cloak Item] "use_cloak_vehicle" pairs vehicle+rider cloak. Only usable while
-			// mounted (no-op otherwise). Toggle direction reads the VEHICLE's own PW_CLOAKED:
-			//   - vehicle not cloaked -> cloak the vehicle AND unconditionally cloak the rider too
-			//     (Jedi_Cloak is idempotent, so this is safe even if the rider is already solo-cloaked
-			//     from a prior "use_cloak" press -- it just upgrades them to paired).
-			//   - vehicle cloaked, rider also cloaked -> decloak both (the normal toggle-off).
-			//   - vehicle cloaked, rider NOT cloaked (shouldn't happen in normal play, but a stray
-			//     one-sided decloak from somewhere could leave this state) -> cloak the rider instead of
-			//     decloaking, to resync toward paired rather than toward off.
-			// Possession/upgrade requirements only gate the two cloak/resync directions -- decloaking
-			// the pair is never blocked by missing item/upgrade, so a player can never get stuck cloaked
-			// just because they later lost the item or upgrade (matches how zyk_adjust_holdable_items
-			// already forces a decloak on item loss elsewhere). The manual-press cooldown (same
-			// vehicleCloakToggleTime field used by the other two directions) still applies to all three,
-			// so rapid-fire re-pressing the key is debounced consistently regardless of direction.
-			if ( ent->client->ps.m_iVehicleNum )
-			{
-				gentity_t *veh = &g_entities[ent->client->ps.m_iVehicleNum];
-
-				if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
-				{
-					if ( ent->client->ps.powerups[PW_CLOAKED] )
-					{//both cloaked -- decloak the pair, gated only by the manual-press cooldown
-						if ( ent->client->vehicleCloakToggleTime < level.time )
-						{
-							Jedi_DecloakPair( veh );
-							ent->client->vehicleCloakToggleTime = level.time + 1000;
-						}
-					}
-					else if ( ent->client->vehicleCloakToggleTime < level.time &&
-						veh->client->cloakToggleTime < level.time &&
-						ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
-						ent->client->ps.pm_type != PM_DEAD &&
-						// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
-						// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
-						(ent->client->pers.skill_levels[38] & (1 << 0)) &&
-						(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
-					{//safeguard: vehicle cloaked but rider isn't -- resync by cloaking the rider too
-						Jedi_Cloak( ent );
-						ent->client->vehicleCloakToggleTime = level.time + 1000;
-					}
-				}
-				else if ( ent->client->vehicleCloakToggleTime < level.time &&
-					veh->client && veh->client->cloakToggleTime < level.time &&
-					ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
-					ent->client->ps.pm_type != PM_DEAD &&
-					// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
-					// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
-					(ent->client->pers.skill_levels[38] & (1 << 0)) &&
-					(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
-				{//vehicle not cloaked -- cloak vehicle + rider together
-					Jedi_Cloak( veh );
-					Jedi_Cloak( ent );
-					ent->client->vehicleCloakToggleTime = level.time + 1000;
-				}
-			}
-			break;
+		// GalaxyRP fix: [Cloak Item] the GENCMD_USE_CLOAK_VEHICLE case that used to live here was
+		// removed -- it required a client engine with a matching generic-command value and a bound
+		// key to ever produce it, which the real, actually-distributed TaystJK engine has no support
+		// for at all (its own GENCMD_* enum stops at GENCMD_GLOAT), making this permanently
+		// unreachable in practice. Replaced with a genuine "/vehicle_cloak" console command
+		// (Cmd_VehicleCloak_f in g_cmds.c) instead, which needs no client-engine cooperation -- see
+		// that function for the identical vehicle+rider pairing logic that used to be here.
 		case GENCMD_TAUNT:
 			G_SetTauntAnim( ent, TAUNT_TAUNT );
 			break;

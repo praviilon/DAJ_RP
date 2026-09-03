@@ -8707,7 +8707,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// "print \"...\"" string exceeds it), so appending /use_cloak's description to that block
 				// directly would have pushed it over and made the whole Misc section vanish for players.
 				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item, on foot or while riding a vehicle. Never cloaks the vehicle itself.\n\
-^3/use_cloak_vehicle: ^7While riding a vehicle with the Cloak Item and Holdable Items Upgrade, cloaks or decloaks the vehicle together with you.\n\
+^3/vehicle_cloak: ^7While riding a vehicle with the Cloak Item and Holdable Items Upgrade, cloaks or decloaks the vehicle together with you.\n\
 ^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
@@ -10503,6 +10503,88 @@ void Cmd_Jetpack_f( gentity_t *ent ) {
 		if (ent->client->jetPackOn)
 			Jetpack_Off(ent);
 		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] &= ~(1 << HI_JETPACK);
+	}
+}
+
+/*
+==================
+Cmd_VehicleCloak_f
+
+GalaxyRP fix: [Cloak Item] moved here from g_active.c's ClientThink_real(), where this used to run as
+the GENCMD_USE_CLOAK_VEHICLE case of the pmove.cmd.generic_cmd switch -- reachable only by a client
+engine that has that generic-command value and a bound key wired up to send it, which the real,
+actually-distributed TaystJK engine has no support for at all (checked directly against TaystJK's own
+client source: its GENCMD_* enum stops at GENCMD_GLOAT, and its own input-command table has no
+"use_cloak_vehicle" entry). That made the old "/use_cloak_vehicle" permanently unreachable -- typing
+it just got forwarded to the server as plain text and fell through to the "Unknown command" fallback
+below, same as any other unrecognised command. "/vehicle_cloak" is a genuine console command instead,
+dispatched through this same commands[] table exactly like every other slash command here -- reachable
+from any client that can type, no engine-side cooperation required. Solo "/use_cloak" (GENCMD_USE_CLOAK,
+still in g_active.c) is untouched -- it's a real, pre-existing native TaystJK command and keeps working
+exactly as it did before.
+
+Pairs vehicle+rider cloak. Only usable while mounted (no-op otherwise). Toggle direction reads the
+VEHICLE's own PW_CLOAKED:
+  - vehicle not cloaked -> cloak the vehicle AND unconditionally cloak the rider too (Jedi_Cloak is
+    idempotent, so this is safe even if the rider is already solo-cloaked from a prior "/use_cloak" --
+    it just upgrades them to paired).
+  - vehicle cloaked, rider also cloaked -> decloak both (the normal toggle-off).
+  - vehicle cloaked, rider NOT cloaked (shouldn't happen in normal play, but a stray one-sided decloak
+    from somewhere could leave this state) -> cloak the rider instead of decloaking, to resync toward
+    paired rather than toward off.
+Possession/upgrade requirements only gate the two cloak/resync directions -- decloaking the pair is
+never blocked by missing item/upgrade, so a player can never get stuck cloaked just because they later
+lost the item or upgrade (matches how zyk_adjust_holdable_items already forces a decloak on item loss
+elsewhere). The manual-use cooldown (vehicleCloakToggleTime) still applies to all three directions, so
+rapid re-issuing the command is debounced consistently regardless of direction. Deliberately registered
+below without CMD_ALIVE -- the original generic_cmd switch never gated on aliveness either, and the
+decloak path in particular is meant to always work regardless, matching that exactly.
+==================
+*/
+void Cmd_VehicleCloak_f( gentity_t *ent ) {
+	extern void Jedi_Cloak( gentity_t *self );
+	extern void Jedi_DecloakPair( gentity_t *self );
+
+	if ( ent->client->ps.m_iVehicleNum )
+	{
+		gentity_t *veh = &g_entities[ent->client->ps.m_iVehicleNum];
+
+		if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
+		{
+			if ( ent->client->ps.powerups[PW_CLOAKED] )
+			{//both cloaked -- decloak the pair, gated only by the manual-use cooldown
+				if ( ent->client->vehicleCloakToggleTime < level.time )
+				{
+					Jedi_DecloakPair( veh );
+					ent->client->vehicleCloakToggleTime = level.time + 1000;
+				}
+			}
+			else if ( ent->client->vehicleCloakToggleTime < level.time &&
+				veh->client->cloakToggleTime < level.time &&
+				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
+				ent->client->ps.pm_type != PM_DEAD &&
+				// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
+				// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
+				(ent->client->pers.skill_levels[38] & (1 << 0)) &&
+				(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+			{//safeguard: vehicle cloaked but rider isn't -- resync by cloaking the rider too
+				Jedi_Cloak( ent );
+				ent->client->vehicleCloakToggleTime = level.time + 1000;
+			}
+		}
+		else if ( ent->client->vehicleCloakToggleTime < level.time &&
+			veh->client && veh->client->cloakToggleTime < level.time &&
+			ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
+			ent->client->ps.pm_type != PM_DEAD &&
+			// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
+			// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
+			(ent->client->pers.skill_levels[38] & (1 << 0)) &&
+			(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+		{//vehicle not cloaked -- cloak vehicle + rider together
+			Jedi_Cloak( veh );
+			Jedi_Cloak( ent );
+			ent->client->vehicleCloakToggleTime = level.time + 1000;
+		}
 	}
 }
 
@@ -15542,6 +15624,10 @@ command_t commands[] = {
 	{ "teleport",			Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "training",			Cmd_TrainingMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "trashitem",			Cmd_TrashItem_f,			CMD_LOGGEDIN },
+	// GalaxyRP fix: [Cloak Item] replaces the old GENCMD_USE_CLOAK_VEHICLE generic-command mechanism
+	// (see Cmd_VehicleCloak_f's own doc comment for why that was unreachable). No CMD_ALIVE, matching
+	// the original generic_cmd switch, which never gated on aliveness either.
+	{ "vehicle_cloak",		Cmd_VehicleCloak_f,			CMD_NOINTERMISSION },
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 	// GalaxyRP fix: no CMD_ALIVE -- Cmd_GalaxyRpUi_f's supdateloggedin push is meant to reach the
 	// client unconditionally (see its own comment above the send), including while spectating, so a

@@ -1214,14 +1214,13 @@ struct gclient_s {
 	int			cloakToggleTime;
 	int			cloakDebRecharge;
 	int			cloakDebReduce;
-	// GalaxyRP fix: [Cloak Item] separate debounce for /use_cloak_vehicle's own manual key-press
-	// cooldown, tracked on the rider (whoever presses the key). Kept distinct from cloakToggleTime,
-	// which is reused for: (a) the solo-cloak debounce shared between /use_cloak and the cloak
-	// inventory item (same action, same field, on whichever entity's own client this is), and (b)
-	// the "just got hit" re-cloak lockout applied by G_Damage's decloak-on-damage check -- that
-	// second use applies to a VEHICLE's own client just as much as a player's, so /use_cloak_vehicle
-	// checks the vehicle's cloakToggleTime too (in addition to this field on the rider) before
-	// allowing a (re)cloak.
+	// GalaxyRP fix: [Cloak Item] separate debounce for /vehicle_cloak's own manual-use cooldown,
+	// tracked on the rider (whoever runs the command). Kept distinct from cloakToggleTime, which is
+	// reused for: (a) the solo-cloak debounce shared between /use_cloak and the cloak inventory item
+	// (same action, same field, on whichever entity's own client this is), and (b) the "just got hit"
+	// re-cloak lockout applied by G_Damage's decloak-on-damage check -- that second use applies to a
+	// VEHICLE's own client just as much as a player's, so /vehicle_cloak checks the vehicle's
+	// cloakToggleTime too (in addition to this field on the rider) before allowing a (re)cloak.
 	int			vehicleCloakToggleTime;
 
 	int			saberStoredIndex; //stores saberEntityNum from playerstate for when it's set to 0 (indicating saber was knocked out of the air)
