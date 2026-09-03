@@ -8686,7 +8686,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// (sv_main.cpp's SV_SendServerCommand silently drops the entire message if the formatted
 				// "print \"...\"" string exceeds it), so appending /use_cloak's description to that block
 				// directly would have pushed it over and made the whole Misc section vanish for players.
-				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item, on foot or while riding a vehicle. Never cloaks the vehicle itself -- use ^3/use_cloak_vehicle ^7for that.\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item, on foot or while riding a vehicle. Never cloaks the vehicle itself.\n\
 ^3/use_cloak_vehicle: ^7While riding a vehicle with the Cloak Item and Holdable Items Upgrade, cloaks or decloaks the vehicle together with you.\n\
 ^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\

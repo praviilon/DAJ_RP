@@ -3996,10 +3996,12 @@ void ClientThink_real( gentity_t *ent ) {
 			//   - vehicle cloaked, rider NOT cloaked (shouldn't happen in normal play, but a stray
 			//     one-sided decloak from somewhere could leave this state) -> cloak the rider instead of
 			//     decloaking, to resync toward paired rather than toward off.
-			// Possession/upgrade requirements and the cooldown only gate the two cloak/resync directions
-			// -- decloaking the pair is always allowed instantly, so a player can never get stuck cloaked
+			// Possession/upgrade requirements only gate the two cloak/resync directions -- decloaking
+			// the pair is never blocked by missing item/upgrade, so a player can never get stuck cloaked
 			// just because they later lost the item or upgrade (matches how zyk_adjust_holdable_items
-			// already forces a decloak on item loss elsewhere).
+			// already forces a decloak on item loss elsewhere). The manual-press cooldown (same
+			// vehicleCloakToggleTime field used by the other two directions) still applies to all three,
+			// so rapid-fire re-pressing the key is debounced consistently regardless of direction.
 			if ( ent->client->ps.m_iVehicleNum )
 			{
 				gentity_t *veh = &g_entities[ent->client->ps.m_iVehicleNum];
@@ -4007,8 +4009,12 @@ void ClientThink_real( gentity_t *ent ) {
 				if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
 				{
 					if ( ent->client->ps.powerups[PW_CLOAKED] )
-					{//both cloaked -- decloak the pair, always allowed, no cooldown/requirement gate
-						Jedi_DecloakPair( veh );
+					{//both cloaked -- decloak the pair, gated only by the manual-press cooldown
+						if ( ent->client->vehicleCloakToggleTime < level.time )
+						{
+							Jedi_DecloakPair( veh );
+							ent->client->vehicleCloakToggleTime = level.time + 1000;
+						}
 					}
 					else if ( ent->client->vehicleCloakToggleTime < level.time &&
 						veh->client->cloakToggleTime < level.time &&
