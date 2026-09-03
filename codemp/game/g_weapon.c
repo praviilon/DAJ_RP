@@ -3901,8 +3901,11 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	// zyk: Stun Baton with Stun Baton Upgrade in RPG Mode allows the player to open any door
 	// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never persisted) to
 	// player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
+	// GalaxyRP fix: [Shop] cvar renamed from zyk_allow_stun_baton_upgrade to rp_stun_baton_door_unlock
+	// to match its actual scope -- it only ever gated this door-unlock effect, never the upgrade's
+	// speed-debuff effect below.
 	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
-		zyk_allow_stun_baton_upgrade.integer == 1)
+		rp_stun_baton_door_unlock.integer == 1)
 	{
 		GlobalUse(tr_ent, ent, ent);
 	}

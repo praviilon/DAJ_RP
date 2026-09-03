@@ -8863,7 +8863,12 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 			}
 			else if (value == 3)
 			{
-				trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, move elevators, and move or destroy other objects. Also makes stun baton decloak enemies and decrease their running speed for some seconds\n\n\"");
+				// GalaxyRP fix: [Shop] dropped two claims that no longer match this upgrade's actual,
+				// exclusive effect: "move or destroy other objects" (never implemented -- the only
+				// mechanic is opening/unlocking doors and elevators) and "decloak enemies" (no longer
+				// upgrade-specific since the cloak-sync overhaul made ANY damage decloak a cloaked
+				// target, with or without this upgrade -- see G_Damage's centralized decloak hook).
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, and move elevators. Also decreases their running speed for some seconds\n\n\"");
 			}
 			else
 			{

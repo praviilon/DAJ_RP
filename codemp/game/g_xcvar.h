@@ -353,7 +353,11 @@ XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NO
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_stun_baton_upgrade,		"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Shop] renamed from zyk_allow_stun_baton_upgrade -- this only ever gated the Stun
+// Baton Upgrade's door-unlock effect (its speed-debuff effect was never gated by it), so the old
+// name overstated its scope; matches the rp_ prefix convention used by other RPG-specific cvars
+// (e.g. rp_downed_timer).
+XCVAR_DEF( rp_stun_baton_door_unlock,		"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_rpg_credits, "500000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_allow_emotes to rp_allow_emotes -- matches this
 // codebase's rp_ naming convention for GalaxyRP-authored cvars (see rp_allow_playsound_command above).
