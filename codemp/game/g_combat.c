@@ -2121,6 +2121,7 @@ extern void zyk_NPC_Kill_f( char *name );
 extern gentity_t *Zyk_NPC_SpawnType(char *npc_type, int x, int y, int z, int yaw);
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern void player_restore_force(gentity_t *ent);
+extern void Jedi_DecloakPair( gentity_t *self );
 void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath ) {
 	gentity_t	*ent;
 	int			anim;
@@ -2141,6 +2142,18 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	if ( !attacker )
 		return;
+
+	// GalaxyRP fix: [Cloak Item] decloak on the real, final kill -- covers both players (this only
+	// reaches player_die() once they're actually dying for good, since a live player's first lethal
+	// hit only downs them via paralyze_player(), which has its own matching hook) and vehicles/NPCs
+	// (which always die in a single call here, no "downed" step). Pair-aware, so a cloaked vehicle
+	// dying with a cloaked rider aboard (or vice versa) takes both down together. No re-cloak lockout
+	// set here -- a dead player is about to respawn and a destroyed vehicle ceases to exist, so the
+	// cooldown wouldn't mean anything.
+	if ( self->client && self->client->ps.powerups[PW_CLOAKED] )
+	{
+		Jedi_DecloakPair( self );
+	}
 
 	// GalaxyRP (Alex): [Database] Update just the ammo table with the current values on death.
 	update_weapons_table_row_with_current_values(self);
@@ -4653,6 +4666,7 @@ int gPainHitLoc = -1;
 vec3_t gPainPoint;
 
 extern void Jedi_Decloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
 extern void Boba_FlyStop( gentity_t *self );
 extern void paralyze_player(int client_id);
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
@@ -4712,6 +4726,26 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	if (targ && targ->client && targ->NPC && targ->health <= 0 && targ->client->ps.eFlags & EF_DISINTEGRATION)
 	{ // zyk: bug fix. If this npc was desintegrated, do not damage it again
 		return;
+	}
+
+	// GalaxyRP fix: [Cloak Item] centralizes "taking damage breaks cloak" here, replacing every
+	// previous bespoke decloak-on-hit patch scattered across DEMP2 (direct hit and alt-fire shockwave),
+	// Lightning Dome, Force Lightning, and Stun Baton -- all of those were just special cases of "this
+	// entity took damage", and G_Damage() is the one function every damage source (weapon hits,
+	// AoE/splash, and environmental/self damage like fall damage, lava, or a player's own splash) funnels
+	// through. Placed here, after every early veto return above (allies, duel-tournament restrictions,
+	// chat protection, noclip attacker, race mode, already-disintegrated NPC) but before any of the
+	// RPG damage-bonus multipliers or shield/armor absorption below touch `damage`, so this fires on any
+	// real (non-vetoed) incoming hit even if it ends up being fully absorbed by shields and drops the
+	// final `take` to 0 -- "took damage" is about being hit, not about net HP lost. Applies identically
+	// to players and vehicles (both have a ->client). Uses Jedi_DecloakPair so a hit on either half of a
+	// cloaked vehicle+rider pair takes both down together, and applies the same temporary re-cloak
+	// lockout (3-10s) the old per-ability code used, so getting hit can't be immediately shrugged off by
+	// re-cloaking.
+	if (damage > 0 && targ && targ->client && targ->client->ps.powerups[PW_CLOAKED])
+	{
+		Jedi_DecloakPair(targ);
+		targ->client->cloakToggleTime = level.time + Q_irand(3000, 10000);
 	}
 
 	if (attacker && attacker->client && attacker->client->sess.amrpgmode == 2)

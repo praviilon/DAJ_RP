@@ -5782,6 +5782,7 @@ void zyk_super_beam(gentity_t *ent, int angle_yaw)
 // zyk: Force Storm ability
 extern void Boba_FlyStop(gentity_t *self);
 extern void Jedi_Decloak(gentity_t *self);
+extern void Jedi_DecloakPair(gentity_t *self);
 void zyk_force_storm(gentity_t *ent)
 {
 	int i = 0;
@@ -5814,7 +5815,12 @@ void zyk_force_storm(gentity_t *ent)
 
 			if (player_ent->client->ps.powerups[PW_CLOAKED])
 			{ // zyk: disables cloak of enemies
-				Jedi_Decloak(player_ent);
+				// GalaxyRP fix: [Cloak Item] uses Jedi_DecloakPair now -- Force Storm deals no real HP
+				// damage (no G_Damage() call in this function at all), so it isn't covered by the new
+				// centralized "any damage decloaks" hook in G_Damage() and needs its own pair-aware call
+				// so a cloaked vehicle+rider caught in the storm both come down, not just whichever one
+				// happens to be `player_ent` in this loop iteration.
+				Jedi_DecloakPair(player_ent);
 			}
 		}
 	}

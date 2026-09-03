@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 extern void Jedi_Cloak( gentity_t *self );
 extern void Jedi_Decloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
 
 qboolean PM_SaberInTransition( int move );
 qboolean PM_SaberInStart( int move );
@@ -3958,45 +3959,78 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 			break;
 		case GENCMD_USE_CLOAK:
-			// GalaxyRP fix: [Cloak Item] "use_cloak" is now the single trigger for both player self-cloak
-			// and vehicle cloak (the old saber-attack-cycle vehicle-cloak trigger above has been removed
-			// entirely). While mounted, this requires BOTH the Holdable Items Upgrade (player_settings bit
-			// 0) AND Cloak Item possession (STAT_HOLDABLE_ITEMS & HI_CLOAK) -- matching the two gates the
-			// old mechanic checked (upgrade + saber-equipped) but swapping the saber requirement for the
-			// same item-possession check used by on-foot self-cloak, since there's no saber-style
-			// equivalent to key off of here. G_ItemUsable() always returns 0 while mounted (no HI_CLOAK
-			// exception, unlike PM_ItemUsable), so it's intentionally NOT used on the mounted branch --
-			// only the two possession/upgrade checks below gate it. The vehicle's own PW_CLOAKED state is
-			// the toggle-direction source of truth (mirrors the removed code), and the rider is cloaked
-			// alongside it for the same reason as before: open vehicles leave the rider as a separate,
-			// fully-rendered entity that needs its own cloak/decloak call.
-			if ( ent->client->ps.m_iVehicleNum )
-			{
-				if ( (ent->client->pers.player_settings & (1 << 0)) &&
-					(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
-				{
-					if ( g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED] )
-					{//decloak vehicle + rider
-						Jedi_Decloak( &g_entities[ent->client->ps.m_iVehicleNum] );
-						Jedi_Decloak( ent );
-					}
-					else
-					{//cloak vehicle + rider
-						Jedi_Cloak( &g_entities[ent->client->ps.m_iVehicleNum] );
-						Jedi_Cloak( ent );
-					}
-				}
-			}
-			else if ( (ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) &&
-				G_ItemUsable(&ent->client->ps, HI_CLOAK) )
+			// GalaxyRP fix: [Cloak Item] "use_cloak" is now solo-only, on foot OR mounted -- pairing with
+			// a vehicle is exclusively "use_cloak_vehicle"'s job now (see GENCMD_USE_CLOAK_VEHICLE below),
+			// which keeps the two commands' responsibilities clean: this one only ever touches `ent`,
+			// never the vehicle. G_ItemUsable() is deliberately not used here at all (it unconditionally
+			// returns 0 while mounted, which would block this on-vehicle case, and its only other
+			// real-world effect for HI_CLOAK is the same "is player alive" check done explicitly below)
+			// -- just possession + alive + off-cooldown. Toggle direction reads `ent`'s own PW_CLOAKED
+			// (not the vehicle's) -- if this player is currently part of a paired cloak, decloaking goes
+			// through Jedi_DecloakPair so the vehicle comes down too; this is what fixes the old "wrong
+			// toggle direction after the vehicle auto-decloaked from its own weapon fire" bug from the
+			// previous single-command design.
+			if ( ent->client->cloakToggleTime < level.time &&
+				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
+				ent->client->ps.pm_type != PM_DEAD &&
+				(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 			{
 				if ( ent->client->ps.powerups[PW_CLOAKED] )
-				{//decloak
-					Jedi_Decloak( ent );
+				{//decloak (self, plus the vehicle too if paired)
+					Jedi_DecloakPair( ent );
 				}
 				else
-				{//cloak
+				{//cloak (self only, regardless of mount state)
 					Jedi_Cloak( ent );
+				}
+				ent->client->cloakToggleTime = level.time + 1000; // matches g_items.c's CLOAK_TOGGLE_TIME
+			}
+			break;
+		case GENCMD_USE_CLOAK_VEHICLE:
+			// GalaxyRP fix: [Cloak Item] "use_cloak_vehicle" pairs vehicle+rider cloak. Only usable while
+			// mounted (no-op otherwise). Toggle direction reads the VEHICLE's own PW_CLOAKED:
+			//   - vehicle not cloaked -> cloak the vehicle AND unconditionally cloak the rider too
+			//     (Jedi_Cloak is idempotent, so this is safe even if the rider is already solo-cloaked
+			//     from a prior "use_cloak" press -- it just upgrades them to paired).
+			//   - vehicle cloaked, rider also cloaked -> decloak both (the normal toggle-off).
+			//   - vehicle cloaked, rider NOT cloaked (shouldn't happen in normal play, but a stray
+			//     one-sided decloak from somewhere could leave this state) -> cloak the rider instead of
+			//     decloaking, to resync toward paired rather than toward off.
+			// Possession/upgrade requirements and the cooldown only gate the two cloak/resync directions
+			// -- decloaking the pair is always allowed instantly, so a player can never get stuck cloaked
+			// just because they later lost the item or upgrade (matches how zyk_adjust_holdable_items
+			// already forces a decloak on item loss elsewhere).
+			if ( ent->client->ps.m_iVehicleNum )
+			{
+				gentity_t *veh = &g_entities[ent->client->ps.m_iVehicleNum];
+
+				if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
+				{
+					if ( ent->client->ps.powerups[PW_CLOAKED] )
+					{//both cloaked -- decloak the pair, always allowed, no cooldown/requirement gate
+						Jedi_DecloakPair( veh );
+					}
+					else if ( ent->client->vehicleCloakToggleTime < level.time &&
+						veh->client->cloakToggleTime < level.time &&
+						ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
+						ent->client->ps.pm_type != PM_DEAD &&
+						(ent->client->pers.player_settings & (1 << 0)) &&
+						(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+					{//safeguard: vehicle cloaked but rider isn't -- resync by cloaking the rider too
+						Jedi_Cloak( ent );
+						ent->client->vehicleCloakToggleTime = level.time + 1000;
+					}
+				}
+				else if ( ent->client->vehicleCloakToggleTime < level.time &&
+					veh->client && veh->client->cloakToggleTime < level.time &&
+					ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
+					ent->client->ps.pm_type != PM_DEAD &&
+					(ent->client->pers.player_settings & (1 << 0)) &&
+					(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+				{//vehicle not cloaked -- cloak vehicle + rider together
+					Jedi_Cloak( veh );
+					Jedi_Cloak( ent );
+					ent->client->vehicleCloakToggleTime = level.time + 1000;
 				}
 			}
 			break;

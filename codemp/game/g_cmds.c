@@ -1441,6 +1441,7 @@ void G_Kill( gentity_t *ent ) {
 	}
 }
 
+extern void Jedi_DecloakPair( gentity_t *self );
 void paralyze_player(int client_id) {
 	if (client_id == -1)
 	{
@@ -1449,6 +1450,16 @@ void paralyze_player(int client_id) {
 
 	if (!(g_entities[client_id].flags & FL_NOTARGET)) {
 		g_entities[client_id].flags ^= FL_NOTARGET;
+	}
+
+	// GalaxyRP fix: [Cloak Item] a live player's first lethal hit lands them here (paralyzed/"downed"),
+	// not in player_die() -- that only fires on an actual final kill, which this "New Death System" can
+	// delay past the moment a cloaked player would otherwise stay invisible while down. Decloak here too
+	// (pair-aware) so cloak can't survive being downed even when the real kill never happens (e.g. they
+	// get revived instead) or is bypassed straight to a real kill some other way.
+	if ( g_entities[client_id].client && g_entities[client_id].client->ps.powerups[PW_CLOAKED] )
+	{
+		Jedi_DecloakPair( &g_entities[client_id] );
 	}
 
 	//GalaxyRP (Alex): [Death System] Paralyze the target player.
@@ -6632,6 +6643,7 @@ void Cmd_SetViewpos_f( gentity_t *ent ) {
 	TeleportPlayer( ent, origin, angles );
 }
 
+extern void Jedi_Decloak( gentity_t *self );
 void G_LeaveVehicle( gentity_t* ent, qboolean ConCheck ) {
 
 	if (ent->client->ps.m_iVehicleNum)
@@ -6640,6 +6652,13 @@ void G_LeaveVehicle( gentity_t* ent, qboolean ConCheck ) {
 
 		if (veh->inuse && veh->client && veh->m_pVehicle)
 		{
+			// GalaxyRP fix: [Cloak Item] a cloaked vehicle must never be left cloaked and unmanned --
+			// decloak it unconditionally on every dismount. This is the single chokepoint every dismount
+			// path (exit key, forced ejection, death, disconnect) funnels through, so one call here
+			// covers all of them. Deliberately a plain Jedi_Decloak, not Jedi_DecloakPair -- the rider
+			// keeps their own cloak state across dismounting; only the vehicle's cloak is forced off.
+			Jedi_Decloak( veh );
+
 			if ( ConCheck ) { // check connection
 				clientConnected_t pCon = ent->client->pers.connected;
 				ent->client->pers.connected = CON_DISCONNECTED;
@@ -8667,7 +8686,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// (sv_main.cpp's SV_SendServerCommand silently drops the entire message if the formatted
 				// "print \"...\"" string exceeds it), so appending /use_cloak's description to that block
 				// directly would have pushed it over and made the whole Misc section vanish for players.
-				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item. While riding a vehicle, also cloaks the vehicle along with you if you have the Holdable Items Upgrade.\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item, on foot or while riding a vehicle. Never cloaks the vehicle itself -- use ^3/use_cloak_vehicle ^7for that.\n\
+^3/use_cloak_vehicle: ^7While riding a vehicle with the Cloak Item and Holdable Items Upgrade, cloaks or decloaks the vehicle together with you.\n\
 ^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
@@ -9082,6 +9102,7 @@ void Cmd_Buy_f( gentity_t *ent ) {
 
 // zyk: if an item left the inventory, makes some adjustments on the player
 extern void Jedi_Decloak(gentity_t *self);
+extern void Jedi_DecloakPair(gentity_t *self);
 void zyk_adjust_holdable_items(gentity_t *ent)
 {
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_BINOCULARS)) && !(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_MEDPAC)) &&
@@ -9093,8 +9114,11 @@ void zyk_adjust_holdable_items(gentity_t *ent)
 	}
 
 	// zyk: if player no longer has Cloak Item and is cloaked, decloaks
+	// GalaxyRP fix: [Cloak Item] uses Jedi_DecloakPair now -- a player who loses the Cloak Item while
+	// paired-cloaked with a vehicle would otherwise only decloak themselves here, leaving the vehicle
+	// cloaked and instantly desynced.
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) && ent->client->ps.powerups[PW_CLOAKED])
-		Jedi_Decloak(ent);
+		Jedi_DecloakPair(ent);
 }
 
 /*

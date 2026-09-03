@@ -855,16 +855,11 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 					}
 				}
 			}
-			else if ( other && other->client && other->client->ps.powerups[PW_CLOAKED] )
-			{
-				// GalaxyRP fix: [Dead Code] rpg_class permanently 0, so rpg_class != 5 was always true (making
-				// this whole condition always true regardless of amrpgmode); guardian_mode permanently 0 made
-				// the nested guardian_mode == guardian_mode check a tautology -- both if-wrappers removed, body unconditional
-				Jedi_Decloak( other );
-				// zyk: now always temp disable
-				//temp disable
-				other->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-			}
+			// GalaxyRP fix: [Cloak Item] the explicit decloak-on-hit branch that used to be here (for a
+			// non-vehicle DEMP2 direct hit) is gone -- the G_Damage() call above on `other` already runs
+			// through the new centralized "any damage decloaks" hook (see G_Damage's own GalaxyRP fix
+			// comment in g_combat.c), which covers this exact hit generically now, pair-aware and with
+			// the same temporary re-cloak lockout.
 		}
 	}
 killProj:

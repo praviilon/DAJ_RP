@@ -2025,12 +2025,13 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 					{ //only update every 400ms to reduce bandwidth usage (as it is passing a 32-bit time value)
 						traceEnt->client->ps.electrifyTime = level.time + 800;
 					}
-					if ( traceEnt->client->ps.powerups[PW_CLOAKED] )
-					{//disable cloak temporarily
-						// GalaxyRP fix: [Dead Code] rpg_class permanently 0, condition always true (amrpgmode<2 || rpg_class!=5)
-						Jedi_Decloak( traceEnt );
-						traceEnt->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-					}
+					// GalaxyRP fix: [Cloak Item] the explicit decloak-on-hit block that used to be here is
+					// gone -- the conditional G_Damage() call above (when dmg is nonzero) already runs
+					// through the new centralized "any damage decloaks" hook (see G_Damage's own GalaxyRP
+					// fix comment in g_combat.c), which covers this hit generically now, pair-aware and
+					// with the same temporary re-cloak lockout. One minor behavior change: a lightning
+					// tick with dmg == 0 (no G_Damage() call at all) no longer decloaks on its own, since
+					// there's no damage there to decloak on.
 
 					// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Armored Soldier ysalamiri-resist branch unreachable
 					if (!traceEnt->NPC && traceEnt->client->jetPackOn)

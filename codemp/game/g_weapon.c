@@ -132,6 +132,7 @@ static vec3_t muzzle;
 extern qboolean G_BoxInBounds( vec3_t point, vec3_t mins, vec3_t maxs, vec3_t boundsMins, vec3_t boundsMaxs );
 extern qboolean G_HeavyMelee( gentity_t *attacker );
 extern void Jedi_Decloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
 
 static void WP_FireEmplaced( gentity_t *ent, qboolean altFire );
 
@@ -1417,12 +1418,11 @@ void DEMP2_AltRadiusDamage( gentity_t *ent )
 						gent->client->ps.electrifyTime = level.time + Q_irand( 300, 800 );
 					}
 				}
-				if ( gent->client->ps.powerups[PW_CLOAKED] )
-				{//disable cloak temporarily
-					// GalaxyRP fix: [Guardian] removed always-true guardian_mode/rpg_class decloak-immunity check (both fields permanently dead)
-					Jedi_Decloak( gent );
-					gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-				}
+				// GalaxyRP fix: [Cloak Item] the explicit decloak-on-hit block that used to be here is
+				// gone -- the G_Damage() call just above this block already runs through the new
+				// centralized "any damage decloaks" hook (see G_Damage's own GalaxyRP fix comment in
+				// g_combat.c), which covers this exact hit generically now, pair-aware and with the same
+				// temporary re-cloak lockout.
 			}
 		}
 	}
@@ -1690,12 +1690,11 @@ void zyk_lightning_dome_radius_damage( gentity_t *ent )
 							gent->client->ps.electrifyTime = level.time + Q_irand( 300, 800 );
 					}
 				}
-				if ( gent->client->ps.powerups[PW_CLOAKED] )
-				{//disable cloak temporarily
-					// GalaxyRP fix: [Guardian] removed always-true guardian_mode/rpg_class decloak-immunity check (both fields permanently dead)
-					Jedi_Decloak( gent );
-					gent->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
-				}
+				// GalaxyRP fix: [Cloak Item] the explicit decloak-on-hit block that used to be here is
+				// gone -- the G_Damage() call just above this block already runs through the new
+				// centralized "any damage decloaks" hook (see G_Damage's own GalaxyRP fix comment in
+				// g_combat.c), which covers this exact hit generically now, pair-aware and with the same
+				// temporary re-cloak lockout.
 			}
 		}
 	}
@@ -3960,10 +3959,12 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 				// GalaxyRP fix: [RPG Class] removed always-true guardian_mode/rpg_class decloak-immunity check
 				// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never
 				// persisted) to player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
-				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2) && tr_ent->client->ps.powerups[PW_CLOAKED])
-				{ // zyk: stun baton upgrade decloaks players except Stealth Attacker
-					Jedi_Decloak(tr_ent);
-				}
+				// GalaxyRP fix: [Cloak Item] the Stun-Baton-Upgrade-exclusive decloak-on-hit block that
+				// used to be here is gone -- it's superseded by G_Damage()'s new centralized "any damage
+				// decloaks" hook (see G_Damage's own GalaxyRP fix comment in g_combat.c), which already
+				// ran for the G_Damage() call just above this point. That hook applies to any hit
+				// regardless of whether the attacker owns this upgrade, so the upgrade's decloak effect
+				// is no longer exclusive to it -- every hit decloaks now, not just Stun-Baton-Upgrade hits.
 
 				// zyk: if the player has stun baton upgrade in RPG mode, enemy has its speed decreased
 				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2))
@@ -5039,9 +5040,14 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 	// here for a shot the server actually authorized -- a blocked alt-fire attempt (insufficient
 	// skill or not logged in) now short-circuits before generating EV_ALT_FIRE at all, so this never
 	// fires for a denied attempt, only for a real one.
+	// GalaxyRP fix: [Cloak Item] uses Jedi_DecloakPair now instead of a plain Jedi_Decloak -- this
+	// fires once for the rider's own shot and once for the vehicle's own shot (each entity runs its
+	// own PM_Weapon independently), so a plain per-entity decloak was exactly what caused the
+	// vehicle-fires-only-it-decloaks / rider-fires-only-they-decloak desync bug. Jedi_DecloakPair
+	// takes the other half of a paired cloak down too, whichever side actually fired.
 	if ( ent && ent->client && ent->client->ps.powerups[PW_CLOAKED] )
 	{
-		Jedi_Decloak( ent );
+		Jedi_DecloakPair( ent );
 	}
 
 	// track shots taken for accuracy tracking. melee weapons are not tracked.

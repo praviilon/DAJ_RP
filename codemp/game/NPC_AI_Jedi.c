@@ -968,6 +968,47 @@ void Jedi_Decloak( gentity_t *self )
 	}
 }
 
+// GalaxyRP fix: [Cloak Item] shared decloak helper -- decloaks `self` (a player OR a vehicle), and
+// if `self` is one half of a mounted rider/vehicle pair where the OTHER half is ALSO currently
+// cloaked, decloaks that half too. This is the single replacement for every previous scattered
+// decloak call (weapon fire, taking damage, dying, manual toggle) so a hit/action on either side of
+// a paired cloak always takes both down together -- the vehicle+rider desync bugs (vehicle fires and
+// only it decloaks, rider fires and only they decloak) were caused by every one of those call sites
+// touching only the one entity they were handed. Deliberately reads each side's PW_CLOAKED live
+// rather than tracking a separate "this cloak was paired" flag -- both entities' current cloak state
+// is already sufficient to reconstruct whether they're paired at the moment this fires, and it's
+// self-healing (a stale/desynced pair auto-corrects the next time either side is decloaked, cloaked,
+// or hit). Safe/idempotent to call on an entity that isn't cloaked, isn't mounted, or isn't a
+// vehicle at all -- see Jedi_Decloak's own internal guard.
+void Jedi_DecloakPair( gentity_t *self )
+{
+	if ( !self || !self->client )
+	{
+		return;
+	}
+
+	Jedi_Decloak( self );
+
+	if ( self->client->ps.m_iVehicleNum )
+	{ //self is a rider -- take the vehicle down too, if it's cloaked
+		gentity_t *veh = &g_entities[self->client->ps.m_iVehicleNum];
+
+		if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
+		{
+			Jedi_Decloak( veh );
+		}
+	}
+	else if ( self->client->NPC_class == CLASS_VEHICLE && self->m_pVehicle && self->m_pVehicle->m_pPilot )
+	{ //self is a vehicle -- take the rider down too, if it's cloaked
+		gentity_t *rider = (gentity_t *)self->m_pVehicle->m_pPilot;
+
+		if ( rider->client && rider->client->ps.powerups[PW_CLOAKED] )
+		{
+			Jedi_Decloak( rider );
+		}
+	}
+}
+
 void Jedi_CheckCloak( void )
 {
 	if ( NPCS.NPC && NPCS.NPC->client && NPCS.NPC->client->NPC_class == CLASS_SHADOWTROOPER )

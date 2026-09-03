@@ -1400,6 +1400,7 @@ void ItemUse_Jetpack( gentity_t *ent )
 #define CLOAK_TOGGLE_TIME			1000
 extern void Jedi_Cloak( gentity_t *self );
 extern void Jedi_Decloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
 void ItemUse_UseCloak( gentity_t *ent )
 {
 	assert(ent && ent->client);
@@ -1417,6 +1418,14 @@ void ItemUse_UseCloak( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [Cloak Item] explicit possession check -- this is normally already guaranteed by
+	// the fact this function is only reached while Cloak Item is the player's selected holdable, but
+	// checking it directly here is cheap and matches the same possession gate "use_cloak" applies.
+	if ( !(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+	{
+		return;
+	}
+
 	/* zyk: now cloak item doesnt use fuel anymore
 	if (!ent->client->ps.powerups[PW_CLOAKED] &&
 		ent->client->ps.cloakFuel < 5)
@@ -1425,12 +1434,16 @@ void ItemUse_UseCloak( gentity_t *ent )
 	}
 	*/
 
+	// GalaxyRP fix: [Cloak Item] same toggle logic as "use_cloak" now (see g_active.c's
+	// GENCMD_USE_CLOAK) -- cloaking is always solo (never touches a vehicle, even though using this
+	// item while mounted is still allowed), but decloaking goes through Jedi_DecloakPair so a player
+	// who is currently part of a paired vehicle+rider cloak also takes the vehicle down with them.
 	if ( ent->client->ps.powerups[PW_CLOAKED] )
-	{//decloak
-		Jedi_Decloak( ent );
+	{//decloak (self, plus the vehicle too if paired)
+		Jedi_DecloakPair( ent );
 	}
 	else
-	{//cloak
+	{//cloak (self only)
 		Jedi_Cloak( ent );
 	}
 

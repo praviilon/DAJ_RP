@@ -1455,7 +1455,13 @@ typedef enum
 	GENCMD_BOW,
 	GENCMD_MEDITATE,
 	GENCMD_FLOURISH,
-	GENCMD_GLOAT
+	GENCMD_GLOAT,
+	// GalaxyRP fix: [Cloak Item] new dedicated key for pairing vehicle+rider cloak (separate from
+	// GENCMD_USE_CLOAK, which is now solo-only regardless of mount state). Appended at the end so no
+	// existing genCmd numeric value shifts; generic_cmd is transmitted as a full byte (see
+	// msg.cpp's MSG_WriteDeltaKey/MSG_ReadDeltaKey calls using width 8), so there's no width-limit
+	// concern with the new value.
+	GENCMD_USE_CLOAK_VEHICLE
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame
