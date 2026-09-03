@@ -3765,21 +3765,37 @@ void ClientThink_real( gentity_t *ent ) {
 			{
 				// GalaxyRP fix: [Cloak Item] GENCMD_SABERATTACKCYCLE is also what the client sends for
 				// alt-fire on weapons that have no dedicated alt-fire generic_cmd (e.g. Disruptor
-				// zoom, Repeater alt-fire) -- see Cmd_SaberAttackCycle_f's own ps.weapon == WP_SABER
-				// guard just above. This vehicle-cloak branch had no such guard, so alt-firing any
-				// weapon while riding/gunning a vehicle (with this secret unlocked) toggled the
-				// vehicle's cloak as a side effect. Added the same weapon check.
+				// zoom, Repeater alt-fire) -- this used to carry a `ps.weapon == WP_SABER` guard here to
+				// mirror Cmd_SaberAttackCycle_f's own no-op for non-saber weapons, out of concern that
+				// alt-firing a weapon while riding/gunning a vehicle would toggle vehicle-cloak as a side
+				// effect. Direct inspection of cl_input.cpp shows this concern doesn't hold: +altattack is
+				// bound to its own button bit (BUTTON_ALT_ATTACK, in_buttons[7]), architecturally separate
+				// from generic_cmd, which is only ever populated by the ~20 dedicated IN_GenCMDxx functions
+				// (saberAttackCycle -> IN_GenCMD19 -> GENCMD_SABERATTACKCYCLE among them) -- alt-fire never
+				// sends this generic_cmd, so the guard was blocking legitimate uses (cloaking a vehicle
+				// while a non-saber weapon is equipped) without preventing anything. Removed so the saber
+				// attack cycle key toggles vehicle-cloak regardless of currently-equipped weapon.
 				// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
 				// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
+				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum)
 				{ // zyk: RPG Mode Cloak Item can cloak vehicles
+					// GalaxyRP fix: [Cloak Item] this only ever toggled PW_CLOAKED on the vehicle entity,
+					// never on the rider (ent). On vehicles with hideRider == true (enclosed vehicles like
+					// the AT-ST) the rider is already EF_NODRAW'd on boarding so this was invisible, but on
+					// open vehicles (swoops, speeders -- hideRider == false) the rider stays a separate,
+					// fully-rendered entity and was never cloaked/decloaked alongside the vehicle. Added
+					// the matching Jedi_Cloak/Jedi_Decloak calls on ent so the rider cloaks too; safe to do
+					// unconditionally since cloaking an already-hidden enclosed-vehicle rider has no
+					// visible effect.
 					if (!g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED])
 					{
 						Jedi_Cloak(&g_entities[ent->client->ps.m_iVehicleNum]);
+						Jedi_Cloak(ent);
 					}
 					else
 					{
 						Jedi_Decloak(&g_entities[ent->client->ps.m_iVehicleNum]);
+						Jedi_Decloak(ent);
 					}
 				}
 
