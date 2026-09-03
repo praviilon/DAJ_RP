@@ -3763,41 +3763,14 @@ void ClientThink_real( gentity_t *ent ) {
 		{ //these are the only two where you wouldn't care about a delay between
 			if (ent->client->sess.amrpgmode == 2)
 			{
-				// GalaxyRP fix: [Cloak Item] GENCMD_SABERATTACKCYCLE is also what the client sends for
-				// alt-fire on weapons that have no dedicated alt-fire generic_cmd (e.g. Disruptor
-				// zoom, Repeater alt-fire) -- this carries a `ps.weapon == WP_SABER` guard here to mirror
-				// Cmd_SaberAttackCycle_f's own no-op for non-saber weapons. A prior revision of this fix
-				// removed that guard on the reasoning that alt-fire is architecturally independent of
-				// generic_cmd (see cl_input.cpp: +altattack is BUTTON_ALT_ATTACK, generic_cmd comes only
-				// from the dedicated IN_GenCMDxx functions), so the cross-trigger it guarded against
-				// shouldn't be reachable. In practice, removing it broke vehicle weapon-control mechanics
-				// (reported after in-game testing), so the guard is restored here -- whatever the exact
-				// mechanism, saber attack cycle toggling vehicle-cloak while a non-saber weapon is
-				// equipped isn't safe to allow. Only the item 3 fix from that same revision (cloaking the
-				// rider alongside the vehicle, just below) is kept; this guard removal alone is reverted.
-				// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
-				// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
-				{ // zyk: RPG Mode Cloak Item can cloak vehicles
-					// GalaxyRP fix: [Cloak Item] this only ever toggled PW_CLOAKED on the vehicle entity,
-					// never on the rider (ent). On vehicles with hideRider == true (enclosed vehicles like
-					// the AT-ST) the rider is already EF_NODRAW'd on boarding so this was invisible, but on
-					// open vehicles (swoops, speeders -- hideRider == false) the rider stays a separate,
-					// fully-rendered entity and was never cloaked/decloaked alongside the vehicle. Added
-					// the matching Jedi_Cloak/Jedi_Decloak calls on ent so the rider cloaks too; safe to do
-					// unconditionally since cloaking an already-hidden enclosed-vehicle rider has no
-					// visible effect.
-					if (!g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED])
-					{
-						Jedi_Cloak(&g_entities[ent->client->ps.m_iVehicleNum]);
-						Jedi_Cloak(ent);
-					}
-					else
-					{
-						Jedi_Decloak(&g_entities[ent->client->ps.m_iVehicleNum]);
-						Jedi_Decloak(ent);
-					}
-				}
+				// GalaxyRP fix: [Cloak Item] the vehicle-cloak trigger that used to live here (toggling
+				// vehicle+rider cloak on GENCMD_SABERATTACKCYCLE, gated on the Holdable Items Upgrade and
+				// requiring a saber equipped) has been removed completely -- it kept colliding with
+				// unrelated saber/weapon-control behavior on that same input (see the removed guard's own
+				// history: alt-fire cross-trigger concerns, then a real vehicle weapon-control regression
+				// when the saber-equipped guard was lifted). Vehicle-cloak is now triggered by the
+				// dedicated "use_cloak" key instead (GENCMD_USE_CLOAK, below in this same switch), which
+				// has no overlap with saber styles, weapon selection, or vehicle weapon-link toggling.
 
 				// GalaxyRP fix: [Skills] removed the GENCMD_ENGAGE_DUEL Unique Skill (skill index 38) heal
 				// branch that used to be here -- skill 38 is being removed the same way as 39-42 (see the
@@ -3985,7 +3958,36 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 			break;
 		case GENCMD_USE_CLOAK:
-			if ( (ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) &&
+			// GalaxyRP fix: [Cloak Item] "use_cloak" is now the single trigger for both player self-cloak
+			// and vehicle cloak (the old saber-attack-cycle vehicle-cloak trigger above has been removed
+			// entirely). While mounted, this requires BOTH the Holdable Items Upgrade (player_settings bit
+			// 0) AND Cloak Item possession (STAT_HOLDABLE_ITEMS & HI_CLOAK) -- matching the two gates the
+			// old mechanic checked (upgrade + saber-equipped) but swapping the saber requirement for the
+			// same item-possession check used by on-foot self-cloak, since there's no saber-style
+			// equivalent to key off of here. G_ItemUsable() always returns 0 while mounted (no HI_CLOAK
+			// exception, unlike PM_ItemUsable), so it's intentionally NOT used on the mounted branch --
+			// only the two possession/upgrade checks below gate it. The vehicle's own PW_CLOAKED state is
+			// the toggle-direction source of truth (mirrors the removed code), and the rider is cloaked
+			// alongside it for the same reason as before: open vehicles leave the rider as a separate,
+			// fully-rendered entity that needs its own cloak/decloak call.
+			if ( ent->client->ps.m_iVehicleNum )
+			{
+				if ( (ent->client->pers.player_settings & (1 << 0)) &&
+					(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
+				{
+					if ( g_entities[ent->client->ps.m_iVehicleNum].client->ps.powerups[PW_CLOAKED] )
+					{//decloak vehicle + rider
+						Jedi_Decloak( &g_entities[ent->client->ps.m_iVehicleNum] );
+						Jedi_Decloak( ent );
+					}
+					else
+					{//cloak vehicle + rider
+						Jedi_Cloak( &g_entities[ent->client->ps.m_iVehicleNum] );
+						Jedi_Cloak( ent );
+					}
+				}
+			}
+			else if ( (ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) &&
 				G_ItemUsable(&ent->client->ps, HI_CLOAK) )
 			{
 				if ( ent->client->ps.powerups[PW_CLOAKED] )
