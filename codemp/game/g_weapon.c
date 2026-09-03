@@ -3899,12 +3899,13 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	tr_ent = &g_entities[tr.entityNum];
 
 	// zyk: Stun Baton with Stun Baton Upgrade in RPG Mode allows the player to open any door
-	// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never persisted) to
-	// player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
+	// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never persisted), to
+	// player_settings bit 2 (account-wide), to skill_levels[38] bit 2 (per-character) -- see g_local.h's
+	// skill_levels field.
 	// GalaxyRP fix: [Shop] cvar renamed from zyk_allow_stun_baton_upgrade to rp_stun_baton_door_unlock
 	// to match its actual scope -- it only ever gated this door-unlock effect, never the upgrade's
 	// speed-debuff effect below.
-	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
+	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
 		rp_stun_baton_door_unlock.integer == 1)
 	{
 		GlobalUse(tr_ent, ent, ent);
@@ -3961,7 +3962,8 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 
 				// GalaxyRP fix: [RPG Class] removed always-true guardian_mode/rpg_class decloak-immunity check
 				// GalaxyRP fix: [Shop] Stun Baton Upgrade moved from secrets_found bit 15 (never
-				// persisted) to player_settings bit 2 (persisted) -- see g_local.h's player_settings field.
+				// persisted), to player_settings bit 2 (account-wide), to skill_levels[38] bit 2
+				// (per-character) -- see g_local.h's skill_levels field.
 				// GalaxyRP fix: [Cloak Item] the Stun-Baton-Upgrade-exclusive decloak-on-hit block that
 				// used to be here is gone -- it's superseded by G_Damage()'s new centralized "any damage
 				// decloaks" hook (see G_Damage's own GalaxyRP fix comment in g_combat.c), which already
@@ -3970,7 +3972,7 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 				// is no longer exclusive to it -- every hit decloaks now, not just Stun-Baton-Upgrade hits.
 
 				// zyk: if the player has stun baton upgrade in RPG mode, enemy has its speed decreased
-				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 2))
+				if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 2))
 				{
 					// zyk: allies cant be hit by it
 					if (zyk_is_ally(ent,tr_ent) == qtrue)

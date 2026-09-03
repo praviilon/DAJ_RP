@@ -359,9 +359,10 @@ void CreateShield(gentity_t *ent)
 	if ( level.gametype == GT_SIEGE || level.gametype == GT_CTF)
 	{ // zyk: added CTF condition
 		// zyk: Force Field 2/2 in RPG Mode has double health
-		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
-		// to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.player_settings & (1 << 0))
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted),
+		// to player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see
+		// g_local.h's skill_levels field.
+		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.skill_levels[38] & (1 << 0))
 		{
 			ent->health = SHIELD_SIEGE_HEALTH * 2;
 		}
@@ -372,9 +373,10 @@ void CreateShield(gentity_t *ent)
 	}
 	else
 	{ // zyk: Force Field 2/2 in RPG Mode has double health
-		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
-		// to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.player_settings & (1 << 0))
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted),
+		// to player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see
+		// g_local.h's skill_levels field.
+		if (ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && ent->parent->client->pers.skill_levels[38] & (1 << 0))
 		{
 			ent->health = SHIELD_HEALTH * 2;
 		}
@@ -483,8 +485,9 @@ qboolean PlaceShield(gentity_t *playerent)
 			shield->s.otherEntityNum2 = playerent->client->sess.sessionTeam;
 
 			// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
-			// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-			if (level.gametype < GT_TEAM && playerent->client && playerent->client->sess.amrpgmode == 2 && playerent->client->pers.player_settings & (1 << 0))
+			// persisted), to player_settings bit 0 (account-wide), to skill_levels[38] bit 0
+			// (per-character) -- see g_local.h's skill_levels field.
+			if (level.gametype < GT_TEAM && playerent->client && playerent->client->sess.amrpgmode == 2 && playerent->client->pers.skill_levels[38] & (1 << 0))
 			{
 				// zyk: setting shield red color if it has the upgrade
 				shield->s.otherEntityNum2 = TEAM_RED;
@@ -1293,9 +1296,10 @@ static void MedPackGive(gentity_t *ent, int amount)
 void ItemUse_MedPack_Big(gentity_t *ent)
 {
 	// zyk: RPG Mode Big Bacta. Recover 150 HP
-	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted) to
-	// player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 0))
+	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted), to
+	// player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see g_local.h's
+	// skill_levels field.
+	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 0))
 		MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT * 3);
 	else
 		MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT);
@@ -1304,15 +1308,16 @@ void ItemUse_MedPack_Big(gentity_t *ent)
 void ItemUse_MedPack(gentity_t *ent)
 {
 	// zyk: RPG Mode Bacta Canister. Recover 75 HP
-	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted) to
-	// player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted), to
+	// player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see g_local.h's
+	// skill_levels field.
 	// GalaxyRP fix: [Shop] the Holdable Items Upgrade's Bacta Canister bonus used to be a no-op for
 	// healing (it only refilled magic_power instead), which contradicted the shop's own description
 	// ("Bacta Canister recovers more health"). Now mirrors Big Bacta's upgrade bonus exactly: heals
 	// 3x the base amount (225 HP) instead of a magic_power refill. See the matching GalaxyRP fix
 	// comment on PM_ItemUsable's HI_MEDPAC case (bg_pmove.c) -- the old "usable at max health to top
 	// off magic_power" carve-out there no longer applies now that this has no non-HP effect.
-	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 0))
+	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 0))
 		MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT * 3);
 	else
 		MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT);

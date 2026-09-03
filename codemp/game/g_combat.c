@@ -5172,9 +5172,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	{
 		int new_knockback = knockback;
 
-		// GalaxyRP fix: [Shop] Impact Reducer moved from secrets_found bit 9 (never persisted) to
-		// player_settings bit 1 (persisted) -- see g_local.h's player_settings field.
-		if (targ->client->pers.player_settings & (1 << 1))
+		// GalaxyRP fix: [Shop] Impact Reducer moved from secrets_found bit 9 (never persisted), to
+		// player_settings bit 1 (account-wide), to skill_levels[38] bit 1 (per-character) -- see
+		// g_local.h's skill_levels field.
+		if (targ->client->pers.skill_levels[38] & (1 << 1))
 			new_knockback -= knockback * 0.8;
 
 		// GalaxyRP fix: [Dead Code] removed rpg_class==9 knockback reduction (rpg_class always 0)

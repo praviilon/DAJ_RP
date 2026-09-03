@@ -6521,9 +6521,10 @@ int PM_ItemUsable(playerState_t *ps, int forcedUse)
 	switch (forcedUse)
 	{
 	case HI_MEDPAC:
-		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
-		// to player_settings bit 0 (persisted via Accounts.PlayerSettings) -- see the Task 3 fix comment
-		// on pers.player_settings in g_local.h.
+		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted),
+		// to player_settings bit 0 (persisted account-wide via Accounts.PlayerSettings), to
+		// skill_levels[38] bit 0 (persisted per-character via Skills.UniqueSkill) -- see g_local.h's
+		// skill_levels field.
 		// GalaxyRP fix: [Shop] the Holdable Items Upgrade's Bacta Canister bonus is now a straight 3x
 		// heal (see ItemUse_MedPack in g_items.c), the same shape as Big Bacta's bonus below -- it no
 		// longer has any non-HP effect (used to top off magic_power), so the old "still usable at max

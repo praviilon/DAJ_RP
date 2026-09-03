@@ -697,16 +697,18 @@ typedef struct clientPersistant_s {
 	// zyk: turn on or off features of this player in his account file. It is a bit value attribute
 	// Possible bit values are:
 	// GalaxyRP fix: [Shop] bits 0/1/2 (formerly "RPG quests"/"Light Power"/"Dark Power", already
-	// removed and free) are now the 3 permanent shop upgrades kept by the /buy item|upgrade refactor.
-	// Moved here from pers.secrets_found, which had no working save path anywhere in the codebase (no
-	// SQL column, and its one would-be writer, save_config(), is never called) -- player_settings is
-	// the field that's actually persisted (Accounts.PlayerSettings), so this is what makes them real,
-	// go-forward-only permanent upgrades. See the matching GalaxyRP fix comments in Cmd_Buy_f
-	// (g_cmds.c) and every other reader migrated alongside it (g_combat.c, g_weapon.c, bg_pmove.c,
-	// g_active.c, g_items.c).
-	// 0 - Holdable Items Upgrade (RPG Mode)
-	// 1 - Impact Reducer (RPG Mode)
-	// 2 - Stun Baton Upgrade (RPG Mode)
+	// removed and free; briefly the 3 permanent shop upgrades kept by the /buy item|upgrade refactor)
+	// are now retired from this field entirely and permanently unused/free again. player_settings is
+	// account-wide (Accounts.PlayerSettings, shared by every character on the account), which made the
+	// 3 shop upgrades account-wide too -- buying one on any character silently granted it on every other
+	// character on the same account. The 3 upgrades now live in pers.skill_levels[38] instead (the dead,
+	// per-character UniqueSkill DB column -- see its doc comment on skill_levels below), keeping the same
+	// bit values 0/1/2. See the matching GalaxyRP fix comments in Cmd_Buy_f (g_cmds.c) and every other
+	// reader migrated alongside it (g_combat.c, g_weapon.c, bg_pmove.c, g_active.c, g_items.c). Like the
+	// other already-retired bits below (7, 12, 14, 15), bits 0-2 were never reachable via /settings in
+	// the first place -- settings_number_to_bit[] in Cmd_Settings_f (g_cmds.c) never mapped any
+	// player-facing settings number to bit 0, 1, or 2 -- so no /settings-side change was needed to
+	// "disable" them; this doc update is the only thing marking them retired here.
 	// 3 - Eternity Power
 	// 4 - Universe Power
 	// 5 - Custom Language
@@ -766,6 +768,17 @@ typedef struct clientPersistant_s {
 	int armor_deflect_timer;
 
 	// zyk: RPG skills
+	// GalaxyRP fix: [Shop] index 38 (UniqueSkill, "Unique Skill" in the skills[] table, g_cmds.c) is a
+	// dead skill slot -- the last remnant of the fully-removed /unique Unique Abilities system, blocked
+	// from purchase/leveling by do_upgrade_skill(), zeroed for new characters, excluded from the skill
+	// display listing. Repurposed as a per-character bitmask (same 0/1/2 bit values formerly used in
+	// player_settings, see that field's doc comment above) for the 3 permanent shop upgrades kept by the
+	// /buy item|upgrade refactor: bit 0 Holdable Items Upgrade, bit 1 Impact Reducer, bit 2 Stun Baton
+	// Upgrade. Unlike player_settings, this array is per-character (Skills.UniqueSkill, keyed by CharID)
+	// rather than account-wide, so owning an upgrade on one character no longer leaks onto every other
+	// character on the same account. Already saved/loaded generically alongside every other skill (the
+	// NUM_OF_SKILLS load loops and the UniqueSkill column in update_skills_query/update_character_query),
+	// so no new DB read/write path was needed for the migration.
 	int skill_levels[NUM_OF_SKILLS];
 
 	int max_rpg_health; // zyk: max health the player can have in RPG Mode. This is set to STAT_MAX_HEALTH for RPG players

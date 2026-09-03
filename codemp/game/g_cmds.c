@@ -103,6 +103,11 @@ const skill_t skills[] = {
 	// gameplay hook has been removed outright rather than left disabled. All five are left as
 	// reserved/unused entries here, rather than deleted outright, so every other skill's numeric index
 	// (43+) doesn't shift.
+	// GalaxyRP fix: [Shop] 38's pers.skill_levels[38] slot (still blocked from normal leveling below) is
+	// now repurposed as a bitmask for the 3 permanent shop upgrades -- see the doc comment on skill_levels
+	// in g_local.h. Its skills[] entry here stays a non-purchasable placeholder; the bitmask is only ever
+	// read/written directly via skill_levels[38] (Cmd_Buy_f and the upgrade-gated code it feeds), never
+	// through the normal do_upgrade_skill()/level-based skill path.
 	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"other",	"merc",		0},
 	{3, "Blaster Pack",			"used as ammo for Blaster Pistol, Bryar Pistol and E11 Blaster Rifle.",																																																											"ammo",		"merc",		0},
 	{3, "Powercell",			"used as ammo for Disruptor, Bowcaster and DEMP2.",																																																																"ammo",		"merc",		0},
@@ -8960,22 +8965,27 @@ void Cmd_Buy_f( gentity_t *ent ) {
 		}
 
 		// GalaxyRP fix: [Shop] duplicate-purchase guards for the 3 kept upgrades, renumbered to match
-		// their new /buy upgrade <n> ids. Storage moved from secrets_found (see the Task 3 fix on
-		// player_settings just below and its matching comment at g_local.h's player_settings field)
-		// to player_settings bits 0/1/2 -- secrets_found was never actually written to the database by
-		// anything, so every player's upgrade state was already lost on every server restart; this is
-		// a pure go-forward change with nothing to migrate.
-		if (value == 1 && ent->client->pers.player_settings & (1 << 0))
+		// their new /buy upgrade <n> ids. Storage moved from secrets_found -> player_settings bits 0/1/2
+		// (never migrated, a pure go-forward change -- secrets_found was never actually written to the
+		// database by anything, so every player's upgrade state was already lost on every server
+		// restart) and now moved again, from player_settings bits 0/1/2 to pers.skill_levels[38] bits
+		// 0/1/2 (the dead, per-character UniqueSkill DB column -- see its doc comment on skill_levels in
+		// g_local.h): player_settings is account-wide (Accounts.PlayerSettings), so storing the 3
+		// upgrades there let a purchase on one character silently grant it on every other character on
+		// the same account. This second move is also go-forward-only -- existing account-wide purchases
+		// are not migrated onto skill_levels[38], by explicit design decision, so every character starts
+		// with all 3 upgrades unowned and each must be bought individually.
+		if (value == 1 && ent->client->pers.skill_levels[38] & (1 << 0))
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"You already have the Holdable Items Upgrade.\n\"" );
 			return;
 		}
-		else if (value == 2 && ent->client->pers.player_settings & (1 << 1))
+		else if (value == 2 && ent->client->pers.skill_levels[38] & (1 << 1))
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"You already have the Impact Reducer.\n\"" );
 			return;
 		}
-		else if (value == 3 && ent->client->pers.player_settings & (1 << 2))
+		else if (value == 3 && ent->client->pers.skill_levels[38] & (1 << 2))
 		{
 			trap->SendServerCommand( ent-g_entities, "print \"You already have the Stun Baton Upgrade.\n\"" );
 			return;
@@ -9003,17 +9013,22 @@ void Cmd_Buy_f( gentity_t *ent ) {
 
 	if (is_upgrade)
 	{
+		// GalaxyRP fix: [Shop] grants skill_levels[38] bits instead of player_settings bits -- see the
+		// duplicate-purchase guards above and the doc comment on skill_levels in g_local.h. save_account
+		// (called below with save_char_file=qtrue) already persists skill_levels[38] via the UniqueSkill
+		// column in update_current_character_and_account(), same as every other skill, so no separate
+		// save call is needed here.
 		if (value == 1)
 		{
-			ent->client->pers.player_settings |= (1 << 0);
+			ent->client->pers.skill_levels[38] |= (1 << 0);
 		}
 		else if (value == 2)
 		{
-			ent->client->pers.player_settings |= (1 << 1);
+			ent->client->pers.skill_levels[38] |= (1 << 1);
 		}
 		else if (value == 3)
 		{
-			ent->client->pers.player_settings |= (1 << 2);
+			ent->client->pers.skill_levels[38] |= (1 << 2);
 		}
 	}
 	else
@@ -15286,18 +15301,19 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 		// GalaxyRP fix: [Shop] appended after the settings loop above, same piggyback-on-zykmod
 		// approach, in the same fixed order as the 3 new entries added to ui_cvars_in_order[] in
 		// cg_servercmds.c (ui_zyk_upgrade_1/2/3_owned). Reports whether each of the 3 kept shop
-		// upgrades (player_settings bits 0/1/2 -- see the duplicate-purchase guards in Cmd_Buy_f) is
-		// already owned, so the Shop -> Upgrades panel (ingame_galaxyrp.menu) can grey out and disable
-		// a button for an upgrade the player already has, instead of letting them click a purchase
-		// Cmd_Buy_f's own duplicate-purchase guard would reject anyway with a "You already have..."
-		// message.
+		// upgrades (skill_levels[38] bits 0/1/2, per-character -- see the duplicate-purchase guards in
+		// Cmd_Buy_f and the doc comment on skill_levels in g_local.h; formerly player_settings bits
+		// 0/1/2, account-wide) is already owned, so the Shop -> Upgrades panel (ingame_galaxyrp.menu)
+		// can grey out and disable a button for an upgrade the player already has, instead of letting
+		// them click a purchase Cmd_Buy_f's own duplicate-purchase guard would reject anyway with a
+		// "You already have..." message.
 		{
 			int owned_bit;
 			int upgrade_bits_to_sync[] = { 0, 1, 2 };
 
 			for (int i = 0; i < ARRAY_LEN(upgrade_bits_to_sync); i++) {
 				owned_bit = upgrade_bits_to_sync[i];
-				strcpy(content, va("%s%d~", content, (ent->client->pers.player_settings & (1 << owned_bit)) ? 1 : 0));
+				strcpy(content, va("%s%d~", content, (ent->client->pers.skill_levels[38] & (1 << owned_bit)) ? 1 : 0));
 			}
 		}
 

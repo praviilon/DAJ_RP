@@ -4020,7 +4020,9 @@ void ClientThink_real( gentity_t *ent ) {
 						veh->client->cloakToggleTime < level.time &&
 						ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 						ent->client->ps.pm_type != PM_DEAD &&
-						(ent->client->pers.player_settings & (1 << 0)) &&
+						// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
+						// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
+						(ent->client->pers.skill_levels[38] & (1 << 0)) &&
 						(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 					{//safeguard: vehicle cloaked but rider isn't -- resync by cloaking the rider too
 						Jedi_Cloak( ent );
@@ -4031,7 +4033,9 @@ void ClientThink_real( gentity_t *ent ) {
 					veh->client && veh->client->cloakToggleTime < level.time &&
 					ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 					ent->client->ps.pm_type != PM_DEAD &&
-					(ent->client->pers.player_settings & (1 << 0)) &&
+					// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
+					// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
+					(ent->client->pers.skill_levels[38] & (1 << 0)) &&
 					(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 				{//vehicle not cloaked -- cloak vehicle + rider together
 					Jedi_Cloak( veh );
