@@ -1427,13 +1427,22 @@ void hurt_touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
 			dmg = 99999;
 			self->timestamp = 0;
 		}
+		// GalaxyRP fix: [Combat] both G_Damage calls below used to unconditionally OR in
+		// DAMAGE_NO_PROTECTION, regardless of the NO_PROTECTION spawnflag dflags was just computed
+		// from a few lines up (self->spawnflags & 8) -- that made every trigger_hurt (lava, acid,
+		// any hazard brush a mapper places) always bypass FL_GODMODE, armor, shields and the
+		// spawn-invulnerability shield, even on brushes the mapper never marked NO_PROTECTION, and
+		// made the spawnflag itself dead weight since it could never actually change anything.
+		// Passing dflags through as-is restores the documented per-brush behavior: only a
+		// trigger_hurt explicitly flagged NO_PROTECTION ignores protection, same as every other
+		// damage source in the game already respects.
 		if (self->activator && self->activator->inuse && self->activator->client)
 		{
-			G_Damage (other, self->activator, self->activator, NULL, NULL, dmg, dflags|DAMAGE_NO_PROTECTION, MOD_TRIGGER_HURT);
+			G_Damage (other, self->activator, self->activator, NULL, NULL, dmg, dflags, MOD_TRIGGER_HURT);
 		}
 		else
 		{
-			G_Damage (other, self, self, NULL, NULL, dmg, dflags|DAMAGE_NO_PROTECTION, MOD_TRIGGER_HURT);
+			G_Damage (other, self, self, NULL, NULL, dmg, dflags, MOD_TRIGGER_HURT);
 		}
 	}
 }

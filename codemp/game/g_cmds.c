@@ -7647,19 +7647,43 @@ void set_max_shield(gentity_t *ent)
 }
 
 // zyk: gives credits to the player
+// GalaxyRP fix: [Economy] `pers.credits += credits` here (both plain int) could overflow past
+// INT_MAX and wrap around to a negative value whenever the sum of the player's existing balance
+// and the amount being added exceeded it -- the clamp below only ever checked the upper bound
+// (`> zyk_max_rpg_credits.integer`), so a negative result silently sailed past it and got stored
+// and persisted as-is, while every caller (Cmd_CreditCreate_f, Cmd_CreditGive_f) went on to log
+// and broadcast the transaction as a success regardless. Computing the sum in a 64-bit
+// intermediate and clamping into [0, zyk_max_rpg_credits.integer] before it's ever assigned back
+// to the 32-bit field makes the overflow impossible rather than trying to detect it after the
+// fact. Callers additionally cap the requested amount up front (see Cmd_CreditCreate_f/
+// Cmd_CreditGive_f) so the amount they log/broadcast matches what was actually applied.
 void add_credits(gentity_t *ent, int credits)
 {
-	ent->client->pers.credits += credits;
-	if (ent->client->pers.credits > zyk_max_rpg_credits.integer)
-		ent->client->pers.credits = zyk_max_rpg_credits.integer;
+	long long new_credits = (long long)ent->client->pers.credits + (long long)credits;
+
+	if (new_credits > zyk_max_rpg_credits.integer)
+		new_credits = zyk_max_rpg_credits.integer;
+	else if (new_credits < 0)
+		new_credits = 0;
+
+	ent->client->pers.credits = (int)new_credits;
 }
 
 // zyk: removes credits from the player
+// GalaxyRP fix: [Economy] same 64-bit-intermediate treatment as add_credits above, for
+// consistency and so this stays safe even if pers.credits or the amount being removed is ever
+// outside the normal [0, zyk_max_rpg_credits.integer] range (e.g. zyk_max_rpg_credits lowered
+// after a player's balance already exceeded the new cap).
 void remove_credits(gentity_t *ent, int credits)
 {
-	ent->client->pers.credits -= credits;
-	if (ent->client->pers.credits < 0)
-		ent->client->pers.credits = 0;
+	long long new_credits = (long long)ent->client->pers.credits - (long long)credits;
+
+	if (new_credits < 0)
+		new_credits = 0;
+	else if (new_credits > zyk_max_rpg_credits.integer)
+		new_credits = zyk_max_rpg_credits.integer;
+
+	ent->client->pers.credits = (int)new_credits;
 }
 
 // zyk: loads settings valid both to Admin-Only Mode and to RPG Mode
@@ -9412,6 +9436,15 @@ void Cmd_CreditCreate_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Economy] cap the requested amount up front instead of letting an
+	// arbitrarily large typed-in value reach add_credits() -- add_credits() itself is now
+	// overflow-safe regardless (see its own GalaxyRP fix comment), but capping here as well
+	// means the amount this command logs and broadcasts to the server always matches what was
+	// actually applied, rather than reporting the huge originally-typed number while silently
+	// applying a smaller clamped one.
+	if (value > zyk_max_rpg_credits.integer)
+		value = zyk_max_rpg_credits.integer;
+
 	// GalaxyRP fix: [validation] this had no equivalent of Cmd_CreditGive_f's own target check --
 	// ClientNumberFromString(..., qfalse) only requires the target be connected, not logged in, so
 	// a not-yet-logged-in target (pers.CharID == 0) could be "credited" here: add_credits() would
@@ -9481,6 +9514,14 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 		trap->SendServerCommand( ent - g_entities, "print \"Can only use positive values.\n\"" );
 		return;
 	}
+
+	// GalaxyRP fix: [Economy] same cap as Cmd_CreditCreate_f above -- keeps the amount this
+	// command logs/broadcasts consistent with what add_credits()/remove_credits() actually apply.
+	// The giver's own balance check just below already bounds value in practice (a giver can never
+	// have more than zyk_max_rpg_credits.integer to give), but this keeps the two commands
+	// consistent and stays safe even if that cap is lowered while a player is already over it.
+	if (value > zyk_max_rpg_credits.integer)
+		value = zyk_max_rpg_credits.integer;
 
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
