@@ -8449,98 +8449,16 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	trap->SendServerCommand(ent - g_entities, "cp \"^2You have sucessfully logged out.\n\"");
 }
 
-char *zyk_get_settings_values(gentity_t *ent)
-{
-	int i = 0;
-	char content[1024];
-
-	strcpy(content,"");
-
-	for (i = 0; i < 16; i++)
-	{ // zyk: settings values
-		if (i != 5 && i != 8 && i != 14 && i != 15)
-		{
-			if (!(ent->client->pers.player_settings & (1 << i)))
-			{
-				strcpy(content,va("%sON-",content));
-			}
-			else
-			{
-				strcpy(content,va("%sOFF-",content));
-			}
-		}
-		else if (i == 5)
-		{
-			if (!(ent->client->pers.player_settings & (1 << i)))
-			{
-				strcpy(content, va("%sEnglish-", content));
-			}
-			else
-			{
-				strcpy(content, va("%sCustom-", content));
-			}
-		}
-		else if (i == 14)
-		{
-			if (ent->client->pers.player_settings & (1 << 24))
-			{
-				strcpy(content,va("%sKorriban Action-",content));
-			}
-			else if (ent->client->pers.player_settings & (1 << 25))
-			{
-				strcpy(content,va("%sMP Duel-",content));
-			}
-			else if (ent->client->pers.player_settings & (1 << 14))
-			{
-				strcpy(content,va("%sCustom-",content));
-			}
-			else 
-			{
-				strcpy(content,va("%sHoth2 Action-",content));
-			}
-
-		}
-		else if (i == 15)
-		{
-			if (!(ent->client->pers.player_settings & (1 << i)))
-			{
-				strcpy(content,va("%sNormal-",content));
-			}
-			else
-			{
-				strcpy(content,va("%sChallenge-",content));
-			}
-		}
-		else
-		{ // zyk: starting saber style has its own handling code
-			if (ent->client->pers.player_settings & (1 << 27))
-			{
-				strcpy(content,va("%sRed-",content));
-			}
-			else if (ent->client->pers.player_settings & (1 << 28))
-			{
-				strcpy(content,va("%sDesann-",content));
-			}
-			else if (ent->client->pers.player_settings & (1 << 29))
-			{
-				strcpy(content,va("%sTavion-",content));
-			}
-			else if (ent->client->pers.player_settings & (1 << 26))
-			{
-				strcpy(content,va("%sYellow-",content));
-			}
-			else
-			{
-				strcpy(content,va("%sBlue-",content));
-			}
-		}
-	}
-
-	// zyk: for compability with older versions, keeping a 0 value here
-	strcpy(content, va("%sON-", content));
-
-	return G_NewString(content);
-}
+// GalaxyRP fix: [Dead Code] zyk_get_settings_values() removed -- it built a "-"-delimited status
+// string covering the old 0-15 settings numbering plus the saber-style/map-choice bits (24/25/14),
+// but had zero callers anywhere in the codebase: not registered in the commands[] dispatch table, not
+// invoked from any other function, and not declared in any header either. Confirmed via a full-repo
+// grep for both "zyk_get_settings_values" and "get_settings_values" turning up only this definition.
+// The real, live version of this same idea is zyk_setting_status_text() plus Cmd_Settings_f's own
+// status-line block further up, both of which already reflect the current 1-7 /settings numbering and
+// are actually wired into the settings UI sync and console output. Removing this dead function also
+// retires the last remaining (unreachable) reader of player_settings bits 14/24/25, which have no
+// writer anywhere and are free for reuse.
 
 // GalaxyRP (Alex): [Skill Display] This method returns a color string based on the ability alignment. Used in displaying the skill to the user.
 char *color_ability(skill_t skill) {
