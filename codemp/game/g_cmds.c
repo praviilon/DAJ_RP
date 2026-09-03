@@ -8559,9 +8559,24 @@ void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 
 	for (int i = 0; i < ARRAY_LEN(skills); i++)
 	{
+		// GalaxyRP fix: [Skills] skill_id 38-42 (Unique Skill/Blaster Pack/Power Cell/Metal Bolts/
+		// Rockets) and 55 (Improvements) are excluded from this listing -- the same reserved/unused
+		// range do_upgrade_skill()/do_downgrade_skill() block from ever being purchased or leveled (see
+		// those functions' matching GalaxyRP fix comments). Without this, they still showed up here
+		// under their category ("other" for 38, "ammo" for 39-42, "items" for 55) even though they can
+		// never be leveled: 38 now doubles as the per-character bitmask storage for the 3 permanent shop
+		// upgrades (see the doc comment on skill_levels in g_local.h), so it would print that raw
+		// bitmask as a fake "N/1" skill level; 55 can carry a leftover nonzero value from before its
+		// own gameplay hooks were removed, printing as if it were still an active skill; 39-42 are
+		// always 0 (never had any gameplay effect coded at all) and just clutter the ammo listing.
+		if ((i >= 38 && i <= 42) || i == 55)
+		{
+			continue;
+		}
+
 		if (strcmp(skills[i].category, arg1) == 0) {
 			strcpy(message, va("%s%s%d - %s: %d/%d", message, color_ability(skills[i]), i + 1, skills[i].skill_name, ent->client->pers.skill_levels[i], skills[i].max_level));
-			
+
 			if (display_counter % 2 != 0) {
 				strcpy(message, va("%s\n", message));
 			}
