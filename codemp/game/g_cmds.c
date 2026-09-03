@@ -8592,7 +8592,7 @@ void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 
 void list_rpg_info(gentity_t *ent, gentity_t *target_ent)
 { // zyk: lists general RPG info of this player
-	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, zyk_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
+	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, zyk_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
 }
 
 /*
