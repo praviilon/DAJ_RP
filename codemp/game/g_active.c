@@ -3765,19 +3765,19 @@ void ClientThink_real( gentity_t *ent ) {
 			{
 				// GalaxyRP fix: [Cloak Item] GENCMD_SABERATTACKCYCLE is also what the client sends for
 				// alt-fire on weapons that have no dedicated alt-fire generic_cmd (e.g. Disruptor
-				// zoom, Repeater alt-fire) -- this used to carry a `ps.weapon == WP_SABER` guard here to
-				// mirror Cmd_SaberAttackCycle_f's own no-op for non-saber weapons, out of concern that
-				// alt-firing a weapon while riding/gunning a vehicle would toggle vehicle-cloak as a side
-				// effect. Direct inspection of cl_input.cpp shows this concern doesn't hold: +altattack is
-				// bound to its own button bit (BUTTON_ALT_ATTACK, in_buttons[7]), architecturally separate
-				// from generic_cmd, which is only ever populated by the ~20 dedicated IN_GenCMDxx functions
-				// (saberAttackCycle -> IN_GenCMD19 -> GENCMD_SABERATTACKCYCLE among them) -- alt-fire never
-				// sends this generic_cmd, so the guard was blocking legitimate uses (cloaking a vehicle
-				// while a non-saber weapon is equipped) without preventing anything. Removed so the saber
-				// attack cycle key toggles vehicle-cloak regardless of currently-equipped weapon.
+				// zoom, Repeater alt-fire) -- this carries a `ps.weapon == WP_SABER` guard here to mirror
+				// Cmd_SaberAttackCycle_f's own no-op for non-saber weapons. A prior revision of this fix
+				// removed that guard on the reasoning that alt-fire is architecturally independent of
+				// generic_cmd (see cl_input.cpp: +altattack is BUTTON_ALT_ATTACK, generic_cmd comes only
+				// from the dedicated IN_GenCMDxx functions), so the cross-trigger it guarded against
+				// shouldn't be reachable. In practice, removing it broke vehicle weapon-control mechanics
+				// (reported after in-game testing), so the guard is restored here -- whatever the exact
+				// mechanism, saber attack cycle toggling vehicle-cloak while a non-saber weapon is
+				// equipped isn't safe to allow. Only the item 3 fix from that same revision (cloaking the
+				// rider alongside the vehicle, just below) is kept; this guard removal alone is reverted.
 				// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never
 				// persisted) to player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
-				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum)
+				if (ent->client->pers.player_settings & (1 << 0) && pmove.cmd.generic_cmd == GENCMD_SABERATTACKCYCLE && ent->client->ps.m_iVehicleNum && ent->client->ps.weapon == WP_SABER)
 				{ // zyk: RPG Mode Cloak Item can cloak vehicles
 					// GalaxyRP fix: [Cloak Item] this only ever toggled PW_CLOAKED on the vehicle entity,
 					// never on the rider (ent). On vehicles with hideRider == true (enclosed vehicles like
