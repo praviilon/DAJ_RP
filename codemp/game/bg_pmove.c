@@ -6485,9 +6485,6 @@ int PM_ItemUsable(playerState_t *ps, int forcedUse)
 	vec3_t mins, maxs;
 	vec3_t trtest;
 	trace_t tr;
-#if defined( _GAME )
-	gentity_t *item_user = &g_entities[ps->clientNum];
-#endif
 
 	// zyk: moved this condition here so we can test if we can use cloak in vehicles
 	if (!forcedUse)
@@ -6524,32 +6521,14 @@ int PM_ItemUsable(playerState_t *ps, int forcedUse)
 	switch (forcedUse)
 	{
 	case HI_MEDPAC:
-#if defined( _GAME )
 		// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted)
 		// to player_settings bit 0 (persisted via Accounts.PlayerSettings) -- see the Task 3 fix comment
 		// on pers.player_settings in g_local.h.
-		if (item_user && item_user->client && item_user->client->sess.amrpgmode == 2 && item_user->client->pers.player_settings & (1 << 0))
-		{ // zyk: bacta canister with holdable items upgrade. Must allow even with max health to regen MP
-			if (ps->stats[STAT_HEALTH] >= ps->stats[STAT_MAX_HEALTH] && item_user->client->pers.magic_power == zyk_max_magic_power(item_user))
-				return 0;
-
-			return 1;
-		}
-		else
-		{
-			if (ps->stats[STAT_HEALTH] >= ps->stats[STAT_MAX_HEALTH])
-			{
-				return 0;
-			}
-			if (ps->stats[STAT_HEALTH] <= 0 ||
-				(ps->eFlags & EF_DEAD))
-			{
-				return 0;
-			}
-
-			return 1;
-		}
-#endif
+		// GalaxyRP fix: [Shop] the Holdable Items Upgrade's Bacta Canister bonus is now a straight 3x
+		// heal (see ItemUse_MedPack in g_items.c), the same shape as Big Bacta's bonus below -- it no
+		// longer has any non-HP effect (used to top off magic_power), so the old "still usable at max
+		// health to top off magic_power" carve-out no longer applies. Falls through to the identical
+		// HI_MEDPAC_BIG logic just below: blocked at max health regardless of the upgrade.
 	case HI_MEDPAC_BIG:
 		if (ps->stats[STAT_HEALTH] >= ps->stats[STAT_MAX_HEALTH])
 		{

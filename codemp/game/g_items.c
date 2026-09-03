@@ -1301,19 +1301,21 @@ void ItemUse_MedPack_Big(gentity_t *ent)
 		MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT);
 }
 
-extern int zyk_max_magic_power(gentity_t *ent);
 void ItemUse_MedPack(gentity_t *ent)
 {
 	// zyk: RPG Mode Bacta Canister. Recover 75 HP
 	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted) to
 	// player_settings bit 0 (persisted) -- see g_local.h's player_settings field.
+	// GalaxyRP fix: [Shop] the Holdable Items Upgrade's Bacta Canister bonus used to be a no-op for
+	// healing (it only refilled magic_power instead), which contradicted the shop's own description
+	// ("Bacta Canister recovers more health"). Now mirrors Big Bacta's upgrade bonus exactly: heals
+	// 3x the base amount (225 HP) instead of a magic_power refill. See the matching GalaxyRP fix
+	// comment on PM_ItemUsable's HI_MEDPAC case (bg_pmove.c) -- the old "usable at max health to top
+	// off magic_power" carve-out there no longer applies now that this has no non-HP effect.
 	if (ent && ent->client && ent->client->sess.amrpgmode == 2 && ent->client->pers.player_settings & (1 << 0))
-	{
-		ent->client->pers.magic_power = zyk_max_magic_power(ent);
-		send_rpg_events(2000);
-	}
-	
-	MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT);
+		MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT * 3);
+	else
+		MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT);
 }
 
 #define JETPACK_TOGGLE_TIME			900 // zyk: default 1000
