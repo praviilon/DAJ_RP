@@ -2904,8 +2904,8 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// values, not the previous character's.
 		ent->client->pers.saberRGB[0] = (saber1Color & SABERRGB_SET) ? (saber1Color & SABERRGB_MASK) : 0;
 		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
-		ent->client->pers.saberColorMode[0] = SABER_STORED_MODE(saber1Color);
-		ent->client->pers.saberColorMode[1] = SABER_STORED_MODE(saber2Color);
+		ent->client->pers.saberColorMode[0] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber1Color) );
+		ent->client->pers.saberColorMode[1] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber2Color) );
 
 		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
 		// re-set to 1 (the "if" branch never set it to 2), so this always evaluated to 1 regardless
@@ -3247,8 +3247,8 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// back to whichever row pers.CharID names, so both have to be this character's before it runs.
 		ent->client->pers.saberRGB[0] = (saber1Color & SABERRGB_SET) ? (saber1Color & SABERRGB_MASK) : 0;
 		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
-		ent->client->pers.saberColorMode[0] = SABER_STORED_MODE(saber1Color);
-		ent->client->pers.saberColorMode[1] = SABER_STORED_MODE(saber2Color);
+		ent->client->pers.saberColorMode[0] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber1Color) );
+		ent->client->pers.saberColorMode[1] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber2Color) );
 
 		ent->client->sess.loggedin = qtrue;
 

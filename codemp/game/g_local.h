@@ -1844,6 +1844,18 @@ void SaveRegisteredItems( void );
 // Parses a packed saber colour as sent by a client (cp_sbRGB1/cp_sbRGB2) or read from the
 // database, and clamps it to something safe to hand on to the renderer. Returns 0 for "unset".
 int		G_ParseSaberRGB( const char *str );
+// GalaxyRP fix: [Saber RGB] SABERCOLORMODE_MASK is 4 bits (0-15), but only 0..NUM_SABER_COLORS-1
+// (0-11) is a valid saber_colors_t -- SABER_STORED_MODE() only masks the raw bits, it doesn't know
+// about that upper bound. No current write path can store 12-15 in those bits (every route that
+// sets pers.saberColorMode[] before it's persisted already validates its input -- see
+// ClientUserinfoChanged()'s own "fromClient >= 0 && fromClient < NUM_SABER_COLORS" check on the
+// live-client path), but a hand-edited or corrupted database row still could, and the two DB-restore
+// call sites (select_player_character(), select_account_and_default_character_data()) applied
+// SABER_STORED_MODE()'s result directly with no such check, unlike that live-client path. Wrap
+// SABER_STORED_MODE()'s result in this before assigning it to pers.saberColorMode[] anywhere it
+// comes from a stored value; falls back to SABER_RED, matching how this column's pre-RGB legacy
+// default (schema default of 1) already decodes.
+int		G_ValidateSaberColorMode( int decodedMode );
 void	RPMod_StringEscape(char *in, char *out, int outSize);
 int		G_ModelIndex( const char *name );
 int		G_SoundIndex( const char *name );

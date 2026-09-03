@@ -116,6 +116,23 @@ int G_ParseSaberRGB( const char *str ) {
 
 /*
 =====================================================================
+GalaxyRP fix: [Saber RGB] validates a saberColorMode decoded from a stored (database) value -- see
+the comment on this function's prototype in g_local.h for why SABER_STORED_MODE()'s raw 4-bit decode
+isn't enough on its own. Anything inside 0..NUM_SABER_COLORS-1 is a real saber_colors_t and passes
+through unchanged; anything else (reachable only via a hand-edited or corrupted database row, not
+through any current in-game write path) falls back to SABER_RED, same as this column's existing
+pre-RGB legacy-default behaviour.
+=====================================================================
+*/
+int G_ValidateSaberColorMode( int decodedMode ) {
+	if ( decodedMode < 0 || decodedMode >= NUM_SABER_COLORS )
+		return SABER_RED;
+
+	return decodedMode;
+}
+
+/*
+=====================================================================
 Cleans the given string from newlines and such
 =====================================================================
 */

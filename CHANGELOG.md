@@ -32,7 +32,8 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - `/settings` renumbered from a sparse 0-15 range (several of which toggled nothing any more) down to a clean 1-7 list.
 - Jetpack: unified the `/jetpack` command's and the RPG auto-grant's availability checks, added a logged-in-only tier to `rp_allow_jetpack_command`.
 - A logged-in player can now pick up either Force Enlightenment color regardless of their current alignment.
-- Redesigned parts of the UI/UX.
+- Redesigned parts of the UI/UX streamlining the user flow.
+- Cloak system is redesigned: /use_cloak and /use_cloak_vehicle commands are used to trigger self-cloak and vehicle-cloak respectively.
 
 ### Fixed
 - **Account/character persistence**: database access now goes through a shared open helper that enables SQLite WAL mode and a busy-retry timeout, fixing intermittent "database is locked" errors on map change that could leave a returning player with no weapons or inventory until a manual respawn. The database path is also now resolved against the engine's home path instead of the process's working directory, so it no longer depends on how the server was launched.
