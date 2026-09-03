@@ -8661,7 +8661,13 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name>: ^7Ignores chat of a player.\n\
 ^3/ignorelist: ^7Lists ignored players.\n\
-^3/jetpack: ^7Gives or removes jetpack from the player.\n\
+^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
+				// GalaxyRP fix: [Commands] split off into its own SendServerCommand call -- the Misc
+				// section above is already close to SV_SendServerCommand's hard 1022-char limit
+				// (sv_main.cpp's SV_SendServerCommand silently drops the entire message if the formatted
+				// "print \"...\"" string exceeds it), so appending /use_cloak's description to that block
+				// directly would have pushed it over and made the whole Misc section vanish for players.
+				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item. While riding a vehicle, also cloaks the vehicle along with you if you have the Holdable Items Upgrade.\n\
 ^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
