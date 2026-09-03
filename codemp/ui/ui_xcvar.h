@@ -245,6 +245,17 @@ XCVAR_DEF( ui_zyk_setting_9_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNA
 XCVAR_DEF( ui_zyk_setting_10_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_11_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_setting_13_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP fix: [Shop] "1" if the player already owns the matching shop upgrade (player_settings bit
+// 0/1/2), "0" otherwise -- fed by Cmd_GalaxyRpUi_f's zykmod sync (g_cmds.c) via the 3 new entries
+// appended to ui_cvars_in_order[] in cg_servercmds.c. Drives the Shop -> Upgrades panel's
+// cvarTest/disableCvar gate in ingame_galaxyrp.menu, which greys out and disables the button for an
+// upgrade already owned. Numbered 1-3 to match the /buy upgrade 1-3 numbering used everywhere else in
+// this area of code, deliberately distinct from the pre-existing ui_zyk_upgrade_0_value through
+// _16_value cvars below -- those are unrelated leftovers from an older, larger upgrade system with no
+// current reader or writer anywhere in the codebase; not touched here.
+XCVAR_DEF( ui_zyk_upgrade_1_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_zyk_upgrade_2_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+XCVAR_DEF( ui_zyk_upgrade_3_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_0_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_1_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_2_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )

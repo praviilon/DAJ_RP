@@ -1855,7 +1855,18 @@ char ui_cvars_in_order[100][100] = {
 	"ui_zyk_setting_9_value",
 	"ui_zyk_setting_10_value",
 	"ui_zyk_setting_11_value",
-	"ui_zyk_setting_13_value"
+	"ui_zyk_setting_13_value",
+	// GalaxyRP fix: [Shop] 3 new entries appended here, in the exact same order the server appends
+	// them to the zykmod content string (see the upgrade_bits_to_sync loop added to Cmd_GalaxyRpUi_f
+	// in g_cmds.c, right after the settings loop above) -- "1" if the player already owns that shop
+	// upgrade (player_settings bit 0/1/2), "0" otherwise. Feeds the Shop -> Upgrades panel's
+	// cvarTest/disableCvar gate in ingame_galaxyrp.menu, which greys out and disables a button for an
+	// upgrade already owned. Distinct from the pre-existing, still-unused ui_zyk_upgrade_0_value
+	// through _16_value cvars declared in ui_xcvar.h -- those are leftovers from an older, larger
+	// upgrade system with no current reader or writer anywhere; not touched here.
+	"ui_zyk_upgrade_1_owned",
+	"ui_zyk_upgrade_2_owned",
+	"ui_zyk_upgrade_3_owned"
 };
 
 static void CG_ZykMod( void )

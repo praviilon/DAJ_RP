@@ -15207,6 +15207,24 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 			}
 		}
 
+		// GalaxyRP fix: [Shop] appended after the settings loop above, same piggyback-on-zykmod
+		// approach, in the same fixed order as the 3 new entries added to ui_cvars_in_order[] in
+		// cg_servercmds.c (ui_zyk_upgrade_1/2/3_owned). Reports whether each of the 3 kept shop
+		// upgrades (player_settings bits 0/1/2 -- see the duplicate-purchase guards in Cmd_Buy_f) is
+		// already owned, so the Shop -> Upgrades panel (ingame_galaxyrp.menu) can grey out and disable
+		// a button for an upgrade the player already has, instead of letting them click a purchase
+		// Cmd_Buy_f's own duplicate-purchase guard would reject anyway with a "You already have..."
+		// message.
+		{
+			int owned_bit;
+			int upgrade_bits_to_sync[] = { 0, 1, 2 };
+
+			for (int i = 0; i < ARRAY_LEN(upgrade_bits_to_sync); i++) {
+				owned_bit = upgrade_bits_to_sync[i];
+				strcpy(content, va("%s%d~", content, (ent->client->pers.player_settings & (1 << owned_bit)) ? 1 : 0));
+			}
+		}
+
 		trap->SendServerCommand(ent->s.number, va("zykmod \"%s\"", content));
 	}
 	else
