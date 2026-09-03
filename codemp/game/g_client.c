@@ -2990,11 +2990,17 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		// Show center print message
 		if (!VALIDSTRINGCVAR(pluginVersion))
 		{
-			trap->SendServerCommand(clientNum, va("cp \"Please download\n^5%s^7 client plugin\nCheck the console or %s\"", JK_VERSION, (allowDownload ? "enable downloads in main menu" : "download from\n^2" JK_URL)));
+			trap->SendServerCommand(clientNum, va("cp \"Please download\n^5%s^7 client plugin.\nIf you already have it then relaunch game\nusing the script file shipped with it\"", JK_VERSION));
 			// GalaxyRP fix: [Plugin] mirror the center print message to the console too (the
 			// EternalJK branch used to be the only place that did this) so the warning is still
 			// visible after the on-screen popup fades.
-			trap->SendServerCommand(clientNum, va("print \"^3You do not have the required client plugin installed. The server requires ^5%s^7.\n\"", JK_VERSION));
+			// GalaxyRP fix: [fs_forcegame] also cover the case where the player already has the
+			// plugin/mod installed but launched TaystJK directly (or switched mods via its mod menu)
+			// instead of using the DAJ_RP launch script -- fs_forcegame then stays on its "taystjk"
+			// default, which wins filesystem search priority over GalaxyRP and silently loads
+			// TaystJK's own bundled cgame/ui instead of ours. That can only be corrected by relaunching
+			// via the script (fs_forcegame is CVAR_INIT, so no in-game command can change it).
+			trap->SendServerCommand(clientNum, va("print \"^3You do not have the required client plugin installed. The server requires ^5%s^7.\n^3If you already have it installed, your game started with the wrong engine folder override - close the game and relaunch using the script file shipped with the client.\n\"", JK_VERSION));
 			G_LogPrintf("ClientPlugin: Player does not have any plugin\n");
 		}
 		else
