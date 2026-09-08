@@ -1834,20 +1834,30 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	// (the two values a player directly controls via /new) were spliced straight into the INSERT
 	// text via va("...%s...%s..."). A quote in either value could inject arbitrary SQL. Prepare/bind/
 	// step directly instead so the values can never be interpreted as SQL syntax.
-	// GalaxyRP fix: [Database] PlayerSettings kept as an explicit literal 0 here rather than bound --
-	// a first pass at this fix bound ent->client->pers.player_settings instead, on the reasoning that
-	// "a brand new account's player_settings is always still 0 at this point". That's wrong: /new
-	// (this function's caller) has no guard requiring the connection be logged out first, and
-	// /logout doesn't clear pers.player_settings the way it already clears pers.bitvalue -- so a
+	// GalaxyRP fix: [Database] PlayerSettings used to be kept as an explicit literal 0 here rather
+	// than bound -- a first pass at this fix bound ent->client->pers.player_settings instead, on the
+	// reasoning that "a brand new account's player_settings is always still 0 at this point". That's
+	// wrong: /new (this function's caller) has no guard requiring the connection be logged out first,
+	// and /logout doesn't clear pers.player_settings the way it already clears pers.bitvalue -- so a
 	// player who is logged into account A, runs /logout, then /new B, still has account A's settings
 	// bitmask sitting in pers.player_settings when this INSERT runs, and binding it would seed the
 	// brand new account B with a stranger's (well, their own other account's) settings. A new account
-	// has no settings history to inherit; 0 is unconditionally correct here regardless of what this
-	// connection was doing before. See the UPDATE sites below (update_accounts_table_row_with_current_values()
-	// and update_current_character_and_account()) for the actual PlayerSettings-never-saved bug --
-	// those bind the real value because they update an EXISTING row for the CURRENTLY logged-in
-	// player, where pers.player_settings is guaranteed current.
-	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, '0', ?)", -1, &stmt, NULL);
+	// has no settings history to inherit; a fixed, hardcoded default is unconditionally correct here
+	// regardless of what this connection was doing before. See the UPDATE sites below
+	// (update_accounts_table_row_with_current_values() and update_current_character_and_account())
+	// for the actual PlayerSettings-never-saved bug -- those bind the real value because they update
+	// an EXISTING row for the CURRENTLY logged-in player, where pers.player_settings is guaranteed
+	// current.
+	// GalaxyRP fix: [Settings] that hardcoded default is no longer plain 0 -- bit 5 (Language) stays
+	// clear (English, the correct default), but bit 13 (Admin Protect) is now set. Bit 13 is inverted
+	// (clear == ON, set == OFF -- see the status-line block in Cmd_Settings_f), so a brand new account
+	// used to come out of this INSERT with Admin Protect showing ON by default, which made no sense:
+	// a fresh account has no admin permissions at all (AdminLevel comes from
+	// rp_default_account_permissions, "0" by default) and, as of the fix in Cmd_Settings_f, could
+	// never have turned Admin Protect on for itself anyway (that now requires the "Give Admin" admin
+	// command). Setting bit 13 here makes the stored default match that: Admin Protect OFF until an
+	// admin senior enough to grant admin commands turns it on for themselves.
+	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, ?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -1857,7 +1867,8 @@ void insert_accounts_table_row(gentity_t* ent, char* username, char* password, s
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
-	sqlite3_bind_text(stmt, 4, username, -1, SQLITE_TRANSIENT);
+	sqlite3_bind_int(stmt, 4, (1 << 13)); // Admin Protect OFF by default; Language (bit 5) stays clear/English
+	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE)
 	{
@@ -9978,6 +9989,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		}
 
 		value = settings_number_to_bit[value];
+
+		// GalaxyRP fix: [Settings] gate turning Admin Protect ON behind the "Give Admin" admin command
+		// (ADM_GIVEADM) -- only an admin senior enough to grant/revoke other players' admin commands
+		// (see /adminup, /admindown) may grant themselves protection from admin commands. Turning it
+		// back OFF is never gated, so a player can always give up their own protection. Bit 13 is
+		// inverted (clear == ON, set == OFF -- see the status-line block above), so "turning ON" is the
+		// branch just below that is about to CLEAR the bit, i.e. the bit must currently be SET.
+		// check_admin_command() already prints the standard "You need the Give Admin admin command"
+		// error and returns qfalse when the caller lacks it, matching every other admin-gated command
+		// in this file.
+		if (value == 13 && (ent->client->pers.player_settings & (1 << value)) && !check_admin_command(ent, ADM_GIVEADM, qtrue))
+		{
+			return;
+		}
 
 		if (ent->client->pers.player_settings & (1 << value))
 		{
