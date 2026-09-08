@@ -7787,6 +7787,22 @@ void zyk_load_common_settings(gentity_t *ent)
 	if (ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))
 	{
 		ent->client->ps.weapon = WP_SABER;
+
+		// GalaxyRP fix: [Settings] bit 11 is reused here for the new /settings 3, "Activate saber on
+		// spawn" -- the old "Start With Saber" toggle that used to own this bit is gone (see the
+		// comment just above), so the bit was free with no DB migration needed. Like every other
+		// /settings toggle, it's inverted (clear == ON, set == OFF -- see the status-line block in
+		// Cmd_Settings_f): clear/ON is the default and matches the existing behavior of spawning with
+		// the blade already lit (client->ps.saberHolstered is left at 0/active, its value straight out
+		// of the memset(client, 0, ...) earlier in ClientSpawn -- nothing to do here). set/OFF instead
+		// spawns the saber selected but not ignited. Set the field directly rather than calling
+		// WP_DeactivateSaber() -- that function also plays the saber-off sound, which belongs to a
+		// live toggle, not silently starting a life in the holstered state; same reasoning NPC_spawn.c
+		// already applies when it sets a freshly spawned NPC's saber holstered.
+		if (ent->client->pers.player_settings & (1 << 11))
+		{
+			ent->client->ps.saberHolstered = 2;
+		}
 	}
 	else
 	{
@@ -9932,10 +9948,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// the fix comments at their eligibility checks in w_force.c), so there is no longer a per-player
 		// choice to report here.
 
-		// GalaxyRP fix: [Settings] the status line for setting 6 (Start With Saber) used to be printed
-		// here. That toggle has been removed below (see the range-check comment further down) -- a
-		// player who owns a saber now always starts with it (see the fix comment at its old gate in
-		// zyk_load_common_settings()), so there is no longer a per-player choice to report here.
+		// GalaxyRP fix: [Settings] the status line for the old setting 6 (Start With Saber) used to be
+		// printed here. That toggle was removed (see the fix comment at its old gate in
+		// zyk_load_common_settings()) -- a player who owns a saber now always starts with it equipped.
+		// Its bit (11) was reused rather than left dead, though: see setting 3 below, "Activate saber
+		// on spawn".
 
 		// GalaxyRP fix: [Settings] the status line for setting 12 (Jetpack) used to be printed here.
 		// /settings 12 has been removed below (see the range-check comment further down) -- its bit was
@@ -9950,6 +9967,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		else
 		{
 			len += sprintf(message + len, "\n^3 2 - Admin Protect ^2ON");
+		}
+
+		// GalaxyRP fix: [Settings] new setting: reuses player_settings bit 11, freed up when the old
+		// "Start With Saber" toggle that used to own it was removed (see the comment above) -- no DB
+		// migration needed. Inverted like every other /settings toggle (clear == ON, set == OFF): ON is
+		// the default and matches the pre-existing behavior of igniting the blade immediately on spawn;
+		// OFF spawns the saber selected but not ignited. See the gate in zyk_load_common_settings().
+		if (ent->client->pers.player_settings & (1 << 11))
+		{
+			len += sprintf(message + len, "\n^3 3 - Activate Saber on Spawn - ^1OFF");
+		}
+		else
+		{
+			len += sprintf(message + len, "\n^3 3 - Activate Saber on Spawn - ^2ON");
 		}
 
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
@@ -9980,7 +10011,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// player_settings value in the database, plus updating every other reader of these bits. Instead
 		// this table translates the number the player types into the real bit index those readers still
 		// expect; everything below continues to operate on that real bit index exactly as before.
-		static const int settings_number_to_bit[] = { 0, 5, 13 }; // index 0 unused (rejected below)
+		// GalaxyRP fix: [Settings] /settings 3 added -- "Activate Saber on Spawn" -- reusing bit 11,
+		// freed up by the old "Start With Saber" toggle removed above. This is a brand new
+		// player-facing number, not a reused one; it just happens to land on bit 11, same as the old
+		// setting 6 did, purely because that bit was already free.
+		static const int settings_number_to_bit[] = { 0, 5, 13, 11 }; // index 0 unused (rejected below)
 
 		if (value <= 0 || value >= (int)ARRAY_LEN(settings_number_to_bit))
 		{
@@ -10022,9 +10057,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			else
 				strcpy(new_status,"^1OFF^7");
 		}
-		// GalaxyRP fix: [Settings] the value==8 (Starting Single Saber Style cycling) branch used to be
-		// here as a special case alongside the generic toggle above, cycling player_settings bits 26-29.
-		// Removed along with setting 3/bit 8 -- see the range-check comment above.
+		// GalaxyRP fix: [Settings] the old setting 3, "Starting Single Saber Style", used to have a
+		// value==8 special case here alongside the generic toggle above, cycling player_settings bits
+		// 26-29. Removed along with that setting -- see the range-check comment above. Player-facing
+		// number 3 has since been reassigned to a brand new setting, "Activate Saber on Spawn" (bit
+		// 11), which needs no special handling -- it's a plain toggle like Admin Protect.
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music cycling) and value==15
 		// (Difficulty/Challenge Mode activation gate) branches used to be here. Both are removed since
 		// 14 and 15 are now rejected above as invalid settings values, and everything downstream of
@@ -10039,14 +10076,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			trap->SendServerCommand( ent-g_entities, va("print \"Language %s\n\"", new_status) );
 		}
 		// GalaxyRP fix: [Settings] the value==6 (Allow Force Powers from allies), value==8 (Starting
-		// Single Saber Style), value==9 (Allow Screen Message), value==10 (Use healing force only at
-		// allied players) and value==11 (Start With Saber) print branches used to be here. Removed along
-		// with those settings -- see the range-check comment above.
+		// Single Saber Style), value==9 (Allow Screen Message) and value==10 (Use healing force only at
+		// allied players) print branches used to be here. Removed along with those settings -- see the
+		// range-check comment above. value==11 used to be here too, printing for the old "Start With
+		// Saber" -- that setting is also removed, but the bit itself is back in use below for the new
+		// "Activate Saber on Spawn".
 		// GalaxyRP fix: [Magic] the value==7 (Show magic cast in chat) print branch used to be here.
 		// Removed since 7 is now rejected above as an invalid settings value.
 		else if (value == 13)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Admin Protect %s\n\"", new_status) );
+		}
+		else if (value == 11)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Activate Saber on Spawn %s\n\"", new_status) );
 		}
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music) and value==15 (Difficulty)
 		// print branches used to be here. Removed since 14 and 15 are now rejected above as invalid

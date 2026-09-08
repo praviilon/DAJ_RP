@@ -711,22 +711,35 @@ typedef struct clientPersistant_s {
 	// "disable" them; this doc update is the only thing marking them retired here.
 	// 3 - Eternity Power
 	// 4 - Universe Power
-	// 5 - Custom Language
-	// 6 - Allow Force Powers from allies
+	// 5 - Custom Language (/settings 1)
+	// GalaxyRP fix: [Settings] bit 6 ("Allow Force Powers from allies") documentation removed here --
+	// that setting has been removed from /settings entirely; force powers between allies are now
+	// always allowed (see the fix comment at its old gate in w_force.c's ForcePowerUsableOn()).
 	// 7 - Show magic cast in chat
-	// 9 - Allow Screen Message
-	// 10 - Use healing force only at allied players
-	// 11 - Start With Saber
+	// GalaxyRP fix: [Settings] bit 9 ("Allow Screen Message") documentation removed here -- that
+	// setting has been removed from /settings entirely; the screen message is now always shown (see
+	// the fix comment at its old gate in g_client.c).
+	// GalaxyRP fix: [Settings] bit 10 ("Use healing force only at allied players") documentation
+	// removed here -- that setting has been removed from /settings entirely; Team Heal and Team
+	// Energize in FFA now always restrict to allies outside non-RPG mode (see the fix comments at
+	// their eligibility checks in w_force.c).
+	// GalaxyRP fix: [Settings] bit 11 used to be "Start With Saber" -- that setting was removed from
+	// /settings entirely (a player who owns a saber now always starts with it equipped, see the fix
+	// comment at its old gate in zyk_load_common_settings()), freeing the bit up for reuse rather than
+	// retiring it. It's now "Activate Saber on Spawn" (/settings 3): whether the blade is ignited
+	// immediately on spawn (the default/ON) or starts selected but not ignited (OFF) -- see the gate
+	// alongside the weapon-selection code in zyk_load_common_settings().
+	// 11 - Activate Saber on Spawn (/settings 3)
 	// GalaxyRP fix: [Settings] bit 12 ("Jetpack") documentation removed here -- that setting has been
 	// removed from the game entirely (its bit was only ever read back by its own status line, never by
 	// anything gating actual jetpack availability).
-	// 13 - Admin Protect
+	// 13 - Admin Protect (/settings 2)
 	// GalaxyRP fix: [Settings] bits 14 ("Boss Battle Music") and 15 ("Difficulty") documentation
 	// removed here — those settings have been removed from the game entirely.
-	// 26 - Saber Starts with Single Yellow/Dual style
-	// 27 - Saber Starts with Single Red/Dual/Staff style
-	// 28 - Saber Starts with Desann/Dual/Staff style
-	// 29 - Saber Starts with Tavion/Dual/Staff style
+	// GalaxyRP fix: [Settings] bits 26-29 ("Starting Single Saber Style") documentation removed here
+	// -- that setting has been removed from /settings entirely; starting single saber style is now
+	// always whatever the base game/skill progression would pick, with no per-player override (see the
+	// fix comment at its old cycling logic in zyk_load_common_settings()).
 	int player_settings;
 
 	// GalaxyRP fix: [RPG Class] rpg_class field (and its class-value documentation) removed here —
