@@ -67,12 +67,20 @@ const skill_t skills[] = {
 	{5, "Absorb",				"allows you to absorb force power attacks done to you",																																																															"force",	"light",	FP_ABSORB},
 	{5, "Heal",					"recover some Health. Level 1 restores 5 hp, level 2 restores 10 hp and level 3 restores 25 hp",																																																				"force",	"light",	FP_HEAL},
 	{5, "Protect",				"decreases damage done to you by non-force power attacks. At level 4 decreases force consumption when receiving damage",																																														"force",	"light",	FP_PROTECT},
-	{5, "Mind Trick",			"makes yourself invisible to the players affected by this force power. Force User class can mind control a player or npc. Level 1 has a duration of 20 seconds, level 2 is 25 seconds and level 3 is 30 seconds",																								"force",	"neutral",	FP_TELEPATHY},
+	// GalaxyRP fix: [Skills audit] description no longer references the "Force User class can mind
+	// control a player or npc" sub-feature -- rpg_class is permanently 0 (see the "Dead Code"
+	// comments in w_force.c), so that ability was removed in an earlier, unrelated RPG-class
+	// cleanup and the description text was simply never updated to match.
+	{5, "Mind Trick",			"makes yourself invisible to the players affected by this force power. Level 1 has a duration of 20 seconds, level 2 is 25 seconds and level 3 is 30 seconds",																								"force",	"neutral",	FP_TELEPATHY},
 	{5, "Team Heal",			"restores some health to players near you",																																																																		"force",	"light",	FP_TEAM_HEAL},
 	{5, "Lightning",			"attacks with a powerful electric attack at players near you. At level 4, does more damage and pushes the enemy back",																																															"force",	"dark",		FP_LIGHTNING},
 	{5, "Grip",					"attacks a player by holding and damaging him",																																																																	"force",	"dark",		FP_GRIP},
 	{5, "Drain",				"drains force power from a player to restore your health",																																																														"force",	"dark",		FP_DRAIN},
-	{5, "Rage",					"makes you 1.3 times faster, increases your saber attack speed and damage and makes you get less damage. Force Guardian class, with Improvements skill at least on level 1, can regen some force when taking damage on health while Rage is active",															"force",	"dark",		FP_RAGE},
+	// GalaxyRP fix: [Skills audit] description no longer references the "Force Guardian class...
+	// regen force when taking damage" sub-feature -- that class/behavior was removed in an earlier,
+	// unrelated RPG-class cleanup (see the "Dead Code" comment in g_combat.c) and the description
+	// text was simply never updated to match.
+	{5, "Rage",					"makes you 1.3 times faster, increases your saber attack speed and damage and makes you get less damage",															"force",	"dark",		FP_RAGE},
 	{5, "Team Energize",		"restores some force power to players near you. If Improvements skill is at least at level 1, regens blaster pack and power cell ammo of the target players",																																					"force",	"dark",		FP_TEAM_FORCE},
 	{4, "Stun Baton",			"attacks someone with a small electric charge. Has %d damage multiplied by the stun baton level. With Stun Baton Upgrade, can destroy or move some other objects, and also decloaks enemies and decrease their moving speed for some seconds",																	"weapons",	"merc",		WP_STUN_BATON},
 	{2, "Blaster Pistol",		"the popular Star Wars pistol used by Han Solo in the movies. Normal fire is a single blaster shot, alternate fire allows you to fire a powerful charged shot. The charged shot causes a lot more damage depending on how much it was charged",																	"weapons",	"merc",		WP_BRYAR_PISTOL},
@@ -8806,7 +8814,11 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 			else
 			{ // zyk: the player can also list the specific info of a skill passing the skill number as argument
 				i = atoi(arg1);
-				if (i >= 1 && i <= NUM_OF_SKILLS)
+				// GalaxyRP fix: [Skills audit] apply the same exclusion as zyk_list_player_skills() (skill_id
+				// 38 "Unique Skill" and 55 "Improvements" are permanently blocked from purchase/leveling in
+				// do_upgrade_skill()/do_downgrade_skill() -- see the comments there) so this numeric lookup
+				// can't be used to view info for a skill the category listing hides.
+				if (i >= 1 && i <= NUM_OF_SKILLS && (i - 1) != 38 && (i - 1) != 55)
 				{
 					trap->SendServerCommand(ent - g_entities, va("print \"^3%s: ^7%s\n\"", skills[i-1].skill_name, skills[i-1].skill_description));
 				}

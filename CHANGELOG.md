@@ -7,6 +7,7 @@
 All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from.
 
 ### Added
+- New `/settings 3` command, "Activate Saber on Spawn": defaults ON (spawn with the blade already lit, the existing behavior), OFF spawns with the saber selected but not ignited.
 - Native TaystJK engine support: builds and runs directly on TaystJK (EternalJK's modern successor) instead of OpenJK, with the old EternalJK/JAPro detection and "switch to OpenJK" warning removed.
 - Multi-platform CI and build support: Windows (x86/x86_64), Linux (x86/x86_64/arm64), and macOS (x86_64/Apple Silicon), including a missing arm64 branch in the platform-detection headers and updated bundled SDL2 (2.0.12 -> 2.32.4).
 - RGB lightsaber colors, persisted per character. Shaders and textures are courtesy of JAPro/TaystJK.
@@ -16,7 +17,6 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - Client-side sync commands (`supdatemodel`, `supdatename`, `supdatesaber`): push server-corrected model/name/saber values back to the client's own cvars so the console and menus no longer show stale values after a database-driven login, character switch, or rejected saber choice.
 - `/help` output rewritten to reflect the current command list, including several commands that existed but were undocumented.
 - `/updatesaber` and `/updateforce` commands: apply lightsaber pick or force power (logged-out players only) pick instantly without needing to respawn first.
-- A new in-game Settings panel showing each `/settings` toggle's live value.
 - Armor skill now gives a chance to deflect an incoming blaster shot.
 - `/adminup`, `/admindown`, and the credit commands (`/spendcredits`, `/createcredits`, `/givecredits`) now write an audit-log entry recording who did what to whom.
 
@@ -29,7 +29,8 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - CI build artifacts now zip with a top-level `GalaxyRP` folder wrapping their contents.
 - Refactored `/buy` and `/stuff` into clean `/buy item <n>` / `/buy upgrade <n>` subcommands (and `/stuff` equivalents).
 - Removed a lot of of the legacy per-class RPG content.
-- `/settings` renumbered from a sparse 0-15 range (several of which toggled nothing any more) down to a clean 1-7 list.
+- `/settings` command cut down to Language and Admin Protect (renumbered 1-2); the other 5 toggles (Allow Force Powers from allies, Starting Single Saber Style, Allow Screen Message, Use healing force only at allied players, Start With Saber) are no longer player-configurable and now always behave the way they used to by default.
+- A new account now defaults to Admin Protect OFF instead of ON (the previous, unintentional default -- a fresh account has no admin permissions to protect, so there was nothing to gain from starting protected). Turning Admin Protect on for yourself via `/settings 2` now also requires the "Admin Protect" admin command -- the same one that already gates whether Admin Protect has any effect against `/give`, `/scale` and `/teleport` -- so a player can only turn the setting on if it can actually do something for them.
 - Jetpack: unified the `/jetpack` command's and the RPG auto-grant's availability checks, added a logged-in-only tier to `rp_allow_jetpack_command`.
 - A logged-in player can now pick up either Force Enlightenment color regardless of their current alignment.
 - Redesigned parts of the UI/UX streamlining the user flow.
