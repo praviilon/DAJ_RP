@@ -1132,11 +1132,19 @@ qboolean NPC_ValidEnemy( gentity_t *ent )
 
 	//In case they're in notarget mode
 	if ( ent->flags & FL_NOTARGET )
-		return qfalse;
-
-	// zyk: cloaked players or npcs will not be picked up as enemies
-	if (ent->client && (!NPCS.NPC->enemy || NPCS.NPC->enemy != ent) && ent->client->ps.powerups[PW_CLOAKED])
-		return qfalse;
+	{
+		// GalaxyRP fix: [Cloak Item] Jedi_Cloak() (NPC_AI_Jedi.c) sets FL_NOTARGET again, matching
+		// TaystJK -- which blocks picking a cloaked entity as a NEW enemy here like any other
+		// FL_NOTARGET holder. The one carve-out: if `ent` is already our current enemy AND FL_NOTARGET
+		// is set because they're cloaked (not for some other reason -- ICARUS scripting, the admin
+		// /notarget debug toggle, an NPC still mid-spawn), let them stay valid so cloaking mid-fight
+		// doesn't make us instantly forget someone we're already engaged with. Every other FL_NOTARGET
+		// case still blocks unconditionally, engaged or not. This is the only place that carve-out is
+		// needed -- cloak only ever sets PW_CLOAKED via Jedi_Cloak(), which always sets FL_NOTARGET
+		// alongside it, so the two are never out of sync.
+		if ( !(ent->client && ent->client->ps.powerups[PW_CLOAKED] && NPCS.NPC->enemy == ent) )
+			return qfalse;
+	}
 
 	// GalaxyRP fix: [Guardian] removed a "bosses prefer to attack the quest player and his allies"
 	// guard here; guardian_invoked_by_id was permanently -1, so this check was always dead.

@@ -937,7 +937,14 @@ void Jedi_Cloak( gentity_t *self )
 {
 	if ( self )
 	{
-		//self->flags |= FL_NOTARGET; zyk: no more sets notarget on player when cloaked so npcs can sometimes attack him
+		// GalaxyRP fix: [Cloak Item] restored -- matches TaystJK's own Jedi_Cloak, and is what makes
+		// turret_find_enemies()/turretG2_find_enemies() (g_turret.c/g_turret_G2.c) and NPC_ValidEnemy()
+		// (NPC_utils.c) actually skip a cloaked target when picking a NEW enemy, since both already
+		// check FL_NOTARGET generically. NPC_ValidEnemy() carves out an exception so an NPC that's
+		// already engaged with this entity doesn't lose them the instant they cloak -- see its own
+		// comment. Turrets get the same "don't drop an already-locked enemy" behavior for free, since
+		// their own ongoing-enemy tracking never rechecks FL_NOTARGET at all once locked on.
+		self->flags |= FL_NOTARGET;
 		if ( self->client )
 		{
 			if ( !self->client->ps.powerups[PW_CLOAKED] )
@@ -955,7 +962,9 @@ void Jedi_Decloak( gentity_t *self )
 {
 	if ( self )
 	{
-		//self->flags &= ~FL_NOTARGET; zyk: no more sets notarget on player when cloaked so npcs can sometimes attack him
+		// GalaxyRP fix: [Cloak Item] restored alongside Jedi_Cloak()'s FL_NOTARGET -- see that function's
+		// comment.
+		self->flags &= ~FL_NOTARGET;
 		if ( self->client )
 		{
 			if ( self->client->ps.powerups[PW_CLOAKED] )
