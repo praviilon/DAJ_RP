@@ -6658,10 +6658,17 @@ void G_LeaveVehicle( gentity_t* ent, qboolean ConCheck ) {
 		if (veh->inuse && veh->client && veh->m_pVehicle)
 		{
 			// GalaxyRP fix: [Cloak Item] a cloaked vehicle must never be left cloaked and unmanned --
-			// decloak it unconditionally on every dismount. This is the single chokepoint every dismount
-			// path (exit key, forced ejection, death, disconnect) funnels through, so one call here
-			// covers all of them. Deliberately a plain Jedi_Decloak, not Jedi_DecloakPair -- the rider
-			// keeps their own cloak state across dismounting; only the vehicle's cloak is forced off.
+			// decloak it unconditionally here too. NOTE: this is NOT actually the single dismount
+			// chokepoint it was originally assumed to be -- G_LeaveVehicle() is only ever reached from
+			// StopFollowing() and client disconnect, while every real player-initiated dismount (exit
+			// key, roll-off, jump-off, a Walker's forced exit, falling off a flying vehicle) plus a
+			// death-eject and a Force-Push eject all call Eject() directly and never pass through here.
+			// The actual chokepoint fix now lives in Eject() itself (g_vehicles.c, "vehicle now has no
+			// pilot" block) -- this call is kept as a harmless belt-and-suspenders decloak for the paths
+			// that do funnel through here (it fires before Eject() runs below, and Jedi_Decloak is a
+			// no-op if the vehicle isn't cloaked, so it's never a double-decloak in practice). Deliberately
+			// a plain Jedi_Decloak, not Jedi_DecloakPair -- the rider keeps their own cloak state across
+			// dismounting; only the vehicle's cloak is forced off.
 			Jedi_Decloak( veh );
 
 			if ( ConCheck ) { // check connection

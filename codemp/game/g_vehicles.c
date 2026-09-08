@@ -602,6 +602,7 @@ void G_EjectDroidUnit( Vehicle_t *pVeh, qboolean kill )
 }
 
 // Eject the pilot from the vehicle.
+extern void Jedi_Decloak( gentity_t *self );
 qboolean Eject( Vehicle_t *pVeh, bgEntity_t *pEnt, qboolean forceEject )
 {
 	gentity_t	*parent;
@@ -801,6 +802,23 @@ getItOutOfMe:
 		if ( pVeh->m_iNumPassengers == 0 )
 		{
 			parent->client->ps.m_iVehicleNum = 0;
+		}
+
+		// GalaxyRP fix: [Cloak Item] a cloaked vehicle must never be left cloaked and unmanned. This is
+		// the actual single chokepoint every real dismount funnels through -- the normal exit key,
+		// roll-off, and jump-off (all in UpdateRider() below), a Walker's forced exit, falling off a
+		// flying vehicle, a death-eject (g_combat.c), and a Force-Push eject (w_force.c) all call this
+		// Eject() function directly, and Fighter's own Eject() override (FighterNPC.c) still calls back
+		// into this one -- so a single check here covers all of them. G_LeaveVehicle() (g_cmds.c) was
+		// where this fix originally lived, on the assumption it was the shared dismount chokepoint, but
+		// it's actually only ever reached from StopFollowing() and client disconnect, so the vehicle was
+		// staying cloaked and invisible with nobody aboard on every normal dismount. Gated on "no pilot"
+		// (not "this specific rider left") so a passenger being promoted to pilot just above correctly
+		// leaves a still-manned vehicle cloaked. Deliberately a plain Jedi_Decloak, not Jedi_DecloakPair
+		// -- the rider (or new pilot) keeps their own cloak state; only the vehicle's cloak is forced off.
+		if ( parent->client && parent->client->ps.powerups[PW_CLOAKED] )
+		{
+			Jedi_Decloak( parent );
 		}
 	}
 
