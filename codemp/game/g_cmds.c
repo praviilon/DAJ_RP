@@ -5614,11 +5614,29 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 			
 			if (output && index_of_slash == 0) {
 				delete_chat_command(text, strlen(chat_modifiers[i].chat_modifier));
-				G_LogPrintf(va("%s: %s: %s\n"), chat_modifiers[i].chat_modifier, ent->client->pers.netname, text);
+				// GalaxyRP fix: [Chat] the arguments meant for va()'s "%s: %s: %s\n" format were
+				// being passed to the outer G_LogPrintf() call instead, so va() formatted its
+				// string with zero of the three %s values it needed. That made it read
+				// nonexistent variadic arguments (garbage stack/register values) as string
+				// pointers, which crashed the server almost every time any chat modifier
+				// (/c, /low, /long, /me, /do, /force, /my, /shout, the language modifiers, etc)
+				// was used. The three values now go directly to G_LogPrintf(), matching the
+				// plain-chat log call a few lines below.
+				G_LogPrintf("%s: %s: %s\n", chat_modifiers[i].chat_modifier, ent->client->pers.netname, text);
 
-				for (j = 0; j < level.numConnectedClients; j++) {
+				// GalaxyRP fix: [Chat] this used to iterate j < level.numConnectedClients while
+				// indexing g_entities[j] directly, which only lines up with the actual connected
+				// clients when they happen to occupy a contiguous block of the lowest-numbered
+				// slots. Any gap (a lower-numbered player disconnecting while a higher-numbered
+				// one stays connected, for example) meant some connected players never got the
+				// message while an empty slot's stale/zeroed clientNum could get sent to instead.
+				// Now iterates every valid client slot (like the plain-chat loop below already
+				// does) and skips any slot that isn't an actual connected player.
+				for (j = 0; j < level.maxclients; j++) {
 
 					other = &g_entities[j];
+					if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
+						continue;
 					if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[i].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 					{
 						trap->SendServerCommand(other->client->ps.clientNum, va(chat_modifiers[i].chat_format, ent->client->pers.netname, text));
