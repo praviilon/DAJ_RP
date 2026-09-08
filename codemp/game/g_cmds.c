@@ -2792,6 +2792,7 @@ void update_current_character_scale(gentity_t* ent, sqlite3* db) {
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args);
 static void G_SyncSaberColorUserinfo( gentity_t *ent );
+static void G_SyncNameModelUserinfo( gentity_t *ent, const char *netName, const char *modelName );
 // GalaxyRP (Alex): [Database] This method changes the character used currently by the player. It reassigns skills, weapons, userinfo, and changes the default character associated with the account.
 // GalaxyRP fix: [Char] added announce_switch -- when qfalse, suppresses this function's own "X
 // switched to: Y" broadcast at the end. /char new now calls this function immediately after
@@ -2924,6 +2925,20 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// and re-published the corruption instead of catching it. Syncing the cache here first makes
 		// that adopt step a no-op: there's nothing stale left for it to stomp our just-loaded value with.
 		G_SyncSaberColorUserinfo( ent );
+
+		// GalaxyRP fix: [Account] same reason, same fix, for this character's display name and player
+		// model -- update_saber() below (and ClientSpawn()'s own copy of this same logic on the respawn
+		// this switch triggers) can call ClientUserinfoChanged(), which unconditionally re-derives
+		// pers.netname/the active model from whatever "name"/"model" currently sit in the cached
+		// userinfo -- a previous character's, or this account's own username, still cached from before
+		// -- and update_current_character_name_and_model() then immediately re-saves that stale value
+		// to this row. set_netname()/set_model() below already correct this before the function
+		// returns (they take displayName/modelName as explicit parameters rather than trusting
+		// whatever pers already holds, so they're not fooled by an earlier corruption the way
+		// update_saber_colors() used to be) -- but that only protects this synchronous call; syncing
+		// the cache here too closes the same later-respawn/any-subsequent-userinfo-change window that
+		// the saber-colour fix above closes.
+		G_SyncNameModelUserinfo( ent, displayName, modelName );
 
 		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
 		// re-set to 1 (the "if" branch never set it to 2), so this always evaluated to 1 regardless
@@ -3276,6 +3291,13 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// value to this character's row -- which the update_saber_colors() call further down, trusting
 		// pers.saberRGB[] as already correct by then, would otherwise just faithfully re-publish.
 		G_SyncSaberColorUserinfo( ent );
+
+		// GalaxyRP fix: [Account] same reason as select_player_character()'s matching call above --
+		// sync the cached userinfo's "name"/"model" keys to this character's own NetName/ModelName
+		// before update_saber() below can trigger a ClientUserinfoChanged() that would otherwise
+		// re-adopt whatever was cached here before this login (this account's raw username, another
+		// character's display name, or a stale client echo) and immediately re-save it to this row.
+		G_SyncNameModelUserinfo( ent, netName, modelName );
 
 		ent->client->sess.loggedin = qtrue;
 
@@ -13691,6 +13713,37 @@ static void G_SyncSaberColorUserinfo( gentity_t *ent ) {
 	Info_SetValueForKey( userinfo, "cp_sbRGB2", va( "%i", ent->client->pers.saberRGB[1] ) );
 	Info_SetValueForKey( userinfo, "color1", va( "%i", ent->client->pers.saberColorMode[0] ) );
 	Info_SetValueForKey( userinfo, "color2", va( "%i", ent->client->pers.saberColorMode[1] ) );
+	trap->SetUserinfo( ent->s.number, userinfo );
+}
+
+// GalaxyRP fix: [Account] same idea as G_SyncSaberColorUserinfo() just above, for a character's
+// display name and player model: patches the server's own CACHED copy of this client's userinfo so
+// its "name"/"model" keys already hold the values a caller is about to apply, before that caller
+// calls (or triggers) ClientUserinfoChanged(). set_netname()/set_model() further down in this file
+// already do this same patch for an organic, live name/model change -- this is the same fix, called
+// by select_player_character() and select_account_and_default_character_data() right after reading
+// a character's/account's saved NetName/ModelName off its database row and before update_saber()
+// runs, for the same reason G_SyncSaberColorUserinfo() is: update_saber() (and ClientSpawn()'s own
+// copy of this same adopt-from-userinfo logic on the respawn a character switch or login triggers)
+// can call ClientUserinfoChanged(), which unconditionally re-derives pers.netname and the active
+// model from whatever's cached here -- a previous character's, this account's own raw username, or a
+// stale client echo -- and then immediately re-saves that stale value to the row just loaded, via
+// update_current_character_name_and_model(). set_netname()/set_model() take their value as an
+// explicit parameter rather than trusting pers, so they already correct this before the loading
+// function returns (unlike update_saber_colors(), which used to just trust pers.saberRGB[] and
+// faithfully re-publish whatever corruption was already there) -- but that only protects the
+// synchronous character-load call itself; syncing the cache here too closes the same later window
+// (a further respawn, or any other unrelated userinfo change) that G_SyncSaberColorUserinfo() closes
+// for saber colour.
+static void G_SyncNameModelUserinfo( gentity_t *ent, const char *netName, const char *modelName ) {
+	char userinfo[MAX_INFO_STRING] = { 0 };
+
+	if ( !ent || !ent->client || !netName || !modelName )
+		return;
+
+	trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
+	Info_SetValueForKey( userinfo, "name", netName );
+	Info_SetValueForKey( userinfo, "model", modelName );
 	trap->SetUserinfo( ent->s.number, userinfo );
 }
 
