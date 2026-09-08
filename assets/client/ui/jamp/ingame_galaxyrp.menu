@@ -2535,10 +2535,78 @@
 			}
 		}
 
-		// GalaxyRP fix: [Skills] Blaster Pack/Power Cell/Metal Bolts/Rockets (skill indices 39-42) removed
-		// from the Ammo Skills panel -- they never had any gameplay effect and are now rejected outright
-		// by do_upgrade_skill()/do_downgrade_skill(). Thermals/Trip Mines/Det Packs below are shifted up
-		// (rect y 180/200/220 -> 100/120/140) to close the gap left at the top of the panel.
+		// GalaxyRP fix: [Skills] Blaster Pack/Power Cell/Metal Bolts/Rockets (skill indices 39-42) are
+		// live ammo-regen skills after all (see the un-blocking fix comment in do_upgrade_skill(),
+		// g_cmds.c) -- restored below at their original rect y 100/120/140/160, with Thermals/Trip
+		// Mines/Det Packs shifted back down to their original y 180/200/220 to make room.
+
+		itemDef
+		{
+			name				blasterPackSkillButton
+			group				ammoSkillsControls
+			text				"[40] Blaster Pack"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 100 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				powerCellSkillButton
+			group				ammoSkillsControls
+			text				"[41] Power Cell"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 120 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				metalBoltsSkillButton
+			group				ammoSkillsControls
+			text				"[42] Metal Bolts"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 140 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				rocketsSkillButton
+			group				ammoSkillsControls
+			text				"[43] Rockets"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 160 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
 
 		itemDef
 		{
@@ -2550,7 +2618,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 100 130 15
+			rect				270 180 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2567,7 +2635,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 120 130 15
+			rect				270 200 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -2584,7 +2652,7 @@
 			font				3
 			textscale			.5
 			style				WINDOW_STYLE_FILLED
-			rect				270 140 130 15
+			rect				270 220 130 15
 			textalign			ITEM_ALIGN_LEFT
 			forecolor			1 .682 0 1
 			visible				0
@@ -3127,14 +3195,82 @@
 			decoration
 		}
 
-		// GalaxyRP fix: [Skills] value fields for the removed Blaster Pack/Power Cell/Metal Bolts/Rockets
-		// skills (39-42) are gone -- see the matching fix comment above the shifted skill buttons.
+		// GalaxyRP fix: [Skills] value fields for Blaster Pack/Power Cell/Metal Bolts/Rockets (39-42)
+		// restored below -- see the matching fix comment above the shifted skill buttons.
+
+		itemDef
+		{
+			name				blasterPackSkillValue
+			group				levelammo
+			rect				380 100 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_40_level"
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				powercellSkillValue
+			group				levelammo
+			rect				380 120 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_41_level"
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				metalBoltsSkillValue
+			group				levelammo
+			rect				380 140 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_42_level"
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				rocketsSkillValue
+			group				levelammo
+			rect				380 160 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_43_level"
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
 
 		itemDef
 		{
 			name				thermalsSkillValue
 			group				levelammo
-			rect				380 100 30 30
+			rect				380 180 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3151,7 +3287,7 @@
 		{
 			name				tripMinesSkillValue
 			group				levelammo
-			rect				380 120 30 30
+			rect				380 200 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
@@ -3168,7 +3304,7 @@
 		{
 			name				detpacksSkillValue
 			group				levelammo
-			rect				380 140 30 30
+			rect				380 220 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""

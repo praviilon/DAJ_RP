@@ -94,15 +94,22 @@ const skill_t skills[] = {
 	{3, "Sense Health",			"allows you to see info about someone, including npcs. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force, mp and max mp. To use it, when you are near a player or npc, use ^3Sense ^7force power",		"force",	"light",	0},
 	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"other",	"merc",		0},
 	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"other",	"merc",		0},
-	// GalaxyRP fix: [Skills] indices 38-42 below (Unique Skill/Blaster Pack/Powercell/Metal Bolts/Rockets)
-	// are removed from use -- do_upgrade_skill()/do_downgrade_skill() reject them outright and they're no
-	// longer shown in ingame_galaxyrp.menu's Skills section. 39-42 never had any gameplay effect coded
-	// (unlike the sibling ammo skills at 43-45, which do grant their weapon in initialize_rpg_skills()).
-	// 38 did have an effect (a self-heal on the Engage Duel key, in g_active.c) but that was the last
-	// remnant of the /unique command's Unique Abilities -- a fully-removed 10-class system -- so its
-	// gameplay hook has been removed outright rather than left disabled. All five are left as
-	// reserved/unused entries here, rather than deleted outright, so every other skill's numeric index
-	// (43+) doesn't shift.
+	// GalaxyRP fix: [Skills] index 38 below (Unique Skill) is a reserved/unused entry -- see the
+	// [Shop] fix comment right below this one -- and stays blocked in do_upgrade_skill()/
+	// do_downgrade_skill(). Its own gameplay hook (a self-heal on the Engage Duel key, in g_active.c)
+	// was the last remnant of the /unique command's Unique Abilities -- a fully-removed 10-class
+	// system -- and has been removed outright rather than left disabled. Left as a reserved/unused
+	// entry here, rather than deleted outright, so every other skill's numeric index (39+) doesn't
+	// shift.
+	// GalaxyRP fix: [Skills] indices 39-42 below (Blaster Pack/Powercell/Metal Bolts/Rockets) were also
+	// blocked here for a time, on the claim they "never had any gameplay effect coded". That was wrong:
+	// RegenerateAmmo() (g_active.c) has always read pers.skill_levels[39..42] every second to compute
+	// passive ammo regen for AMMO_BLASTER/AMMO_POWERCELL/AMMO_METAL_BOLTS/AMMO_ROCKETS respectively, so
+	// blocking them from ever being leveled silently zeroed out passive regen for those four ammo
+	// types. Un-blocked again in do_upgrade_skill()/do_downgrade_skill() and re-shown in
+	// zyk_list_player_skills() and ingame_galaxyrp.menu's Ammo Skills panel -- ordinary, purchasable
+	// skills like any other, same as the sibling ammo skills at 43-45 (which additionally grant their
+	// own weapon in initialize_rpg_skills(), unlike 39-42, which are ammo-only).
 	// GalaxyRP fix: [Shop] 38's pers.skill_levels[38] slot (still blocked from normal leveling below) is
 	// now repurposed as a bitmask for the 3 permanent shop upgrades -- see the doc comment on skill_levels
 	// in g_local.h. Its skills[] entry here stays a non-purchasable placeholder; the bitmask is only ever
@@ -8632,17 +8639,19 @@ void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 
 	for (int i = 0; i < ARRAY_LEN(skills); i++)
 	{
-		// GalaxyRP fix: [Skills] skill_id 38-42 (Unique Skill/Blaster Pack/Power Cell/Metal Bolts/
-		// Rockets) and 55 (Improvements) are excluded from this listing -- the same reserved/unused
-		// range do_upgrade_skill()/do_downgrade_skill() block from ever being purchased or leveled (see
-		// those functions' matching GalaxyRP fix comments). Without this, they still showed up here
-		// under their category ("other" for 38, "ammo" for 39-42, "items" for 55) even though they can
-		// never be leveled: 38 now doubles as the per-character bitmask storage for the 3 permanent shop
-		// upgrades (see the doc comment on skill_levels in g_local.h), so it would print that raw
-		// bitmask as a fake "N/1" skill level; 55 can carry a leftover nonzero value from before its
-		// own gameplay hooks were removed, printing as if it were still an active skill; 39-42 are
-		// always 0 (never had any gameplay effect coded at all) and just clutter the ammo listing.
-		if ((i >= 38 && i <= 42) || i == 55)
+		// GalaxyRP fix: [Skills] skill_id 38 (Unique Skill) and 55 (Improvements) are excluded from this
+		// listing -- the same reserved/unused ids do_upgrade_skill()/do_downgrade_skill() block from
+		// ever being purchased or leveled (see those functions' matching GalaxyRP fix comments). Without
+		// this, they'd still show up here even though they can never be leveled: 38 now doubles as the
+		// per-character bitmask storage for the 3 permanent shop upgrades (see the doc comment on
+		// skill_levels in g_local.h), so it would print that raw bitmask as a fake "N/1" skill level; 55
+		// can carry a leftover nonzero value from before its own gameplay hooks were removed, printing as
+		// if it were still an active skill.
+		// GalaxyRP fix: [Skills] 39-42 (Blaster Pack/Power Cell/Metal Bolts/Rockets) used to be excluded
+		// here too, on the claim they "never had any gameplay effect coded at all and always read 0".
+		// That was wrong -- they're live ammo-regen skills (see the un-blocking fix comment in
+		// do_upgrade_skill()) -- so they're shown again like any other skill.
+		if (i == 38 || i == 55)
 		{
 			continue;
 		}
@@ -12379,17 +12388,24 @@ qboolean do_upgrade_skill(gentity_t* upgrader, gentity_t* upgradee, int skill_id
 		return qfalse;
 	}
 
-	// GalaxyRP fix: [Skills] skill_id 38-42 (Unique Skill/Blaster Pack/Power Cell/Metal Bolts/Rockets)
-	// are kept as reserved, unused entries in the skills[] table below so every skill index at 43+
-	// doesn't shift. 39-42 never had any gameplay effect coded anywhere (unlike the sibling ammo skills
-	// at 43-45, which do grant their weapon). 38's own ability (g_active.c's GENCMD_ENGAGE_DUEL heal)
-	// has been removed outright, the last remnant of the /unique command's now fully-removed Unique
-	// Abilities. All five are blocked here instead of being left as a leveling slot that does nothing.
-	// skill_id 55 (Improvements) joins them here for the same reason: its own gameplay hooks (a global
-	// damage bonus in g_combat.c, a Magic Sense duration bonus and the unlock gates on 3 Magic powers
-	// in g_main.c, and a Team Energize ammo-regen bonus in w_force.c) have all been removed outright as
-	// loose ends from the same removed-features cleanup, rather than left half-working.
-	if ((skill_id >= 38 && skill_id <= 42) || skill_id == 55)
+	// GalaxyRP fix: [Skills] skill_id 39-42 (Blaster Pack/Power Cell/Metal Bolts/Rockets) used to be
+	// blocked here too, alongside 38 and 55, on the claim that they "never had any gameplay effect
+	// coded anywhere". That was wrong -- RegenerateAmmo() in g_active.c has always read
+	// pers.skill_levels[39..42] every second to compute passive ammo regen for AMMO_BLASTER/
+	// AMMO_POWERCELL/AMMO_METAL_BOLTS/AMMO_ROCKETS respectively (gated on rp_allow_ammo_regen for
+	// 39-41, rp_allow_explosives_regen for 42). Blocking them from ever being leveled silently zeroed
+	// out passive regen for those four ammo types for every account created since. Un-blocked here so
+	// they can be purchased/leveled/downgraded normally again, same as any other skill; see the
+	// matching un-exclusion in zyk_list_player_skills() and the restored buttons in
+	// ingame_galaxyrp.menu's Ammo Skills panel.
+	// skill_id 38 (Unique Skill) stays blocked: it now doubles as the per-character bitmask storage for
+	// the 3 permanent shop upgrades (see the doc comment on skill_levels in g_local.h), so it can never
+	// be a normal levelable skill again. skill_id 55 (Improvements) also stays blocked: its own
+	// gameplay hooks (a global damage bonus in g_combat.c, a Magic Sense duration bonus and the unlock
+	// gates on 3 Magic powers in g_main.c, and a Team Energize ammo-regen bonus in w_force.c) were all
+	// removed outright as loose ends from the same removed-features cleanup that also broke 39-42;
+	// restoring those is a separate task from this one.
+	if (skill_id == 38 || skill_id == 55)
 	{
 		trap->SendServerCommand(upgrader - g_entities, "print \"This skill is no longer in use.\n\"");
 		return qfalse;
@@ -12439,9 +12455,10 @@ qboolean do_downgrade_skill(gentity_t* downgrader, gentity_t* downgradee, int sk
 		return qfalse;
 	}
 
-	// GalaxyRP fix: [Skills] see the matching fix comment in do_upgrade_skill() above -- skill_id 38-42
-	// and 55 are reserved/unused and blocked from being touched by either command.
-	if ((skill_id >= 38 && skill_id <= 42) || skill_id == 55)
+	// GalaxyRP fix: [Skills] see the matching fix comment in do_upgrade_skill() above -- 39-42 are
+	// un-blocked (they're live ammo-regen skills, not unused), 38 and 55 stay reserved/unused and
+	// blocked from being touched by either command.
+	if (skill_id == 38 || skill_id == 55)
 	{
 		trap->SendServerCommand(downgrader - g_entities, "print \"This skill is no longer in use.\n\"");
 		return qfalse;
