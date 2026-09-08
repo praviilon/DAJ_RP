@@ -2419,7 +2419,12 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	}
 	if ( level.gametype == GT_SIEGE ) {
 		Q_strcat( buf, sizeof( buf ), va( "siegeclass\\%s\\", className ) );
-		Q_strcat( buf, sizeof( buf ), va( "sdt\\%i\\", className ) );
+		// GalaxyRP fix: [Siege] "sdt" ("siege desired team") was being filled with className (a
+		// string) through a "%i" conversion instead of the actual desired-team value -- cg_players.c's
+		// ClientInfo parsing (CG_NewClientInfo) reads this key back with atoi() into
+		// newInfo.siegeDesiredTeam, so this was sending every client's desired Siege team as a
+		// garbage number instead of the real value.
+		Q_strcat( buf, sizeof( buf ), va( "sdt\\%i\\", client->sess.siegeDesiredTeam ) );
 	}
 
 	trap->GetConfigstring( CS_PLAYERS+clientNum, oldClientinfo, sizeof( oldClientinfo ) );

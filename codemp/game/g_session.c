@@ -103,7 +103,12 @@ void G_WriteClientSessionData( gclient_t *client )
 	Q_strcat( s, sizeof( s ), va( "%s ", siegeClass ) );
 	Q_strcat( s, sizeof( s ), va( "%s", IP ) );
 
-	var = va( "session%i", client - level.clients );
+	// GalaxyRP fix: [Session] "client - level.clients" is pointer subtraction, which yields a
+	// ptrdiff_t (a 64-bit "long" on this build), but "%i" expects a plain 32-bit int -- undefined
+	// behavior that's more likely to matter on a 64-bit build than the 32-bit builds this originally
+	// shipped on. The index is always small (0..MAX_CLIENTS-1) so an explicit (int) cast is exact
+	// and removes any doubt.
+	var = va( "session%i", (int)(client - level.clients) );
 
 	trap->Cvar_Set( var, s );
 
@@ -116,7 +121,8 @@ void G_WriteClientSessionData( gclient_t *client )
 
 	Q_strcat(zykstr, sizeof(zykstr), va("%s", rpgchar));
 
-	zykvar = va("zyksession%i", client - level.clients);
+	// GalaxyRP fix: [Session] same ptrdiff_t/"%i" mismatch as above.
+	zykvar = va("zyksession%i", (int)(client - level.clients));
 
 	trap->Cvar_Set(zykvar, zykstr);
 }
@@ -133,11 +139,19 @@ void G_ReadSessionData( gclient_t *client )
 	char			s[MAX_CVAR_VALUE_STRING] = {0}, zykstr[MAX_CVAR_VALUE_STRING] = { 0 };
 	const char		*var;
 	const char *zykvar;
-	int			i=0, tempSessionTeam=0, tempSpectatorState, tempTeamLeader;
+	int			i=0, tempSessionTeam=0, tempSpectatorState, tempTeamLeader, tempMotdSeen;
 
-	var = va( "session%i", client - level.clients );
+	// GalaxyRP fix: [Session] same ptrdiff_t/"%i" mismatch as the write side in
+	// G_WriteClientSessionData() -- see the comment there.
+	var = va( "session%i", (int)(client - level.clients) );
 	trap->Cvar_VariableStringBuffer( var, s, sizeof(s) );
 
+	// GalaxyRP fix: [Session] "%i" into "&client->sess.motdSeen" mismatched the sscanf() format's
+	// "int *" against motdSeen's actual "qboolean" type. Harmless in practice on this project's
+	// supported platforms (qboolean is int-sized everywhere it's built), but reads into a
+	// mismatched-type pointer regardless -- now goes through a temp int and a cast-assignment
+	// afterward, matching the existing tempSessionTeam/tempSpectatorState/tempTeamLeader pattern
+	// used for the other enum/qboolean fields in this same sscanf() call.
 	sscanf( s, "%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %s %s %s",
 		&tempSessionTeam, //&client->sess.sessionTeam,
 		&client->sess.spectatorNum,
@@ -161,7 +175,7 @@ void G_ReadSessionData( gclient_t *client )
 		&client->sess.ally1,
 		&client->sess.ally2,
 		&client->sess.vote_timer,
-		&client->sess.motdSeen, // Tr!Force: [Motd] Save motd seen
+		&tempMotdSeen, //&client->sess.motdSeen, // Tr!Force: [Motd] Save motd seen
 		client->sess.filename,
 		client->sess.siegeClass,
 		client->sess.IP
@@ -170,6 +184,7 @@ void G_ReadSessionData( gclient_t *client )
 	client->sess.sessionTeam	= (team_t)tempSessionTeam;
 	client->sess.spectatorState	= (spectatorState_t)tempSpectatorState;
 	client->sess.teamLeader		= (qboolean)tempTeamLeader;
+	client->sess.motdSeen		= (qboolean)tempMotdSeen;
 
 	// convert back to spaces from unused chars, as session data is written that way.
 	for ( i=0; client->sess.siegeClass[i]; i++ )
@@ -195,7 +210,8 @@ void G_ReadSessionData( gclient_t *client )
 	client->ps.fd.forcePowerSelected = client->sess.selectedFP;
 
 	// zyk: new session cvar info
-	zykvar = va("zyksession%i", client - level.clients);
+	// GalaxyRP fix: [Session] same ptrdiff_t/"%i" mismatch as above.
+	zykvar = va("zyksession%i", (int)(client - level.clients));
 	trap->Cvar_VariableStringBuffer(zykvar, zykstr, sizeof(zykstr));
 
 	sscanf(zykstr, "%s",
