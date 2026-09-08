@@ -10025,16 +10025,22 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		value = settings_number_to_bit[value];
 
-		// GalaxyRP fix: [Settings] gate turning Admin Protect ON behind the "Give Admin" admin command
-		// (ADM_GIVEADM) -- only an admin senior enough to grant/revoke other players' admin commands
-		// (see /adminup, /admindown) may grant themselves protection from admin commands. Turning it
-		// back OFF is never gated, so a player can always give up their own protection. Bit 13 is
-		// inverted (clear == ON, set == OFF -- see the status-line block above), so "turning ON" is the
-		// branch just below that is about to CLEAR the bit, i.e. the bit must currently be SET.
-		// check_admin_command() already prints the standard "You need the Give Admin admin command"
-		// error and returns qfalse when the caller lacks it, matching every other admin-gated command
-		// in this file.
-		if (value == 13 && (ent->client->pers.player_settings & (1 << value)) && !check_admin_command(ent, ADM_GIVEADM, qtrue))
+		// GalaxyRP fix: [Settings] gate turning Admin Protect ON behind the "Admin Protect" admin
+		// command (ADM_ADMPROTECT) -- this was originally gated behind ADM_GIVEADM ("Give Admin"), but
+		// ADM_ADMPROTECT's own in-game help text (see the command_number == ADM_ADMPROTECT branch
+		// further down in this file) already documents it as "With this flag, a player can use Admin
+		// Protect option in /settings to protect himself from admin commands" -- i.e. the codebase
+		// itself designates ADM_ADMPROTECT, not ADM_GIVEADM, as the permission for this. Corrected here
+		// to match. It's also the same flag that gates whether Admin Protect has any effect once it IS
+		// on (see the 6 enforcement sites in Cmd_Give_f, Cmd_Scale_f and Cmd_Teleport_f), so a player
+		// can now only turn the setting on if it can actually do something for them. Turning it back
+		// OFF is never gated, so a player can always give up their own protection. Bit 13 is inverted
+		// (clear == ON, set == OFF -- see the status-line block above), so "turning ON" is the branch
+		// just below that is about to CLEAR the bit, i.e. the bit must currently be SET.
+		// check_admin_command() prints the standard "You need the Admin Protect admin command" error
+		// and returns qfalse when the caller lacks it, matching every other admin-gated command in this
+		// file.
+		if (value == 13 && (ent->client->pers.player_settings & (1 << value)) && !check_admin_command(ent, ADM_ADMPROTECT, qtrue))
 		{
 			return;
 		}
