@@ -2791,6 +2791,7 @@ void update_current_character_scale(gentity_t* ent, sqlite3* db) {
 }
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args);
+static void G_SyncSaberColorUserinfo( gentity_t *ent );
 // GalaxyRP (Alex): [Database] This method changes the character used currently by the player. It reassigns skills, weapons, userinfo, and changes the default character associated with the account.
 // GalaxyRP fix: [Char] added announce_switch -- when qfalse, suppresses this function's own "X
 // switched to: Y" broadcast at the end. /char new now calls this function immediately after
@@ -2906,6 +2907,23 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
 		ent->client->pers.saberColorMode[0] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber1Color) );
 		ent->client->pers.saberColorMode[1] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber2Color) );
+
+		// GalaxyRP fix: [Saber RGB] patch the server's cached userinfo (cp_sbRGB1/cp_sbRGB2/color1/
+		// color2) to match this character's just-loaded colours *before* update_saber() below runs.
+		// update_saber() calls ClientUserinfoChanged() (directly, when the saber model differs from
+		// before -- which a character switch usually does -- and again via ClientSpawn()'s own copy
+		// of the same logic on the respawn this switch triggers) and that function unconditionally
+		// re-adopts whatever cp_sbRGB1/cp_sbRGB2/color1/color2 currently sit in this cache, straight
+		// into pers.saberRGB[]/pers.saberColorMode[] -- overwriting what we just set two lines above
+		// with whichever colour was last cached here (a previous character's, on a switch; a stale
+		// client echo, on login). ClientUserinfoChanged() then immediately re-saves pers.saberRGB[]
+		// to the DB row named by pers.CharID (already this character's, set above), so the corrupted
+		// value got written straight back out -- and update_saber_colors() below, which republishes
+		// pers.saberRGB[] to the client and would otherwise be the fix, only runs *after* update_saber()
+		// and simply trusts whatever pers.saberRGB[] already holds by then, so it faithfully re-saved
+		// and re-published the corruption instead of catching it. Syncing the cache here first makes
+		// that adopt step a no-op: there's nothing stale left for it to stomp our just-loaded value with.
+		G_SyncSaberColorUserinfo( ent );
 
 		// GalaxyRP fix: [gameplay] number_of_sabers was initialized to 1 and only ever explicitly
 		// re-set to 1 (the "if" branch never set it to 2), so this always evaluated to 1 regardless
@@ -3249,6 +3267,15 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ent->client->pers.saberRGB[1] = (saber2Color & SABERRGB_SET) ? (saber2Color & SABERRGB_MASK) : 0;
 		ent->client->pers.saberColorMode[0] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber1Color) );
 		ent->client->pers.saberColorMode[1] = G_ValidateSaberColorMode( SABER_STORED_MODE(saber2Color) );
+
+		// GalaxyRP fix: [Saber RGB] same reason as select_player_character()'s matching call above --
+		// sync the cached userinfo to this character's just-loaded colours before update_saber() below
+		// can trigger a ClientUserinfoChanged() that would otherwise re-adopt a stale cp_sbRGB1/
+		// cp_sbRGB2/color1/color2 left over from whichever account/character was active here before
+		// (or from this client's own not-yet-arrived userinfo echo) and immediately re-save that wrong
+		// value to this character's row -- which the update_saber_colors() call further down, trusting
+		// pers.saberRGB[] as already correct by then, would otherwise just faithfully re-publish.
+		G_SyncSaberColorUserinfo( ent );
 
 		ent->client->sess.loggedin = qtrue;
 
@@ -13640,9 +13667,34 @@ any of them the same three things have to happen, which is what update_saber_col
      next Apply and undo the change.
 ==================
 */
-void update_saber_colors( gentity_t *ent ) {
+// GalaxyRP fix: [Saber RGB] patches the server's own CACHED copy of this client's userinfo so its
+// cp_sbRGB1/cp_sbRGB2/color1/color2 keys match ent->client->pers.saberRGB[]/pers.saberColorMode[].
+// This used to be inlined at the top of update_saber_colors() below (right before its own
+// ClientUserinfoChanged() call, for exactly the reason explained in the comment that's still there);
+// factored out so select_player_character() and select_account_and_default_character_data() (both in
+// this file) can call it too, immediately after loading a character's saved colours and *before*
+// calling update_saber() -- see the GalaxyRP fix: [Saber RGB] comment at each of those call sites for
+// why that matters: without this pre-sync, update_saber() (and the respawn a character switch or
+// login triggers, via ClientSpawn()'s own copy of this same adopt-from-userinfo logic in g_client.c)
+// can end up re-adopting a stale cached colour from before this character/session and immediately
+// re-saving it as if it were this character's own -- and the update_saber_colors() call those two
+// functions already make *after* update_saber() only republishes whatever pers.saberRGB[] holds by
+// then, so it was faithfully re-saving and re-publishing the corruption instead of catching it.
+static void G_SyncSaberColorUserinfo( gentity_t *ent ) {
 	char userinfo[MAX_INFO_STRING] = { 0 };
 
+	if ( !ent || !ent->client )
+		return;
+
+	trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
+	Info_SetValueForKey( userinfo, "cp_sbRGB1", va( "%i", ent->client->pers.saberRGB[0] ) );
+	Info_SetValueForKey( userinfo, "cp_sbRGB2", va( "%i", ent->client->pers.saberRGB[1] ) );
+	Info_SetValueForKey( userinfo, "color1", va( "%i", ent->client->pers.saberColorMode[0] ) );
+	Info_SetValueForKey( userinfo, "color2", va( "%i", ent->client->pers.saberColorMode[1] ) );
+	trap->SetUserinfo( ent->s.number, userinfo );
+}
+
+void update_saber_colors( gentity_t *ent ) {
 	if ( !ent || !ent->client )
 		return;
 
@@ -13652,12 +13704,7 @@ void update_saber_colors( gentity_t *ent ) {
 	// color2 back out of this cache, not out of the values just decided by our three callers, so
 	// without this a stale cached value (left over from any earlier RGB use this session) could
 	// immediately stomp a freshly-set or freshly-cleared value within this same call.
-	trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
-	Info_SetValueForKey( userinfo, "cp_sbRGB1", va( "%i", ent->client->pers.saberRGB[0] ) );
-	Info_SetValueForKey( userinfo, "cp_sbRGB2", va( "%i", ent->client->pers.saberRGB[1] ) );
-	Info_SetValueForKey( userinfo, "color1", va( "%i", ent->client->pers.saberColorMode[0] ) );
-	Info_SetValueForKey( userinfo, "color2", va( "%i", ent->client->pers.saberColorMode[1] ) );
-	trap->SetUserinfo( ent->s.number, userinfo );
+	G_SyncSaberColorUserinfo( ent );
 
 	// Rebuild the clientinfo configstring (publishing c1..c4) and save the character.
 	ClientUserinfoChanged( ent->s.number );
