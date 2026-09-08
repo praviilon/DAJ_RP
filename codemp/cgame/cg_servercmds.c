@@ -1844,18 +1844,18 @@ char ui_cvars_in_order[100][100] = {
 	// six setting cvars back in alignment with the six setting values the server actually sends right
 	// after them.
 	"ui_rp_skill_60_level",
-	// GalaxyRP fix: [Settings] 6 new entries appended here, in the exact same order the server appends
-	// their values to the zykmod content string (see the settings_to_sync loop added to
-	// Cmd_GalaxyRpUi_f in g_cmds.c) -- this array is parsed positionally via strtok in CG_ZykMod below,
-	// so the order here must match the server's append order exactly. These feed the Settings panel's
-	// *Value itemDefs in ingame_galaxyrp.menu, which previously only ever showed their static "0"
-	// XCVAR_DEF default since nothing wrote to them.
-	"ui_zyk_setting_6_value",
-	"ui_zyk_setting_8_value",
-	"ui_zyk_setting_9_value",
-	"ui_zyk_setting_10_value",
-	"ui_zyk_setting_11_value",
-	"ui_zyk_setting_13_value",
+	// GalaxyRP fix: [Settings] 6 entries used to sit here (ui_zyk_setting_6/8/9/10/11/13_value), fed by
+	// a settings_to_sync loop that used to be in Cmd_GalaxyRpUi_f (g_cmds.c) via the now-removed
+	// zyk_setting_status_text(). Those cvars only ever fed the Settings panel's *Value itemDefs in
+	// ingame_galaxyrp.menu, which was removed entirely in an earlier pass of this cleanup, and the
+	// settings themselves (Allow Force Powers from allies, Starting Single Saber Style, Allow Screen
+	// Message, Use healing force only at allied players, Start With Saber, Admin Protect) are either
+	// removed or no longer UI-synced in this pass (see settings_number_to_bit in Cmd_Settings_f) -- so
+	// these entries, the loop that fed them and their XCVAR_DEFs in ui_xcvar.h have all been removed
+	// together. Removing them here (rather than leaving "0"-valued placeholders) is safe precisely
+	// because the server-side loop that appended their values to the zykmod content string is removed
+	// in the same pass -- this array's positional strtok parsing in CG_ZykMod below still lines up with
+	// what the server actually sends.
 	// GalaxyRP fix: [Shop] 3 new entries appended here, in the exact same order the server appends
 	// them to the zykmod content string (see the upgrade_bits_to_sync loop added to Cmd_GalaxyRpUi_f
 	// in g_cmds.c, right after the settings loop above) -- "1" if the player already owns that shop

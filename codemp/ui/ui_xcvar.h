@@ -231,20 +231,14 @@ XCVAR_DEF( ui_rp_skill_59_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNA
 XCVAR_DEF( ui_rp_skill_60_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_61_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_62_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
-// GalaxyRP fix: [Settings] ui_zyk_setting_0_value through _4_value, _7_value, _12_value, _14_value and
-// _15_value were removed here -- those settings themselves were removed from Cmd_Settings_f (g_cmds.c)
-// and their /settings-panel bindings from ingame_galaxyrp.menu in earlier passes of this cleanup, and
-// no C code anywhere in codemp/game, codemp/cgame or codemp/ui ever read or wrote these cvars (they
-// only ever displayed a value the player-facing UI set back into itself). Only the still-live settings
-// (5,6,8,9,10,11,13 -- see settings_number_to_bit in Cmd_Settings_f for how these bit indices now map
-// to the player-facing /settings 1-7 numbers) keep a cvar declaration below.
-XCVAR_DEF( ui_zyk_setting_5_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_6_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_8_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_9_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_10_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_11_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_setting_13_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
+// GalaxyRP fix: [Settings] ui_zyk_setting_0_value through _15_value (the full 0-15 range) have now all
+// been removed here. _0_value through _4_value, _7_value, _12_value, _14_value and _15_value went in
+// earlier passes of this cleanup; _5_value, _6_value, _8_value, _9_value, _10_value, _11_value and
+// _13_value are removed in this pass along with the settings_to_sync loop that used to feed the last
+// six of them (see the fix comment on ui_cvars_in_order[] in cg_servercmds.c) and, for the settings
+// that toggled them, Cmd_Settings_f itself (g_cmds.c). None of these cvars was ever read or written by
+// any C code anywhere in codemp/game, codemp/cgame or codemp/ui -- they only ever fed the Settings
+// panel in ingame_galaxyrp.menu, which was removed entirely in an earlier pass of this cleanup.
 // GalaxyRP fix: [Shop] "1" if the player already owns the matching shop upgrade (player_settings bit
 // 0/1/2), "0" otherwise -- fed by Cmd_GalaxyRpUi_f's zykmod sync (g_cmds.c) via the 3 new entries
 // appended to ui_cvars_in_order[] in cg_servercmds.c. Drives the Shop -> Upgrades panel's

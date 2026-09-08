@@ -575,14 +575,13 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 
 	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User Unique Skill / Force Guardian Force Armor checks unreachable
 
-	if (forcePower != FP_TEAM_HEAL && forcePower != FP_TEAM_FORCE && attacker && attacker->client && other && other->client &&
-		attacker->client->sess.amrpgmode > 0 && other->client->sess.amrpgmode > 0 && other->client->pers.player_settings & (1 << 6) && 
-		zyk_is_ally(attacker,other) == qtrue)
-	{ // zyk: allies wont be affected by force powers if they do not allow it
-		return 0;
-	}
+	// GalaxyRP fix: [Settings] a guard used to sit here, blocking a hostile force power between allies
+	// when the target had player_settings bit 6 set (the old /settings 2, "Allow Force Powers from
+	// allies", set to OFF). That per-player choice has been removed (see the fix comment on
+	// settings_number_to_bit in Cmd_Settings_f) -- allies never block each other's force powers now,
+	// which is what this guard already did by default whenever the setting was left at ON.
 
-	if (level.race_mode > 0 && level.race_mode < 3 && attacker && attacker->client && other && other->client && 
+	if (level.race_mode > 0 && level.race_mode < 3 && attacker && attacker->client && other && other->client &&
 		((attacker->client->pers.race_position > 0) || 
 		 (attacker->client->pers.race_position == 0 && other->client->pers.race_position > 0)))
 	{ // zyk: Race Mode. Cannot use force powers on targets waiting for race to start 
@@ -1384,7 +1383,13 @@ void ForceTeamHeal( gentity_t *self )
 			 ((ent->client->sess.amrpgmode < 2 && ent->client->ps.stats[STAT_ARMOR] < 100) || (ent->client->sess.amrpgmode == 2 && 
 			 ent->client->ps.stats[STAT_ARMOR] < max_shield)))) && ent->client->ps.stats[STAT_HEALTH] > 0 && ForcePowerUsableOn(self, ent, FP_TEAM_HEAL) &&
 		 	trap->InPVS(self->client->ps.origin, ent->client->ps.origin) && 
-			(((self->client->sess.amrpgmode == 0 || self->client->pers.player_settings & (1 << 10) || zyk_is_ally(self, ent) == qtrue) && 
+			// GalaxyRP fix: [Settings] this used to also allow through a target who was not an ally
+			// (self->client->pers.player_settings & (1 << 10) -- the old /settings 5, "Use healing force
+			// only at allied players", set to OFF/bypass). That per-player choice has been removed (see
+			// the fix comment on settings_number_to_bit in Cmd_Settings_f) -- Team Heal in FFA now always
+			// restricts to allies, except in non-RPG mode (amrpgmode == 0), where there is no allied
+			// group to restrict to.
+			(((self->client->sess.amrpgmode == 0 || zyk_is_ally(self, ent) == qtrue) &&
 			 g_gametype.integer == GT_FFA) || OnSameTeam(self, ent)))
 		{ // zyk: Team Heal now can be used in FFA and in npcs. It will not heal enemy npcs
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);
@@ -1535,7 +1540,13 @@ void ForceTeamForceReplenish( gentity_t *self )
 			ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax &&
 			ForcePowerUsableOn(self, ent, FP_TEAM_FORCE) &&
 			trap->InPVS(self->client->ps.origin, ent->client->ps.origin) && 
-			(((self->client->sess.amrpgmode == 0 || self->client->pers.player_settings & (1 << 10) || zyk_is_ally(self, ent) == qtrue) && 
+			// GalaxyRP fix: [Settings] this used to also allow through a target who was not an ally
+			// (self->client->pers.player_settings & (1 << 10) -- the old /settings 5, "Use healing force
+			// only at allied players", set to OFF/bypass). That per-player choice has been removed (see
+			// the fix comment on settings_number_to_bit in Cmd_Settings_f) -- Team Energize in FFA now
+			// always restricts to allies, except in non-RPG mode (amrpgmode == 0), where there is no
+			// allied group to restrict to.
+			(((self->client->sess.amrpgmode == 0 || zyk_is_ally(self, ent) == qtrue) &&
 			g_gametype.integer == GT_FFA) || OnSameTeam(self, ent)))
 		{
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);

@@ -7769,8 +7769,11 @@ void remove_credits(gentity_t *ent, int credits)
 // zyk: loads settings valid both to Admin-Only Mode and to RPG Mode
 void zyk_load_common_settings(gentity_t *ent)
 {
-	// zyk: loading the starting weapon based in player settings
-	if (ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER) && !(ent->client->pers.player_settings & (1 << 11)))
+	// GalaxyRP fix: [Settings] this used to also require !(player_settings & (1 << 11)) (the "Start
+	// With Saber" setting) to be clear. That per-player choice has been removed (see the fix comment
+	// on settings_number_to_bit in Cmd_Settings_f) -- a player who owns a saber now always starts with
+	// it, which is what this used to do by default anyway.
+	if (ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))
 	{
 		ent->client->ps.weapon = WP_SABER;
 	}
@@ -7787,27 +7790,13 @@ void zyk_load_common_settings(gentity_t *ent)
 		// hasn't been assignable anywhere in the codebase since commit 5d35b28b8 (2022) made login
 		// always set amrpgmode = 2 "kept for backwards compatibility" -- so the amrpgmode == 1 half
 		// of each of these OR-conditions could never be true and is being dropped as dead code.
-		if (ent->client->pers.player_settings & (1 << 26) &&
-			ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 2)
-		{
-			// ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel = SS_MEDIUM;
-			// ent->client->saberCycleQueue = ent->client->ps.fd.saberAnimLevel;
-			ent->client->ps.fd.saberAnimLevel = SS_MEDIUM;
-		}
-		else if (ent->client->pers.player_settings & (1 << 27) &&
-				ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 3)
-		{
-			ent->client->ps.fd.saberAnimLevel = SS_STRONG;
-		}
-		else if (ent->client->pers.player_settings & (1 << 28) && ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 4)
-		{
-			ent->client->ps.fd.saberAnimLevel = SS_DESANN;
-		}
-		else if (ent->client->pers.player_settings & (1 << 29) && ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] == 5)
-		{
-			ent->client->ps.fd.saberAnimLevel = SS_TAVION;
-		}
-		else if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 1)
+
+		// GalaxyRP fix: [Settings] the player_settings bit 26/27/28/29 branches that used to sit here
+		// (cycled via the old /settings 3, "Starting Single Saber Style") have been removed -- that
+		// setting is gone (see the fix comment on settings_number_to_bit in Cmd_Settings_f), so starting
+		// single saber style is now always whatever the base game/skill progression below would pick,
+		// with no per-player override.
+		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[5] >= 1)
 		{
 			ent->client->ps.fd.saberAnimLevel = SS_FAST;
 		}
@@ -8558,11 +8547,12 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 // but had zero callers anywhere in the codebase: not registered in the commands[] dispatch table, not
 // invoked from any other function, and not declared in any header either. Confirmed via a full-repo
 // grep for both "zyk_get_settings_values" and "get_settings_values" turning up only this definition.
-// The real, live version of this same idea is zyk_setting_status_text() plus Cmd_Settings_f's own
-// status-line block further up, both of which already reflect the current 1-7 /settings numbering and
-// are actually wired into the settings UI sync and console output. Removing this dead function also
-// retires the last remaining (unreachable) reader of player_settings bits 14/24/25, which have no
-// writer anywhere and are free for reuse.
+// The real, live version of this same idea was Cmd_Settings_f's own status-line block further up
+// (plus, until a later pass of this same cleanup, zyk_setting_status_text() -- since removed along
+// with the settings-UI sync it fed, whose only consumer was the Settings panel, itself already removed
+// from ingame_galaxyrp.menu). Removing this dead function also retires the last remaining
+// (unreachable) reader of player_settings bits 14/24/25, which have no writer anywhere and are free
+// for reuse.
 
 // GalaxyRP (Alex): [Skill Display] This method returns a color string based on the ability alignment. Used in displaying the skill to the user.
 char *color_ability(skill_t skill) {
@@ -9900,14 +9890,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			len += sprintf(message + len, "\n^3 1 - Language - ^3English");
 		}
 
-		if (ent->client->pers.player_settings & (1 << 6))
-		{
-			len += sprintf(message + len, "\n^3 2 - Allow Force Powers from allies - ^1OFF");
-		}
-		else
-		{
-			len += sprintf(message + len, "\n^3 2 - Allow Force Powers from allies - ^2ON");
-		}
+		// GalaxyRP fix: [Settings] the status line for setting 2 (Allow Force Powers from allies) used
+		// to be printed here. That toggle has been removed below (see the range-check comment further
+		// down) -- allies never affecting each other's force powers with a hostile force power is now
+		// the permanent, always-on behavior (see the fix comment at its old ForcePowerUsableOn() gate in
+		// w_force.c), so there is no longer a per-player choice to report here.
 
 		// GalaxyRP fix: [Magic] the status line for setting 7 (Show magic cast in chat) used to be
 		// printed here. /settings 7 has been removed below (see the range-check comment further down)
@@ -9916,44 +9903,28 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// as permanently unreachable (see the fix comment on TryGrapple()'s old dispatch logic), so
 		// its status line is removed here to match.
 
-		// zyk: Saber Style flags
-		if (ent->client->pers.player_settings & (1 << 26))
-			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^3Yellow");
-		else if (ent->client->pers.player_settings & (1 << 27))
-			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^1Red");
-		else if (ent->client->pers.player_settings & (1 << 28))
-			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^1Desann");
-		else if (ent->client->pers.player_settings & (1 << 29))
-			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^5Tavion");
-		else
-			len += sprintf(message + len, "\n^3 3 - Starting Single Saber Style - ^5Blue");
+		// GalaxyRP fix: [Settings] the status line for setting 3 (Starting Single Saber Style) used to
+		// be printed here. That toggle has been removed below (see the range-check comment further
+		// down) -- starting saber style is now always whatever the base game would pick with no
+		// per-player override (see the fix comment at its old cycling logic in
+		// zyk_load_common_settings()), so there is no longer a choice to report here.
 
-		if (ent->client->pers.player_settings & (1 << 9))
-		{
-			len += sprintf(message + len, "\n^3 4 - Allow Screen Message - ^1OFF");
-		}
-		else
-		{
-			len += sprintf(message + len, "\n^3 4 - Allow Screen Message - ^2ON");
-		}
+		// GalaxyRP fix: [Settings] the status line for setting 4 (Allow Screen Message) used to be
+		// printed here. That toggle has been removed below (see the range-check comment further down)
+		// -- the screen message is now always shown to a logged-in RPG-mode player who hasn't seen it
+		// yet (see the fix comment at its old gate in g_client.c), so there is no longer a per-player
+		// choice to report here.
 
-		if (ent->client->pers.player_settings & (1 << 10))
-		{
-			len += sprintf(message + len, "\n^3 5 - Use healing force only at allied players - ^1OFF");
-		}
-		else
-		{
-			len += sprintf(message + len, "\n^3 5 - Use healing force only at allied players - ^2ON");
-		}
+		// GalaxyRP fix: [Settings] the status line for setting 5 (Use healing force only at allied
+		// players) used to be printed here. That toggle has been removed below (see the range-check
+		// comment further down) -- Team Heal and Team Energize in FFA now always restrict to allies (see
+		// the fix comments at their eligibility checks in w_force.c), so there is no longer a per-player
+		// choice to report here.
 
-		if (ent->client->pers.player_settings & (1 << 11))
-		{
-			len += sprintf(message + len, "\n^3 6 - Start With Saber ^1OFF");
-		}
-		else
-		{
-			len += sprintf(message + len, "\n^3 6 - Start With Saber ^2ON");
-		}
+		// GalaxyRP fix: [Settings] the status line for setting 6 (Start With Saber) used to be printed
+		// here. That toggle has been removed below (see the range-check comment further down) -- a
+		// player who owns a saber now always starts with it (see the fix comment at its old gate in
+		// zyk_load_common_settings()), so there is no longer a per-player choice to report here.
 
 		// GalaxyRP fix: [Settings] the status line for setting 12 (Jetpack) used to be printed here.
 		// /settings 12 has been removed below (see the range-check comment further down) -- its bit was
@@ -9963,11 +9934,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		if (ent->client->pers.player_settings & (1 << 13))
 		{
-			len += sprintf(message + len, "\n^3 7 - Admin Protect ^1OFF");
+			len += sprintf(message + len, "\n^3 2 - Admin Protect ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 7 - Admin Protect ^2ON");
+			len += sprintf(message + len, "\n^3 2 - Admin Protect ^2ON");
 		}
 
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
@@ -9986,15 +9957,19 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		trap->Argv(1, arg1, sizeof( arg1 ));
 		value = atoi(arg1);
 
-		// GalaxyRP fix: [Settings] player-facing /settings numbers renumbered to a clean 1-7 sequence
-		// (previously 5,6,8,9,10,11,13 -- gaps left behind by settings 0-4,7,12,14,15, which were
-		// removed in earlier passes of this same cleanup; see the status-line comments above for why
-		// each one is gone). The underlying player_settings bit positions below are NOT renumbered --
-		// doing that would mean migrating every already-saved player_settings value in the database,
-		// plus updating every other reader of these bits in g_main.c/g_client.c/w_force.c. Instead this
-		// table translates the number the player types into the real bit index those readers still
+		// GalaxyRP fix: [Settings] player-facing /settings numbers renumbered to a clean 1-2 sequence
+		// (previously 5,13 -- gaps left behind by settings 6,8,9,10,11, which are removed in this same
+		// cleanup pass: Allow Force Powers from allies, Starting Single Saber Style, Allow Screen
+		// Message, Use healing force only at allied players and Start With Saber are no longer
+		// player-configurable and now always behave the way described at each setting's old gameplay
+		// usage site -- see the fix comments in w_force.c, g_client.c and zyk_load_common_settings() --
+		// plus settings 0-4,7,12,14,15, which were removed in earlier passes of this same cleanup; see
+		// the status-line comments above for why each one is gone). The underlying player_settings bit
+		// positions below are NOT renumbered -- doing that would mean migrating every already-saved
+		// player_settings value in the database, plus updating every other reader of these bits. Instead
+		// this table translates the number the player types into the real bit index those readers still
 		// expect; everything below continues to operate on that real bit index exactly as before.
-		static const int settings_number_to_bit[] = { 0, 5, 6, 8, 9, 10, 11, 13 }; // index 0 unused (rejected below)
+		static const int settings_number_to_bit[] = { 0, 5, 13 }; // index 0 unused (rejected below)
 
 		if (value <= 0 || value >= (int)ARRAY_LEN(settings_number_to_bit))
 		{
@@ -10004,62 +9979,31 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		value = settings_number_to_bit[value];
 
-		if (value != 8)
+		if (ent->client->pers.player_settings & (1 << value))
 		{
-			if (ent->client->pers.player_settings & (1 << value))
-			{
-				ent->client->pers.player_settings &= ~(1 << value);
+			ent->client->pers.player_settings &= ~(1 << value);
 
-				if (value == 5)
-					strcpy(new_status, "^3English^7");
-				else
-					strcpy(new_status,"^2ON^7");
-			}
+			if (value == 5)
+				strcpy(new_status, "^3English^7");
 			else
-			{
-				ent->client->pers.player_settings |= (1 << value);
-
-				if (value == 5)
-					strcpy(new_status, "^1Custom^7");
-				else
-					strcpy(new_status,"^1OFF^7");
-			}
+				strcpy(new_status,"^2ON^7");
 		}
+		else
+		{
+			ent->client->pers.player_settings |= (1 << value);
+
+			if (value == 5)
+				strcpy(new_status, "^1Custom^7");
+			else
+				strcpy(new_status,"^1OFF^7");
+		}
+		// GalaxyRP fix: [Settings] the value==8 (Starting Single Saber Style cycling) branch used to be
+		// here as a special case alongside the generic toggle above, cycling player_settings bits 26-29.
+		// Removed along with setting 3/bit 8 -- see the range-check comment above.
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music cycling) and value==15
 		// (Difficulty/Challenge Mode activation gate) branches used to be here. Both are removed since
 		// 14 and 15 are now rejected above as invalid settings values, and everything downstream of
 		// Challenge Mode activation is dead.
-		else
-		{ // zyk: starting saber style has its own handling code
-			if (ent->client->pers.player_settings & (1 << 26))
-			{
-				ent->client->pers.player_settings &= ~(1 << 26);
-				ent->client->pers.player_settings |= (1 << 27);
-				strcpy(new_status,"^1Red^7");
-			}
-			else if (ent->client->pers.player_settings & (1 << 27))
-			{
-				ent->client->pers.player_settings &= ~(1 << 27);
-				ent->client->pers.player_settings |= (1 << 28);
-				strcpy(new_status,"^1Desann^7");
-			}
-			else if (ent->client->pers.player_settings & (1 << 28))
-			{
-				ent->client->pers.player_settings &= ~(1 << 28);
-				ent->client->pers.player_settings |= (1 << 29);
-				strcpy(new_status,"^5Tavion");
-			}
-			else if (ent->client->pers.player_settings & (1 << 29))
-			{
-				ent->client->pers.player_settings &= ~(1 << 29);
-				strcpy(new_status,"^5Blue^7");
-			}
-			else
-			{
-				ent->client->pers.player_settings |= (1 << 26);
-				strcpy(new_status,"^3Yellow^7");
-			}
-		}
 
 		save_account(ent, qfalse);
 
@@ -10069,28 +10013,12 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Language %s\n\"", new_status) );
 		}
-		else if (value == 6)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Allow Force Powers from allies %s\n\"", new_status) );
-		}
+		// GalaxyRP fix: [Settings] the value==6 (Allow Force Powers from allies), value==8 (Starting
+		// Single Saber Style), value==9 (Allow Screen Message), value==10 (Use healing force only at
+		// allied players) and value==11 (Start With Saber) print branches used to be here. Removed along
+		// with those settings -- see the range-check comment above.
 		// GalaxyRP fix: [Magic] the value==7 (Show magic cast in chat) print branch used to be here.
 		// Removed since 7 is now rejected above as an invalid settings value.
-		else if (value == 8)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Starting Single Saber Style %s\n\"", new_status) );
-		}
-		else if (value == 9)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Allow Screen Message %s\n\"", new_status) );
-		}
-		else if (value == 10)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Use healing force only at allied players %s\n\"", new_status) );
-		}
-		else if (value == 11)
-		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Start With Saber %s\n\"", new_status) );
-		}
 		else if (value == 13)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Admin Protect %s\n\"", new_status) );
@@ -15396,51 +15324,15 @@ void Cmd_TrainingMode_f(gentity_t* ent) {
 	return;
 }
 
-// GalaxyRP fix: [Settings] plain-text status words for the ui_zyk_setting_N_value cvars used by the
-// Settings panel in ingame_galaxyrp.menu. Those cvars (declared via XCVAR_DEF in ui_xcvar.h) were
-// never written by any code anywhere in the repo -- they only ever displayed their static "0"
-// default, which is meaningless to a player looking at the panel. This piggybacks on the existing
-// zykmod server->cgame sync (see the content string built in Cmd_GalaxyRpUi_f just below, and
-// CG_ZykMod/ui_cvars_in_order in cg_servercmds.c) to push the exact same words Cmd_Settings_f already
-// prints to console when run with no arguments, so the panel and the console command can never say
-// different things. setting_number matches the player-facing /settings <N> numbering (see
-// settings_number_to_bit in Cmd_Settings_f above), not the underlying player_settings bit position.
-// Deliberately NOT sharing code with Cmd_Settings_f's own status-line block -- that block is already
-// correct and tested, and duplicating a handful of comparisons here is lower risk than refactoring it.
-void zyk_setting_status_text(gentity_t *ent, int setting_number, char *out, int out_size) {
-	switch (setting_number) {
-		case 2: // Allow Force Powers from allies
-			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 6)) ? "OFF" : "ON", out_size);
-			break;
-		case 3: // Starting Single Saber Style (multi-bit, spans bits 26-29)
-			if (ent->client->pers.player_settings & (1 << 26))
-				Q_strncpyz(out, "Yellow", out_size);
-			else if (ent->client->pers.player_settings & (1 << 27))
-				Q_strncpyz(out, "Red", out_size);
-			else if (ent->client->pers.player_settings & (1 << 28))
-				Q_strncpyz(out, "Desann", out_size);
-			else if (ent->client->pers.player_settings & (1 << 29))
-				Q_strncpyz(out, "Tavion", out_size);
-			else
-				Q_strncpyz(out, "Blue", out_size);
-			break;
-		case 4: // Allow Screen Message
-			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 9)) ? "OFF" : "ON", out_size);
-			break;
-		case 5: // Use healing force only at allied players
-			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 10)) ? "OFF" : "ON", out_size);
-			break;
-		case 6: // Start With Saber
-			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 11)) ? "OFF" : "ON", out_size);
-			break;
-		case 7: // Admin Protect
-			Q_strncpyz(out, (ent->client->pers.player_settings & (1 << 13)) ? "OFF" : "ON", out_size);
-			break;
-		default:
-			Q_strncpyz(out, "", out_size);
-			break;
-	}
-}
+// GalaxyRP fix: [Settings] zyk_setting_status_text() used to sit here -- plain-text status words for
+// the ui_zyk_setting_N_value cvars, fed to the client via the settings_to_sync loop that used to be in
+// Cmd_GalaxyRpUi_f just below (see CG_ZykMod/ui_cvars_in_order in cg_servercmds.c). Those cvars only
+// ever fed the Settings panel in ingame_galaxyrp.menu, which was removed entirely in an earlier pass of
+// this cleanup, and the settings this function reported on (Allow Force Powers from allies, Starting
+// Single Saber Style, Allow Screen Message, Use healing force only at allied players, Start With Saber)
+// are themselves removed in this pass (see settings_number_to_bit in Cmd_Settings_f) -- so both the
+// function and its ui_cvars_in_order/XCVAR_DEF plumbing in cg_servercmds.c and ui_xcvar.h are now
+// entirely without a consumer and have been removed together.
 
 void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	// zyk: sends info to the client-side menu if player has the client-side plugin
@@ -15486,23 +15378,15 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 			strcpy(content, va("%s%d/%d~", content, ent->client->pers.skill_levels[i], skills[i].max_level));
 		}
 
-		// GalaxyRP fix: [Settings] appended after the skills loop and before the packet is sent, in the
-		// same fixed order as the 6 new entries added to ui_cvars_in_order[] in cg_servercmds.c
-		// (ui_zyk_setting_6/8/9/10/11/13_value). See zyk_setting_status_text() above for what each word
-		// means and why this piggybacks on the zykmod sync instead of its own command.
-		{
-			char setting_text[16];
-			int setting_number;
-			int settings_to_sync[] = { 2, 3, 4, 5, 6, 7 };
+		// GalaxyRP fix: [Settings] a settings_to_sync loop used to be appended here, after the skills
+		// loop and before the packet is sent, pushing 6 setting-status words (via the now-removed
+		// zyk_setting_status_text() above) into 6 entries that used to sit here in ui_cvars_in_order[]
+		// in cg_servercmds.c. Those cvars only ever fed the Settings panel in ingame_galaxyrp.menu, which
+		// was removed entirely in an earlier pass of this cleanup, and the settings themselves are
+		// removed in this pass (see settings_number_to_bit in Cmd_Settings_f) -- so the loop, its
+		// ui_cvars_in_order[] entries and their XCVAR_DEFs in ui_xcvar.h have all been removed together.
 
-			for (int i = 0; i < ARRAY_LEN(settings_to_sync); i++) {
-				setting_number = settings_to_sync[i];
-				zyk_setting_status_text(ent, setting_number, setting_text, sizeof(setting_text));
-				strcpy(content, va("%s%s~", content, setting_text));
-			}
-		}
-
-		// GalaxyRP fix: [Shop] appended after the settings loop above, same piggyback-on-zykmod
+		// GalaxyRP fix: [Shop] appended after where the settings loop above used to be, same piggyback-on-zykmod
 		// approach, in the same fixed order as the 3 new entries added to ui_cvars_in_order[] in
 		// cg_servercmds.c (ui_zyk_upgrade_1/2/3_owned). Reports whether each of the 3 kept shop
 		// upgrades (skill_levels[38] bits 0/1/2, per-character -- see the duplicate-purchase guards in

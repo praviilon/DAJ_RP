@@ -3027,8 +3027,11 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		// Tr!Force: [Motd] Check screen message
 		if (!client->sess.motdSeen && VALIDSTRINGCVAR(rp_screen_message.string))
 		{
-			// Logged players can disable the screen message if they want to
-			if (ent->client->sess.amrpgmode == 0 || !(ent->client->pers.player_settings & (1 << 9)))
+			// GalaxyRP fix: [Settings] this used to be gated behind
+			// (ent->client->sess.amrpgmode == 0 || !(ent->client->pers.player_settings & (1 << 9))) --
+			// letting a logged-in RPG player disable the screen message via the old /settings 4, "Allow
+			// Screen Message". That per-player choice has been removed (see the fix comment on
+			// settings_number_to_bit in Cmd_Settings_f) -- the screen message is now always shown.
 			{
 				// Delay motd for non-plugin clients
 				int motdDelayed = rp_pluginRequired.integer && !client->pers.clientPlugin ? rp_screen_message_timer.integer + 2 : 0;
