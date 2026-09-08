@@ -5410,8 +5410,15 @@
 		// from player_settings bit 0 by Cmd_GalaxyRpUi_f/CG_ZykMod, see the matching comments in
 		// g_cmds.c and cg_servercmds.c), so a player who already owns Holdable Items Upgrade can't
 		// click a purchase Cmd_Buy_f's own duplicate-purchase guard would reject anyway with a "You
-		// already have..." message. Also added "exec zykmod" to the action below so a successful
-		// purchase greys the button out immediately, without needing to leave and reopen this panel.
+		// already have..." message.
+		// GalaxyRP fix: [Shop] this action used to also send "exec zykmod" right after the purchase, to
+		// grey the button out immediately without leaving and reopening this panel -- removed. Buying
+		// all 3 upgrades in quick succession (each purchase already prints a confirmation, plus this
+		// panel's own "exec buy upgrade N") could stack up enough server->client reliable commands to
+		// trip the engine's "Server command overflow" client-drop protection (MAX_RELIABLE_COMMANDS,
+		// sv_main.cpp), especially on a busier server. buyButton's own onOpen handler above already
+		// does an "exec zykmod" refresh every time this Shop panel is (re)opened, so the greyed-out
+		// state still catches up correctly -- just on the next open instead of instantly on purchase.
 		itemDef
 		{
 			name				buy0Button
@@ -5436,7 +5443,6 @@
 				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Holdable Items Upgrade is now
 				// upgrade 1 (was flat product id 40).
 				exec			"buy upgrade 1"
-				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -5466,8 +5472,9 @@
 			{
 				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Impact Reducer is now
 				// upgrade 2 (was flat product id 15).
+				// GalaxyRP fix: [Shop] "exec zykmod" removed here -- see the matching comment on
+				// buy0Button above for why.
 				exec			"buy upgrade 2"
-				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
@@ -5507,8 +5514,9 @@
 			{
 				// GalaxyRP fix: [Shop] renumbered to /buy upgrade <n> -- Stun Baton Upgrade is now
 				// upgrade 3 (was flat product id 33).
+				// GalaxyRP fix: [Shop] "exec zykmod" removed here -- see the matching comment on
+				// buy0Button above for why.
 				exec			"buy upgrade 3"
-				exec			"zykmod" ;
 				play			"sound/interface/button1.wav" ;
 			}
 		}
