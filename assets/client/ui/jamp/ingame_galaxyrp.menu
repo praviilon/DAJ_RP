@@ -60,7 +60,6 @@
 			hide			levelother ;
 			hide			levelammo ;
 			hide			levelitem ;
-			hide 			settingsControls ;
 			hide 			buyControls ;
 			hide 			buyAmmoControls ;
 			hide 			buyWeaponsControls ;
@@ -168,7 +167,6 @@
 				hide			levelother ;
 				hide			levelammo ;
 				hide			levelitem ;
-				hide 			settingsControls ;
 				hide 			buyControls ;
 				hide 			buyAmmoControls ;
 				hide 			buyWeaponsControls ;
@@ -253,7 +251,6 @@
 				hide			levelother ;
 				hide			levelammo ;
 				hide			levelitem ;
-				hide 			settingsControls ;
 				hide 			buyControls ;
 				hide 			buyAmmoControls ;
 				hide 			buyWeaponsControls ;
@@ -338,7 +335,6 @@
 				hide			levelother ;
 				hide			levelammo ;
 				hide			levelitem ;
-				hide 			settingsControls ;
 				hide 			buyControls ;
 				hide 			buyAmmoControls ;
 				hide 			buyWeaponsControls ;
@@ -422,7 +418,6 @@
 				hide			levelother ;
 				hide			levelammo ;
 				hide			levelitem ;
-				hide 			settingsControls ;
 				hide 			buyControls ;
 				hide 			buyAmmoControls ;
 				hide 			buyWeaponsControls ;
@@ -513,7 +508,6 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
-				hide 			settingsControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		gamesButton 		forecolor 1 1 1 1 ;
 			}
@@ -592,7 +586,6 @@
 				hide 				buyAmmoControls ;
 				hide 				buyWeaponsControls ;
 				hide 				buyMiscControls ;
-				hide 				settingsControls ;
 				hide 				gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		cameraButton	forecolor 1 1 1 1 ;
@@ -894,11 +887,11 @@
 			{
 				play			"sound/interface/button1.wav" ;
 				// GalaxyRP fix: [Profile UI] added exec "zykmod" here 2026-09-02, matching upButton
-				// ("Skills") and settingsButton -- Force power levels are server-side account data synced
-				// through the same zykmod payload as regular skills (see the skills[] loop in
-				// Cmd_GalaxyRpUi_f, g_cmds.c), so without this the panel only ever showed whatever was
-				// synced the last time the menu was opened or Skills/Customize/Settings was clicked,
-				// instead of the player's current force power levels.
+				// ("Skills") -- Force power levels are server-side account data synced through the same
+				// zykmod payload as regular skills (see the skills[] loop in Cmd_GalaxyRpUi_f, g_cmds.c),
+				// so without this the panel only ever showed whatever was synced the last time the menu
+				// was opened or Skills/Customize was clicked, instead of the player's current force
+				// power levels.
 				exec			"zykmod" ;
 				hide			listControls ;
 				hide			charControls ;
@@ -920,7 +913,6 @@
 				hide			levelother ;
 				hide			levelammo ;
 				hide			levelitem ;
-				hide			settingsControls ;
 				hide			buyControls ;
 				hide			buyAmmoControls ;
 				hide			buyWeaponsControls ;
@@ -6032,400 +6024,6 @@
 				close			ingame_galaxyrp ;
 			}
 		}
-
-		itemDef
-		{
-			name				settingsButton_glow
-			style				WINDOW_STYLE_SHADER
-			// GalaxyRP fix: [Profile UI] repositioned to sit directly above cameraButton (rect y 350),
-			// spaced by the same 30px interval the top group of tabs use with each other (Skills 78,
-			// Characters 108, Shop 138, Games 168) -- 350 - 30 = 320.
-			rect				5 320 140 30
-			background			"gfx/menus/menu_blendbox2"
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-			// GalaxyRP: [Profile UI] Settings only makes sense for a logged-in account, same as
-			// Skills/Characters/Shop/Games above.
-			cvarTest			"ui_loggedin"
-			showCvar
-			{
-				"1"
-			}
-		}
-
-		itemDef
-		{
-			name				settingsButton
-			group				mainButtons
-			text				"Settings"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				10 320 140 30
-			font				3
-			textscale			0.8
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			// GalaxyRP fix: [Profile UI] this button and its cvarTest/showCvar login gate below were
-			// added new -- settingsButton_glow (above) already existed, but nothing in this file had
-			// ever declared the actual clickable settingsButton itemDef, so the Settings panel
-			// (settingsControls group, below) was unreachable in-game since the section was first added.
-			cvarTest			"ui_loggedin"
-			showCvar
-			{
-				"1"
-			}
-			descText			"Adjust your account settings"
-
-			mouseEnter
-			{
-				show			settingsButton_glow
-			}
-			mouseExit
-			{
-				hide			settingsButton_glow
-			}
-			action
-			{
-				play			"sound/interface/button1.wav" ;
-				// GalaxyRP fix: [Settings] added exec "zykmod" here 2026-09-02, matching the same call
-				// upButton/listButton already make -- without it the *Value fields below only ever show
-				// whatever was synced the last time some other button was pressed (or nothing at all, if
-				// this is the first tab opened), instead of the player's current settings.
-				exec			"zykmod" ;
-				show 			settingsControls ;
-				hide			charControls ;
-				hide			changePassControls ;
-				hide 			rpgClassControls ;
-				hide 			upControls ;
-				hide 			forceLoginSkillsControls ;
-				hide			weaponSkillsControls ;
-				hide			otherSkillsControls ;
-				hide			ammoSkillsControls ;
-				hide			itemsSkillsControls ;
-				hide			questControls ;
-				hide			universeControls ;
-				hide			lightControls ;
-				hide			darkControls ;
-				hide			eternityControls ;
-				hide			questMapsControls ;
-				hide 			listControls ;
-				hide 			commandsControls ;
-				hide			levelweapon ;
-				hide			levelother ;
-				hide			levelammo ;
-				hide			levelitem ;
-				hide 			buyControls ;
-				hide 			buyAmmoControls ;
-				hide 			buyWeaponsControls ;
-				hide 			buyMiscControls ;
-				hide 			cameraControls ;
-				hide 			gamesControls ;
-				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
-				setitemcolor		settingsButton		forecolor 1 1 1 1 ;
-			}
-		}
-
-		// Removed setting0Value (no setting0Button existed in this menu) 2026-08-31: server-side
-		// /settings 0 command was removed; this edit field only ever displayed
-		// ui_zyk_setting_0_value and never called exec, but is removed for consistency.
-
-		// Removed setting1Value/setting2Value/setting3Value/setting4Value (no matching Buttons
-		// existed in this menu for any of them) 2026-08-31: server-side /settings 1-4 were removed
-		// in an earlier pass of this same cleanup; these edit fields only ever displayed
-		// ui_zyk_setting_1_value through ui_zyk_setting_4_value and never called exec, so they were
-		// missed at the time — removed now for consistency with setting0Value above.
-
-		// GalaxyRP fix: [Settings] removed setting5Value 2026-09-02: unlike the dead-setting removals
-		// above, /settings 1 (Language, the real bit-5 setting) is still fully live server-side -- this
-		// field was its only representation in this panel, and it never had a matching Button next to
-		// it (Language has no in-game toggle button, only the console command), so it rendered as a
-		// bare, unlabeled value with no way to tell what it was for. Removed rather than labeled, per
-		// request, since nothing else in this panel is display-only with no button.
-
-		itemDef
-		{
-			name				setting6Button
-			group				settingsControls
-			text				"Allow Force Powers from allies"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 140 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] /settings renumbered to a clean 1-7 sequence (this is now
-				// player-facing number 2) -- see settings_number_to_bit in Cmd_Settings_f (g_cmds.c).
-				// The itemDef name and cvar binding below are left as setting6* since that still matches
-				// the underlying player_settings bit position, which is unchanged.
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- without it, toggling this setting
-				// updated the server-side value correctly, but setting6Value below kept showing whatever
-				// was synced the last time the Settings tab was opened (matching the same missing-refresh
-				// bug already fixed on upButton/listButton/settingsButton elsewhere in this menu).
-				exec			"settings 2"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting6Value
-			group				settingsControls
-			rect				410 140 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_6_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		// Removed setting7Button/setting7Value ("Show magic cast in chat", exec "settings 7")
-		// 2026-08-31: server-side /settings 7 was removed -- the chat line it toggled,
-		// zyk_show_magic_in_chat(), was removed as dead (it lost its only callers when the seven
-		// magic/ultimate powers it announced were removed as permanently unreachable). This button
-		// would now trigger "Invalid settings value" from the server. See also setting0Value above
-		// and setting14Button/setting15Button below for the same treatment.
-
-		itemDef
-		{
-			name				setting8Button
-			group				settingsControls
-			text				"Starting Single Saber Style"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 155 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 3 (see setting6Button
-				// above for the full explanation). Name/cvar left as setting8* (real bit unchanged).
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
-				// setting6Button above for why.
-				exec			"settings 3"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting8Value
-			group				settingsControls
-			rect				410 155 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_8_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting9Button
-			group				settingsControls
-			text				"Allow Screen Message"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 170 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 4 (see setting6Button
-				// above for the full explanation). Name/cvar left as setting9* (real bit unchanged).
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
-				// setting6Button above for why.
-				exec			"settings 4"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting9Value
-			group				settingsControls
-			rect				410 170 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_9_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting10Button
-			group				settingsControls
-			text				"Use healing force only at allied players"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 185 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 5 (see setting6Button
-				// above for the full explanation). Name/cvar left as setting10* (real bit unchanged).
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
-				// setting6Button above for why.
-				exec			"settings 5"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting10Value
-			group				settingsControls
-			rect				410 185 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_10_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		itemDef 
-		{
-			name				setting11Button
-			group				settingsControls
-			text				"Start With Saber"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 200 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 6 (see setting6Button
-				// above for the full explanation). Name/cvar left as setting11* (real bit unchanged).
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
-				// setting6Button above for why.
-				exec			"settings 6"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting11Value
-			group				settingsControls
-			rect				410 200 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_11_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		// Removed setting12Button/setting12Value ("Jetpack", exec "settings 12") 2026-09-02: server-side
-		// /settings 12 was already removed from Cmd_Settings_f (its bit was only ever read back by its
-		// own now-removed status line, never gating actual jetpack availability), which left this
-		// button as the last stale binding calling a removed command. Removed for consistency with
-		// setting0Value/setting1-4Value/setting7Button/setting14-15Button above -- see also ui_xcvar.h,
-		// where ui_zyk_setting_12_value's now-unused cvar declaration was removed at the same time.
-		// GalaxyRP fix: [Profile UI] 2026-09-02: the row below (setting13Button/Value, "Admin Protect")
-		// used to stay at its original rect y 245, leaving a lopsided 30px gap where this removed row's
-		// own slot (y 230) used to sit, while every other row is a uniform 15px apart. Pulled up to
-		// y 215 -- directly following setting11 (Start With Saber) at y 200 -- to close that gap and
-		// match the uniform spacing every other settings row uses.
-
-		itemDef
-		{
-			name				setting13Button
-			group				settingsControls
-			text				"Admin Protect"
-			descText			""
-			type				1
-			font				3
-			textscale			.4
-			style				WINDOW_STYLE_FILLED
-			rect				180 215 180 12
-			textalign			ITEM_ALIGN_LEFT
-			forecolor			1 .682 0 1
-			visible				0
-			action
-			{
-				// GalaxyRP fix: [Settings] renumbered -- now player-facing number 7 (see setting6Button
-				// above for the full explanation). Name/cvar left as setting13* (real bit unchanged).
-				// GalaxyRP fix: [Settings] added exec "zykmod" here -- see the matching fix on
-				// setting6Button above for why.
-				exec			"settings 7"
-				exec			"zykmod" ;
-				play			"sound/interface/button1.wav" ;
-			}
-		}
-
-		itemDef
-		{
-			name				setting13Value
-			group				settingsControls
-			rect				410 215 140 12
-			style				WINDOW_STYLE_EMPTY
-			type				ITEM_TYPE_EDITFIELD
-			text				""
-			cvar				"ui_zyk_setting_13_value" 
-			textalign			ITEM_ALIGN_LEFT
-			font				3
-			textscale			.4
-			forecolor			1 1 1 1
-			visible				0
-		}
-
-		// Removed setting14Button/setting14Value ("Boss Battle Music", exec "settings 14") and
-		// setting15Button/setting15Value ("Difficulty", exec "settings 15") 2026-08-31:
-		// server-side /settings 0, 14 and 15 commands were removed, so these buttons would
-		// now trigger "Invalid settings value" from the server. See also setting0Value below.
 
 //----------------------------------------------------------------------------------------------
 // List Tab Beginning
