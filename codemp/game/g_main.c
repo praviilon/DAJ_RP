@@ -5134,15 +5134,12 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 			return qfalse;
 		}
 
-		if (attacker->client->pers.player_statuses & (1 << 26) && attacker != target)
-		{ // zyk: used nofight command, cannot hit anyone
-			return qfalse;
-		}
-
-		if (target->client->pers.player_statuses & (1 << 26) && attacker != target)
-		{ // zyk: used nofight command, cannot be hit by anyone
-			return qfalse;
-		}
+		// GalaxyRP: [nofight] the two player_statuses bit 26 checks that used to sit here -- "used
+		// nofight command, cannot hit anyone" and "cannot be hit by anyone" -- are gone along with
+		// the /nofight command itself; see the note where Cmd_NoFight_f used to live in g_cmds.c.
+		// The second of the two was the one that actually produced the reported invulnerability: it
+		// made a player immune to every other player, indefinitely, with no way for them to switch
+		// it back off once they had joined a team, and no indication anywhere that it was on.
 
 		if (attacker->client->noclip == qtrue || target->client->noclip == qtrue)
 		{ // zyk: noclip does not allow hitting

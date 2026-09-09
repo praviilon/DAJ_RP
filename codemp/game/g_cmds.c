@@ -10717,12 +10717,6 @@ void Cmd_RaceMode_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (ent->client->pers.player_statuses & (1 << 26))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join race while being in nofight mode\n\"");
-		return;
-	}
-
 	if (ent->client->pers.race_position == 0)
 	{
 		int j = 0, swoop_number = -1;
@@ -14681,12 +14675,6 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		return;
 	}
 
-	if (ent->client->pers.player_statuses & (1 << 26))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join tournament while being in nofight mode\n\"");
-		return;
-	}
-
 	if (level.duel_players[ent->s.number] == -1 && level.duel_tournament_mode > 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot join the duel tournament now\n\"");
@@ -15043,12 +15031,6 @@ void Cmd_SniperMode_f(gentity_t *ent) {
 		return;
 	}
 
-	if (ent->client->pers.player_statuses & (1 << 26))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join sniper battle while being in nofight mode\n\"");
-		return;
-	}
-
 	if (level.sniper_players[ent->s.number] == -1 && level.sniper_mode > 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot join the Sniper Battle now\n\"");
@@ -15135,12 +15117,6 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	if (level.sniper_mode > 0 && level.sniper_players[ent->s.number] != -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"You are already in a Sniper Battle\n\"");
-		return;
-	}
-
-	if (ent->client->pers.player_statuses & (1 << 26))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join melee battle while being in nofight mode\n\"");
 		return;
 	}
 
@@ -15255,12 +15231,6 @@ void Cmd_RpgLmsMode_f(gentity_t *ent) {
 
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking /rpglms during boss battles used to be
 	// here. guardian_mode is permanently 0 now, so it was unreachable.
-
-	if (ent->client->pers.player_statuses & (1 << 26))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join RPG LMS while being in nofight mode\n\"");
-		return;
-	}
 
 	if (level.rpg_lms_players[ent->s.number] == -1 && level.rpg_lms_mode > 1)
 	{
@@ -15567,30 +15537,22 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 	return;
 }
 
-/*
-==================
-Cmd_NoFight_f
-==================
-*/
-void Cmd_NoFight_f(gentity_t *ent) {
-	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR)
-	{
-		if (ent->client->pers.player_statuses & (1 << 26))
-		{
-			ent->client->pers.player_statuses &= ~(1 << 26);
-			trap->SendServerCommand(ent->s.number, "print \"Deactivated\n\"");
-		}
-		else
-		{
-			ent->client->pers.player_statuses |= (1 << 26);
-			trap->SendServerCommand(ent->s.number, "print \"Activated\n\"");
-		}
-	}
-	else
-	{
-		trap->SendServerCommand(ent->s.number, "print \"This command must be used as spectator\n\"");
-	}
-}
+// GalaxyRP: [nofight] Cmd_NoFight_f() used to sit here -- the "/nofight" command (added by Zyk in
+// 2017 and never modified since), which toggled player_statuses bit 26 to make a player unable to
+// damage other players and, more importantly, unable to be damaged BY them. It has been removed
+// entirely, along with every check that read that bit: the two in zyk_can_hit_target() (g_main.c),
+// the sentry-gun one in G_Damage() (g_combat.c), and the five "cannot join X while being in nofight
+// mode" guards on /race, /duelmode, /sniper, /melee and /rpglms above.
+//
+// It could only be toggled while spectating, so a player who enabled it and then joined had no way
+// to turn it back off, and nothing in the game told them it was on -- the only documentation was an
+// in-game tutorial line that was dropped when the tutorial text moved to language files. The result
+// was a player who looked normal but could not be hurt by anyone, with no console output and no
+// obvious cause, which is exactly how it was finally tracked down. Since the mode also had to be
+// entered from spectator (a couple of keystrokes away at any time), the restriction never actually
+// prevented anyone from granting themselves PvP immunity either.
+//
+// Bit 26 of player_statuses is now unused and free for reuse -- see g_local.h.
 /*
 ==================
 Cmd_ModVersion_f
@@ -16359,7 +16321,6 @@ command_t commands[] = {
 	{ "newschannels",		Cmd_NewsChannels_f,					0 },
 	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "nofight",			Cmd_NoFight_f,				CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },

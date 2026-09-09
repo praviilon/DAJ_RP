@@ -620,7 +620,9 @@ typedef struct clientPersistant_s {
 	// 23 - Unique Ability 3
 	// 24 - hit by Ice Bomb
 	// 25 - RPG Mode tutorial
-	// 26 - Using nofight command
+	// 26 - UNUSED (was "Using nofight command"; the /nofight command and every check that read this
+	//      bit were removed -- see the note where Cmd_NoFight_f used to live in g_cmds.c. Free to reuse,
+	//      but note a returning player's stale bit is harmless only because nothing reads it any more)
 	// 27 - Has just lost his duel in Duel Tournament
 	// 28 - Custom Quest npc
 	int player_statuses;

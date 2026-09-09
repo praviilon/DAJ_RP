@@ -4700,12 +4700,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		return;
 	}
 
-	// zyk: if attacker has nofight, cannot damage sentries
-	if (attacker && attacker->client && !attacker->NPC && attacker->client->pers.player_statuses & (1 << 26) && targ && Q_stricmp(targ->classname, "sentryGun") == 0 && 
-		(!targ->parent || targ->parent != attacker))
-	{
-		return;
-	}
+	// GalaxyRP: [nofight] an "if attacker has nofight, cannot damage sentries" check used to sit
+	// here, reading player_statuses bit 26. It went with the /nofight command -- see the note where
+	// Cmd_NoFight_f used to live in g_cmds.c. Nothing else guarded sentry guns, so a player can now
+	// damage another player's sentry exactly as they could before ever using /nofight.
 
 	// zyk: target has chat protection
 	if (targ && targ->client && !targ->NPC && targ->client->pers.player_statuses & (1 << 5))
