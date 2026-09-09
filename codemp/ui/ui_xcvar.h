@@ -244,29 +244,16 @@ XCVAR_DEF( ui_rp_skill_62_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNA
 // appended to ui_cvars_in_order[] in cg_servercmds.c. Drives the Shop -> Upgrades panel's
 // cvarTest/disableCvar gate in ingame_galaxyrp.menu, which greys out and disables the button for an
 // upgrade already owned. Numbered 1-3 to match the /buy upgrade 1-3 numbering used everywhere else in
-// this area of code, deliberately distinct from the pre-existing ui_zyk_upgrade_0_value through
-// _16_value cvars below -- those are unrelated leftovers from an older, larger upgrade system with no
-// current reader or writer anywhere in the codebase; not touched here.
+// this area of code. The pre-existing ui_zyk_upgrade_0_value through _16_value cvars that used to sit
+// directly below these three have now been removed: they were leftovers of Zyk's original "Unique
+// Upgrades" panel, whose writer (a block of trap->Cvar_Set calls in CG_ZykMod, cg_servercmds.c) was
+// deleted in "Began fixing the GalaxyRP UI" and whose only reader (the matching itemDef cvar bindings
+// in the old ingame_zykmod.menu) was deleted in "More UI refactoring, also fixed the buy button" --
+// leaving 17 XCVAR_DEFs with nothing on either end of them. They were never part of the positional
+// ui_cvars_in_order[] sync, so removing them cannot shift that array's alignment.
 XCVAR_DEF( ui_zyk_upgrade_1_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_2_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_upgrade_3_owned,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_0_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_1_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_2_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_3_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_4_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_5_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_6_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_7_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_8_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_9_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_10_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_11_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_12_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_13_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_14_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_15_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_upgrade_16_value,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_light_power,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_dark_power,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_eternity_power,			"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )

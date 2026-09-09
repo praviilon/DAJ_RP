@@ -1861,9 +1861,12 @@ char ui_cvars_in_order[100][100] = {
 	// in g_cmds.c, right after the settings loop above) -- "1" if the player already owns that shop
 	// upgrade (player_settings bit 0/1/2), "0" otherwise. Feeds the Shop -> Upgrades panel's
 	// cvarTest/disableCvar gate in ingame_galaxyrp.menu, which greys out and disables a button for an
-	// upgrade already owned. Distinct from the pre-existing, still-unused ui_zyk_upgrade_0_value
-	// through _16_value cvars declared in ui_xcvar.h -- those are leftovers from an older, larger
-	// upgrade system with no current reader or writer anywhere; not touched here.
+	// upgrade already owned. Numbered 1-3 to match the /buy upgrade 1-3 numbering; the unrelated
+	// ui_zyk_upgrade_0_value through _16_value cvars that used to be declared alongside them in
+	// ui_xcvar.h (leftovers of the old "Unique Upgrades" panel, whose writer was a block of
+	// trap->Cvar_Set calls right here in CG_ZykMod and whose reader was the old ingame_zykmod.menu --
+	// both long since deleted) have now been removed. They were never entries in this array, so their
+	// removal does not affect the positional parsing below.
 	"ui_zyk_upgrade_1_owned",
 	"ui_zyk_upgrade_2_owned",
 	"ui_zyk_upgrade_3_owned"
