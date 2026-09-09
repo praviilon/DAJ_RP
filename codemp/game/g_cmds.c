@@ -81,7 +81,12 @@ const skill_t skills[] = {
 	// unrelated RPG-class cleanup (see the "Dead Code" comment in g_combat.c) and the description
 	// text was simply never updated to match.
 	{5, "Rage",					"makes you 1.3 times faster, increases your saber attack speed and damage and makes you get less damage",															"force",	"dark",		FP_RAGE},
-	{5, "Team Energize",		"restores some force power to players near you. If Improvements skill is at least at level 1, regens blaster pack and power cell ammo of the target players",																																					"force",	"dark",		FP_TEAM_FORCE},
+	// GalaxyRP fix: [Skills audit] description no longer references the "If Improvements skill is at
+	// least at level 1, regens blaster pack and power cell ammo of the target players" sub-feature --
+	// that ammo-regen branch (gated on the since-removed Improvements skill) was already stripped out
+	// of ForceTeamForceReplenish() in an earlier, unrelated fix (see the matching comments in
+	// w_force.c); the description text was simply never updated to match.
+	{5, "Team Energize",		"restores some force power to players near you",																																																																	"force",	"dark",		FP_TEAM_FORCE},
 	{4, "Stun Baton",			"attacks someone with a small electric charge. Has %d damage multiplied by the stun baton level. With Stun Baton Upgrade, can destroy or move some other objects, and also decloaks enemies and decrease their moving speed for some seconds",																	"weapons",	"merc",		WP_STUN_BATON},
 	{2, "Blaster Pistol",		"the popular Star Wars pistol used by Han Solo in the movies. Normal fire is a single blaster shot, alternate fire allows you to fire a powerful charged shot. The charged shot causes a lot more damage depending on how much it was charged",																	"weapons",	"merc",		WP_BRYAR_PISTOL},
 	{2, "E11 Blaster Rifle",	"the rifle used by the Storm Troopers. Normal fire is a single shot, while the alternate fire is the rapid fire. Level 2 unlocks the alternate fire mode.",																																										"weapons",	"merc",		WP_BLASTER},
