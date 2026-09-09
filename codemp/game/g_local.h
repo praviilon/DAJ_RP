@@ -718,9 +718,17 @@ typedef struct clientPersistant_s {
 	// 3 - Eternity Power
 	// 4 - Universe Power
 	// 5 - Custom Language (/settings 1)
-	// GalaxyRP fix: [Settings] bit 6 ("Allow Force Powers from allies") documentation removed here --
-	// that setting has been removed from /settings entirely; force powers between allies are now
-	// always allowed (see the fix comment at its old gate in w_force.c's ForcePowerUsableOn()).
+	// GalaxyRP fix: [Settings] bit 6 used to be "Allow Force Powers from allies" -- that setting was
+	// removed from /settings entirely (force powers between allies are now always allowed, see the fix
+	// comment at its old gate in w_force.c's ForcePowerUsableOn()), freeing the bit for reuse rather
+	// than retiring it. It is now the Use Hint (/settings 4): whether the gfx/hud/useableHint hand
+	// icon is drawn while looking at a usable world entity. Inverted like the other toggles here
+	// (clear == ON, set == OFF), and because a zeroed player_settings therefore reads as ON, new
+	// accounts are created with this bit SET so the feature starts OFF -- see the hardcoded default in
+	// insert_accounts_table_row() (g_cmds.c), the same mechanism bit 13 uses. Accounts that already
+	// existed before this bit was introduced have it clear and so start with the hint ON; that is
+	// accepted rather than migrated, and players can turn it off with /settings 4.
+	// 6 - Use Hint (/settings 4)
 	// 7 - Show magic cast in chat
 	// GalaxyRP fix: [Settings] bit 9 ("Allow Screen Message") documentation removed here -- that
 	// setting has been removed from /settings entirely; the screen message is now always shown (see
@@ -1919,6 +1927,8 @@ void	G_Sound( gentity_t *ent, int channel, int soundIndex );
 void	G_SoundAtLoc( vec3_t loc, int channel, int soundIndex );
 void	G_EntitySound( gentity_t *ent, int channel, int soundIndex );
 void	TryUse( gentity_t *ent );
+// GalaxyRP: [Use hint] read-only companion to TryUse -- see its comment in g_utils.c
+qboolean G_CanUseInFrontOf( gentity_t *ent );
 void	G_SendG2KillQueue(void);
 void	G_KillG2Queue(int entNum);
 void	G_FreeEntity( gentity_t *e );

@@ -1163,6 +1163,11 @@ typedef struct cgMedia_s {
 
 	qhandle_t	hackerIconShader;
 
+	// GalaxyRP: [Use hint] the Jedi Academy hand icon shown while looking at a usable world entity
+	// (/settings 4). gfx/hud/useableHint ships in the base JKA assets, which are shared by SP and MP,
+	// so nothing extra has to be packaged -- single player registers the same shader path.
+	qhandle_t	useableHintShader;
+
 	// Saber shaders
 	//-----------------------------
 	qhandle_t	forceCoronaShader;

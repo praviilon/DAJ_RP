@@ -4445,6 +4445,29 @@ void ClientEndFrame( gentity_t *ent ) {
 		isNPC = qtrue;
 	}
 
+	// GalaxyRP: [Use hint] evaluate the usable-entity hand icon once per client per frame, here at the
+	// end of the frame so origin and view angles are already final. Deliberately placed ABOVE the
+	// spectator early-return below so the stat is always written on every path -- a player who was
+	// looking at a door and then went spectator or died would otherwise keep the last value forever,
+	// and the client would keep drawing it. G_CanUseInFrontOf() (g_utils.c) itself also refuses for
+	// dead and spectating players, so this is belt and braces, not duplication.
+	// The gate is the whole cost story: the trace runs only for a logged-in player who turned the
+	// feature on via /settings 4 (bit 6 is inverted -- clear == ON), so a server where nobody enabled
+	// it pays nothing but this comparison. Gating here rather than client-side also means the setting
+	// itself never has to be networked: the client draws whenever the bit arrives.
+	if ( ent->s.number < MAX_CLIENTS && ent->client )
+	{
+		if ( ent->client->sess.loggedin == qtrue && !(ent->client->pers.player_settings & (1 << 6))
+			&& G_CanUseInFrontOf( ent ) )
+		{
+			ent->client->ps.stats[STAT_USE_HINT] = 1;
+		}
+		else
+		{
+			ent->client->ps.stats[STAT_USE_HINT] = 0;
+		}
+	}
+
 	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR ) {
 		SpectatorClientEndFrame( ent );
 		return;

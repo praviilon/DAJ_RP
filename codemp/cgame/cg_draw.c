@@ -8361,6 +8361,39 @@ static void CG_Draw2DScreenTints( void )
 	}
 }
 
+/*
+=================
+CG_DrawUseHint
+
+GalaxyRP: [Use hint] draws the Jedi Academy "you can press Use here" hand icon. Single player has
+had this since release (CG_UseIcon, code/cgame/cg_draw.cpp); multiplayer never did.
+
+All this does is read one bit. The detection is server-side -- G_CanUseInFrontOf() in g_utils.c,
+evaluated once per client per frame in ClientEndFrame() -- because usability lives in server-only
+entity data (svFlags & SVF_PLAYER_USABLE, ent->use, FL_INACTIVE) that appears nowhere in
+entityState_t, so the cgame has no way to work it out for itself. The server also applies the
+per-player /settings 4 gate before setting the bit, which is why there is no setting check here: if
+the bit arrived, the player wants the icon.
+
+Position: 520,296 at 48x48 in the 640x480 virtual screen. Not SP's 50,285 -- that lands inside our
+chat box (x30, baseline y350, growing upward). This sits in the one pocket of the right side that
+nothing else claims: below the radar (520,0 120x120, on by default in every gametype here), left of
+the powerup icon column (x570+), left of the jetpack/cloak/e-web fuel bars (x617+) and the lagometer
+(x592+), and above righthud (y368+). 48x48 is the largest square that fits; wider runs into the
+powerup column.
+=================
+*/
+static void CG_DrawUseHint( void )
+{
+	if ( !cg.snap->ps.stats[STAT_USE_HINT] )
+	{
+		return;
+	}
+
+	trap->R_SetColor( NULL );
+	CG_DrawPic( 520, 296, 48, 48, cgs.media.useableHintShader );
+}
+
 static void CG_Draw2D( void ) {
 	float			inTime = cg.invenSelectTime+WEAPON_SELECT_TIME;
 	float			wpTime = cg.weaponSelectTime+WEAPON_SELECT_TIME;
@@ -8509,6 +8542,10 @@ static void CG_Draw2D( void ) {
 			CG_DrawAmmoWarning();
 
 			CG_DrawCrosshairNames();
+
+			// GalaxyRP: [Use hint] inside the "don't draw any status if dead or the scoreboard is
+			// showing" block, which is where single player draws its own copy of this icon too.
+			CG_DrawUseHint();
 
 			if (cg_drawStatus.integer)
 			{

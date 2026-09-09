@@ -565,7 +565,18 @@ typedef enum {
 	STAT_ARMOR,
 	STAT_DEAD_YAW,					// look this direction when dead (FIXME: get rid of?)
 	STAT_CLIENTS_READY,				// bit mask of clients wishing to exit the intermission (FIXME: configstring?)
-	STAT_MAX_HEALTH					// health / armor limit, changable by handicap
+	STAT_MAX_HEALTH,				// health / armor limit, changable by handicap
+	// GalaxyRP: [Use hint] 1 while the player is looking at a usable world entity within
+	// USE_DISTANCE, 0 otherwise -- see G_CanUseInFrontOf() (g_utils.c), which the server evaluates
+	// once per client per frame in ClientEndFrame(), and CG_DrawUseHint() (cg_draw.c), which draws
+	// the hand icon when this reads non-zero. Set only for players who enabled it via /settings 4,
+	// so the client needs to know nothing about the setting -- it just draws when the bit arrives.
+	// Slot 9 was free: nothing in this codebase used stats[9..15], and the engine already sends all
+	// MAX_STATS entries unconditionally (msg.cpp writes a MAX_STATS bitmask plus a short per changed
+	// stat), so this needs no protocol or engine change. Chosen over a spare EF_ flag because
+	// BG_PlayerStateToEntityState() copies eFlags into the player's entityState -- an eFlags bit
+	// would be broadcast to every client on the server, while stats[] stays private to its owner.
+	STAT_USE_HINT
 } statIndex_t;
 
 

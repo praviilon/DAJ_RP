@@ -2067,6 +2067,109 @@ tryJetPack:
 	}
 }
 
+/*
+==============
+G_CanUseInFrontOf
+
+"Would pressing Use right now activate a usable world entity?" -- the predicate behind the
+gfx/hud/useableHint hand icon (/settings 4). Read-only: it never touches any entity or player state.
+
+GalaxyRP: [Use hint] Jedi Academy SINGLE PLAYER has this feature; multiplayer never did. SP's version
+(CanUseInfrontOf, code/game/g_utils.cpp) cannot be ported -- its cgame reads server entities directly
+through centity_t::gent, starts the trace from client->renderInfo.eyePoint (a server-only struct that
+is never networked) and calls gi.trace from client render code. None of that exists across the MP
+VM boundary, and nothing about usability appears in entityState_t or playerState_t. So the detection
+runs here, on the server, and only its one-bit result is networked (ps.stats[STAT_USE_HINT]).
+
+Deliberately built as the geometry-only predicate: it answers for the ValidUseTarget() branch of
+TryUse() and nothing else. TryUse also consumes the Use key for vehicles, jetpacks, body dragging,
+corpse dragging, the jawa seller, NPC follow orders, dispensers and helping up a downed player -- none
+of those set SVF_PLAYER_USABLE, so none of them light the hand. That is a scope choice, not an
+oversight; covering them means restructuring TryUse itself into a query mode, which is a separate job.
+
+This is a separate function rather than a query flag on TryUse precisely so TryUse -- live, heavily
+used code -- is not restructured for a HUD hint. The cost of that choice is that the two can drift
+apart, so they are kept adjacent here, and test_usehint.py asserts they still share USE_DISTANCE, the
+same trace mask and the same ValidUseTarget()/siege gate. If you change the trace in either one,
+change it in both.
+==============
+*/
+qboolean G_CanUseInFrontOf( gentity_t *ent )
+{
+	gentity_t	*target;
+	trace_t		trace;
+	vec3_t		src, dest, vf;
+	vec3_t		viewspot;
+
+	if (level.gametype == GT_SIEGE &&
+		!gSiegeRoundBegun)
+	{ //nothing can be used til the round starts.
+		return qfalse;
+	}
+
+	// zyk: same eligibility guards TryUse applies before it traces
+	if (!ent || !ent->client || (ent->client->ps.weaponTime > 0 && ent->client->ps.torsoAnim != BOTH_BUTTON_HOLD && ent->client->ps.torsoAnim != BOTH_CONSOLE1) || ent->health < 1 ||
+		(ent->client->ps.pm_flags & PMF_FOLLOW) || ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->tempSpectate >= level.time ||
+		(ent->client->ps.forceHandExtend != HANDEXTEND_NONE && ent->client->ps.forceHandExtend != HANDEXTEND_DRAGGING))
+	{
+		return qfalse;
+	}
+
+	if (ent->client->ps.emplacedIndex)
+	{ //on an emplaced gun, Use does nothing else
+		return qfalse;
+	}
+
+	// GalaxyRP: [Use hint] the three states where TryUse consumes the Use key before it ever reaches
+	// the trace below -- riding a vehicle (Use ejects), jetpack on (Use toggles it) and dragging a
+	// body (Use lets go). Pressing Use in any of them does something, but never a world entity, so the
+	// hand stays dark rather than pointing at scenery the key would not actually activate.
+	if (ent->s.number < MAX_CLIENTS && ent->client->ps.m_iVehicleNum)
+	{
+		return qfalse;
+	}
+
+	if (ent->client->jetPackOn)
+	{
+		return qfalse;
+	}
+
+	if (ent->client->bodyGrabIndex != ENTITYNUM_NONE)
+	{
+		return qfalse;
+	}
+
+	VectorCopy(ent->client->ps.origin, viewspot);
+	viewspot[2] += ent->client->ps.viewheight;
+
+	VectorCopy( viewspot, src );
+	AngleVectors( ent->client->ps.viewangles, vf, NULL, NULL );
+
+	VectorMA( src, USE_DISTANCE, vf, dest );
+
+	//Trace ahead to find a valid target
+	trap->Trace( &trace, src, vec3_origin, vec3_origin, dest, ent->s.number, MASK_OPAQUE|CONTENTS_SOLID|CONTENTS_BODY|CONTENTS_ITEM|CONTENTS_CORPSE, qfalse, 0, 0 );
+
+	if ( trace.fraction == 1.0f || trace.entityNum == ENTITYNUM_NONE )
+	{
+		return qfalse;
+	}
+
+	target = &g_entities[trace.entityNum];
+
+	if ( !target->inuse )
+	{
+		return qfalse;
+	}
+
+	// zyk: the same gate TryUse uses to decide it has a usable world entity
+	return ( ValidUseTarget( target )
+		&& (level.gametype != GT_SIEGE
+			|| !target->alliedTeam
+			|| target->alliedTeam != ent->client->sess.sessionTeam
+			|| g_ff_objectives.integer) ) ? qtrue : qfalse;
+}
+
 qboolean G_PointInBounds( vec3_t point, vec3_t mins, vec3_t maxs )
 {
 	int i;

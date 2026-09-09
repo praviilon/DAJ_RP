@@ -1953,7 +1953,13 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
-	sqlite3_bind_int(stmt, 4, (1 << 13)); // Admin Protect OFF by default; Language (bit 5) stays clear/English
+	// GalaxyRP: [Use hint] bit 6 (Use Hint) joins bit 13 here for the same reason -- it is inverted
+	// (clear == ON), so a new account whose PlayerSettings was plain 0 would come out of this INSERT
+	// with the hand icon already showing. Setting it makes the stored default OFF, which is what the
+	// feature ships as. Note this covers accounts created by /new only: the built-in "admin" account
+	// created by InitializeGalaxyRpTables() (g_main.c) still inserts PlayerSettings '0' literally and
+	// is deliberately left that way, so it keeps starting with both Admin Protect and the Use Hint ON.
+	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6)); // Admin Protect + Use Hint OFF by default; Language (bit 5) stays clear/English
 	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	// GalaxyRP fix: [stability] this used to never check the INSERT's own result -- an error here (most
@@ -10790,6 +10796,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			len += sprintf(message + len, "\n^3 3 - Activate Saber on Spawn - ^2ON");
 		}
 
+		// GalaxyRP: [Use hint] new setting: reuses player_settings bit 6, freed up when the old "Allow
+		// Force Powers from allies" toggle that used to own it was removed -- no DB migration needed.
+		// Inverted like every other toggle here (clear == ON, set == OFF). The default is OFF, which
+		// under that inversion means the bit must be SET, so insert_accounts_table_row() creates new
+		// accounts with it already set rather than this reading the convention backwards.
+		if (ent->client->pers.player_settings & (1 << 6))
+		{
+			len += sprintf(message + len, "\n^3 4 - Use Hint - ^1OFF");
+		}
+		else
+		{
+			len += sprintf(message + len, "\n^3 4 - Use Hint - ^2ON");
+		}
+
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
 		// (Difficulty/Challenge Mode) used to be printed here. Both settings have been removed below
 		// (see the range-check comment further down) since everything downstream of Challenge Mode
@@ -10822,7 +10842,10 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// freed up by the old "Start With Saber" toggle removed above. This is a brand new
 		// player-facing number, not a reused one; it just happens to land on bit 11, same as the old
 		// setting 6 did, purely because that bit was already free.
-		static const int settings_number_to_bit[] = { 0, 5, 13, 11 }; // index 0 unused (rejected below)
+		// GalaxyRP: [Use hint] /settings 4 added -- "Use Hint" -- reusing bit 6, freed by the old
+		// "Allow Force Powers from allies" toggle. Another brand new player-facing number that just
+		// happens to land on a previously-used bit because that bit was already free.
+		static const int settings_number_to_bit[] = { 0, 5, 13, 11, 6 }; // index 0 unused (rejected below)
 
 		if (value <= 0 || value >= (int)ARRAY_LEN(settings_number_to_bit))
 		{
