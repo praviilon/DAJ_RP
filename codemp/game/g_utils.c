@@ -2089,9 +2089,9 @@ oversight; covering them means restructuring TryUse itself into a query mode, wh
 
 This is a separate function rather than a query flag on TryUse precisely so TryUse -- live, heavily
 used code -- is not restructured for a HUD hint. The cost of that choice is that the two can drift
-apart, so they are kept adjacent here, and test_usehint.py asserts they still share USE_DISTANCE, the
-same trace mask and the same ValidUseTarget()/siege gate. If you change the trace in either one,
-change it in both.
+apart, and they already did once: this function used to bail on ps.m_iVehicleNum alone while TryUse
+only bails when the referenced vehicle actually exists. They are kept adjacent here for that reason.
+If you change the guards, the trace or the ValidUseTarget gate in either one, change it in both.
 ==============
 */
 qboolean G_CanUseInFrontOf( gentity_t *ent )
@@ -2125,8 +2125,16 @@ qboolean G_CanUseInFrontOf( gentity_t *ent )
 	// body (Use lets go). Pressing Use in any of them does something, but never a world entity, so the
 	// hand stays dark rather than pointing at scenery the key would not actually activate.
 	if (ent->s.number < MAX_CLIENTS && ent->client->ps.m_iVehicleNum)
-	{
-		return qfalse;
+	{ // zyk: mirror TryUse exactly -- it only consumes the Use key (to eject) when the referenced
+	  // vehicle is really there. A stale m_iVehicleNum pointing at a freed slot leaves Use working on
+	  // world entities, so returning qfalse on m_iVehicleNum alone would darken the hint in a case
+	  // where the key still works.
+		gentity_t *currentVeh = &g_entities[ent->client->ps.m_iVehicleNum];
+
+		if (currentVeh->inuse && currentVeh->m_pVehicle)
+		{
+			return qfalse;
+		}
 	}
 
 	if (ent->client->jetPackOn)

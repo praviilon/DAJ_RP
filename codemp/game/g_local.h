@@ -725,9 +725,15 @@ typedef struct clientPersistant_s {
 	// icon is drawn while looking at a usable world entity. Inverted like the other toggles here
 	// (clear == ON, set == OFF), and because a zeroed player_settings therefore reads as ON, new
 	// accounts are created with this bit SET so the feature starts OFF -- see the hardcoded default in
-	// insert_accounts_table_row() (g_cmds.c), the same mechanism bit 13 uses. Accounts that already
-	// existed before this bit was introduced have it clear and so start with the hint ON; that is
-	// accepted rather than migrated, and players can turn it off with /settings 4.
+	// insert_accounts_table_row() (g_cmds.c), the same mechanism bit 13 uses.
+	// IMPORTANT, for anyone reusing a "free" bit after this one: free of readers is not the same as
+	// free of data. Bit 6 was /settings 2, "Allow Force Powers from allies", a live player-facing
+	// toggle right up until the settings cleanup that retired it -- so accounts that predate this
+	// feature hold whatever that player last set, not zero. In practice a pre-existing account starts
+	// with the hint ON or OFF depending on a choice its owner made about an unrelated setting years
+	// ago. That is accepted here rather than migrated (a deliberate call), and /settings 4 reports and
+	// changes the current state either way. Bits 16-25 and 30-31 have never been used by any setting
+	// in this mod's history and are the ones to reach for when a predictable default actually matters.
 	// 6 - Use Hint (/settings 4)
 	// 7 - Show magic cast in chat
 	// GalaxyRP fix: [Settings] bit 9 ("Allow Screen Message") documentation removed here -- that

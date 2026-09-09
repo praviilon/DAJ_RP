@@ -571,9 +571,10 @@ typedef enum {
 	// once per client per frame in ClientEndFrame(), and CG_DrawUseHint() (cg_draw.c), which draws
 	// the hand icon when this reads non-zero. Set only for players who enabled it via /settings 4,
 	// so the client needs to know nothing about the setting -- it just draws when the bit arrives.
-	// Slot 9 was free: nothing in this codebase used stats[9..15], and the engine already sends all
-	// MAX_STATS entries unconditionally (msg.cpp writes a MAX_STATS bitmask plus a short per changed
-	// stat), so this needs no protocol or engine change. Chosen over a spare EF_ flag because
+	// Slot 9 was free: nothing in this codebase used stats[9..15], and the engine's playerState delta
+	// already covers every slot up to MAX_STATS (msg.cpp writes a MAX_STATS-wide changed-mask and then
+	// a short for each stat that actually changed), so this needs no protocol or engine change and
+	// costs nothing on the frames where it does not flip. Chosen over a spare EF_ flag because
 	// BG_PlayerStateToEntityState() copies eFlags into the player's entityState -- an eFlags bit
 	// would be broadcast to every client on the server, while stats[] stays private to its owner.
 	STAT_USE_HINT

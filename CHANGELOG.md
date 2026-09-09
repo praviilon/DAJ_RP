@@ -21,7 +21,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - `/adminup`, `/admindown`, and the credit commands (`/spendcredits`, `/createcredits`, `/givecredits`) now write an audit-log entry recording who did what to whom.
 - `/roll <dice>d<faces>` dice notation (up to 10 dice, 2-100 faces), plus `/rollall` and `/flipcoinall` to send a roll or flip to the whole server.
 - `rp_dice_roll_cooldown` cvar (default 3000 ms): shared cooldown for `/roll`, `/rollall`, `/flipcoin` and `/flipcoinall`.
-- Use hint: the single-player hand icon (`gfx/hud/useableHint`) now appears in multiplayer while you are looking at a usable door, button, console or other world entity. Toggle with `/settings 4`; new accounts start with it OFF. Accounts created before this release start with it ON — turn it off once with `/settings 4`.
+- Use hint: the single-player hand icon (`gfx/hud/useableHint`) now appears in multiplayer while you are looking at something the Use key can actually activate — a use-button door, a console, a power converter, an emplaced gun. Auto-opening doors and scenery are excluded, because Use does nothing on them. Toggle with `/settings 4`; new accounts start with it OFF, and accounts that predate this release start ON or OFF depending on an old setting that shared the same storage — run `/settings` to see which.
 
 ### Changed
 - `/roll` and `/flipcoin` are now distance-scoped like `/me` instead of being broadcast to the whole server, and require being alive; spectators and dead players use `/rollall` and `/flipcoinall`.

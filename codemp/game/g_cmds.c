@@ -10927,6 +10927,15 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Activate Saber on Spawn %s\n\"", new_status) );
 		}
+		// GalaxyRP fix: [Use hint] this branch was missing when /settings 4 was added, so the toggle
+		// flipped the bit and saved it but printed nothing at all -- the player had no way to tell
+		// whether they had just turned the hint on or off, or whether the command had worked. Every
+		// player-facing setting needs an entry here; test_settings_print_coverage in the use-hint test
+		// suite now asserts that every bit reachable through settings_number_to_bit[] has one.
+		else if (value == 6)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Use Hint %s\n\"", new_status) );
+		}
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music) and value==15 (Difficulty)
 		// print branches used to be here. Removed since 14 and 15 are now rejected above as invalid
 		// settings values.
