@@ -165,7 +165,6 @@ XCVAR_DEF( ui_loggedin,					"0",					NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_level_up_score,		"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_skillpoints,			"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
-XCVAR_DEF( ui_zyk_rpg_skillcounter,			"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_magic_power,			"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_credits,				"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_zyk_rpg_rpgclass,				"20",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
@@ -229,8 +228,18 @@ XCVAR_DEF( ui_rp_skill_57_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNA
 XCVAR_DEF( ui_rp_skill_58_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_59_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
 XCVAR_DEF( ui_rp_skill_60_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
-XCVAR_DEF( ui_rp_skill_61_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
-XCVAR_DEF( ui_rp_skill_62_level,			"0",					NULL,				CVAR_ARCHIVE | CVAR_INTERNAL)
+// GalaxyRP fix: [Skills] ui_rp_skill_61_level and ui_rp_skill_62_level used to follow here, and
+// ui_zyk_rpg_skillcounter used to sit up with the other ui_zyk_rpg_* cvars. All three are removed:
+// NUM_OF_SKILLS (rp_local.h) is 60, so the server only ever sends 60 skill levels and 61/62 could
+// never receive a value -- they were in fact the cause of the settings-panel misalignment fixed in
+// ui_cvars_in_order[] (cg_servercmds.c), where two extra slots shifted every setting value that
+// followed. ui_zyk_rpg_skillcounter had no reader or writer anywhere at all.
+// NOTE for future cleanups: skills 39 and 56 are NOT dead even though no menu file references
+// ui_zyk_skill_39_level or ui_zyk_skill_56_level. Those are the two reserved skills ("Unique Skill"
+// and "Improvements") that do_upgrade_skill()/do_downgrade_skill() block from purchase (g_cmds.c);
+// the server still sends a value for them, because Cmd_GalaxyRpUi_f walks all NUM_OF_SKILLS entries.
+// CG_ZykMod assigns those values into ui_cvars_in_order[] purely by position, so their two cvars have
+// to stay as placeholders -- removing them would shift every skill level after them by one.
 // GalaxyRP fix: [Settings] ui_zyk_setting_0_value through _15_value (the full 0-15 range) have now all
 // been removed here. _0_value through _4_value, _7_value, _12_value, _14_value and _15_value went in
 // earlier passes of this cleanup; _5_value, _6_value, _8_value, _9_value, _10_value, _11_value and

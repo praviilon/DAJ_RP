@@ -1843,6 +1843,8 @@ char ui_cvars_in_order[100][100] = {
 	// this array's skill-cvar count (60) matches the server's actual skill count exactly, putting the
 	// six setting cvars back in alignment with the six setting values the server actually sends right
 	// after them.
+	// Follow-up: the two orphaned ui_rp_skill_61_level/_62_level cvars themselves have now also been
+	// removed from ui_xcvar.h, so nothing anywhere declares a skill cvar the server cannot fill.
 	"ui_rp_skill_60_level",
 	// GalaxyRP fix: [Settings] 6 entries used to sit here (ui_zyk_setting_6/8/9/10/11/13_value), fed by
 	// a settings_to_sync loop that used to be in Cmd_GalaxyRpUi_f (g_cmds.c) via the now-removed
