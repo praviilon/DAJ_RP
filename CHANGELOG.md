@@ -21,7 +21,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - `/adminup`, `/admindown`, and the credit commands (`/spendcredits`, `/createcredits`, `/givecredits`) now write an audit-log entry recording who did what to whom.
 - `/roll <dice>d<faces>` dice notation (up to 10 dice, 2-100 faces), plus `/rollall` and `/flipcoinall` to send a roll or flip to the whole server.
 - `rp_dice_roll_cooldown` cvar (default 3000 ms): shared cooldown for `/roll`, `/rollall`, `/flipcoin` and `/flipcoinall`.
-- Use hint: the single-player hand icon (`gfx/hud/useableHint`) now appears in multiplayer whenever the Use key would actually do something — both for directly usable entities (consoles, power converters, emplaced guns, use-flagged movers) and for the USE_BUTTON triggers that operate most map doors and lifts. Auto-opening doors are excluded, since Use does nothing on them. Toggle with `/settings 4`; new accounts start with it OFF, and accounts predating this release start ON or OFF depending on an old setting that shared the same storage — run `/settings` to see which.
+- Use hint: the hand icon now appears whenever the Use key would actually do something — both for directly usable entities (consoles, power converters, emplaced guns, use-flagged movers) and for the USE_BUTTON triggers that operate most map doors and lifts. Toggle with `/settings 4`.
 
 ### Changed
 - `/roll` and `/flipcoin` are now distance-scoped like `/me` instead of being broadcast to the whole server, and require being alive; spectators and dead players use `/rollall` and `/flipcoinall`.
@@ -34,7 +34,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - Refactored `/buy` and `/stuff` into clean `/buy item <n>` / `/buy upgrade <n>` subcommands (and `/stuff` equivalents).
 - Removed a lot of of the legacy per-class RPG content.
 - `/settings` command cut down to Language and Admin Protect (renumbered 1-2); the other 5 toggles (Allow Force Powers from allies, Starting Single Saber Style, Allow Screen Message, Use healing force only at allied players, Start With Saber) are no longer player-configurable and now always behave the way they used to by default.
-- A new account now defaults to Admin Protect OFF instead of ON (the previous, unintentional default -- a fresh account has no admin permissions to protect, so there was nothing to gain from starting protected). Turning Admin Protect on for yourself via `/settings 2` now also requires the "Admin Protect" admin command -- the same one that already gates whether Admin Protect has any effect against `/give`, `/scale` and `/teleport` -- so a player can only turn the setting on if it can actually do something for them.
+- A new account now defaults to Admin Protect OFF instead of ON (the previous, unintentional default -- a fresh account has no admin permissions to protect, so there was nothing to gain from starting protected). Turning Admin Protect on for yourself via `/settings 2` now also requires the "Admin Protect" admin command.
 - Jetpack: unified the `/jetpack` command's and the RPG auto-grant's availability checks, added a logged-in-only tier to `rp_allow_jetpack_command`.
 - A logged-in player can now pick up either Force Enlightenment color regardless of their current alignment.
 - Redesigned parts of the UI/UX streamlining the user flow.
