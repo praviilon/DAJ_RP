@@ -205,6 +205,15 @@ qboolean admin_account_exists(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* 
 		count = sqlite3_column_int(stmt, 0);
 		sqlite3_finalize(stmt);
 	}
+	else
+	{
+		// GalaxyRP fix: [stability] this fallthrough (rc == SQLITE_DONE, no row at all) used to return
+		// without ever finalizing stmt -- effectively dead in practice for a bare COUNT(*) query (which
+		// always yields exactly one row), but the same missing-finalize class of bug fixed in several
+		// other functions in g_cmds.c. Finalized here too so sqlite3_close() on this connection can't be
+		// silently left BUSY by it.
+		sqlite3_finalize(stmt);
+	}
 
 	if (count == 0) {
 		return qfalse;
@@ -240,12 +249,22 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	char statement_weapon_entry_creation[200] = "INSERT INTO Weapons(AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('0', '0', '0', '0', '0', '0', '0')";
 
 	//alex: Create account record
+	// GalaxyRP fix: [stability] this used to call sqlite3_close(db) before returning on this specific
+	// failure path -- unlike every other early return in this function, none of which close db
+	// themselves. This function's only caller, InitializeGalaxyRpTables(), already calls
+	// sqlite3_close(db) unconditionally right after the admin-account block finishes, regardless of
+	// which path was taken in here. That meant this one path closed db twice: once here, and once again
+	// in the caller right after -- calling sqlite3_close() on an already-closed handle is undefined
+	// behavior (a use-after-free of the connection object). This INSERT can fail on any genuine DB
+	// error, and, now that Accounts.Username has a real UNIQUE index (see InitializeGalaxyRpTables()),
+	// also on a UNIQUE constraint violation if this ever races another process inserting the same
+	// 'admin' username against a shared database file. Removed the redundant close here so the caller's
+	// single close is the only one, matching every other early-return path in this function.
 	rc = sqlite3_exec(db, statement_account_entry_creation, 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", zErrMsg);
 		sqlite3_free(zErrMsg);
-		sqlite3_close(db);
 		return;
 	}
 
