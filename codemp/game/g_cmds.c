@@ -32,6 +32,15 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define MAX_EMOTE_WORDS 11;
 #define MAX_CHAT_MODIFIERS 24;
 
+// GalaxyRP fix: [Char] the character-select UI (ingame_galaxyrp.menu) only ever had 15 character-slot
+// itemDefs (ui_zyk_rpg_char_1 through _15), and CG_ZykChars (cg_servercmds.c) has always silently capped
+// its own display at 15 -- but nothing server-side ever enforced that as an actual limit on how many
+// characters an account could create. create_new_character() below now refuses a 16th character using
+// this same constant, and select_character_list_for_ui() below uses it as a defensive cap on how many
+// rows it will ever accumulate into a fixed-size buffer, so the two are guaranteed to agree by
+// construction rather than by two separately-maintained "15"s drifting apart.
+#define MAX_CHARACTERS_PER_ACCOUNT 15
+
 //rww - for getting bot commands...
 int AcceptBotCommand(char *cmd, gentity_t *pl);
 //end rww
@@ -2140,6 +2149,41 @@ int select_number_of_characters_with_name(gentity_t* ent, char* character_name, 
 	return 0;
 }
 
+// GalaxyRP fix: [Char] companion to select_number_of_characters_with_name() just above -- that one counts
+// how many characters an account has with one specific name (duplicate-name check), this counts the
+// account's total character count regardless of name, for create_new_character()'s MAX_CHARACTERS_PER_ACCOUNT
+// check below.
+int select_number_of_characters(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+
+	rc = sqlite3_prepare(db, "SELECT count(CharID) FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return 0;
+	}
+	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return 0;
+	}
+	if (rc == SQLITE_ROW)
+	{
+		int numberOfChars;
+
+		numberOfChars = sqlite3_column_int(stmt, 0);
+		sqlite3_finalize(stmt);
+
+		return numberOfChars;
+	}
+
+	sqlite3_finalize(stmt);
+	return 0;
+}
+
 // GalaxyRP (Alex): [Database] SELECT This method returns the character ID associated with the character name given, AND which belongs to the account the player is currently logged in with.
 int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	int charID = -1;
@@ -3063,19 +3107,26 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 }
 
 // GalaxyRP (Alex): [Database] This method displays the list of characters to a player.
+// GalaxyRP fix: [security] same reasoning as select_character_list_for_ui() below -- accountID is a
+// server-derived int, never attacker-controlled text, so the old va()-spliced query text was never
+// actually exploitable, but it was inconsistent with the bound-parameter style used everywhere else in
+// this file. Bound here too, and the per-row strcpy() into CharName switched to Q_strncpyz() for the same
+// defense-in-depth reason (character names are already capped to 31 characters at creation time, so this
+// never overflowed the 1024-byte buffer in practice, but nothing here actually enforced that itself).
 void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt)
 {
 	char CharName[MAX_STRING_CHARS];
 	int charLevel;
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
-	rc = sqlite3_prepare(db, va("SELECT Name, Level FROM Characters WHERE AccountID='%i'", ent->client->sess.accountID), -1, &stmt, NULL);
+	rc = sqlite3_prepare(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
+	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -3085,7 +3136,7 @@ void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, s
 	}
 	int i = 1;
 	while (rc == SQLITE_ROW) {
-		strcpy(CharName, sqlite3_column_text(stmt, 0));
+		Q_strncpyz(CharName, (const char *)sqlite3_column_text(stmt, 0), sizeof(CharName));
 		charLevel = sqlite3_column_int(stmt, 1);
 		trap->SendServerCommand(ent - g_entities, va("print \"^3%i.^2%s - Level:%i\n\"", i, CharName, charLevel));
 		i++;
@@ -3101,19 +3152,36 @@ void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, s
 }
 
 // GalaxyRP (Alex): [Database] This method returns a list of character names readable by the UI.
-void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, char* CharString)
+// GalaxyRP fix: [security/stability] two related issues fixed together here:
+//  1. the query text used to be built via va("...AccountID='%i'", ...) -- accountID is a server-derived
+//     int (session state, never attacker-controlled text) so this was never actually exploitable, but it
+//     was inconsistent with the bound-parameter style used everywhere else in this file. Bound like every
+//     other query here now.
+//  2. the accumulation loop used to be strcpy(CharString, va("%s&%s", CharString, CharName)) -- CharString
+//     fed back into va() as its own first argument, growing with no bound against the caller's fixed-size
+//     stack buffer (Cmd_ZykChars_f's char_string[MAX_STRING_CHARS]). create_new_character() now refuses to
+//     create a character past MAX_CHARACTERS_PER_ACCOUNT, so a *new* account can no longer grow this past
+//     that -- but that only protects accounts created after this fix; one that already has more rows than
+//     that from before this fix existed would still reach this loop otherwise unbounded. Added an explicit
+//     CharStringSize parameter and a MAX_CHARACTERS_PER_ACCOUNT loop cap (matching the client's own
+//     ui_zyk_rpg_char_1.._15 slots and CG_ZykChars's identical cap in cg_servercmds.c) so a grandfathered
+//     over-limit account safely stops filling the string instead of overflowing it, and switched to
+//     Q_strcat/Q_strncpyz, which never write past their destination's declared size.
+void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, char* CharString, int CharStringSize)
 {
 	char CharName[MAX_STRING_CHARS] = "";
 	int charLevel = 0;
+	int charCount = 0;
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
-	rc = sqlite3_prepare(db, va("SELECT Name, Level FROM Characters WHERE AccountID='%i'", ent->client->sess.accountID), -1, &stmt, NULL);
+	rc = sqlite3_prepare(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
+	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_ROW && rc != SQLITE_DONE)
 	{
@@ -3121,10 +3189,11 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 		sqlite3_finalize(stmt);
 		return;
 	}
-	while (rc == SQLITE_ROW) {
-		strcpy(CharName, sqlite3_column_text(stmt, 0));
+	while (rc == SQLITE_ROW && charCount < MAX_CHARACTERS_PER_ACCOUNT) {
+		Q_strncpyz(CharName, (const char *)sqlite3_column_text(stmt, 0), sizeof(CharName));
 		charLevel = sqlite3_column_int(stmt, 1);
-		strcpy(CharString, va("%s&%s", CharString, CharName));
+		Q_strcat(CharString, CharStringSize, va("&%s", CharName));
+		charCount++;
 		rc = sqlite3_step(stmt);
 	}
 
@@ -3438,6 +3507,19 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	// that one is left in place for its own, more specific message.
 	if (zyk_check_user_input(char_name, strlen(char_name)) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name can only contain letters and numbers.\n\"");
+		return qfalse;
+	}
+
+	// GalaxyRP fix: [Char] the character-select UI only ever had 15 slots to display characters in
+	// (ingame_galaxyrp.menu's ui_zyk_rpg_char_1.._15, and CG_ZykChars's matching client-side cap in
+	// cg_servercmds.c), but nothing here ever stopped an account from creating more than that -- a 16th+
+	// character was still fully creatable and usable via /char use, just permanently invisible to the
+	// menu. It also removed the safety margin select_character_list_for_ui() below relies on to stay
+	// within its fixed-size output buffer. Reject a 16th character explicitly, with a clear reason,
+	// rather than silently letting the count drift past what the rest of this system assumes.
+	if (select_number_of_characters(ent, db, zErrMsg, rc, stmt) >= MAX_CHARACTERS_PER_ACCOUNT) {
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Character limit reached. You can only have %i characters per account.\n\"", MAX_CHARACTERS_PER_ACCOUNT));
+		trap->SendServerCommand(ent - g_entities, va("cp \"^1Character limit reached (%i max).\n\"", MAX_CHARACTERS_PER_ACCOUNT));
 		return qfalse;
 	}
 
@@ -15524,12 +15606,24 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 		int skillpoints = ent->client->pers.skillpoints;
 		int credits = ent->client->pers.credits;
 
-		strcpy(content, "");
+		// GalaxyRP fix: [security/stability] this whole payload used to be accumulated via
+		// strcpy(content, va("%s...", content, ...)) at every step below -- content fed back into va() as
+		// its own first argument, growing with no bound before being strcpy()'d back into this fixed
+		// 1024-byte stack buffer. Every field here is bounded in practice today (MAX_NETNAME, the client's
+		// own MAX_QPATH-capped model-packing buffer, skill levels that never exceed single digits, etc.),
+		// so this never actually overflowed in real play -- but nothing here enforced that, and a future
+		// change to any of these fields (a longer name cap, more skills, larger credit/xp values) could
+		// silently corrupt this stack buffer with no warning at all. Q_strcat never writes past the
+		// destination's declared size, so switched every append below to it: a field that wouldn't fit is
+		// safely dropped instead of corrupting memory. See the length sanity check right before this is
+		// sent, further down, for the other half of this fix.
+		content[0] = '\0';
 
-		strcpy(content, va("%s%s~%s~%s~%s~%d~%d/%d~%d~%d~%s~", content, ent->client->pers.netname, modelname, saber1Model, saber2Model, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
+		Q_strcat(content, sizeof(content), va("%s~%s~%s~%s~%d~%d/%d~%d~%d~%s~",
+			ent->client->pers.netname, modelname, saber1Model, saber2Model, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
 
 		for (int i = 0; i < ARRAY_LEN(skills); i++) {
-			strcpy(content, va("%s%d/%d~", content, ent->client->pers.skill_levels[i], skills[i].max_level));
+			Q_strcat(content, sizeof(content), va("%d/%d~", ent->client->pers.skill_levels[i], skills[i].max_level));
 		}
 
 		// GalaxyRP fix: [Settings] a settings_to_sync loop used to be appended here, after the skills
@@ -15555,8 +15649,20 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 
 			for (int i = 0; i < ARRAY_LEN(upgrade_bits_to_sync); i++) {
 				owned_bit = upgrade_bits_to_sync[i];
-				strcpy(content, va("%s%d~", content, (ent->client->pers.skill_levels[38] & (1 << owned_bit)) ? 1 : 0));
+				Q_strcat(content, sizeof(content), va("%d~", (ent->client->pers.skill_levels[38] & (1 << owned_bit)) ? 1 : 0));
 			}
+		}
+
+		// GalaxyRP fix: [stability] defensive sanity check -- if this payload ever grows close to the
+		// buffer's real capacity (a future change to NUM_OF_SKILLS, a longer field, or a later feature
+		// piggybacking on this command), log it loudly server-side instead of letting it fail silently.
+		// Two different silent failure modes exist downstream of this buffer: Q_strcat above quietly drops
+		// whatever wouldn't fit once content is full, and even a content string that fits in this buffer
+		// can still be silently discarded in full by SV_SendServerCommand (sv_main.cpp), which refuses to
+		// send any reliable command string over 1022 bytes with no error to anyone. 900 leaves headroom
+		// for the "zykmod \"...\"" wrapper this content is embedded in below.
+		if (strlen(content) > 900) {
+			G_LogPrintf("WARNING: Cmd_GalaxyRpUi_f content for %s is %d bytes, close to the zykmod payload's safe limit.\n", ent->client->pers.netname, (int)strlen(content));
 		}
 
 		trap->SendServerCommand(ent->s.number, va("zykmod \"%s\"", content));
@@ -15593,7 +15699,7 @@ void Cmd_ZykChars_f(gentity_t* ent) {
 		return;
 	}
 
-	select_character_list_for_ui(ent, db, zErrMsg, rc, stmt, char_string);
+	select_character_list_for_ui(ent, db, zErrMsg, rc, stmt, char_string, sizeof(char_string));
 
 	trap->SendServerCommand(ent->s.number, va("zykchars \"%s\"", char_string));
 	sqlite3_close(db);
@@ -15780,7 +15886,16 @@ command_t commands[] = {
 	// menu's "exec zykmod" fires on open, instead of being stuck showing the logged-in menu state
 	// until they're alive again.
 	{ "zykmod",				Cmd_GalaxyRpUi_f,			CMD_NOINTERMISSION },
-	{ "zykchars",			Cmd_ZykChars_f,			CMD_ALIVE | CMD_NOINTERMISSION }
+	// GalaxyRP fix: [Char] dropped CMD_ALIVE -- this required the player be alive, not spectating, and not
+	// in tempSpectate just to refresh the character list, while its sibling zykmod (just above) was
+	// deliberately fixed to have no such requirement, and Cmd_Char_f itself (the actual "char use"/"char
+	// new"/"char remove" switch, g_cmds.c) has never required it either. The asymmetry meant a dead or
+	// spectating player opening the Characters tab got a "must be alive" refusal instead of a refreshed
+	// list, then could still click Use against whatever character name was left over in the client's
+	// ui_zyk_rpg_char_N cvar from the last successful refresh -- stale data with no indication anything
+	// was wrong. Character management doesn't need the player to be alive in the world any more than
+	// switching characters itself does.
+	{ "zykchars",			Cmd_ZykChars_f,			CMD_NOINTERMISSION }
 //	{ "meleearena",			Cmd_MeleeArena_f,			CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "thedestroyer",		Cmd_TheDestroyer_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "teamtask",			Cmd_TeamTask_f,				CMD_NOINTERMISSION },

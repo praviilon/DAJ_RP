@@ -1869,6 +1869,18 @@ char ui_cvars_in_order[100][100] = {
 	"ui_zyk_upgrade_3_owned"
 };
 
+// GalaxyRP fix: [stability] CG_ZykMod below assigns each "~"-delimited field of the zykmod payload to
+// ui_cvars_in_order[] purely by position, with nothing to catch the server's field count and this array
+// drifting apart -- exactly this already happened once (see the "GalaxyRP fix: [Settings]" comment above,
+// which silently shifted six settings values two array positions out of alignment for a long time, with
+// no error or warning anywhere). This constant is the real, current field count Cmd_GalaxyRpUi_f
+// (g_cmds.c) sends: 9 base fields (name, model, saber1, saber2, level, xp/xpToLevel, skillpoints, credits,
+// current character) + NUM_OF_SKILLS (60, rp_local.h) skill levels + 3 shop-upgrade-owned flags = 72.
+// There's no automatic way to keep the two sides in sync across this VM boundary, so this has to be
+// updated by hand whenever either side's field count changes -- the warning in CG_ZykMod is the safety
+// net for whenever it isn't.
+#define ZYKMOD_EXPECTED_FIELD_COUNT 72
+
 static void CG_ZykMod( void )
 { // zyk: receives account info of logged players
 	char arg[1024] = {0};
@@ -1884,9 +1896,20 @@ static void CG_ZykMod( void )
 		trap->Cvar_Set(ui_cvars_in_order[i], va("%s", value));
 		i++;
 		if (i >= ARRAY_LEN(ui_cvars_in_order)) {
+			trap->Print("WARNING: CG_ZykMod received more fields than ui_cvars_in_order[] has entries -- server and client zykmod field counts are out of sync.\n");
 			return;
 		}
 		value = strtok(NULL, "~");
+	}
+
+	// GalaxyRP fix: [stability] see the comment on ZYKMOD_EXPECTED_FIELD_COUNT above. If fewer fields
+	// arrived than expected, every cvar from this point on in ui_cvars_in_order[] was left holding
+	// whatever it already had (a previous zykmod update, or its XCVAR_DEF default) rather than being
+	// corrupted with a misaligned value -- but that's still silently stale data with nothing anywhere to
+	// report it. Log it so a future protocol mismatch between this array and Cmd_GalaxyRpUi_f is caught
+	// immediately instead of quietly shipping wrong menu data.
+	if (i != ZYKMOD_EXPECTED_FIELD_COUNT) {
+		trap->Print("WARNING: CG_ZykMod received %d fields, expected %d -- zykmod payload may be out of sync with ui_cvars_in_order[].\n", i, ZYKMOD_EXPECTED_FIELD_COUNT);
 	}
 }
 
