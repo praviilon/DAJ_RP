@@ -72,6 +72,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - The 3 credit commands now validate their arguments consistently, and `/createcredits` no longer reports success against a target who isn't actually logged in while silently discarding the credited amount.
 - A stale mouse-cursor focus in the menu system could silently swallow a click if the cursor hadn't moved since the last mouse-move event; clicks now always re-check what's actually under the cursor.
 - Force Drain's visual effect no longer fails to show at skill levels 1-2.
+- Fixed multiple code syntax errors that could potentially crash the server.
 
 ### Security
 - Fixed a real SQL injection vulnerability in the `/login`, `/new`, and `/changepassword` account commands, and applied the same parameterized-query treatment across the rest of the database layer (item names, chat/news text, character saves, and related queries) as a broader hardening pass.
