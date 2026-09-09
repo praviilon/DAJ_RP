@@ -899,6 +899,22 @@ static void UI_BuildPlayerList() {
 
 static void UI_UpdateSaberCvars(void);
 
+// GalaxyRP fix: [Menu] holding ESCAPE down could make the top-bar (UIMENU_INGAME) menu flicker
+// open and closed for as long as the key stayed physically held. The OS's own key-repeat feature
+// sends repeated "key down" events for a held key (with only one real "key up" at actual release),
+// and neither the engine's escape routing nor UI_KeyEvent() below ever distinguished those repeats
+// from a genuine new press: the first uncaught ESCAPE auto-opens this menu (see the UIMENU_INGAME
+// case below), and the very next repeat -- now that the menu is open and catching keys -- gets
+// forwarded into UI_KeyEvent(), which unconditionally closes it again on any ESCAPE keydown; once
+// closed, the next repeat reopens it, and so on for as long as the key is held. This flag breaks
+// that cycle: it's armed the moment this menu auto-opens (below) and again each time UI_KeyEvent()
+// acts on an ESCAPE press, so only the FIRST ESCAPE keydown of a given hold does anything -- every
+// repeat-generated keydown after it is ignored until UI_KeyEvent() sees the matching key-up, which
+// re-arms it for the next genuine, separate press. Confirmed present identically in stock OpenJK
+// and stock TaystJK (not a regression introduced by this mod), so this is a UI-side workaround
+// rather than a fix at its root cause in the client engine, which this mod doesn't build or ship.
+static qboolean escapeHoldSuppressed = qfalse;
+
 void UI_SetActiveMenu( uiMenuCommand_t menu ) {
 	char buf[256];
 
@@ -960,6 +976,11 @@ void UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			UI_BuildPlayerList();
 			Menus_CloseAll();
 			Menus_ActivateByName("ingame");
+			// GalaxyRP fix: [Menu] see escapeHoldSuppressed's own comment above -- this is the
+			// auto-open reached when ESCAPE isn't yet caught by any menu. Arming it here means the
+			// very next repeat-generated ESCAPE keydown (still the same physical press that got us
+			// here) is ignored by UI_KeyEvent() instead of immediately closing this menu again.
+			escapeHoldSuppressed = qtrue;
 			return;
 		case UIMENU_PLAYERCONFIG:
 			// trap->Cvar_Set( "cl_paused", "1" );
@@ -10460,11 +10481,26 @@ UI_KeyEvent
 =================
 */
 void UI_KeyEvent( int key, qboolean down ) {
+	// GalaxyRP fix: [Menu] see escapeHoldSuppressed's own comment further up for the full flicker
+	// explanation. A key-up always re-arms: it means the physical press that last suppressed (or
+	// triggered) an ESCAPE action has now genuinely ended, so the next ESCAPE keydown is a real,
+	// separate press again. Checked unconditionally (not just while a menu is focused) so a release
+	// that arrives after the menu has already closed still resets this correctly.
+	if (key == A_ESCAPE && !down) {
+		escapeHoldSuppressed = qfalse;
+	}
+
 	if (Menu_Count() > 0) {
 		menuDef_t *menu = Menu_GetFocused();
 		if (menu) {
 			if (key == A_ESCAPE && down && !Menus_AnyFullScreenVisible()) {
-				Menus_CloseAll();
+				// GalaxyRP fix: [Menu] only act on the first ESCAPE keydown of a hold -- every
+				// repeat-generated keydown after it (until the matching key-up above) is ignored
+				// instead of re-closing whatever ESCAPE just opened/closed a moment ago.
+				if (!escapeHoldSuppressed) {
+					escapeHoldSuppressed = qtrue;
+					Menus_CloseAll();
+				}
 			} else {
 				Menu_HandleKey(menu, key, down );
 			}
