@@ -108,14 +108,14 @@ const skill_t skills[] = {
 	{2, "Concussion Rifle",		"it shoots a powerful shot that has a big damage area. Alt fire shoots a ray similar to disruptor shots, but it can go through force fields and can throw the enemy on the ground. Level 2 unlocks the alternate fire mode.",																															"weapons",	"merc",		WP_CONCUSSION},
 	{2, "Bryar Pistol",			"very similar to the blaster pistol, but this one has a better fire rate with normal shot. Level 2 unlocks the alternate fire mode.",																																																					"weapons",	"merc",		WP_BRYAR_OLD},
 	{3, "Melee",				"allows you to attack with your fists and legs. You can punch, kick or do a special melee attack by holding both Attack and Alt Attack buttons (usually the mouse buttons).",																																	"weapons",	"merc",		0},
-	{5, "Max Shield",			"The max shield (armor) the player can have. Each level increases 20 per cent of max shield the player can have",																																																"other",	"merc",		0},
-	{4, "Shield Strength",		"Each level increases your shield resistance by 7 per cent",																																																													"other",	"merc",		0},
-	{4, "Health Strength",		"Each level increases your health resistance by 7 per cent",																																																													"other",	"merc",		0},
-	{1, "Drain Shield",			"When using Drain force power, and your health is full, restores some shield. It also makes Drain suck hp/shield from the enemy to restore your hp/shield",																																						"other",	"merc",		0},
+	{5, "Max Shield",			"The max shield (armor) the player can have. Each level increases 20 per cent of max shield the player can have",																																																"protect",	"merc",		0},
+	{4, "Shield Strength",		"Each level increases your shield resistance by 7 per cent",																																																													"protect",	"merc",		0},
+	{4, "Health Strength",		"Each level increases your health resistance by 7 per cent",																																																													"protect",	"merc",		0},
+	{1, "Drain Shield",			"When using Drain force power, and your health is full, restores some shield. It also makes Drain suck hp/shield from the enemy to restore your hp/shield",																																						"force",	"merc",		0},
 	{3, "Jetpack",				"the jetpack, used by Boba Fett. Allows you to fly. To use it, jump and press the Use key (usually R) while in the middle of the jump. Each level uses less fuel, allowing you to fly for a longer time",																										"items",	"merc",		HI_JETPACK},
 	{3, "Sense Health",			"allows you to see info about someone, including npcs. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force, mp and max mp. To use it, when you are near a player or npc, use ^3Sense ^7force power",		"force",	"light",	0},
-	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"other",	"merc",		0},
-	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"other",	"merc",		0},
+	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"force",	"merc",		0},
+	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"force",	"merc",		0},
 	// GalaxyRP fix: [Skills] index 38 below (Unique Skill) is a reserved/unused entry -- see the
 	// [Shop] fix comment right below this one -- and stays blocked in do_upgrade_skill()/
 	// do_downgrade_skill(). Its own gameplay hook (a self-heal on the Engage Duel key, in g_active.c)
@@ -137,7 +137,7 @@ const skill_t skills[] = {
 	// in g_local.h. Its skills[] entry here stays a non-purchasable placeholder; the bitmask is only ever
 	// read/written directly via skill_levels[38] (Cmd_Buy_f and the upgrade-gated code it feeds), never
 	// through the normal do_upgrade_skill()/level-based skill path.
-	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"other",	"merc",		0},
+	{1, "Unique Skill",			"placeholder, does nothing",																																																																					"protect",	"merc",		0},
 	{3, "Blaster Pack",			"used as ammo for Blaster Pistol, Bryar Pistol and E11 Blaster Rifle.",																																																											"ammo",		"merc",		0},
 	{3, "Powercell",			"used as ammo for Disruptor, Bowcaster and DEMP2.",																																																																"ammo",		"merc",		0},
 	{3, "Metal Bolts",			"used as ammo for Repeater, Flechette and Concussion Rifle.",																																																													"ammo",		"merc",		0},
@@ -162,10 +162,10 @@ const skill_t skills[] = {
 	{1, "Cloak Item",			"makes you almost invisible to players and invisible to npcs.",																																																													"items",	"merc",		HI_CLOAK},
 	{5, "Force Power",			"increases the max force power you have. Necessary to allow you to use force powers and force-based skills",																																																	"force",	"neutral",	0},
 	{3, "Improvements",			"placeholder, does nothing",																																																																					"items",	"merc",		0},
-	{5, "Armor",				"Each level increases your damage resistance by 10 percent, but also decreases your movement speed by 10 percent.",																																																"items",	"merc",		0},
+	{5, "Armor",				"Each level increases your damage resistance by 10 percent, but also decreases your movement speed by 10 percent.",																																																"protect",	"merc",		0},
 	{2, "Flame Thrower",		"Allows you to use a flamethrower. Used by alt-firing with a stun baton.",																																																										"items",	"merc",		0},
-	{5, "Shield Regeneration",	"Increases the rate at which shield is regenerated by one per second for each point. Meditating will make it faster.",																																															"other",	"merc",		0},
-	{5, "Health Regeneration",	"Increases the rate at which health is regenerated by one per second for each point. Meditating will make it faster.",																																															"other",	"merc",		0},
+	{5, "Shield Regeneration",	"Increases the rate at which shield is regenerated by one per second for each point. Meditating will make it faster.",																																															"protect",	"merc",		0},
+	{5, "Health Regeneration",	"Increases the rate at which health is regenerated by one per second for each point. Meditating will make it faster.",																																															"protect",	"merc",		0},
 };
 
 #define MAX_WORDED_EMOTES 132
@@ -9420,6 +9420,26 @@ char *add_spacing_for_columns(skill_t skill, char* message, int skill_id) {
 	return message;
 }
 
+// GalaxyRP fix: [Skills] the category string in skills[] is what /list <category> filters on, so it
+// doubles as the name of the subcommand. The categories are kept deliberately identical to the Skills
+// panels in ingame_galaxyrp.menu, panel for panel:
+//
+//     /list force     <-> forceLoginSkillsControls    /list ammo     <-> levelammo
+//     /list weapons   <-> levelweapon                 /list items    <-> levelitem
+//     /list protect   <-> levelother
+//
+// Nothing in the build ties the two together -- the menu addresses skills as 1-based
+// ui_zyk_skill_N_level cvars, this table is 0-based C -- so they can only be kept in step by hand. A
+// skill added to one side and not the other ends up either visible in a menu that no console command
+// can list, or listable but unreachable in the UI. Both happened before this pass: Drain Shield,
+// Shield Heal and Team Shield Heal sat in the old "other" category while the menu showed them under
+// Force, and Armor sat under "items" while the menu showed it under Protection.
+//
+// Worth knowing before moving anything else: category is not purely cosmetic. do_upgrade_skill()'s
+// helper below branches on it to hand out the actual force power, weapon, ammo or holdable item --
+// but each of those branches also requires value_internal != 0 (the FP_/WP_/HI_ id), so moving a
+// skill whose value_internal is 0 is display-only. Every skill moved in this pass has 0. Moving one
+// that does not would change what the player is granted.
 void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 {
 	char message[1024];
@@ -9492,9 +9512,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 
 			if (Q_stricmp( arg1, "help" ) == 0)
 			{
-				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list other: ^7lists miscellaneous skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n\n\"");
+				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list protect: ^7lists protection skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n\n\"");
 			}
-			else if (Q_stricmp( arg1, "force" ) == 0 || Q_stricmp( arg1, "weapons" ) == 0 || Q_stricmp( arg1, "other" ) == 0 || 
+			else if (Q_stricmp( arg1, "force" ) == 0 || Q_stricmp( arg1, "weapons" ) == 0 || Q_stricmp( arg1, "protect" ) == 0 || 
 					 Q_stricmp( arg1, "ammo" ) == 0 || Q_stricmp( arg1, "items" ) == 0)
 			{
 				zyk_list_player_skills(ent, ent, G_NewString(arg1));
@@ -14222,7 +14242,7 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 			trap->Argv( 2, arg2, sizeof( arg2 ) );
 
-			if (Q_stricmp(arg2, "force") == 0 || Q_stricmp(arg2, "weapons") == 0 || Q_stricmp(arg2, "other") == 0 || 
+			if (Q_stricmp(arg2, "force") == 0 || Q_stricmp(arg2, "weapons") == 0 || Q_stricmp(arg2, "protect") == 0 || 
 				Q_stricmp(arg2, "ammo") == 0 || Q_stricmp(arg2, "items") == 0)
 			{ // zyk: show skills of the player
 				zyk_list_player_skills(player_ent, ent, G_NewString(arg2));
