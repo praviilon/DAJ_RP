@@ -6160,7 +6160,12 @@ void PM_RocketLock( float lockDist, qboolean vehicleLock )
 	if (tr.fraction != 1 && tr.entityNum < ENTITYNUM_NONE && tr.entityNum != pm->ps->clientNum)
 	{
 		bgEntity_t *bgEnt = PM_BGEntForNum(tr.entityNum);
-		if ( bgEnt && (bgEnt->s.powerups&PW_CLOAKED) )
+		// GalaxyRP fix: [Cloak Item] PW_CLOAKED is an index into powerups[], not a mask -- this tested
+		// "s.powerups & 11", i.e. bits 0/1/3 (PW_NONE/PW_QUAD/PW_PULL), so a cloaked target stayed
+		// rocket-lockable while a player holding PW_PULL was spuriously unlockable. Every other reader
+		// of s.powerups already shifts (cg_players.c, cg_draw.c); this one site did not. Shared bg_
+		// code, so game and cgame pick the correction up together and prediction stays in step.
+		if ( bgEnt && (bgEnt->s.powerups & (1 << PW_CLOAKED)) )
 		{
 			pm->ps->rocketLockIndex = ENTITYNUM_NONE;
 			pm->ps->rocketLockTime = 0;

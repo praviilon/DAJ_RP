@@ -1433,6 +1433,15 @@ void ItemUse_UseCloak( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [Cloak Item] same downed test as the /use_cloak console path (g_active.c) -- a
+	// downed player keeps 50 health, so nothing above stops them re-cloaking after being downed and
+	// lying there invisible. Gates only the cloak direction; the decloak below stays reachable.
+	if ( !ent->client->ps.powerups[PW_CLOAKED] &&
+		(ent->client->pers.player_statuses & (1 << 6)) )
+	{
+		return;
+	}
+
 	/* zyk: now cloak item doesnt use fuel anymore
 	if (!ent->client->ps.powerups[PW_CLOAKED] &&
 		ent->client->ps.cloakFuel < 5)

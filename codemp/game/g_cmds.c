@@ -1482,10 +1482,6 @@ void paralyze_player(int client_id) {
 		return;
 	}
 
-	if (!(g_entities[client_id].flags & FL_NOTARGET)) {
-		g_entities[client_id].flags ^= FL_NOTARGET;
-	}
-
 	// GalaxyRP fix: [Cloak Item] a live player's first lethal hit lands them here (paralyzed/"downed"),
 	// not in player_die() -- that only fires on an actual final kill, which this "New Death System" can
 	// delay past the moment a cloaked player would otherwise stay invisible while down. Decloak here too
@@ -1494,6 +1490,15 @@ void paralyze_player(int client_id) {
 	if ( g_entities[client_id].client && g_entities[client_id].client->ps.powerups[PW_CLOAKED] )
 	{
 		Jedi_DecloakPair( &g_entities[client_id] );
+	}
+
+	// GalaxyRP fix: [Death System] the FL_NOTARGET set that makes a downed player untargetable used to
+	// run ABOVE the decloak. Jedi_Decloak() clears FL_NOTARGET unconditionally (it is the other half of
+	// what Jedi_Cloak sets), so downing a CLOAKED player set the flag and then immediately stripped it
+	// again -- that one player ended up downed and still targetable by NPCs and turrets, unlike every
+	// other downed player. Setting it after the decloak keeps both behaviours.
+	if (!(g_entities[client_id].flags & FL_NOTARGET)) {
+		g_entities[client_id].flags ^= FL_NOTARGET;
 	}
 
 	//GalaxyRP (Alex): [Death System] Paralyze the target player.
@@ -7290,7 +7295,17 @@ void G_LeaveVehicle( gentity_t* ent, qboolean ConCheck ) {
 			// no-op if the vehicle isn't cloaked, so it's never a double-decloak in practice). Deliberately
 			// a plain Jedi_Decloak, not Jedi_DecloakPair -- the rider keeps their own cloak state across
 			// dismounting; only the vehicle's cloak is forced off.
-			Jedi_Decloak( veh );
+			// GalaxyRP fix: [Cloak Item] gated on this entity actually being aboard. StopFollowing() is
+			// one of the two callers, and a following spectator's playerState is a wholesale copy of the
+			// player they follow (g_active.c) -- including ps.m_iVehicleNum. So a spectator who merely
+			// stopped following, or disconnected, was stripping the cloak off a stranger's vehicle that
+			// they were never on. r.ownerNum is the right discriminator: boarding sets it to the
+			// vehicle's entity number and ejecting resets it, and unlike ps it is never copied to a
+			// follower. Eject() below already ignores a non-occupant, so only this call needed the guard.
+			if ( ent->r.ownerNum == veh->s.number )
+			{
+				Jedi_Decloak( veh );
+			}
 
 			if ( ConCheck ) { // check connection
 				clientConnected_t pCon = ent->client->pers.connected;
@@ -14150,6 +14165,14 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 	}
 	else
 	{ // zyk: paralyze the target player
+		// GalaxyRP fix: [Cloak Item] decloak on the way down, same as the Death System's own
+		// paralyze_player() does -- being downed must never leave a player invisible, however they got
+		// there. Pair-aware, so a mounted target takes their vehicle down too.
+		if ( g_entities[client_id].client->ps.powerups[PW_CLOAKED] )
+		{
+			Jedi_DecloakPair( &g_entities[client_id] );
+		}
+
 		g_entities[client_id].client->pers.player_statuses |= (1 << 6);
 
 		g_entities[client_id].client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
@@ -16684,7 +16707,7 @@ command_t commands[] = {
 	// GalaxyRP fix: [Cloak Item] replaces the old GENCMD_USE_CLOAK_VEHICLE generic-command mechanism
 	// (see Cmd_VehicleCloak_f's own doc comment for why that was unreachable). No CMD_ALIVE, matching
 	// the original generic_cmd switch, which never gated on aliveness either.
-	{ "vehicle_cloak",		Cmd_VehicleCloak_f,			CMD_NOINTERMISSION },
+	{ "vehicle_cloak",		Cmd_VehicleCloak_f,			CMD_NOINTERMISSION|CMD_ALIVE }, // CMD_ALIVE: a following spectator inherits the followed player's ps, vehicle and cloak state -- see Cmd_VehicleCloak_f
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 	// GalaxyRP fix: no CMD_ALIVE -- Cmd_GalaxyRpUi_f's supdateloggedin push is meant to reach the
 	// client unconditionally (see its own comment above the send), including while spectating, so a

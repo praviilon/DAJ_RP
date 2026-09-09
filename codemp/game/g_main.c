@@ -7401,7 +7401,9 @@ void duel_tournament_prepare(gentity_t *ent)
 		ent->client->ps.droneExistTime = level.time + 5000;
 	}
 
-	Jedi_Decloak(ent);
+	// GalaxyRP fix: [Cloak Item] pair-aware, like every other decloak trigger -- a duelist prepped
+	// while paired-cloaked used to leave the vehicle cloaked behind them.
+	Jedi_DecloakPair(ent);
 
 	// zyk: disable jetpack
 	Jetpack_Off(ent);

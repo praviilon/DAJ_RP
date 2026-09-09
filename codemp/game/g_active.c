@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_saga.h"
 
 extern void Jedi_Cloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
 extern void Jedi_Decloak( gentity_t *self );
 extern void Jedi_DecloakPair( gentity_t *self );
 
@@ -1366,6 +1367,18 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 			ent->client->dangerTime = level.time;
 			ent->client->ps.eFlags &= ~EF_INVULNERABLE;
 			ent->client->invulnerableTimer = 0;
+			// GalaxyRP fix: [Cloak Item] a saber swing has to break cloak like any other attack, and it
+			// was the one weapon that never did. The decloak hook lives in FireWeapon() (g_weapon.c),
+			// which is driven by EV_FIRE_WEAPON / EV_ALT_FIRE -- but PM_Weapon (bg_pmove.c) hands the
+			// saber to PM_WeaponLightsaber() and then returns via killAfterItem BEFORE the block that
+			// emits either of those, and PM_WeaponLightsaber only ever emits EV_SABER_ATTACK. So a
+			// cloaked player could swing, damage and kill while staying fully invisible. Decloaking on
+			// this event closes it at the one place the saber does announce itself, pair-aware so a
+			// mounted attacker takes their vehicle down with them.
+			if ( ent->client->ps.powerups[PW_CLOAKED] )
+			{
+				Jedi_DecloakPair( ent );
+			}
 			break;
 
 		//rww - Note that these must be in the same order (ITEM#-wise) as they are in holdable_t
@@ -3991,9 +4004,17 @@ void ClientThink_real( gentity_t *ent ) {
 			// through Jedi_DecloakPair so the vehicle comes down too; this is what fixes the old "wrong
 			// toggle direction after the vehicle auto-decloaked from its own weapon fire" bug from the
 			// previous single-command design.
+			// GalaxyRP fix: [Cloak Item] the downed test below. Being downed is supposed to break cloak
+			// (paralyze_player does exactly that), but it also leaves the player on 50 health -- so they
+			// passed every aliveness gate here and could simply press use_cloak again a second later and
+			// lie there invisible for the rest of rp_downed_timer. It gates only the CLOAK direction:
+			// the decloak branch stays reachable, so a player downed while cloaked can always turn it
+			// off, and losing the item still forces it off elsewhere.
 			if ( ent->client->cloakToggleTime < level.time &&
 				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 				ent->client->ps.pm_type != PM_DEAD &&
+				(ent->client->ps.powerups[PW_CLOAKED] ||
+					!(ent->client->pers.player_statuses & (1 << 6))) &&
 				(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 			{
 				if ( ent->client->ps.powerups[PW_CLOAKED] )

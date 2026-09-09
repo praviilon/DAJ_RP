@@ -998,22 +998,35 @@ void Jedi_DecloakPair( gentity_t *self )
 
 	Jedi_Decloak( self );
 
-	if ( self->client->ps.m_iVehicleNum )
+	// GalaxyRP fix: [Cloak Item] the CLASS_VEHICLE test MUST come first. ps.m_iVehicleNum is not the
+	// "am I a rider" flag it looks like: g_vehicles.c sets a rider's copy to the vehicle's entity
+	// number, but it also sets a MANNED VEHICLE's own copy to (pilot client number + 1). So a vehicle
+	// carrying a pilot has a non-zero m_iVehicleNum too, and testing it first sent every vehicle down
+	// the rider branch, where it looked up g_entities[pilotNum + 1] -- not the pilot, but whichever
+	// entity happens to occupy the next slot. Two symptoms: the rider never came down with the vehicle
+	// (vehicle fires or is hit, only the vehicle decloaks), and an unrelated cloaked player sitting in
+	// that neighbouring client slot got force-decloaked instead. Branching on NPC_class first is
+	// unambiguous, and the rider branch below then only ever sees a real rider, whose m_iVehicleNum
+	// carries no +1.
+	if ( self->client->NPC_class == CLASS_VEHICLE )
+	{ //self is a vehicle -- take the rider down too, if it's cloaked
+		if ( self->m_pVehicle && self->m_pVehicle->m_pPilot )
+		{
+			gentity_t *rider = (gentity_t *)self->m_pVehicle->m_pPilot;
+
+			if ( rider->client && rider->client->ps.powerups[PW_CLOAKED] )
+			{
+				Jedi_Decloak( rider );
+			}
+		}
+	}
+	else if ( self->client->ps.m_iVehicleNum )
 	{ //self is a rider -- take the vehicle down too, if it's cloaked
 		gentity_t *veh = &g_entities[self->client->ps.m_iVehicleNum];
 
 		if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
 		{
 			Jedi_Decloak( veh );
-		}
-	}
-	else if ( self->client->NPC_class == CLASS_VEHICLE && self->m_pVehicle && self->m_pVehicle->m_pPilot )
-	{ //self is a vehicle -- take the rider down too, if it's cloaked
-		gentity_t *rider = (gentity_t *)self->m_pVehicle->m_pPilot;
-
-		if ( rider->client && rider->client->ps.powerups[PW_CLOAKED] )
-		{
-			Jedi_Decloak( rider );
 		}
 	}
 }
