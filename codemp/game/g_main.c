@@ -6651,17 +6651,20 @@ void clear_special_power_effect(gentity_t *ent)
 	}
 }
 
-// zyk: shows a text message from the file based on the language set by the player. Can receive additional arguments to concat in the final string
+// zyk: shows a text message from the file based on the language set by the player.
+// GalaxyRP fix: [Text messages] this used to accept "additional arguments to concat in the
+// final string" via "...", but the "..." parameter is kept only for source/binary
+// compatibility with its one caller and any future one -- see the fix comment further down for
+// why it's no longer actually used to substitute anything into the loaded text.
 void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qboolean broadcast_message, ...)
 {
-	va_list argptr;
 	char content[MAX_STRING_CHARS];
-	const char *file_content;
 	static char string[MAX_STRING_CHARS];
 	char language[128];
 	char console_cmd[64];
 	int client_id = -1;
 	FILE *text_file = NULL;
+	size_t content_len;
 
 	strcpy(content, "");
 	strcpy(string, "");
@@ -6686,8 +6689,15 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 	if (text_file)
 	{
 		fgets(content, sizeof(content), text_file);
-		if (content[strlen(content) - 1] == '\n')
-			content[strlen(content) - 1] = '\0';
+		// GalaxyRP fix: [Text messages] a file that exists but is completely empty leaves
+		// fgets() unable to read anything, so content stays the empty string set above --
+		// strlen(content) is then 0, and "strlen(content) - 1" (an unsigned size_t
+		// subtraction) underflowed to SIZE_MAX, making content[strlen(content) - 1] an
+		// out-of-bounds read. Only strip a trailing newline when there's actually a
+		// character to look at.
+		content_len = strlen(content);
+		if (content_len > 0 && content[content_len - 1] == '\n')
+			content[content_len - 1] = '\0';
 
 		fclose(text_file);
 	}
@@ -6696,11 +6706,17 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 		strcpy(content, "^1File could not be open!");
 	}
 
-	file_content = va("%s", content);
-
-	va_start(argptr, broadcast_message);
-	Q_vsnprintf(string, sizeof(string), file_content, argptr);
-	va_end(argptr);
+	// GalaxyRP fix: [Text messages] content is translator/admin-authored text loaded straight
+	// from a GalaxyRP/textfiles/<language>/*.txt file, and was being used directly as the
+	// format string for Q_vsnprintf() against whatever variadic arguments this function's
+	// caller happened to pass -- its one current caller (the new-player tutorial) passes none.
+	// Since content has no guarantee of containing exactly as many %-conversions as arguments
+	// were actually supplied, any accidental literal '%' in a message file (very easy to
+	// introduce in ordinary text -- "100% complete", "a 50% chance", etc) would make
+	// Q_vsnprintf() read a nonexistent argument as a pointer and crash the server, exactly like
+	// the /c and /low chat-modifier crash fixed earlier. content is now sent verbatim instead
+	// of being interpreted as a format string.
+	Q_strncpyz(string, content, sizeof(string));
 
 	trap->SendServerCommand(client_id, va("%s \"%s\n\"", console_cmd, string));
 }
