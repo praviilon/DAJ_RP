@@ -2067,6 +2067,118 @@ tryJetPack:
 	}
 }
 
+// GalaxyRP: [Use hint] the trigger half of the answer, and the half originally missed.
+//
+// A func_door with a targetname gets no automatic touch-trigger (see the spawnflag test in
+// g_mover.c's door setup), so it is opened by something that targets it -- very often a
+// trigger_multiple or trigger_once carrying the USE_BUTTON spawnflag (4). Touch_Multi (g_trigger.c)
+// is what handles those: stand inside the trigger's volume, press Use, and it fires its targets. The
+// door itself never needs SVF_PLAYER_USABLE, which is why looking straight at one and testing
+// ValidUseTarget() reports "not usable" for a door that visibly opens when you press Use.
+//
+// Single player covered exactly this case with CanUseInfrontOfPartOfLevel(), a box check run when the
+// forward trace found nothing. This is the multiplayer equivalent, built from MP's own two sources of
+// truth rather than ported: entity discovery mirrors G_TouchTriggers() (g_active.c) -- the same
+// {40,40,52} query box, the same CONTENTS_TRIGGER filter, the same player-bounds EntityContact test --
+// and the accept/reject conditions mirror Touch_Multi() itself, minus the BUTTON_USE press, which is
+// precisely the thing the hint exists to tell you to do.
+extern void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );
+qboolean G_PointInBounds( vec3_t point, vec3_t mins, vec3_t maxs );
+
+static qboolean G_UsableTriggerInRange( gentity_t *ent )
+{
+	int			i, num;
+	int			touch[MAX_GENTITIES];
+	gentity_t	*hit;
+	vec3_t		mins, maxs;
+	vec3_t		forward;
+	static vec3_t	range = { 40, 40, 52 };
+
+	if ( !ent->client )
+	{
+		return qfalse;
+	}
+
+	VectorSubtract( ent->client->ps.origin, range, mins );
+	VectorAdd( ent->client->ps.origin, range, maxs );
+
+	num = trap->EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+
+	// zyk: same comment as G_TouchTriggers -- can't use r.absmin, it carries a one unit pad
+	VectorAdd( ent->client->ps.origin, ent->r.mins, mins );
+	VectorAdd( ent->client->ps.origin, ent->r.maxs, maxs );
+
+	AngleVectors( ent->client->ps.viewangles, forward, NULL, NULL );
+
+	for ( i = 0; i < num; i++ )
+	{
+		hit = &g_entities[touch[i]];
+
+		if ( !hit->inuse || hit->touch != Touch_Multi )
+		{ // zyk: only trigger_multiple / trigger_once carry the USE_BUTTON behaviour
+			continue;
+		}
+
+		if ( !(hit->r.contents & CONTENTS_TRIGGER) )
+		{
+			continue;
+		}
+
+		if ( !(hit->spawnflags & 4) )
+		{ // zyk: not a USE_BUTTON trigger -- it fires on touch alone, no hint needed
+			continue;
+		}
+
+		if ( hit->flags & FL_INACTIVE )
+		{ // zyk: set by target_deactivate
+			continue;
+		}
+
+		if ( hit->alliedTeam && ent->client->sess.sessionTeam != hit->alliedTeam )
+		{
+			continue;
+		}
+
+		if ( !(hit->spawnflags & 1) )
+		{ // zyk: not CLIENTONLY, so Touch_Multi's NPC-only restrictions apply and we are not an NPC
+			if ( hit->spawnflags & 16 )
+			{ // NPCONLY
+				continue;
+			}
+
+			if ( hit->NPC_targetname && hit->NPC_targetname[0] )
+			{ // zyk: only a specifically named NPC may fire this one
+				continue;
+			}
+		}
+
+		if ( hit->spawnflags & 2 )
+		{ // FACING -- must be within 45 degrees of the trigger's movedir
+			if ( DotProduct( hit->movedir, forward ) < 0.5f )
+			{
+				continue;
+			}
+		}
+
+		if ( hit->genericValue7 )
+		{ // zyk: hold-to-use trigger; Touch_Multi additionally requires the origin itself to be inside
+			if ( !G_PointInBounds( ent->client->ps.origin, hit->r.absmin, hit->r.absmax ) )
+			{
+				continue;
+			}
+		}
+
+		if ( !trap->EntityContact( mins, maxs, (sharedEntity_t *)hit, qfalse ) )
+		{
+			continue;
+		}
+
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 /*
 ==============
 G_CanUseInFrontOf
@@ -2081,11 +2193,18 @@ is never networked) and calls gi.trace from client render code. None of that exi
 VM boundary, and nothing about usability appears in entityState_t or playerState_t. So the detection
 runs here, on the server, and only its one-bit result is networked (ps.stats[STAT_USE_HINT]).
 
-Deliberately built as the geometry-only predicate: it answers for the ValidUseTarget() branch of
-TryUse() and nothing else. TryUse also consumes the Use key for vehicles, jetpacks, body dragging,
-corpse dragging, the jawa seller, NPC follow orders, dispensers and helping up a downed player -- none
-of those set SVF_PLAYER_USABLE, so none of them light the hand. That is a scope choice, not an
-oversight; covering them means restructuring TryUse itself into a query mode, which is a separate job.
+Scope: world geometry only, by two routes, because the Use key has two ways of reaching a door.
+The first is the entity directly ahead being player-usable in its own right (ValidUseTarget, the
+TryUse branch). The second is standing inside a USE_BUTTON trigger that fires it --
+G_UsableTriggerInRange() above. The second route matters more than it looks: a func_door carrying a
+targetname gets no touch-trigger of its own and is opened by whatever targets it, so most map doors
+and lifts are reached that way and carry no SVF_PLAYER_USABLE at all. The first version of this
+feature had only route one and stayed dark on exactly the doors players use most.
+
+Still NOT covered, deliberately: the Use key's other jobs -- vehicles, jetpacks, body dragging,
+corpse dragging, the jawa seller, NPC follow orders, dispensers and helping up a downed player. None
+of those involve SVF_PLAYER_USABLE or a trigger, and covering them means restructuring TryUse itself
+into a query mode, which is a separate job.
 
 This is a separate function rather than a query flag on TryUse precisely so TryUse -- live, heavily
 used code -- is not restructured for a HUD hint. The cost of that choice is that the two can drift
@@ -2159,23 +2278,27 @@ qboolean G_CanUseInFrontOf( gentity_t *ent )
 	trap->Trace( &trace, src, vec3_origin, vec3_origin, dest, ent->s.number, MASK_OPAQUE|CONTENTS_SOLID|CONTENTS_BODY|CONTENTS_ITEM|CONTENTS_CORPSE, qfalse, 0, 0 );
 
 	if ( trace.fraction == 1.0f || trace.entityNum == ENTITYNUM_NONE )
-	{
-		return qfalse;
+	{ // zyk: nothing ahead -- fall back to the trigger check, exactly as SP does
+		return G_UsableTriggerInRange( ent );
 	}
 
 	target = &g_entities[trace.entityNum];
 
-	if ( !target->inuse )
-	{
-		return qfalse;
-	}
-
+	// zyk: no extra !target->inuse test here -- TryUse does not have one, and the whole point of this
+	// function is that it decides exactly what TryUse decides.
 	// zyk: the same gate TryUse uses to decide it has a usable world entity
-	return ( ValidUseTarget( target )
+	if ( ValidUseTarget( target )
 		&& (level.gametype != GT_SIEGE
 			|| !target->alliedTeam
 			|| target->alliedTeam != ent->client->sess.sessionTeam
-			|| g_ff_objectives.integer) ) ? qtrue : qfalse;
+			|| g_ff_objectives.integer) )
+	{
+		return qtrue;
+	}
+
+	// zyk: the thing we are looking at is not itself player-usable, but we may still be standing in a
+	// USE_BUTTON trigger that opens it -- which is how targetname'd doors and lifts actually work.
+	return G_UsableTriggerInRange( ent );
 }
 
 qboolean G_PointInBounds( vec3_t point, vec3_t mins, vec3_t maxs )
