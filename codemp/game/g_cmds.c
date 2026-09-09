@@ -14052,9 +14052,19 @@ static void apply_saber_from_userinfo(gentity_t* ent)
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
 	char userinfo[MAX_INFO_STRING] = { 0 }, * value = NULL;
-
-	if (!saber_switch_allowed(ent))
-		return;
+	// GalaxyRP fix: [Saber] this used to be a single "if (!saber_switch_allowed(ent)) return;" at the
+	// top, which skipped BOTH the userinfo persist below AND the instant apply. That meant a switched-
+	// to character's saved saber hilt (from select_player_character()/select_account_and_default_
+	// character_data()), or a plain "/saber <a> <b>", was silently dropped with no lasting effect
+	// whenever the player happened to be in a duel, Duel Tournament, or a GT_TEAM+ gametype -- and it
+	// never self-corrected, because ClientSpawn()'s own userinfo-vs-pers.saber1/2 diff (g_client.c),
+	// which *does* apply unconditionally on every respawn, had nothing to catch: userinfo was never
+	// updated with the target saber in the first place. Splitting this into "persist unconditionally,
+	// apply only if allowed" (mirroring TaystJK's own UI_UpdateSaberCvars(), which always Cvar_Set()s
+	// saber1/saber2 first and only conditionally fires the instant-apply command) means a blocked
+	// instant switch now still lands correctly on the player's next respawn, exactly as
+	// saber_switch_allowed()'s own refusal messages already promise.
+	qboolean instantApplyAllowed = saber_switch_allowed(ent);
 
 	if (number_of_args == 1)
 	{
@@ -14082,7 +14092,8 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 
 	trap->SetUserinfo(ent->s.number, userinfo);
 
-	apply_saber_from_userinfo(ent);
+	if (instantApplyAllowed)
+		apply_saber_from_userinfo(ent);
 }
 
 /*
