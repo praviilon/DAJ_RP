@@ -422,6 +422,20 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 												ALTER TABLE Characters ADD COLUMN saberTwoColor INTEGER DEFAULT 1;\
 												COMMIT;";
 
+	// GalaxyRP fix: [security/Account] Accounts.Username was never actually constrained to be unique at
+	// the database level -- uniqueness was enforced only in application code, as a check-then-insert in
+	// Cmd_Register_F (g_cmds.c): select_number_of_accounts_with_username() followed by
+	// insert_accounts_table_row(). Two players submitting /new for the same username within the same
+	// narrow window could both pass that check before either INSERT committed, producing two Accounts
+	// rows with an identical Username -- and every username-keyed query in this codebase (/login,
+	// is_password_correct(), select_account_and_default_character_data(), etc.) assumes exactly one
+	// matching row, with no ORDER BY, so which of the two duplicates a given query resolves to is
+	// undefined once that happens. CREATE UNIQUE INDEX (rather than a UNIQUE column constraint, which
+	// SQLite has no ALTER TABLE support for adding to an existing table) closes this at the storage layer
+	// itself: insert_accounts_table_row() now checks its own INSERT's result and reports failure to
+	// Cmd_Register_F instead of silently ignoring a constraint violation this index can now raise.
+	char statement_username_unique_index[120] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_accounts_username_unique' ON 'Accounts' ('Username')";
+
 	//Alex: Create Account Table
 	trap->Print("Initializing Account table.\n");
 
@@ -616,6 +630,31 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 		}
 	}
 	trap->Print("Done with Saber columns.\n");
+
+	// GalaxyRP fix: [security/Account] see the doc comment on statement_username_unique_index above --
+	// this is the DB-level enforcement half of that fix. "IF NOT EXISTS" makes this safe to (re-)run on
+	// every server start once it has succeeded once. If it fails, that is not "already applied" the way
+	// duplicate-column-name is for the ALTER TABLE migrations above (IF NOT EXISTS already handles that
+	// case for an index) -- the realistic failure here is that this database already has two or more
+	// Accounts rows sharing a Username from before this fix existed, which SQLite refuses to build a
+	// UNIQUE index over. Don't block server startup over it: log a clear, actionable warning so an admin
+	// can find and merge/rename the duplicate(s), and continue -- the application-level check in
+	// Cmd_Register_F still guards *new* registrations either way, this index just can't be created until
+	// the existing duplicate is resolved.
+	trap->Print("Initializing unique index on Accounts.Username.\n");
+
+	rc = sqlite3_exec(db, statement_username_unique_index, 0, 0, &zErrMsg);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("WARNING: could not create a UNIQUE index on Accounts.Username: %s\n", zErrMsg);
+		trap->Print("WARNING: this usually means two or more existing accounts already share a Username. "
+			"Find and rename/merge the duplicate account(s) in the database, then restart the server to "
+			"finish enabling this protection. Until then, duplicate usernames can still be created.\n");
+		sqlite3_free(zErrMsg);
+	}
+	else {
+		trap->Print("Done with unique index on Accounts.Username.\n");
+	}
 
 	if (with_admin_account == qtrue) {
 		trap->Print("Initializing admin account.\n");
