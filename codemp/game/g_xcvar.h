@@ -373,6 +373,9 @@ XCVAR_DEF( zyk_sniper_battle_time_to_start, "12000",	RP_CVU_sniperBattleTimeToSt
 // never been a working /sell command (see the Shop wording fixes elsewhere), so "selling" no longer
 // belongs in the name, and this moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.
 XCVAR_DEF( rp_buying_cooldown,			"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [Dice] time in milliseconds a player must wait between dice/coin commands. Shared by
+// /roll, /rollall, /flipcoin and /flipcoinall. 0 disables the cooldown entirely.
+XCVAR_DEF( rp_dice_roll_cooldown,		"3000",			RP_CVU_diceRollCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_rpg_max_level, "100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
 

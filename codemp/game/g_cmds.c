@@ -8410,16 +8410,180 @@ void save_account(gentity_t *ent, qboolean save_char_file)
 	}
 }
 
-// GalaxyRP fix: [macOS/Clang build failure] old K&R-style declaration left max_value with no
-// type, defaulting to int under pre-C99 rules ("implicit int"). ISO C99 and later, and Clang by
-// default, reject this as a hard error (-Wimplicit-int). Give it its always-intended type.
-int roll_dice(int max_value) {
-	int result = rand() % (max_value + 1);
-	while (result == 0) {
-		result = rand() % (max_value + 1);
+// GalaxyRP fix: [Dice] the whole /roll + /flipcoin implementation below was rewritten. The old one
+// was a single roll_dice(int max_value) that did "rand() % (max_value + 1)" and re-rolled while the
+// result was 0. That is a valid rejection sample and its distribution was fine, but it had two
+// defects: at /roll 2147483647 the "max_value + 1" is signed overflow (undefined behaviour), and
+// "rand() % n" can never return a value above RAND_MAX -- which is 2^31-1 with glibc but only 32767
+// with MSVC, so a Windows build silently capped any roll above 32767. Both are gone here: rolls are
+// now bounded to DICE_MAX_FACES, and each die is drawn with a proper rejection sample that is exactly
+// uniform on every platform rather than merely close to uniform.
+//
+// The GalaxyRP "feature-better-dice-rolling" branch had already prototyped the NdM idea adopted here,
+// but its implementation could not be shipped: it assigned a string literal to a single char, used a
+// char*[1000] as a string buffer, returned the address of a local array from build_roll_string(), and
+// strcpy'd the result of strtok(NULL, "d") without a NULL check. Clang refuses to compile it and every
+// input tested -- including the valid "/roll 2d6" and the documented "/roll 10" -- segfaults. Only the
+// design was taken from it; none of the code.
+
+#define DICE_MAX_DICE 10
+#define DICE_MAX_FACES 100
+
+// GalaxyRP fix: [Dice] one die, uniform on [1, max_value] with no modulo bias on any platform.
+// rand() yields RAND_MAX+1 equally likely values; that range divides into max_value buckets with a
+// remainder, and the naive "rand() % max_value" hands that remainder to the lowest faces, which is
+// what makes low numbers marginally more likely. Discarding the remainder region instead makes every
+// face exactly equally likely. The loop always terminates: usable is a non-zero multiple of
+// max_value, so at least one rand() value in [0, usable) exists, and since usable is always more than
+// half of the full range the expected number of iterations is under 2 (for DICE_MAX_FACES it is
+// 1.003). max_value is validated by the caller; the guard is only so this can never spin.
+static int zyk_roll_die(int max_value)
+{
+	unsigned int range = (unsigned int)RAND_MAX + 1u;
+	unsigned int usable = 0;
+	unsigned int result = 0;
+
+	if (max_value < 2)
+	{
+		return 1;
 	}
 
-	return result;
+	usable = range - (range % (unsigned int)max_value);
+
+	do
+	{
+		result = (unsigned int)rand();
+	} while (result >= usable);
+
+	return (int)(result % (unsigned int)max_value) + 1;
+}
+
+// GalaxyRP fix: [Dice] parses "<faces>" or "<dice>d<faces>" without strtok. strtok is what made the
+// experimental branch crash: it returns NULL when the string holds no delimiter, which is exactly the
+// plain "/roll 20" case, and that NULL went straight into strcpy. This scans the string itself, so
+// "no d present" is an ordinary branch rather than a special return value that has to be remembered.
+// Digits are accumulated with a ceiling instead of via atoi, so an absurd argument such as
+// "/roll 99999999999999" saturates harmlessly at DICE_ARG_TOO_BIG and is rejected by the range checks
+// below, rather than being handed to atoi (whose behaviour on overflow is undefined).
+#define DICE_ARG_TOO_BIG 1000000
+
+static qboolean zyk_parse_dice_digits(const char **cursor, int *out_value)
+{
+	const char *scan = *cursor;
+	int value = 0;
+
+	if (!isdigit((unsigned char)*scan))
+	{
+		return qfalse;
+	}
+
+	while (isdigit((unsigned char)*scan))
+	{
+		if (value < DICE_ARG_TOO_BIG)
+		{
+			value = (value * 10) + (*scan - '0');
+		}
+
+		scan++;
+	}
+
+	if (value > DICE_ARG_TOO_BIG)
+	{
+		value = DICE_ARG_TOO_BIG;
+	}
+
+	*cursor = scan;
+	*out_value = value;
+
+	return qtrue;
+}
+
+static qboolean zyk_parse_dice_arg(const char *arg, int *number_of_dice, int *max_value)
+{
+	const char *cursor = arg;
+	int first = 0;
+	int second = 0;
+
+	if (zyk_parse_dice_digits(&cursor, &first) == qfalse)
+	{
+		return qfalse;
+	}
+
+	if (*cursor == 'd' || *cursor == 'D')
+	{
+		cursor++;
+
+		if (zyk_parse_dice_digits(&cursor, &second) == qfalse)
+		{
+			return qfalse;
+		}
+
+		if (*cursor != '\0')
+		{ // zyk: trailing junk, e.g. "2d6x"
+			return qfalse;
+		}
+
+		*number_of_dice = first;
+		*max_value = second;
+
+		return qtrue;
+	}
+
+	if (*cursor != '\0')
+	{ // zyk: trailing junk, e.g. "20x"
+		return qfalse;
+	}
+
+	*number_of_dice = 1;
+	*max_value = first;
+
+	return qtrue;
+}
+
+// GalaxyRP fix: [Dice] /roll and /flipcoin used to hard-broadcast with SendServerCommand(-1, ...),
+// which made them the only in-character actions in the mod that ignored its own RP chat distances --
+// every /me, /do, /my and /shout variant in chat_modifiers[] above is distance-scoped. This sends an
+// already-formatted chat line to the players who would have received a /me from this player, and
+// matches the receiver rules the chat_modifiers dispatch in G_Say uses: an admin holding
+// ADM_IGNORECHATDISTANCE hears everything, and spectators always hear everything. G_Say's own loop is
+// deliberately left alone -- this is a second caller of the same rules, not a refactor of the first.
+static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const char *message)
+{
+	int i = 0;
+	gentity_t *other = NULL;
+
+	for (i = 0; i < level.maxclients; i++)
+	{
+		other = &g_entities[i];
+
+		if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
+			continue;
+
+		if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance ||
+			other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) ||
+			other->client->sess.sessionTeam == TEAM_SPECTATOR)
+		{
+			trap->SendServerCommand(other->client->ps.clientNum, message);
+		}
+	}
+}
+
+// GalaxyRP fix: [Dice] shared cooldown gate for both commands, modelled on the existing
+// rp_buying_cooldown / pers.buy_sell_timer pair used by Cmd_Buy_f. The engine's sv_floodProtect
+// already limits each client to one string command per second, but that is a server-wide cvar an
+// admin may lower or disable, and one broadcast per second per player is still enough to bury chat.
+static qboolean zyk_dice_cooldown_ok(gentity_t *ent)
+{
+	if (ent->client->pers.dice_roll_timer > level.time)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1You must wait ^3%.1f ^1more seconds before rolling again.\n\"",
+			(ent->client->pers.dice_roll_timer - level.time) / 1000.0f));
+		return qfalse;
+	}
+
+	ent->client->pers.dice_roll_timer = level.time + rp_dice_roll_cooldown.integer;
+
+	return qtrue;
 }
 
 /*
@@ -8428,35 +8592,79 @@ Cmd_Roll_f
 ==================
 */
 
-void Cmd_Roll_f(gentity_t *ent) {
-
-	char arg1[MAX_STRING_CHARS];
+static void zyk_roll(gentity_t *ent, int distance)
+{
+	char arg1[MAX_STRING_CHARS] = { 0 };
+	char results[MAX_STRING_CHARS] = { 0 };
+	char message[MAX_STRING_CHARS] = { 0 };
+	int rolls[DICE_MAX_DICE];
+	int number_of_dice = 0;
+	int max_value = 0;
+	int total = 0;
+	int i = 0;
 
 	if (trap->Argc() != 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<max roll>.\n^1Example: ^2/roll ^320\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<faces> ^1or ^2/roll ^3<dice>d<faces>^1.\n^1Examples: ^2/roll ^320^1, ^2/roll ^32d6\n\"");
 		return;
 	}
 
 	trap->Argv(1, arg1, sizeof(arg1));
 
-	if (StringIsInteger(arg1) == qfalse) {
-		trap->SendServerCommand(ent - g_entities, "print \"Argument must be an integer.\n\"");
+	if (zyk_parse_dice_arg(arg1, &number_of_dice, &max_value) == qfalse)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<faces> ^1or ^2/roll ^3<dice>d<faces>^1.\n^1Examples: ^2/roll ^320^1, ^2/roll ^32d6\n\"");
 		return;
 	}
 
-	int max_value = atoi(arg1);
-
-	if (max_value < 2) {
-		trap->SendServerCommand(ent - g_entities, "print \"Maximum value must be at least two.\n\"");
+	if (number_of_dice < 1 || number_of_dice > DICE_MAX_DICE)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1You can roll between ^31 ^1and ^3%d ^1dice at once.\n\"", DICE_MAX_DICE));
 		return;
 	}
 
-	int result = roll_dice(max_value);
+	if (max_value < 2 || max_value > DICE_MAX_FACES)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1A die must have between ^32 ^1and ^3%d ^1faces.\n\"", DICE_MAX_FACES));
+		return;
+	}
 
-	trap->SendServerCommand(-1, va("chat \"^3<Dice Roll> %s^2 rolled a ^3%d^2 out of ^3%d\n\"", ent->client->pers.netname, result, max_value));
+	if (zyk_dice_cooldown_ok(ent) == qfalse)
+	{
+		return;
+	}
 
-	return;
+	for (i = 0; i < number_of_dice; i++)
+	{
+		rolls[i] = zyk_roll_die(max_value);
+		total += rolls[i];
+	}
+
+	if (number_of_dice == 1)
+	{
+		Com_sprintf(message, sizeof(message), "chat \"^3<Dice Roll> %s^2 rolled a ^3%d^2 out of ^3%d\n\"",
+			ent->client->pers.netname, rolls[0], max_value);
+	}
+	else
+	{
+		for (i = 0; i < number_of_dice; i++)
+		{
+			Q_strcat(results, sizeof(results), va("%s^3%d", (i == 0) ? "" : "^2, ", rolls[i]));
+		}
+
+		Com_sprintf(message, sizeof(message), "chat \"^3<Dice Roll> %s^2 rolled %s ^2on ^3%dd%d^2, for a total of ^3%d\n\"",
+			ent->client->pers.netname, results, number_of_dice, max_value, total);
+	}
+
+	zyk_send_chat_within_distance(ent, distance, message);
+}
+
+void Cmd_Roll_f(gentity_t *ent) {
+	zyk_roll(ent, ACTION_DISTANCE);
+}
+
+void Cmd_RollAll_f(gentity_t *ent) {
+	zyk_roll(ent, BROADCAST_DISTANCE);
 }
 
 /*
@@ -8465,7 +8673,9 @@ Cmd_FlipCoin_f
 ==================
 */
 
-void Cmd_FlipCoin_f(gentity_t *ent) {
+static void zyk_flip_coin(gentity_t *ent, int distance)
+{
+	char message[MAX_STRING_CHARS] = { 0 };
 
 	if (trap->Argc() != 1)
 	{
@@ -8473,16 +8683,23 @@ void Cmd_FlipCoin_f(gentity_t *ent) {
 		return;
 	}
 
-	int result = roll_dice(2);
-
-	if (result == 1) {
-		trap->SendServerCommand(-1, va("chat \"^3%s^2 flipped a coin that landed on ^3HEADS.\n\"", ent->client->pers.netname));
-	}
-	else {
-		trap->SendServerCommand(-1, va("chat \"^3%s^2 flipped a coin that landed on ^3TAILS.\n\"", ent->client->pers.netname));
+	if (zyk_dice_cooldown_ok(ent) == qfalse)
+	{
+		return;
 	}
 
-	return;
+	Com_sprintf(message, sizeof(message), "chat \"^3%s^2 flipped a coin that landed on ^3%s.\n\"",
+		ent->client->pers.netname, (zyk_roll_die(2) == 1) ? "HEADS" : "TAILS");
+
+	zyk_send_chat_within_distance(ent, distance, message);
+}
+
+void Cmd_FlipCoin_f(gentity_t *ent) {
+	zyk_flip_coin(ent, ACTION_DISTANCE);
+}
+
+void Cmd_FlipCoinAll_f(gentity_t *ent) {
+	zyk_flip_coin(ent, BROADCAST_DISTANCE);
 }
 
 // GalaxyRP fix: [Classes] validate_rpg_class() used to live here (already a stub returning qtrue,
@@ -9341,8 +9558,17 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/allyremove <player name>: ^7Removes player from allies.\n\
 ^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
-^3/flipcoin: ^7Flips a coin and displays the result in chat.\n\
-^3/roll <max value>: ^7Rolls a dice and displays the result in chat.\n\
+^3/roll <faces> ^7or ^3/roll <dice>d<faces>: ^7Rolls 1-10 dice of 2-100 faces. Seen by players near you.\n\
+^3/rollall: ^7Same roll, seen by the whole server. Usable while dead or spectating.\n\
+^3/flipcoin: ^7Flips a coin. Seen by players near you.\n\
+^3/flipcoinall: ^7Same flip, seen by the whole server. Usable while dead or spectating.\n\"");
+				// GalaxyRP fix: [Dice] the Misc section is split here for the same reason /use_cloak
+				// was split off below: the four dice/coin entries above replaced two much shorter ones
+				// and took the single Misc block to 978 of SV_SendServerCommand's hard 1022 characters,
+				// leaving 44 for anyone who later adds a Misc command -- and going over does not
+				// truncate, it silently drops the whole section. Splitting here puts both halves back
+				// near 500 and restores the headroom.
+				trap->SendServerCommand(ent - g_entities, "print \"\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
 ^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
 ^3/order <action>: ^7Orders NPC to perform an action.\n\
@@ -16339,7 +16565,8 @@ command_t commands[] = {
 	{ "entundo",			Cmd_EntUndo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ex",					Cmd_Examine_f,				CMD_LOGGEDIN },
 	{ "examine",			Cmd_Examine_f,				CMD_LOGGEDIN },
-	{ "flipcoin",			Cmd_FlipCoin_f,				0 },
+	{ "flipcoin",			Cmd_FlipCoin_f,			CMD_NOINTERMISSION|CMD_ALIVE },
+	{ "flipcoinall",		Cmd_FlipCoinAll_f,		CMD_NOINTERMISSION },
 	{ "givecredits",		Cmd_CreditGive_f,			CMD_RPG | CMD_NOINTERMISSION },
 	{ "giveitem",			Cmd_GiveItem_f,				CMD_LOGGEDIN},
 	{ "givexp",				Cmd_GiveXp_f,				CMD_LOGGEDIN},
@@ -16385,7 +16612,8 @@ command_t commands[] = {
 	{ "remapsave",			Cmd_RemapSave_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "removexp",			Cmd_RemoveXp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "removepickups",		Cmd_RemovePickups_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "roll",				Cmd_Roll_f,					0 },
+	{ "roll",				Cmd_Roll_f,				CMD_NOINTERMISSION|CMD_ALIVE },
+	{ "rollall",			Cmd_RollAll_f,			CMD_NOINTERMISSION },
 	{ "rpglmsmode",			Cmd_RpgLmsMode_f,			CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "rpglmstable",		Cmd_RpgLmsTable_f,			CMD_NOINTERMISSION },
 	{ "scale",				Cmd_Scale_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
@@ -16492,10 +16720,12 @@ void ClientCommand( int clientNum ) {
 		return;
 	}
 
-	else if (Q_stricmp(cmd, "roll") == 0) {
-		Cmd_Roll_f(ent);
-	}
-
+	// GalaxyRP fix: [Dice] an "else if (Q_stricmp(cmd, \"roll\") == 0) Cmd_Roll_f(ent);" branch used to
+	// sit here. It was pure duplication: "roll" is an ordinary entry in the commands[] table above, so
+	// the fallthrough below already dispatches it to exactly the same handler after exactly the same
+	// flag checks. Worse, it was actively wrong once /roll gained flags -- it would have run whatever
+	// the table's handler was for any command reaching this point, bypassing nothing but confusing
+	// everything. Removed; the table is now the single source of truth for every command.
 	else
 		command->func( ent );
 }

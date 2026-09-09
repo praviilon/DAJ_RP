@@ -149,6 +149,27 @@ void RP_CVU_sniperBattleTimeToStart(void)
 	RP_ClampCvarMinimum(&zyk_sniper_battle_time_to_start, "zyk_sniper_battle_time_to_start", 1000);
 }
 
+// GalaxyRP: [Dice] rp_dice_roll_cooldown is added to level.time to schedule pers.dice_roll_timer.
+// 0 is a legitimate setting (it means "no cooldown"), and a negative value would mean the same thing
+// while reading as if it did something else -- so the floor is 0 rather than a minimum that works.
+// The ceiling matters more: level.time is milliseconds since the map loaded, so on a server that has
+// been up for a day an unbounded cooldown could push level.time + cooldown past INT_MAX and wrap the
+// timer into the past, silently disabling the very cooldown it was set to enforce. A minute is far
+// beyond any sane RP setting and leaves the sum nowhere near the limit.
+void RP_CVU_diceRollCooldown(void)
+{
+	if (rp_dice_roll_cooldown.integer < 0)
+	{
+		trap->Cvar_Set("rp_dice_roll_cooldown", "0");
+		trap->Cvar_Update(&rp_dice_roll_cooldown);
+	}
+	else if (rp_dice_roll_cooldown.integer > 60000)
+	{
+		trap->Cvar_Set("rp_dice_roll_cooldown", "60000");
+		trap->Cvar_Update(&rp_dice_roll_cooldown);
+	}
+}
+
 
 //
 // Cvar table

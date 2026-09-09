@@ -654,6 +654,10 @@ typedef struct clientPersistant_s {
 	// zyk: cooldown time to buy or sell
 	int buy_sell_timer;
 
+	// GalaxyRP: [Dice] cooldown time for /roll, /rollall, /flipcoin and /flipcoinall, shared by all
+	// four so a player cannot sidestep it by alternating commands. Modelled on buy_sell_timer above.
+	int dice_roll_timer;
+
 	int player_scale;
 
 	// zyk: chat protection cooldown timer. After this time, player will be protected against damage
@@ -2166,6 +2170,7 @@ void RP_CVU_duelTournamentArenaScale(void);
 void RP_CVU_duelTournamentDuelTime(void);
 void RP_CVU_duelTournamentTimeToStart(void);
 void RP_CVU_sniperBattleTimeToStart(void);
+void RP_CVU_diceRollCooldown(void);
 
 // GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.

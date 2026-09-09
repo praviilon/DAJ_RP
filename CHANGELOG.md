@@ -19,8 +19,11 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - `/updatesaber` and `/updateforce` commands: apply lightsaber pick or force power (logged-out players only) pick instantly without needing to respawn first.
 - Armor skill now gives a chance to deflect an incoming blaster shot.
 - `/adminup`, `/admindown`, and the credit commands (`/spendcredits`, `/createcredits`, `/givecredits`) now write an audit-log entry recording who did what to whom.
+- `/roll <dice>d<faces>` dice notation (up to 10 dice, 2-100 faces), plus `/rollall` and `/flipcoinall` to send a roll or flip to the whole server.
+- `rp_dice_roll_cooldown` cvar (default 3000 ms): shared cooldown for `/roll`, `/rollall`, `/flipcoin` and `/flipcoinall`.
 
 ### Changed
+- `/roll` and `/flipcoin` are now distance-scoped like `/me` instead of being broadcast to the whole server, and require being alive; spectators and dead players use `/rollall` and `/flipcoinall`.
 - Default admin account's `AdminLevel` is now `-1` (all bits) instead of a hardcoded bitmask, so it automatically gains any admin command added in the future.
 - The server is now always treated as being in RP Mode: the `zyk_rp_mode` cvar and the mode-switching `/mode`-style dead code tied to it were removed, along with several other unused quest/RPG cvars.
 - Command usage messages made consistent with their actual names (`/new`, `/spendcredits`, `/newsadd`, `/helpup`, etc., which had drifted from earlier renames).
@@ -38,6 +41,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - The in-game saber menu's Apply button now instantly applies a hilt/type change.
 
 ### Fixed
+- **Dice rolls**: `/roll` could produce a non-uniform result and, on a Windows build, silently capped any roll above 32767; `/roll 2147483647` was undefined behavior. Rolls are now drawn with a bias-free rejection sample and bounded to 100 faces.
 - **Account/character persistence**: database access now goes through a shared open helper that enables SQLite WAL mode and a busy-retry timeout, fixing intermittent "database is locked" errors on map change that could leave a returning player with no weapons or inventory until a manual respawn. The database path is also now resolved against the engine's home path instead of the process's working directory, so it no longer depends on how the server was launched.
 - **Saber persistence**: a saved dual/staff saber configuration was being silently discarded and replaced with a single saber on every login or character load, due to a counting bug in the database-load path; fixed so dual/staff sabers round-trip correctly.
 - **Saber switching**: a logged-in player's saber choice made through the UI was never detected as changed (the client's live selection was unconditionally overwritten by the database value on every spawn), leaving the saber selection menu stuck; the database read is now scoped to first spawn only.
