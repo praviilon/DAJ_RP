@@ -5324,6 +5324,24 @@ static void UI_UpdateSaberCvars ( void )
 	colorI = TranslateSaberColor( UI_Cvar_VariableString ( "ui_saber2_color" ) );
 	trap->Cvar_Set ( "color2", va("%d",colorI) );
 	trap->Cvar_Set ( "g_saber2_color", UI_Cvar_VariableString ( "ui_saber2_color" ));
+
+	// GalaxyRP: [Saber] instant-apply the hilt/type selection immediately, matching TaystJK's own
+	// UI_UpdateSaberCvars() -- it auto-fires "cmd saber %s %s" here (gated behind a cvar the client
+	// only turns on once the connected server has advertised support for it, since TaystJK connects
+	// to many different mods' servers). We don't need that detection dance: this client only ever
+	// talks to our own server, and our own server already has a purpose-built, no-argument command
+	// for exactly this -- "/updatesaber" (Cmd_UpdateSaber_f, g_cmds.c) re-reads whichever
+	// saber1/saber2 userinfo cvars were just set above and applies them immediately, no respawn
+	// needed. Reusing it here instead of "cmd saber %s %s" avoids re-parsing the hilt names back out
+	// of ui_saber/ui_saber2 into command arguments. Colours (set above) already apply live on their
+	// own via the ordinary automatic userinfo sync -- see ClientUserinfoChanged() in g_client.c --
+	// this call is only needed for the hilt/type, which ClientUserinfoChanged() deliberately does
+	// NOT adopt outside of a player's first-ever connect (see the fix comment there). The server can
+	// still refuse this (private duel, Duel Tournament duel, or a Team/Siege-family gametype -- see
+	// saber_switch_allowed() in g_cmds.c) with a chat message explaining why; the saber1/saber2
+	// cvars just set above still take effect normally on this player's next natural respawn either
+	// way, so nothing is lost by the refusal.
+	trap->Cmd_ExecuteText( EXEC_APPEND, "updatesaber\n" );
 }
 
 // More hard coded goodness for the menus.

@@ -13522,13 +13522,18 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern qboolean G_SaberModelSetup(gentity_t *ent);
 
-// GalaxyRP: [Saber] shared by update_saber() (the "/saber <a> <b>" path) and Cmd_UpdateSaber_f()
-// (the argument-less "/updatesaber" path below) -- both are just server-side saber changes, so
-// both are subject to the same three restriction checks. These used to only be active at
-// zyk_allow_saber_command level 2; that cvar is gone (see the instant-saber-switching change
-// above this one) and this mod only ever wanted level-2 behaviour, so the checks now run
-// unconditionally for any command that can change a player's saber. Prints the matching refusal
-// message and returns qfalse if the change is currently blocked.
+// GalaxyRP: [Saber] shared by update_saber() (the "/saber <a> <b>" path), Cmd_UpdateSaber_f()
+// (the argument-less "/updatesaber" path below), and -- since the UI's saber menu Apply button
+// now auto-fires "/updatesaber" itself, see UI_UpdateSaberCvars() in ui_main.c -- the ordinary
+// in-game Apply button too. All three are just server-side saber changes, so all three are
+// subject to the same restriction checks. These used to only be active at zyk_allow_saber_command
+// level 2; that cvar is gone (see the instant-saber-switching change above this one) and this mod
+// only ever wanted level-2 behaviour, so the checks now run unconditionally for any command that
+// can change a player's saber. Prints the matching refusal message and returns qfalse if the
+// change is currently blocked. None of these checks affect the player's *next* respawn -- only
+// the instant, no-death application: ClientSpawn()'s own userinfo-diff-and-apply (g_client.c)
+// doesn't call this function at all, so a blocked instant switch still takes effect normally the
+// next time the player actually spawns.
 static qboolean saber_switch_allowed(gentity_t* ent)
 {
 	if (ent->client->ps.duelInProgress == qtrue)
@@ -13540,6 +13545,21 @@ static qboolean saber_switch_allowed(gentity_t* ent)
 	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
+		return qfalse;
+	}
+
+	// GalaxyRP: [Saber] mirrors TaystJK's own restriction on its equivalent automatic instant-
+	// saber-switch feature (its UI_UpdateSaberCvars() only auto-fires the switch when
+	// g_gametype < GT_TEAM). Team-based and Siege rounds shouldn't let a player instantly swap
+	// their saber type/hilt mid-round (e.g. single -> staff for a different reach/style matchup
+	// against whoever they're currently fighting) without at least dying first -- GT_TEAM and
+	// everything after it in the gametype_t enum (bg_public.h) is every team-based mode this
+	// codebase has (Team, Siege, and, if ever enabled, CTF/CTY), matching the "team games go
+	// after this" boundary already used the same way elsewhere (e.g. ClientUserinfoChanged()'s
+	// teamInfo check in g_client.c).
+	if (level.gametype >= GT_TEAM)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot instantly switch sabers in Team or Siege game types. It will apply on your next respawn.\n\"");
 		return qfalse;
 	}
 
@@ -13700,8 +13720,8 @@ void Cmd_Saber_f( gentity_t *ent ) {
 Cmd_UpdateSaber_f
 
 GalaxyRP: [Saber] "/updatesaber" -- takes no arguments. Re-applies whatever saber hilt/type the
-player already picked in the in-game saber menu and pressed Apply on (which only ever wrote to
-this client's own "saber1"/"saber2" userinfo cvars, see UI_UpdateSaberCvars() in ui_main.c)
+player already picked in the in-game saber menu and pressed Apply on (which writes to this
+client's own "saber1"/"saber2" userinfo cvars, see UI_UpdateSaberCvars() in ui_main.c)
 immediately, without needing a /kill or death to force a respawn -- ClientSpawn() in g_client.c
 does this same userinfo diff-and-apply, but only ever runs it when the player is placed fresh in
 the world. Adapted from JA++'s japp_allowSaberSwitch feature (see
@@ -13709,6 +13729,14 @@ C:\Users\richa\TaystJK\japp-master\game\g_client.cpp's ClientSpawn), kept as its
 instead of folding it into "/saber" with no arguments (which stays a pure status query here) and
 subject to the same restriction checks as any other saber change instead of a separate enable
 cvar -- see saber_switch_allowed() above.
+
+GalaxyRP: [Saber] since TaystJK's own UI_UpdateSaberCvars() (ui_main.c) auto-fires the client-side
+equivalent of this command right after Apply sets saber1/saber2 -- see the matching comment there
+-- pressing Apply now instantly applies a hilt/type change in-game, the same as TaystJK, instead
+of requiring the player to separately type "/updatesaber" afterward. This command itself is
+unchanged and still works exactly as before -- typing it manually remains a valid (if now usually
+unnecessary) way to force a re-apply, e.g. after a saber choice was rejected/corrected and the
+player wants to retry without going through the menu again.
 ==================
 */
 void Cmd_UpdateSaber_f( gentity_t *ent ) {
