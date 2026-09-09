@@ -13962,16 +13962,26 @@ static qboolean saber_switch_allowed(gentity_t* ent)
 // (G_SetSaber/ClientUserinfoChanged/G_SaberModelSetup/saber-style reset), then syncs the client's
 // own display. update_saber() calls this right after pushing saber1Model/saber2Model into
 // userinfo itself (the "/saber <a> <b>" path, which names the sabers explicitly). Cmd_UpdateSaber_f
-// below calls it directly with no such push, picking up whatever the in-game saber menu's Apply
-// button already wrote into this client's own "saber1"/"saber2" userinfo cvars (see
-// UI_UpdateSaberCvars() in ui_main.c) -- adapted from JA++'s japp_allowSaberSwitch idea (see
+// below calls it directly with no such push, picking up whatever this client's own "saber1"/
+// "saber2" userinfo cvars already hold -- adapted from JA++'s japp_allowSaberSwitch idea (see
 // C:\Users\richa\TaystJK\japp-master\game\g_client.cpp's ClientSpawn userinfo-diff block, which is
 // what actually performs this apply there, only on respawn), but exposed as its own always-on
 // command instead of folding it into "/saber" with no arguments (which here still just prints the
 // player's current saber names, unchanged) and instead of JA++'s separate enable cvar.
-static void apply_saber_from_userinfo(gentity_t* ent)
+//
+// syncClientAlways distinguishes those two callers, and only affects the client-cvar echo at the
+// very end -- see the fix comment there. Pass qtrue when the SERVER decided the saber and has
+// already written it into userinfo itself (update_saber(): /saber, and login/character restores),
+// where the client's own cvars may be stale even when nothing here changes. Pass qfalse when the
+// CLIENT proposed the change through its own userinfo (Cmd_UpdateSaber_f), where echoing on a
+// no-op would overwrite a selection that simply hasn't arrived yet.
+static void apply_saber_from_userinfo(gentity_t* ent, qboolean syncClientAlways)
 {
 	qboolean changedSaber = qfalse;
+	// GalaxyRP fix: [Saber] see the syncClientAlways comment above -- set the moment the userinfo we
+	// just read asks for something other than what the player currently has, whether or not
+	// G_SetSaber() below then accepts it, so a rejected/corrected request is still echoed back.
+	qboolean requestedChange = qfalse;
 	char userinfo[MAX_INFO_STRING] = { 0 }, * saber = NULL, * key = NULL, * value = NULL;
 
 	//first we want the userinfo so we can see if we should update this client's saber -rww
@@ -13984,6 +13994,8 @@ static void apply_saber_from_userinfo(gentity_t* ent)
 		if (saber && value &&
 			(Q_stricmp(value, saber) || !saber[0] || !ent->client->saber[0].model[0]))
 		{ //doesn't match up (or our saber is BS), we want to try setting it
+			requestedChange = qtrue;
+
 			if (G_SetSaber(ent, i, value, qfalse))
 				changedSaber = qtrue;
 
@@ -14045,9 +14057,22 @@ static void apply_saber_from_userinfo(gentity_t* ent)
 	// trap->SetUserinfo above only updates the SERVER's cached copy of this client's userinfo, it
 	// never tells the client itself, so its own console/UI kept showing whatever it last sent,
 	// including after a DB-driven login restore or a rejected/corrected invalid saber combo).
-	// Sent unconditionally (not just when changedSaber) so a no-op /saber call (already matching)
-	// or a login restore that leaves saber1/saber2 unchanged still keeps the client in sync.
-	trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", ent->client->pers.saber1, ent->client->pers.saber2));
+	//
+	// GalaxyRP fix: [Saber] this used to be sent unconditionally on every path. That is right for
+	// update_saber()'s callers (syncClientAlways), where the SERVER is the authority and has just
+	// written userinfo itself -- a DB-driven login/character restore legitimately leaves
+	// saber1/saber2 unchanged while the client's own cvars are stale, and only this echo can fix
+	// them. It is actively harmful on the client-proposed /updatesaber path, though: there, "the
+	// userinfo matches what the player already has" usually means the client's newly-picked saber
+	// simply hasn't reached the server yet, and echoing the CURRENT saber back overwrites the pick
+	// the player just made (CG_SaberUpdate_f sets those cvars unconditionally), destroying it before
+	// it can ever be applied -- so the selection could not land on the next respawn either, and even
+	// re-issuing the command by hand could never help. Echoing only when the userinfo actually asked
+	// for something different (requestedChange, set whether or not G_SetSaber then accepted it, so a
+	// rejection/correction is still pushed back) makes that case fail safe instead: an apply with
+	// nothing to do now simply leaves the client's own cvars alone.
+	if (changedSaber || requestedChange || syncClientAlways)
+		trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", ent->client->pers.saber1, ent->client->pers.saber2));
 }
 
 void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int number_of_args) {
@@ -14093,7 +14118,7 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	trap->SetUserinfo(ent->s.number, userinfo);
 
 	if (instantApplyAllowed)
-		apply_saber_from_userinfo(ent);
+		apply_saber_from_userinfo(ent, qtrue);
 }
 
 /*
@@ -14129,20 +14154,21 @@ instead of folding it into "/saber" with no arguments (which stays a pure status
 subject to the same restriction checks as any other saber change instead of a separate enable
 cvar -- see saber_switch_allowed() above.
 
-GalaxyRP: [Saber] since TaystJK's own UI_UpdateSaberCvars() (ui_main.c) auto-fires the client-side
-equivalent of this command right after Apply sets saber1/saber2 -- see the matching comment there
--- pressing Apply now instantly applies a hilt/type change in-game, the same as TaystJK, instead
-of requiring the player to separately type "/updatesaber" afterward. This command itself is
-unchanged and still works exactly as before -- typing it manually remains a valid (if now usually
-unnecessary) way to force a re-apply, e.g. after a saber choice was rejected/corrected and the
-player wants to retry without going through the menu again.
+GalaxyRP fix: [Saber] the in-game saber menu's Apply button used to auto-fire this command to get
+its instant apply. It no longer does -- it fires "saber <a> <b>" with the hilts as explicit
+arguments instead, because an argument-less command always overtook the very userinfo cvars it
+needed to read (see the fix comment in UI_UpdateSaberCvars(), ui_main.c). This command is
+unchanged and still works on its own: typing it manually re-applies whatever saber1/saber2 this
+client's cvars currently hold, which is still useful for forcing a re-apply without going back
+through the menu. Because it is the CLIENT proposing the change here, it passes qfalse for
+apply_saber_from_userinfo()'s syncClientAlways -- see that function's comment.
 ==================
 */
 void Cmd_UpdateSaber_f( gentity_t *ent ) {
 	if (!saber_switch_allowed(ent))
 		return;
 
-	apply_saber_from_userinfo(ent);
+	apply_saber_from_userinfo(ent, qfalse);
 }
 
 // GalaxyRP: [Saber RGB] defined in bg_saberLoad.c (shared across game/cgame/ui) -- Cmd_SaberColor_f

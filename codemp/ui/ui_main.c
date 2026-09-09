@@ -5326,9 +5326,12 @@ static void UI_PackSaberRGBCvar( qboolean secondSaber )
 	trap->Cvar_Set( destCvar, va( "%i", SABERRGB_PACK( r, g, b ) ) );
 }
 
+static void UI_SanitizeAccountArg( char *str );
+
 static void UI_UpdateSaberCvars ( void )
 {
 	saber_colors_t colorI;
+	char saber1[MAX_QPATH], saber2[MAX_QPATH];
 
 	trap->Cvar_Set ( "saber1", UI_Cvar_VariableString ( "ui_saber" ) );
 	trap->Cvar_Set ( "saber2", UI_Cvar_VariableString ( "ui_saber2" ) );
@@ -5350,19 +5353,52 @@ static void UI_UpdateSaberCvars ( void )
 	// UI_UpdateSaberCvars() -- it auto-fires "cmd saber %s %s" here (gated behind a cvar the client
 	// only turns on once the connected server has advertised support for it, since TaystJK connects
 	// to many different mods' servers). We don't need that detection dance: this client only ever
-	// talks to our own server, and our own server already has a purpose-built, no-argument command
-	// for exactly this -- "/updatesaber" (Cmd_UpdateSaber_f, g_cmds.c) re-reads whichever
-	// saber1/saber2 userinfo cvars were just set above and applies them immediately, no respawn
-	// needed. Reusing it here instead of "cmd saber %s %s" avoids re-parsing the hilt names back out
-	// of ui_saber/ui_saber2 into command arguments. Colours (set above) already apply live on their
-	// own via the ordinary automatic userinfo sync -- see ClientUserinfoChanged() in g_client.c --
-	// this call is only needed for the hilt/type, which ClientUserinfoChanged() deliberately does
-	// NOT adopt outside of a player's first-ever connect (see the fix comment there). The server can
-	// still refuse this (private duel, Duel Tournament duel, or a Team/Siege-family gametype -- see
-	// saber_switch_allowed() in g_cmds.c) with a chat message explaining why; the saber1/saber2
-	// cvars just set above still take effect normally on this player's next natural respawn either
-	// way, so nothing is lost by the refusal.
-	trap->Cmd_ExecuteText( EXEC_APPEND, "updatesaber\n" );
+	// talks to our own server. Colours (set above) already apply live on their own via the ordinary
+	// automatic userinfo sync -- see ClientUserinfoChanged() in g_client.c -- so this call is only
+	// needed for the hilt/type, which ClientUserinfoChanged() deliberately does NOT adopt outside of
+	// a player's first-ever connect (see the fix comment there).
+	//
+	// GalaxyRP fix: [Saber] this used to fire the argument-less "updatesaber" instead, letting the
+	// server re-read whichever saber1/saber2 userinfo cvars were just set above -- which never
+	// worked, because the command overtakes the cvars it depends on. Setting a CVAR_USERINFO cvar
+	// only flags the userinfo dirty; the engine flushes it to the server later in the same frame
+	// (inside CL_SendCmd), whereas the command buffer this appends to is drained earlier
+	// (Cbuf_Execute). So "updatesaber" always arrived a step AHEAD of the saber1/saber2 values it
+	// was meant to read, the server compared its still-stale userinfo against the player's current
+	// saber, found no difference, and applied nothing at all. Passing the hilts as explicit
+	// arguments instead -- exactly what TaystJK does, and what the "/saber <a> <b>" console command
+	// (Cmd_Saber_f, g_cmds.c) already takes -- removes that ordering dependency entirely: the values
+	// travel inside the command itself, so the server no longer has to have received anything else
+	// first. update_saber() then writes them into its own copy of this client's userinfo before
+	// applying them, so the two can't disagree.
+	//
+	// The server can still refuse the instant apply (private duel, Duel Tournament duel, or a
+	// Team/Siege-family gametype -- see saber_switch_allowed() in g_cmds.c) with a chat message
+	// explaining why; update_saber() persists the requested hilt to userinfo either way, so a
+	// refused switch still takes effect on this player's next natural respawn.
+	trap->Cvar_VariableStringBuffer( "ui_saber", saber1, sizeof( saber1 ) );
+	trap->Cvar_VariableStringBuffer( "ui_saber2", saber2, sizeof( saber2 ) );
+
+	// GalaxyRP fix: [security] same quote-injection issue UI_SanitizeAccountArg documents further
+	// down for the login/password/character-name handlers -- these go into a quoted argument of a
+	// string handed to Cmd_ExecuteText, and the engine's tokenizer has no way to escape a '"'. These
+	// two come from the saber menu's own hilt lists rather than a text field, but they are ordinary
+	// cvars that can be set directly (/set ui_saber ...), so sanitize rather than trust the source.
+	UI_SanitizeAccountArg( saber1 );
+	UI_SanitizeAccountArg( saber2 );
+
+	// "none" is the canonical "no second saber" value everywhere else (it is what the menu's own
+	// single/staff type buttons set ui_saber2 to, and what update_saber() substitutes for a missing
+	// second argument). UI_UpdateSaberType() clears ui_saber2 to an empty string instead, though,
+	// and an empty argument would make update_saber() strip the saber2 key out of userinfo entirely
+	// rather than set it to a valid value -- so normalise it here.
+	if ( !saber2[0] )
+		Q_strncpyz( saber2, "none", sizeof( saber2 ) );
+
+	// Nothing sensible to apply without a first hilt, and sending an empty one would likewise strip
+	// the saber1 key out of userinfo server-side; leave the player's saber alone in that case.
+	if ( saber1[0] )
+		trap->Cmd_ExecuteText( EXEC_APPEND, va( "saber \"%s\" \"%s\"\n", saber1, saber2 ) );
 }
 
 // More hard coded goodness for the menus.
