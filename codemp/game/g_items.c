@@ -3146,7 +3146,9 @@ void FinishSpawningItem( gentity_t *ent ) {
 		}
 	}
 
-	if (g_forcePowerDisable.integer)
+	// GalaxyRP fix: [Force] duel-aware, see G_ForcePowerDisableValue() -- force powerups used to keep
+	// spawning in Duel/Power Duel when only zyk_duelForcePowerDisable was set.
+	if (G_ForcePowerDisableValue())
 	{ //if force powers disabled, don't add force powerups
 		if (ent->item->giType == IT_POWERUP)
 		{

@@ -94,6 +94,61 @@ void RP_CVU_listCmdsResultsPerPage(void)
 	}
 }
 
+// GalaxyRP fix: [validation] same class as the timer cvars above, for the duel/minigame cvars that
+// were missed by that pass. Each of these has a value range below which its feature does not merely
+// behave oddly but becomes permanently unusable, so each clamps to the lowest value that still
+// works rather than to 0 (which for most of them IS the broken value). A clamped-away setting is
+// reported the same way the others are -- by simply correcting the cvar, so an admin who inspects it
+// sees the value actually in force.
+static void RP_ClampCvarMinimum(vmCvar_t* cvar, const char* cvarName, int minimum)
+{
+	if (cvar->integer < minimum)
+	{
+		trap->Cvar_Set(cvarName, va("%i", minimum));
+		trap->Cvar_Update(cvar);
+	}
+}
+
+// zyk_duel_radius is compared against the distance between the two duelists every frame
+// (g_active.c): at 0 or below, "too far apart" is true immediately, so every private duel ends on
+// its very first frame and duelling is impossible. 100 units is close quarters but functional.
+void RP_CVU_duelRadius(void)
+{
+	RP_ClampCvarMinimum(&zyk_duel_radius, "zyk_duel_radius", 100);
+}
+
+// The Duel Tournament arena's kill radius is DUEL_TOURNAMENT_ARENA_SIZE * scale / 100 (g_main.c),
+// while duelists are teleported to +/-125 units from the arena centre. Below a scale of 200 that
+// radius is smaller than the distance they spawn at, so both duelists are killed for leaving the
+// arena on the first frame of every match.
+void RP_CVU_duelTournamentArenaScale(void)
+{
+	RP_ClampCvarMinimum(&zyk_duel_tournament_arena_scale, "zyk_duel_tournament_arena_scale", 200);
+}
+
+// Duelists are frozen in place for the first DUEL_TOURNAMENT_PROTECT_TIME (2000ms) of a match
+// (bg_pmove.c). A duel_time at or below that leaves them frozen for the entire match, so every
+// match runs its clock out at full health and is scored as a tie -- no duel is ever actually
+// fought. 5000ms gives a (very short) 3 seconds of real duelling.
+void RP_CVU_duelTournamentDuelTime(void)
+{
+	RP_ClampCvarMinimum(&zyk_duel_tournament_duel_time, "zyk_duel_tournament_duel_time", 5000);
+}
+
+// Both of these set "<timer> = level.time + cvar" when the first player signs up, and the mode's
+// per-frame handler ends the event the moment that timer elapses with too few players. At 0 or
+// below the timer is already in the past, so the first person to join instantly ends the event they
+// just started and the mode can never be entered at all.
+void RP_CVU_duelTournamentTimeToStart(void)
+{
+	RP_ClampCvarMinimum(&zyk_duel_tournament_time_to_start, "zyk_duel_tournament_time_to_start", 1000);
+}
+
+void RP_CVU_sniperBattleTimeToStart(void)
+{
+	RP_ClampCvarMinimum(&zyk_sniper_battle_time_to_start, "zyk_sniper_battle_time_to_start", 1000);
+}
+
 
 //
 // Cvar table

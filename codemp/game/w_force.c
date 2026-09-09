@@ -159,13 +159,10 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	int i, i_r, lastFPKnown = -1;
 	qboolean warnClient = qfalse, warnClientLimit = qfalse, didEvent = qfalse;
 	char userinfo[MAX_INFO_STRING], forcePowers[DEFAULT_FORCEPOWERS_LEN+1], readBuf[DEFAULT_FORCEPOWERS_LEN+1];
-	int force_powers_disabled = g_forcePowerDisable.integer; 
-
-	// zyk: if gametype is Duel or Power Duel, use zyk_duelForcePowerDisable instead
-	if (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL)
-	{
-		force_powers_disabled = zyk_duelForcePowerDisable.integer;
-	}
+	// zyk: if gametype is Duel or Power Duel, uses zyk_duelForcePowerDisable instead
+	// GalaxyRP fix: [Force] moved into G_ForcePowerDisableValue() (g_main.c) so the other readers of
+	// g_forcePowerDisable get the same duel-aware answer this function already did.
+	int force_powers_disabled = G_ForcePowerDisableValue();
 
 	// if server has no max rank, default to max (50)
 	if ( g_maxForceRank.integer <= 0 || g_maxForceRank.integer >= NUM_FORCE_MASTERY_LEVELS ) {

@@ -1873,43 +1873,21 @@ void TryUse( gentity_t *ent )
 		}
 	}
 
-	if (level.duel_tournament_mode == 1 && ent->client->sess.amrpgmode < 2 && target && target->client && target->client->sess.amrpgmode < 2 && target->s.number < MAX_CLIENTS && 
-		level.duel_players[ent->s.number] != -1 && level.duel_players[target->s.number] != -1 && zyk_duel_tournament_allow_teams.integer > 0)
-	{ // zyk: adding this plater as ally in Duel Tournament
-		if (level.duel_allies[ent->s.number] != target->s.number)
-		{
-			level.duel_allies[ent->s.number] = target->s.number;
-			trap->SendServerCommand(ent->s.number, va("chat \"^3Duel Tournament: ^7Added %s ^7as ally\"", target->client->pers.netname));
-
-			if (level.duel_allies[target->s.number] == ent->s.number)
-			{ // zyk: established an alliance
-				trap->SendServerCommand(target->s.number, va("chat \"^3Duel Tournament: ^7Confirmed %s ^7as ally\"", ent->client->pers.netname));
-			}
-			else
-			{ // zyk: request for alliance
-				trap->SendServerCommand(target->s.number, va("chat \"^3Duel Tournament: ^7%s ^7requested you as ally\"", ent->client->pers.netname));
-			}
-
-			// zyk: setting use anim
-			ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-			ent->client->ps.forceDodgeAnim = BOTH_BUTTON_HOLD;
-			ent->client->ps.forceHandExtendTime = level.time + 500;
-
-			return;
-		}
-		else
-		{
-			level.duel_allies[ent->s.number] = -1;
-			trap->SendServerCommand(ent->s.number, va("chat \"^3Duel Tournament: ^7%s ^7no longer ally\"", target->client->pers.netname));
-
-			// zyk: setting use anim
-			ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-			ent->client->ps.forceDodgeAnim = BOTH_BUTTON_HOLD;
-			ent->client->ps.forceHandExtendTime = level.time + 500;
-
-			return;
-		}
-	}
+	// GalaxyRP: [Duel Tournament] the Duel Tournament 2v2 ally-forming block used to sit here -- press
+	// Use on another signed-up player during signup (mode 1) to request them as a team-mate, press
+	// again to drop them. It was the ONLY writer of level.duel_allies[], and it has been removed along
+	// with the zyk_duel_tournament_allow_teams cvar that gated it, so tournaments are now always 1v1.
+	//
+	// It had been unreachable for logged-in players for years in any case: the condition required
+	// sess.amrpgmode < 2 on BOTH players, but amrpgmode only ever holds 0 (not logged in) or 2 (logged
+	// in) -- the value 1 is long dead, see the "always 2, kept for backwards compatibility" note in
+	// g_cmds.c. So on any server where people log in, the cvar advertised a feature that could never
+	// actually be used, and only two logged-OUT players could ever team up.
+	//
+	// With this gone, level.duel_allies[] stays -1 for every client for the whole map, so every
+	// remaining "does this duelist have an ally" branch in the tournament code (g_main.c) is inert.
+	// Those branches are left in place for now rather than unpicked from the match state machine in
+	// the same pass as several unrelated fixes; they are dead code, not live behaviour.
 
 	if (ent->client->sess.amrpgmode == 2 && target && target->client && target->NPC && target->health > 0 && Q_stricmp( target->NPC_type, "jawa_seller" ) == 0)
 	{ // zyk: player talked to jawa_seller

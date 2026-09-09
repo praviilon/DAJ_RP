@@ -2451,7 +2451,15 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	}
 
 	// GalaxyRP (Alex): [Database] Save character's stuff as soon as they change them.
-	if (client->sess.sessionTeam == TEAM_FREE && client->sess.loggedin == qtrue) {
+	// GalaxyRP fix: [Saber] this used to also require sessionTeam == TEAM_FREE. The UPDATE below is the
+	// only place saberOneModel/saberTwoModel and the two packed blade colours are ever written to the
+	// database, so that condition meant those changes were never saved for anyone whose session team is
+	// something else: every player in a Team, CTF or Siege game (where the team is RED or BLUE, never
+	// FREE), and a logged-in player still sitting in spectator, which is the normal state right after
+	// joining. The change applied live and the client was told it had worked, then it was silently gone
+	// on the next login. Only the login check is needed here -- the save is keyed on the player's own
+	// character and is meaningless without one.
+	if (client->sess.loggedin == qtrue) {
 		sqlite3* db;
 		char* zErrMsg = 0;
 		int rc;
@@ -3771,7 +3779,7 @@ void ClientSpawn(gentity_t *ent) {
 	if ( level.gametype != GT_HOLOCRON
 		&& level.gametype != GT_JEDIMASTER
 		&& !HasSetSaberOnly()
-		&& !AllForceDisabled( g_forcePowerDisable.integer )
+		&& !AllForceDisabled( G_ForcePowerDisableValue() ) // GalaxyRP fix: [Force] duel-aware, see G_ForcePowerDisableValue()
 		&& g_jediVmerc.integer )
 	{
 		if ( level.gametype >= GT_TEAM && (client->sess.sessionTeam == TEAM_BLUE || client->sess.sessionTeam == TEAM_RED) )

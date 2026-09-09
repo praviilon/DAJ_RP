@@ -2364,11 +2364,21 @@ saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, cha
 		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 0), sizeof(saber1Model));
 		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 1), sizeof(saber2Model));
 
-		sqlite3_finalize(stmt);
+		// GalaxyRP fix: [Saber] only copy out when a row was actually read. These two locals start
+		// empty, and the copies below used to run unconditionally -- so on the row-not-found path they
+		// overwrote saber_info's own {"none", "none"} defaults with empty strings. An empty saber name
+		// then reaches Info_SetValueForKey in ClientSpawn(), which DELETES the key rather than storing
+		// an empty value, and the resulting missing saber2 resolves to the default saber, silently
+		// giving the player two sabers. The "none" defaults exist precisely to avoid that.
+		strcpy(saber_info.saber1Model, saber1Model);
+		strcpy(saber_info.saber2Model, saber2Model);
 	}
 
-	strcpy(saber_info.saber1Model, saber1Model);
-	strcpy(saber_info.saber2Model, saber2Model);
+	// GalaxyRP fix: [stability] finalize on every path, not just the row-found one -- same leak class
+	// as select_weapons_table_row_from_entity() and the other lookups in this file. This one runs from
+	// ClientSpawn()'s first-spawn saber restore, so a character row that cannot be found leaked the
+	// connection there too.
+	sqlite3_finalize(stmt);
 
 	return saber_info;
 }
@@ -2653,12 +2663,16 @@ void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zEr
 		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 5);
 		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 6);
 		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 7);
-
-		sqlite3_finalize(stmt);
-		return;
 	}
 
-	return;
+	// GalaxyRP fix: [stability] the finalize used to live inside the SQLITE_ROW branch above, so the
+	// row-not-found path fell out of this function with the statement still live. sqlite3_close()
+	// then refuses to close the connection (it returns SQLITE_BUSY, which the caller does not check),
+	// leaking the handle and its WAL lock. This is the same leak class already fixed in the sibling
+	// lookups in this file. It is reachable in practice: this runs from ClientSpawn() for every
+	// logged-in player, and a session whose character could not be resolved keeps loggedin set with
+	// CharID left at 0, so the query legitimately matches no row -- on every single respawn.
+	sqlite3_finalize(stmt);
 }
 
 // GalaxyRP (Alex): [Database] UPDATE This method updated a weapons table row with information contained within the entity with which it's called.
@@ -9045,6 +9059,16 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// list. Reset to 0 here so that query can no longer match a real account once logged out.
 	ent->client->sess.accountID = 0;
 
+	// GalaxyRP fix: [Account] pers.CharID is the last piece of the previous character's identity that
+	// survived a logout, and unlike the session fields above it is not merely stale bookkeeping: it is
+	// the CharID that database WRITES are keyed on. player_die() (g_combat.c) calls
+	// update_weapons_table_row_with_current_values() unconditionally -- it is not gated on being
+	// logged in, unlike every other save path -- and that runs "UPDATE Weapons SET ... WHERE CharID=?"
+	// using this value. Since /logout also strips the player's weapons and ammo down to a logged-out
+	// baseline, dying at any point after logging out wrote that empty loadout straight over the
+	// character's saved ammo. Clearing it means the update matches no row instead.
+	ent->client->pers.CharID = 0;
+
 	// GalaxyRP fix: [Guardian] removed the `if (can_play_quest == 1) { boss_battle_music_reset_timer
 	// = ...; }` block here -- can_play_quest can no longer become 1 anywhere (see the GalaxyRP fix
 	// comment on quest_get_new_player's old location further up in this file), and
@@ -13262,6 +13286,16 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 
 	if (g_entities[client_id].client->pers.level + number_of_levels > zyk_rpg_max_level.integer) {
 		int max_possible_value = zyk_rpg_max_level.integer - g_entities[client_id].client->pers.level;
+
+		// GalaxyRP fix: [Admin] this printed a negative "Maximum allowed" when the target is already at
+		// or above the cap -- which happens whenever zyk_rpg_max_level is lowered below an existing
+		// character's level. The refusal itself was always correct; only the number was nonsense.
+		if (max_possible_value <= 0)
+		{
+			trap->SendServerCommand(ent - g_entities, va("print \"^1That player is already at or above the maximum level (%d), operation not done.\n\"", zyk_rpg_max_level.integer));
+			return;
+		}
+
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Too many levels selected, operation not done. Maximum allowed: %d\n\"", max_possible_value));
 		return;
 	}
@@ -14219,7 +14253,16 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	//first we want the userinfo so we can see if we should update this client's saber -rww
 	trap->GetUserinfo(ent->s.number, userinfo, sizeof(userinfo));
 
-	value = G_NewString(saber1Model);
+	// GalaxyRP fix: [stability] both of these used to be wrapped in G_NewString() before being handed
+	// to Info_SetValueForKey. That was pure waste with a real cost: Info_SetValueForKey copies the
+	// value into the userinfo buffer (and trap->SetUserinfo copies again), so the allocations were
+	// never needed -- but G_NewString allocates out of the game's 4MB permanent pool (g_mem.c), which
+	// is never freed until the map changes and calls trap->Error(ERR_DROP) when exhausted. g_mem.c
+	// warns in as many words that it must not be used from a client command, and this is reached
+	// straight from /saber, whose arguments are player-supplied and unbounded in length. Repeated use
+	// therefore consumed the pool with no way to reclaim it, ending in a dropped game VM. Pass the
+	// caller's strings directly; nothing reads them again after these calls.
+	value = saber1Model;
 
 	Info_SetValueForKey(userinfo, "saber1", value);
 
@@ -14229,7 +14272,7 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	}
 	else
 	{
-		value = G_NewString(saber2Model);
+		value = saber2Model;
 	}
 
 	Info_SetValueForKey(userinfo, "saber2", value);

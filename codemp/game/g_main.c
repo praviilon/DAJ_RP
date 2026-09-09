@@ -4654,6 +4654,15 @@ void CheckVote( void ) {
 			return;
 	}
 	level.voteTime = 0;
+
+	// GalaxyRP fix: [Vote] level.voting_player was set when the vote was called and then never cleared,
+	// so it went on naming a client slot after the vote had resolved. Client slots are reused: if the
+	// player who called the vote disconnects and somebody else connects into the same slot before the
+	// vote finishes, the zyk_vote_timer cooldown above is applied to the newcomer, who is then refused
+	// with "You cannot vote now" without ever having voted. Clearing it with the vote it belongs to
+	// keeps the two in step. (Only matters on servers that set zyk_vote_timer above 0.)
+	level.voting_player = -1;
+
 	trap->SetConfigstring( CS_VOTE_TIME, "" );
 }
 
@@ -5105,6 +5114,22 @@ qboolean zyk_check_immunity_power(gentity_t *ent)
 // always-true conjunct.
 
 // zyk: tests if the target player can be hit by the attacker gun/saber damage, force power or special power
+// GalaxyRP fix: [Force] the "which force-power disable mask is actually in force right now" rule used
+// to exist only as three inline lines inside WP_InitForcePowers (w_force.c), so every other place that
+// consulted g_forcePowerDisable kept using the plain server-wide value even in Duel and Power Duel,
+// where zyk_duelForcePowerDisable is meant to replace it. That left force powerups still spawning in
+// duel gametypes and the jedi/merc split deciding on the wrong mask. Factored out here so there is one
+// answer to that question and every caller gets the same one.
+int G_ForcePowerDisableValue(void)
+{
+	if (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL)
+	{
+		return zyk_duelForcePowerDisable.integer;
+	}
+
+	return g_forcePowerDisable.integer;
+}
+
 qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 {
 	if (attacker && attacker->client && target && target->client && !attacker->NPC && !target->NPC)
@@ -7339,6 +7364,15 @@ void duel_tournament_end()
 	level.duelist_2_id = -1;
 	level.duelist_1_ally_id = -1;
 	level.duelist_2_ally_id = -1;
+
+	// GalaxyRP fix: [Duel Tournament] the paused flag was the one piece of tournament state this
+	// function did not reset, and nothing else clears it except a map change. Because Cmd_DuelPause_f
+	// refuses to run while no tournament exists ("There is no duel tournament now"), a tournament
+	// that was paused and then ended -- e.g. paused during signup, then everyone left -- left the flag
+	// stuck on with no way to clear it. Every later tournament on that map then sat in signup forever:
+	// the mode-1 start transition lives inside the "not paused" guard, so it simply never fired, with
+	// no message to explain why. Ending a tournament now leaves no state behind for the next one.
+	level.duel_tournament_paused = qfalse;
 }
 
 // zyk: prepare duelist for duel
@@ -7483,11 +7517,24 @@ void duel_tournament_generate_match_table()
 			{
 				last_opponent_id = -1;
 
+				// GalaxyRP fix: [Duel Tournament] number_of_filled_positions used to be reset ONLY by
+				// the break below, i.e. only when this player managed to fill its full quota of
+				// positions. With the maximum 32 duelists the array is exactly full (32 players x 31
+				// opponents = 992 = 2 x MAX_DUEL_MATCHES), so the last players run the j loop to
+				// completion without ever hitting that break -- the counter then carried over into the
+				// next player, which stopped early and left matches with a first duelist but no second.
+				// Those half-filled entries sat inside the counted range, so the tournament played
+				// matches whose second duelist id was -1: an out-of-bounds entity index, a -1 index into
+				// duel_allies[], and a match nobody could win. Resetting per player instead makes the
+				// counter's state independent of how the loop below terminates. Verified by simulation:
+				// with exactly 32 duelists this now produces the complete 496-match round robin with no
+				// holes and no repeated pairings, and every smaller tournament is unchanged.
+				number_of_filled_positions = 0;
+
 				for (j = 0; j < MAX_DUEL_MATCHES; j++)
 				{
 					if (number_of_filled_positions >= max_filled_positions)
 					{
-						number_of_filled_positions = 0;
 						break;
 					}
 
@@ -7652,6 +7699,14 @@ char *duel_tournament_remaining_health(gentity_t *ent)
 	char health_info[128];
 	gentity_t *ally = NULL;
 
+	// GalaxyRP fix: [Duel Tournament] callers can now legitimately pass NULL for a match slot that
+	// holds no valid duelist (see duel_tournament_set_match_winner), and every line below reads
+	// ent->s.number / ent->client. Return an empty health string rather than crashing.
+	if (!ent || !ent->client)
+	{
+		return "";
+	}
+
 	if (level.duel_allies[ent->s.number] != -1)
 	{
 		ally = &g_entities[level.duel_allies[ent->s.number]];
@@ -7680,6 +7735,21 @@ void duel_tournament_give_score(gentity_t *ent, int score)
 {
 	gentity_t *ally = NULL;
 
+	// GalaxyRP fix: [Duel Tournament] this used to dereference ent unconditionally and then do
+	// "level.duel_players[ent->s.number] += score" with no check on the current value. Two problems.
+	// First, its callers can legitimately pass NULL now that a match slot holding -1 no longer
+	// produces a bogus entity pointer. Second, and worse, -1 in duel_players[] is the sentinel for
+	// "not in the tournament" (a player who spectated, disconnected or was never signed up), so
+	// adding a score to it turned -1 back into 0 -- i.e. silently re-enrolled them as a member,
+	// without duelists_quantity being incremented to match. That happens on the "both teams invalid"
+	// tie path, and the resurrected player then reappears in /dueltable, stays eligible to win the
+	// whole tournament, and on their eventual real disconnect decrements duelists_quantity a second
+	// time, driving it negative so the "everyone left" check can never end the tournament again.
+	if (!ent || !ent->client || level.duel_players[ent->s.number] == -1)
+	{
+		return;
+	}
+
 	if (level.duel_allies[ent->s.number] != -1)
 	{
 		ally = &g_entities[level.duel_allies[ent->s.number]];
@@ -7707,14 +7777,31 @@ void duel_tournament_give_score(gentity_t *ent, int score)
 // zyk: sets the winner of the Duel Tournament match
 void duel_tournament_set_match_winner(gentity_t *winner)
 {
-	gentity_t *first_duelist = &g_entities[level.duelist_1_id];
-	gentity_t *second_duelist = &g_entities[level.duelist_2_id];
+	gentity_t *first_duelist = NULL;
+	gentity_t *second_duelist = NULL;
 	gentity_t *first_duelist_ally = NULL;
 	gentity_t *second_duelist_ally = NULL;
 
 	char ally_name[36];
 
 	strcpy(ally_name, "");
+
+	// GalaxyRP fix: [Duel Tournament] these two used to be initialised unconditionally as
+	// &g_entities[level.duelist_N_id]. Both ids legitimately hold -1 (they are reset to it between
+	// matches, and a malformed match table can carry -1 into a match -- see the packing fix in
+	// duel_tournament_generate_match_table), and &g_entities[-1] is an out-of-bounds pointer to
+	// whatever sits before the entity array. It is not NULL, so the "ent && ent->client" guards
+	// further down accept it and then read a client pointer out of unrelated memory. The ally ids
+	// immediately below were always guarded this way; the duelist ids themselves were not.
+	if (level.duelist_1_id != -1)
+	{
+		first_duelist = &g_entities[level.duelist_1_id];
+	}
+
+	if (level.duelist_2_id != -1)
+	{
+		second_duelist = &g_entities[level.duelist_2_id];
+	}
 
 	if (level.duelist_1_ally_id != -1)
 	{
@@ -7810,8 +7897,13 @@ qboolean duel_tournament_valid_duelist(gentity_t *ent)
 // zyk: validates duelists in Duel Tournament
 qboolean duel_tournament_validate_duelists()
 {
-	gentity_t *first_duelist = &g_entities[level.duelist_1_id];
-	gentity_t *second_duelist = &g_entities[level.duelist_2_id];
+	// GalaxyRP fix: [Duel Tournament] same out-of-bounds initialisation fixed in
+	// duel_tournament_set_match_winner above -- &g_entities[-1] when a duelist id holds the -1
+	// "no duelist" sentinel. duel_tournament_valid_duelist() below already treats a NULL entity as
+	// invalid, which is exactly the right answer for an empty slot; it could not do that for a
+	// pointer into out-of-bounds memory, which is non-NULL and passes its "ent && ent->client" test.
+	gentity_t *first_duelist = (level.duelist_1_id != -1) ? &g_entities[level.duelist_1_id] : NULL;
+	gentity_t *second_duelist = (level.duelist_2_id != -1) ? &g_entities[level.duelist_2_id] : NULL;
 	gentity_t *first_duelist_ally = NULL;
 	gentity_t *second_duelist_ally = NULL;
 
@@ -7831,14 +7923,17 @@ qboolean duel_tournament_validate_duelists()
 	}
 
 	// zyk: removing duelists from private duels
-	if (first_duelist->client->ps.duelInProgress == qtrue)
+	// GalaxyRP fix: [Duel Tournament] NULL-guarded, matching the two ally branches immediately below
+	// which always were -- these two now hold NULL for an empty match slot instead of an
+	// out-of-bounds pointer, so they have to be checked the same way.
+	if (first_duelist && first_duelist->client->ps.duelInProgress == qtrue)
 	{
 		first_duelist->client->ps.stats[STAT_HEALTH] = first_duelist->health = -999;
 
 		player_die(first_duelist, first_duelist, first_duelist, 100000, MOD_SUICIDE);
 	}
 
-	if (second_duelist->client->ps.duelInProgress == qtrue)
+	if (second_duelist && second_duelist->client->ps.duelInProgress == qtrue)
 	{
 		second_duelist->client->ps.stats[STAT_HEALTH] = second_duelist->health = -999;
 
@@ -7871,7 +7966,14 @@ qboolean duel_tournament_validate_duelists()
 		level.duel_matches[level.duel_matches_done][0] = level.duelist_1_ally_id;
 
 		level.duel_allies[level.duelist_1_ally_id] = -1;
-		level.duel_allies[level.duelist_1_id] = -1;
+
+		// GalaxyRP fix: [Duel Tournament] guarded -- duelist_1_id can hold the -1 "no duelist"
+		// sentinel here, and this is an out-of-bounds WRITE into whatever precedes duel_allies[]
+		// in the level struct, not just a bad read.
+		if (level.duelist_1_id != -1)
+		{
+			level.duel_allies[level.duelist_1_id] = -1;
+		}
 
 		level.duelist_1_id = level.duelist_1_ally_id;
 		level.duelist_1_ally_id = -1;
@@ -7885,7 +7987,12 @@ qboolean duel_tournament_validate_duelists()
 		level.duel_matches[level.duel_matches_done][1] = level.duelist_2_ally_id;
 
 		level.duel_allies[level.duelist_2_ally_id] = -1;
-		level.duel_allies[level.duelist_2_id] = -1;
+
+		// GalaxyRP fix: [Duel Tournament] same out-of-bounds write guarded as for duelist 1 above.
+		if (level.duelist_2_id != -1)
+		{
+			level.duel_allies[level.duelist_2_id] = -1;
+		}
 
 		level.duelist_2_id = level.duelist_2_ally_id;
 		level.duelist_2_ally_id = -1;
@@ -7956,7 +8063,14 @@ void sniper_battle_end()
 
 			WP_InitForcePowers(ent);
 
-			ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
+			// GalaxyRP fix: [Sniper Battle] restoring the force pool from the raw cvar ignores the RPG
+			// cap. In RPG mode a character's real maximum is pers.max_force_power, derived from their
+			// Force Power skill (see initialize_rpg_skills in g_cmds.c), which is a quarter of this
+			// cvar per skill level -- so a low-skill character walked out of a sniper battle with the
+			// full server maximum instead of their own, and kept it until their next respawn. This line
+			// predates RPG players being allowed into sniper battles at all (the check that used to
+			// reject them was commented out later), which is why it was never updated.
+			ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : zyk_max_force_power.integer;
 
 			if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
 				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
@@ -8031,7 +8145,10 @@ void sniper_battle_winner()
 
 	if (ent)
 	{
-		ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
+		// GalaxyRP fix: [Sniper Battle] same RPG force-cap bypass fixed in sniper_battle_end() above --
+		// this is the winner's restore, and it handed the winner the raw server maximum regardless of
+		// their own Force Power skill.
+		ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : zyk_max_force_power.integer;
 
 		ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 20000;
 		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 20000;
@@ -8591,6 +8708,18 @@ void G_RunFrame( int levelTime ) {
 			level.melee_mode_timer = level.time + 3000;
 			level.melee_mode = 3;
 		}
+		// GalaxyRP fix: [Melee Battle] the "== 1" test above is the only early end, so a battle whose
+		// player count reaches 0 rather than 1 never ends early at all. That is not a corner case: the
+		// out-of-bounds kill loop that pushes players off the platform runs later in this same frame,
+		// so the last two players falling together take the count straight from 2 to 0. The battle then
+		// sat in mode 2 for its entire remaining timeout -- ten minutes at the shipped default --
+		// rejecting every attempt to join with no explanation, until the "Time is up" message finally
+		// fired. Same for the sniper battle and RPG LMS below.
+		else if (level.melee_mode_quantity <= 0)
+		{
+			melee_battle_end();
+			trap->SendServerCommand(-1, "chat \"^3Melee Battle: ^7No players left! Melee Battle is over!\"");
+		}
 	}
 	else if (level.melee_mode == 1 && level.melee_mode_timer < level.time)
 	{
@@ -8620,6 +8749,14 @@ void G_RunFrame( int levelTime ) {
 		{
 			sniper_battle_winner();
 			sniper_battle_end();
+		}
+		// GalaxyRP fix: [Sniper Battle] see the matching comment in the Melee Battle block above --
+		// a count that reaches 0 (both remaining players dying in the same frame, or disconnecting)
+		// never satisfied the "== 1" test, leaving the mode unjoinable until its full timeout.
+		else if (level.sniper_mode_quantity <= 0)
+		{
+			sniper_battle_end();
+			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7No players left! Sniper Battle is over!\"");
 		}
 	}
 	else if (level.sniper_mode == 1 && level.sniper_mode_timer < level.time)
@@ -8651,6 +8788,14 @@ void G_RunFrame( int levelTime ) {
 			rpg_lms_winner();
 			rpg_lms_end();
 		}
+		// GalaxyRP fix: [RPG LMS] see the matching comment in the Melee Battle block above -- a count
+		// that reaches 0 rather than 1 never satisfied the "== 1" test, leaving the mode unjoinable
+		// until its full timeout.
+		else if (level.rpg_lms_quantity <= 0)
+		{
+			rpg_lms_end();
+			trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7No players left! RPG LMS is over!\"");
+		}
 	}
 	else if (level.rpg_lms_mode == 1 && level.rpg_lms_timer < level.time)
 	{
@@ -8671,7 +8816,25 @@ void G_RunFrame( int levelTime ) {
 	// zyk: Duel Tournament
 	if (level.duel_tournament_mode == 4)
 	{ // zyk: validations during a duel
-		if (duel_tournament_validate_duelists() == qtrue)
+		// GalaxyRP fix: [Duel Tournament] /duelpause did not actually pause a duel that was already
+		// under way. This whole mode-4 block sits outside the "duel_tournament_paused == qfalse"
+		// guard further down -- deliberately, because it used to contain only the leaver validation
+		// call below, which does need to keep running while paused (that is what the original
+		// "validation when it is paused" fix was for). The duel OUTCOME logic was later merged into
+		// the same block without being re-guarded, so while "paused" the match kept resolving: deaths
+		// still decided a winner and the duel clock still ran out and scored the match on health.
+		// Validation still runs while paused; only the outcome now waits for the unpause.
+		//
+		// The duel clock also has to be held, not merely ignored: duel_tournament_timer is an
+		// absolute level.time stamp, so a pause longer than the remaining duel time would otherwise
+		// expire during the pause and time the match out the instant it resumed. Pushing it forward
+		// by each paused frame keeps the remaining duel time exactly where it was.
+		if (level.duel_tournament_paused == qtrue)
+		{
+			level.duel_tournament_timer += (level.time - level.previousTime);
+		}
+
+		if (duel_tournament_validate_duelists() == qtrue && level.duel_tournament_paused == qfalse)
 		{
 			gentity_t *first_duelist = &g_entities[level.duelist_1_id];
 			gentity_t *second_duelist = &g_entities[level.duelist_2_id];

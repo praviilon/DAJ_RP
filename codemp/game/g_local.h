@@ -2158,6 +2158,19 @@ void RP_CVU_flameThrowerCooldown(void);
 // g_cvar.c for why it needs a minimum of 1 rather than the usual clamp-to-0 pattern.
 void RP_CVU_listCmdsResultsPerPage(void);
 
+// GalaxyRP fix: [validation] duel and minigame cvars whose feature becomes permanently unusable
+// below a certain value rather than merely odd -- each clamps to its own lowest working value
+// instead of 0. See the individual comments in g_cvar.c for what breaks and why.
+void RP_CVU_duelRadius(void);
+void RP_CVU_duelTournamentArenaScale(void);
+void RP_CVU_duelTournamentDuelTime(void);
+void RP_CVU_duelTournamentTimeToStart(void);
+void RP_CVU_sniperBattleTimeToStart(void);
+
+// GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
+// in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.
+int G_ForcePowerDisableValue(void);
+
 //
 // g_client.c
 //
