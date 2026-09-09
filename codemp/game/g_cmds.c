@@ -1693,7 +1693,19 @@ The methods in the area are used to split up database actions into multiple help
 void set_model(gentity_t* ent, char modelName[MAX_STRING_CHARS])
 {
 	char userinfo[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 
@@ -1718,7 +1730,19 @@ void set_model(gentity_t* ent, char modelName[MAX_STRING_CHARS])
 void set_netname(gentity_t* ent, char netName[MAX_STRING_CHARS])
 {
 	char userinfo[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	//Alex: set display name
 	Q_strncpyz(ent->client->pers.netname, netName, sizeof(ent->client->pers.netname));
@@ -2146,6 +2170,14 @@ int select_number_of_characters_with_name(gentity_t* ent, char* character_name, 
 
 	}
 
+	// GalaxyRP fix: [stability] this fallthrough (rc == SQLITE_DONE, no row at all) used to return
+	// without ever finalizing stmt -- effectively dead in practice for a bare COUNT(*) query (which
+	// always yields exactly one row), but the same missing-finalize class of bug fixed just below in
+	// select_char_id_using_char_name() and further down in select_player_character(), which are
+	// reachable. Finalized here too for the same reason: sqlite3_close() on a connection with an
+	// outstanding prepared statement returns SQLITE_BUSY and leaves the connection open, silently
+	// leaking it, since none of this file's callers check that return value.
+	sqlite3_finalize(stmt);
 	return 0;
 }
 
@@ -2210,8 +2242,18 @@ int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3
 	if (rc == SQLITE_ROW)
 	{
 		charID = sqlite3_column_int(stmt, 0);
-		sqlite3_finalize(stmt);
 	}
+
+	// GalaxyRP fix: [stability] this used to only finalize inside the "row found" branch above --
+	// every call where the character name doesn't exist for this account (rc == SQLITE_DONE, no row)
+	// fell through to "return charID" (-1, the correct not-found sentinel) with the prepared statement
+	// never finalized. sqlite3_close() on a connection with an outstanding unfinalized statement
+	// returns SQLITE_BUSY and leaves the connection open instead of actually closing it -- and every
+	// caller of the RP_DB_Open()/sqlite3_close() pair in this file ignores that return value, so this
+	// silently leaked a full database connection (and its WAL lock / file descriptor) on every call
+	// that didn't find a match. Trivially reachable via a simple typo: /char remove <a name that
+	// doesn't exist> hits exactly this path. Finalizing unconditionally here closes that leak.
+	sqlite3_finalize(stmt);
 
 	return charID;
 }
@@ -2282,7 +2324,19 @@ void update_chars_table_row_with_current_values(gentity_t* ent) {
 
 	// GalaxyRP (Alex): [Database] Grab the model and display name, so they can be saved in the database.
 	char userinfo[MAX_INFO_STRING], modelName[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
@@ -2791,7 +2845,19 @@ The methods do broader actions, which are a combination of multiple actions that
 // GalaxyRP (Alex): [Database] This method saves the player's name, scale and model to the database. All the information is taken from ent. (Characters tables)
 void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	char userinfo[MAX_INFO_STRING], modelName[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
@@ -3065,6 +3131,16 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// Apply, undoing the restore). Inside the row block, next to the set_netname()/set_model()
 		// calls it mirrors -- with no row there is no character to have restored a colour from.
 		update_saber_colors(ent);
+	}
+	else
+	{
+		// GalaxyRP fix: [stability] this row-not-found path (rc == SQLITE_DONE) used to leave stmt
+		// unfinalized -- normally unreachable since numberOfChars was just confirmed to be exactly 1
+		// a few lines above, but a race between that check and this query (e.g. the character being
+		// removed by another command in between) could still hit it, and sqlite3_close() silently
+		// fails to actually close the connection while any statement on it remains unfinalized. Same
+		// leak class fixed in select_char_id_using_char_name() elsewhere in this file.
+		sqlite3_finalize(stmt);
 	}
 
 	// GalaxyRP fix: [Account] borrowed from a newer fork of this mod -- call initialize_rpg_skills()
@@ -3445,22 +3521,52 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 89);
 
 		sqlite3_finalize(stmt);
+
+		// GalaxyRP fix: [Account] set_netname()/set_model()/update_saber_colors() and the
+		// sess.amrpgmode = 2 assignment below used to sit here unconditionally, AFTER this "row
+		// found" block instead of inside it -- so when the account+character lookup above found no
+		// matching row (rc == SQLITE_DONE: a stale DefaultChar, a legacy/imported account, or any
+		// other case where the target character can't be resolved), all four still ran anyway.
+		// set_netname()/set_model() were called with netName/modelName as uninitialized stack memory
+		// (neither is assigned anywhere outside this block), and sess.amrpgmode was forced to 2 even
+		// though sess.loggedin (correctly gated inside this block, a few lines above) stayed qfalse --
+		// a real, correctly-authenticated /login (the password check in Cmd_Login_F already passed
+		// before this function is ever called) whose character couldn't be resolved ended up
+		// "logged in" as far as the ClientCommand dispatcher's CMD_LOGGEDIN gate is concerned (it
+		// checks amrpgmode, not loggedin) while sess.accountID/pers.CharID were never actually set.
+		// Moved inside this block so none of the four can run without real, just-loaded row data
+		// behind them; see the trailing else below for what now happens instead when no row is found.
+		set_netname(ent, netName);
+		set_model(ent, modelName);
+
+		// GalaxyRP: [Saber RGB] same as select_player_character() -- republish the restored colours and
+		// push them into the client's own cvars so its console and saber menu agree with the server.
+		update_saber_colors(ent);
+
+		// GalaxyRP fix: [Scale] the pers.player_statuses reset that used to sit here (see the GalaxyRP fix:
+		// [Scale] comment further up, right before do_scale()) was moved ahead of do_scale() instead --
+		// it was wiping out the "player is scaled" bit do_scale() had just set a few lines above, which
+		// broke scale restoration on the respawn that follows every login. See that comment for the full
+		// explanation.
+
+		ent->client->sess.amrpgmode = 2;
+
+		return;
 	}
 
-	set_netname(ent, netName);
-	set_model(ent, modelName);
-
-	// GalaxyRP: [Saber RGB] same as select_player_character() -- republish the restored colours and
-	// push them into the client's own cvars so its console and saber menu agree with the server.
-	update_saber_colors(ent);
-
-	// GalaxyRP fix: [Scale] the pers.player_statuses reset that used to sit here (see the GalaxyRP fix:
-	// [Scale] comment further up, right before do_scale()) was moved ahead of do_scale() instead --
-	// it was wiping out the "player is scaled" bit do_scale() had just set a few lines above, which
-	// broke scale restoration on the respawn that follows every login. See that comment for the full
-	// explanation.
-
-	ent->client->sess.amrpgmode = 2;
+	// GalaxyRP fix: [stability] this row-not-found path (rc == SQLITE_DONE) used to fall through to
+	// the block moved into the "row found" branch above with the prepared statement never finalized --
+	// the same leak class fixed in select_char_id_using_char_name() and select_player_character()
+	// elsewhere in this file. Finalize it, and log the failure server-side so it's visible instead of
+	// silently invisible either way. Deliberately does NOT touch sess.loggedin/sess.amrpgmode/
+	// pers.CharID here: this function is also called from ClientBegin() on every map change for an
+	// already-logged-in player (see g_client.c), where a transient lookup failure regressing an
+	// already-valid session would be worse than just leaving this one reload's fields stale for a
+	// single map. Cmd_Login_F (the /login path) checks sess.loggedin itself after calling this and
+	// reports the failure to the player explicitly instead of claiming a successful login it didn't
+	// deliver.
+	sqlite3_finalize(stmt);
+	G_LogPrintf("WARNING: select_account_and_default_character_data found no matching account+character row for username '%s' (selected character '%s') -- account/character data was not loaded.\n", username, ent->client->sess.rpgchar);
 
 	return;
 }
@@ -3619,9 +3725,37 @@ void remove_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3*
 		return;
 	}
 
-	char remove_character_query[117] = "DELETE FROM Characters WHERE CharID='%i';DELETE FROM Skills WHERE CharID='%i';DELETE FROM Weapons WHERE CharID='%i';";
+	// GalaxyRP fix: [security] this used to build one combined, semicolon-separated DELETE query via
+	// va()/%i splicing straight into the SQL text. charID only ever comes from
+	// select_char_id_using_char_name()'s return value (its -1 "not found" sentinel is already
+	// rejected above), so it was never actually attacker-controlled text and this was never
+	// exploitable -- but it was the last query in this file's /char path still built that way instead
+	// of bound, after the rest of the database layer was hardened. sqlite3_prepare() (unlike
+	// sqlite3_exec(), which run_db_query() wraps) only ever prepares a single statement, so the three
+	// DELETEs run as three separate bound statements here instead of one combined multi-statement
+	// text blob.
+	const char *remove_character_queries[3] = {
+		"DELETE FROM Characters WHERE CharID=?",
+		"DELETE FROM Skills WHERE CharID=?",
+		"DELETE FROM Weapons WHERE CharID=?"
+	};
 
-	run_db_query(va(remove_character_query, charID, charID, charID), db, zErrMsg, rc, stmt);
+	for (int i = 0; i < 3; i++) {
+		rc = sqlite3_prepare(db, remove_character_queries[i], -1, &stmt, NULL);
+		if (rc != SQLITE_OK)
+		{
+			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			continue;
+		}
+		sqlite3_bind_int(stmt, 1, charID);
+		rc = sqlite3_step(stmt);
+		if (rc != SQLITE_DONE)
+		{
+			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		}
+		sqlite3_finalize(stmt);
+	}
 
 	trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2has been removed.\n\"", char_name));
 	trap->SendServerCommand(ent - g_entities, va("cp \"^2Character %s ^2has been removed.\n\"", char_name));
@@ -3645,7 +3779,19 @@ void update_current_character_and_account(gentity_t* ent) {
 	}
 
 	char userinfo[MAX_INFO_STRING], modelName[MAX_INFO_STRING];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Q_strncpyz(modelName, Info_ValueForKey(userinfo, "model"), sizeof(modelName));
@@ -3980,6 +4126,20 @@ void Cmd_Login_F(gentity_t * ent)
 	// while paralyzed or mid-duel with g_allowDuelSuicide off, and even when it doesn't, its respawn is
 	// deferred, leaving stale force powers/weapons equipped in the meantime).
 	select_account_and_default_character_data(ent, username, db, zErrMsg, rc, stmt);
+
+	// GalaxyRP fix: [Account] select_account_and_default_character_data() can legitimately fail to
+	// resolve this account's default/selected character to an actual row (see its own comment for
+	// when) without ever setting sess.loggedin -- this used to fall straight through regardless and
+	// unconditionally tell the player "You have successfully logged in" (plus schedule the relog
+	// kill and send zykchars/zykmod) even when it hadn't. Check the real outcome instead.
+	if (ent->client->sess.loggedin == qfalse)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1Login failed: no character data could be found for this account. Please contact an admin.\n\"");
+		trap->SendServerCommand(ent - g_entities, "cp \"^1Login failed: character data not found.\n\"");
+
+		sqlite3_close(db);
+		return;
+	}
 
 	initialize_rpg_skills(ent);
 
@@ -15576,7 +15736,19 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	char modelname[MAX_STRING_CHARS];
 	char saber1Model[MAX_STRING_CHARS];
 	char saber2Model[MAX_STRING_CHARS];
-	int clientNum = ClientNumberFromString(ent, ent->client->pers.netname, qfalse);
+	// GalaxyRP fix: [Char] this used to re-derive "this player's" own client slot via
+	// ClientNumberFromString(), which either treats the name as a raw slot index (if it's purely
+	// numeric) or does a case-insensitive SUBSTRING search across every connected player's name and
+	// returns the first match by ascending slot -- neither of which is guaranteed to be this player.
+	// A numeric player name, or a name that happens to be a substring of another, earlier-slot
+	// player's name (e.g. "Vader" vs. an earlier-joined "DarthVaderFan"), returned that OTHER
+	// player's slot instead, and the userinfo (model/saber1/saber2) fetched below then belonged to
+	// them, not to ent. In the functions that save this to the database (e.g.
+	// update_current_character_and_account()) that wrong value gets written straight into ent's own
+	// Characters.ModelName row -- real save-path data corruption from nothing more than an ordinary
+	// name collision. ent is already the exact right entity at every one of these call sites, so this
+	// never needed to be looked up by name at all.
+	int clientNum = ent->s.number;
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 
@@ -15584,6 +15756,21 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 	Q_strncpyz(modelname, Info_ValueForKey(userinfo, "model"), sizeof(modelname));
 	Q_strncpyz(saber1Model, Info_ValueForKey(userinfo, "saber1"), sizeof(saber1Model));
 	Q_strncpyz(saber2Model, Info_ValueForKey(userinfo, "saber2"), sizeof(saber2Model));
+
+	// GalaxyRP fix: [stability] model/saber1/saber2 come straight from client-editable userinfo, and
+	// unlike character names (rejected outright if they contain '&' or anything non-alphanumeric,
+	// see create_new_character()'s zyk_check_user_input() check) nothing ever stripped a '~' out of
+	// these. The engine's Cvar_ValidateString (cvar.cpp) rejects '\', '"' and ';' in a userinfo value
+	// but not '~' -- and '~' is exactly the field delimiter the content string below is built from, so
+	// a player who sets e.g. their model cvar to include a literal '~' shifts every field after it in
+	// their own zykmod payload (CG_ZykMod's mismatch warning, added separately, will now at least log
+	// this instead of silently misapplying it -- but stripping it here means it can't happen at all).
+	// Purely self-inflicted either way (this command only ever sends back to ent->s.number, the same
+	// player whose cvars these are), but there's no reason to leave the gap open. netname is handled
+	// the same way, into its own local copy, a few lines below.
+	Q_strstrip(modelname, "~", NULL);
+	Q_strstrip(saber1Model, "~", NULL);
+	Q_strstrip(saber2Model, "~", NULL);
 
 	// GalaxyRP: [Profile UI] tell the client whether it is currently logged into an account, so the
 	// Profile menu can gate the Force icon and the Character Information/Skills/Characters/Shop/Games
@@ -15619,8 +15806,17 @@ void Cmd_GalaxyRpUi_f(gentity_t* ent) {
 		// sent, further down, for the other half of this fix.
 		content[0] = '\0';
 
+		// GalaxyRP fix: [stability] see the Q_strstrip() comment above modelname/saber1Model/
+		// saber2Model further up -- netname gets the same '~'-stripping treatment here, into its own
+		// local copy rather than mutating ent->client->pers.netname in place (that field is the
+		// player's actual display name used everywhere else; only this one payload needs a delimiter-
+		// safe copy of it).
+		char netnameForUi[MAX_NETNAME];
+		Q_strncpyz(netnameForUi, ent->client->pers.netname, sizeof(netnameForUi));
+		Q_strstrip(netnameForUi, "~", NULL);
+
 		Q_strcat(content, sizeof(content), va("%s~%s~%s~%s~%d~%d/%d~%d~%d~%s~",
-			ent->client->pers.netname, modelname, saber1Model, saber2Model, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
+			netnameForUi, modelname, saber1Model, saber2Model, level, xp, xpToLevel, skillpoints, credits, ent->client->sess.rpgchar));
 
 		for (int i = 0; i < ARRAY_LEN(skills); i++) {
 			Q_strcat(content, sizeof(content), va("%d/%d~", ent->client->pers.skill_levels[i], skills[i].max_level));
