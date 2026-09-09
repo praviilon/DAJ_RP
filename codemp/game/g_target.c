@@ -65,6 +65,7 @@ void SP_target_give( gentity_t *ent ) {
 takes away all the activators powerups.
 Used to drop flight powerups into death puts.
 */
+extern void Jedi_Decloak( gentity_t *self );
 void Use_target_remove_powerups( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 	if( !activator->client ) {
 		return;
@@ -76,6 +77,25 @@ void Use_target_remove_powerups( gentity_t *ent, gentity_t *other, gentity_t *ac
 		Team_ReturnFlag( TEAM_BLUE );
 	} else if( activator->client->ps.powerups[PW_NEUTRALFLAG] ) {
 		Team_ReturnFlag( TEAM_FREE );
+	}
+
+	// GalaxyRP fix: [Cloak Item] decloak properly before the blanket clear below. That memset includes
+	// PW_CLOAKED, but cloak is half of a pair: Jedi_Cloak() (NPC_AI_Jedi.c) sets FL_NOTARGET alongside
+	// the powerup, and only Jedi_Decloak() clears both. Wiping the powerup array directly therefore
+	// made a cloaked activator visible again while leaving FL_NOTARGET set -- and nothing clears that
+	// flag afterwards, so they stayed permanently ignored by every NPC, turret, seeker drone and
+	// vehicle turret (see the FL_NOTARGET tests in NPC_combat.c, g_turret.c, g_turret_G2.c,
+	// g_vehicleTurret.c and g_items.c) until their next respawn. Any map can place one of these, so it
+	// was reachable in ordinary play, and it also broke the invariant NPC_ValidEnemy() (NPC_utils.c)
+	// documents and relies on: PW_CLOAKED and FL_NOTARGET are never out of step.
+	// Deliberately routed through Jedi_Decloak() rather than clearing the flag inline here: FL_NOTARGET
+	// has other owners (/notarget, the Death System's downed state, ICARUS SET_NOTARGET), so this uses
+	// the same rule as every other decloak in the game instead of inventing a second one for this
+	// entity. Guarded on the powerup so an activator who holds FL_NOTARGET for one of those other
+	// reasons, and is not cloaked, is left exactly as it was.
+	if ( activator->client->ps.powerups[PW_CLOAKED] )
+	{
+		Jedi_Decloak( activator );
 	}
 
 	memset( activator->client->ps.powerups, 0, sizeof( activator->client->ps.powerups ) );

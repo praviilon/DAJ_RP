@@ -26,7 +26,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_saga.h"
 
 extern void Jedi_Cloak( gentity_t *self );
-extern void Jedi_DecloakPair( gentity_t *self );
 extern void Jedi_Decloak( gentity_t *self );
 extern void Jedi_DecloakPair( gentity_t *self );
 
@@ -4497,6 +4496,19 @@ void ClientEndFrame( gentity_t *ent ) {
 	// turn off any expired powerups
 	for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
 		if ( ent->client->ps.powerups[ i ] < level.time ) {
+			// GalaxyRP fix: [Cloak Item] PW_CLOAKED is half of a pair -- Jedi_Cloak() sets FL_NOTARGET
+			// alongside it and Jedi_Decloak() clears both, and NPC_ValidEnemy() (NPC_utils.c) relies on
+			// the two never being out of step. Zeroing the powerup here on its own would strip the
+			// cloak while leaving the player permanently untargetable by every NPC, turret and seeker
+			// until their next respawn. In practice this loop cannot currently reach cloak -- it is
+			// stored as a flat 2147483647, which only falls below level.time after ~24.9 days on a
+			// single map -- but it is the generic expiry path, so it is the one that would bite first
+			// if cloak were ever given a real duration. Routed through the same helper every other
+			// decloak uses rather than clearing the flag inline, because FL_NOTARGET has other owners
+			// (/notarget, the downed state, ICARUS SET_NOTARGET) and this keeps one rule, not two.
+			if ( i == PW_CLOAKED && ent->client->ps.powerups[ i ] ) {
+				Jedi_Decloak( ent );
+			}
 			ent->client->ps.powerups[ i ] = 0;
 		}
 	}
