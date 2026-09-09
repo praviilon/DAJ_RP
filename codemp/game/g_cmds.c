@@ -1575,8 +1575,11 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 
 		trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
 		trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
-		trap->SendServerCommand(target->client->ps.clientNum, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
-		trap->SendServerCommand(target->client->ps.clientNum, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
+		// GalaxyRP fix: [Chat] target - g_entities. This one was never actually wrong -- a downed
+		// player is a real player, never a follower, so their ps.clientNum is their own -- but it is
+		// the same fragile spelling as the three sites that were, so it is normalised with them.
+		trap->SendServerCommand(target - g_entities, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
+		trap->SendServerCommand(target - g_entities, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
 
 		return qtrue;
 	}
@@ -5114,7 +5117,12 @@ void SetTeam( gentity_t *ent, char *s ) {
 				/*
 				if (g_forceBasedTeams.integer && ent->client->ps.fd.forceSide == FORCE_DARKSIDE)
 				{
-					trap->SendServerCommand( ent->client->ps.clientNum,
+					// GalaxyRP fix: [Chat] ent-g_entities, matching the //JAC "Invalid clientNum was
+					// being used" correction already applied to the sibling branch below -- this
+					// force-based-teams branch was missed by it. SetTeam is reachable from a following
+					// spectator running /team, whose ps.clientNum is the followed player's, so the
+					// rejection message went to the wrong person entirely.
+					trap->SendServerCommand( ent-g_entities,
 						va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "TOOMANYRED_SWITCH")) );
 				}
 				else
@@ -5131,7 +5139,12 @@ void SetTeam( gentity_t *ent, char *s ) {
 				/*
 				if (g_forceBasedTeams.integer && ent->client->ps.fd.forceSide == FORCE_LIGHTSIDE)
 				{
-					trap->SendServerCommand( ent->client->ps.clientNum,
+					// GalaxyRP fix: [Chat] ent-g_entities, matching the //JAC "Invalid clientNum was
+					// being used" correction already applied to the sibling branch below -- this
+					// force-based-teams branch was missed by it. SetTeam is reachable from a following
+					// spectator running /team, whose ps.clientNum is the followed player's, so the
+					// rejection message went to the wrong person entirely.
+					trap->SendServerCommand( ent-g_entities,
 						va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "TOOMANYBLUE_SWITCH")) );
 				}
 				else
@@ -6172,7 +6185,17 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 						continue;
 					if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[i].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 					{
-						trap->SendServerCommand(other->client->ps.clientNum, va(chat_modifiers[i].chat_format, ent->client->pers.netname, text));
+						// GalaxyRP fix: [Chat] send to j, not other->client->ps.clientNum. A recipient
+						// must be addressed by their own entity index: SpectatorClientEndFrame
+						// (g_active.c) copies the followed player's whole playerState over a
+						// follower's, clientNum included, and only StopFollowing puts it back, so on
+						// a follower that field names the player they are WATCHING. Every
+						// distance-scoped RP modifier routes through this one loop -- /me, /do, /my,
+						// /shout, /low, the language ones -- so a spectator following a player saw
+						// none of them while that player received each line twice, once more per
+						// follower. The condition just above deliberately lets spectators hear
+						// everything regardless of distance, which is exactly the case this broke.
+						trap->SendServerCommand(j, va(chat_modifiers[i].chat_format, ent->client->pers.netname, text));
 					}
 					else
 						continue;
