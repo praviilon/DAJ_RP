@@ -4467,9 +4467,12 @@ void ClientEndFrame( gentity_t *ent ) {
 
 	// GalaxyRP: [Use hint] evaluate the usable-entity hand icon once per client per frame, here at the
 	// end of the frame so origin and view angles are already final. Deliberately placed ABOVE the
-	// spectator early-return below so the stat is always written on every path -- a player who was
-	// looking at a door and then went spectator or died would otherwise keep the last value forever,
-	// and the client would keep drawing it. G_CanUseInFrontOf() (g_utils.c) itself also refuses for
+	// spectator early-return below, so a player who was looking at a door and then died or went to
+	// free-fly spectate has the stat cleared rather than keeping its last value forever with the client
+	// still drawing it. Note this is not literally "every path": SpectatorClientEndFrame runs straight
+	// after and copies the followed player's whole playerState over a follower's, this stat included,
+	// so a follower sees whatever the player they are watching sees. That is consistent with a follower
+	// inheriting the rest of that player's HUD, so it is left alone. G_CanUseInFrontOf() (g_utils.c) itself also refuses for
 	// dead and spectating players, so this is belt and braces, not duplication.
 	// The gate is the whole cost story: the trace runs only for a logged-in player who turned the
 	// feature on via /settings 4 (bit 6 is inverted -- clear == ON), so a server where nobody enabled

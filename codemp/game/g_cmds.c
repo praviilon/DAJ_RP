@@ -8433,7 +8433,10 @@ void save_account(gentity_t *ent, qboolean save_char_file)
 
 // GalaxyRP fix: [Dice] the whole /roll + /flipcoin implementation below was rewritten. The old one
 // was a single roll_dice(int max_value) that did "rand() % (max_value + 1)" and re-rolled while the
-// result was 0. That is a valid rejection sample and its distribution was fine, but it had two
+// result was 0. Rejecting 0 is a valid way to shift the range to 1..max, but it does not remove the
+// modulo bias underneath -- "rand() % n" still favours the low residues whenever n does not divide
+// RAND_MAX+1, and rejecting one value leaves the rest of that skew intact. On glibc, with n small, the
+// skew is far too small to observe; on a 15-bit RAND_MAX it is not. On top of that it had two harder
 // defects: at /roll 2147483647 the "max_value + 1" is signed overflow (undefined behaviour), and
 // "rand() % n" can never return a value above RAND_MAX -- which is 2^31-1 with glibc but only 32767
 // with MSVC, so a Windows build silently capped any roll above 32767. Both are gone here: rolls are
@@ -8584,7 +8587,15 @@ static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const ch
 			other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) ||
 			other->client->sess.sessionTeam == TEAM_SPECTATOR)
 		{
-			trap->SendServerCommand(other->client->ps.clientNum, message);
+			// GalaxyRP fix: [Dice] send to i, not other->client->ps.clientNum. A spectator following
+			// someone has that player's playerState copied over their own wholesale
+			// (SpectatorClientEndFrame, g_active.c), and nothing restores ps.clientNum afterwards except
+			// StopFollowing -- so ps.clientNum on a follower is the FOLLOWED player's number. Using it
+			// meant the follower received nothing while the player they were watching received the same
+			// line once more per follower. i is this slot's own index and is always correct. (The
+			// chat_modifiers loop in G_Say above still has this same defect; it is older and out of
+			// scope here, but it is the reason this code was written this way.)
+			trap->SendServerCommand(i, message);
 		}
 	}
 }
@@ -9564,7 +9575,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/skillup <player name> <skill number> <number of levels (optional)>: ^7upgrades a skill.\n\
 ^3/skilldown <player name> <skill number> <number of levels (optional)>: ^7downgrades a skill.\n\
 ^3/god: ^7Makes you invincible.\n\
-^3/players <player name(optional)> <force/weapons/other/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
+^3/players <player name(optional)> <force/weapons/protect/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
 ^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/silence <player name>: ^7Silences the player.\n\
@@ -10965,8 +10976,9 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// GalaxyRP fix: [Use hint] this branch was missing when /settings 4 was added, so the toggle
 		// flipped the bit and saved it but printed nothing at all -- the player had no way to tell
 		// whether they had just turned the hint on or off, or whether the command had worked. Every
-		// player-facing setting needs an entry here; test_settings_print_coverage in the use-hint test
-		// suite now asserts that every bit reachable through settings_number_to_bit[] has one.
+		// player-facing setting needs an entry here -- if you add one to settings_number_to_bit[] above,
+		// add its status line and its confirmation together, or the toggle will silently do nothing
+		// visible.
 		else if (value == 6)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Use Hint %s\n\"", new_status) );
@@ -11463,8 +11475,11 @@ never blocked by missing item/upgrade, so a player can never get stuck cloaked j
 lost the item or upgrade (matches how zyk_adjust_holdable_items already forces a decloak on item loss
 elsewhere). The manual-use cooldown (vehicleCloakToggleTime) still applies to all three directions, so
 rapid re-issuing the command is debounced consistently regardless of direction. Deliberately registered
-below without CMD_ALIVE -- the original generic_cmd switch never gated on aliveness either, and the
-decloak path in particular is meant to always work regardless, matching that exactly.
+below with CMD_ALIVE. That was deliberately absent at first, to mirror the original generic_cmd
+switch, which never gated on aliveness -- but a following spectator has the followed player's
+playerState copied over their own, so without the flag a spectator could cloak or decloak a stranger's
+vehicle. The flag costs nothing real: a dead player's vehicle is already decloaked by player_die's own
+Jedi_DecloakPair, so the decloak direction has nothing left to do by the time CMD_ALIVE would block it.
 ==================
 */
 void Cmd_VehicleCloak_f( gentity_t *ent ) {
@@ -11485,10 +11500,17 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 					ent->client->vehicleCloakToggleTime = level.time + 1000;
 				}
 			}
+			// GalaxyRP fix: [Cloak Item] the downed test, matching the two other cloak entry points
+			// (GENCMD_USE_CLOAK in g_active.c and ItemUse_UseCloak in g_items.c). A downed player keeps
+			// 50 health and so passes every aliveness check above; without this they could still cloak
+			// themselves and the vehicle while down. paralyze_player does not eject a mounted player,
+			// so the state is reachable. Gates only the cloak/resync directions -- the decloak-both
+			// branch above stays gated on the cooldown alone, as designed.
 			else if ( ent->client->vehicleCloakToggleTime < level.time &&
 				veh->client->cloakToggleTime < level.time &&
 				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 				ent->client->ps.pm_type != PM_DEAD &&
+				!(ent->client->pers.player_statuses & (1 << 6)) &&
 				// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
 				// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
 				(ent->client->pers.skill_levels[38] & (1 << 0)) &&
@@ -11502,6 +11524,7 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 			veh->client && veh->client->cloakToggleTime < level.time &&
 			ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 			ent->client->ps.pm_type != PM_DEAD &&
+			!(ent->client->pers.player_statuses & (1 << 6)) &&
 			// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
 			// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
 			(ent->client->pers.skill_levels[38] & (1 << 0)) &&

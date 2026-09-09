@@ -2080,8 +2080,15 @@ tryJetPack:
 // forward trace found nothing. This is the multiplayer equivalent, built from MP's own two sources of
 // truth rather than ported: entity discovery mirrors G_TouchTriggers() (g_active.c) -- the same
 // {40,40,52} query box, the same CONTENTS_TRIGGER filter, the same player-bounds EntityContact test --
-// and the accept/reject conditions mirror Touch_Multi() itself, minus the BUTTON_USE press, which is
+// and the accept/reject conditions follow Touch_Multi() itself, minus the BUTTON_USE press, which is
 // precisely the thing the hint exists to tell you to do.
+//
+// Not a complete mirror, deliberately: FIRE_BUTTON (spawnflag 8), the post-fire wait window, the
+// non-Siege genericValue1 veto and the Siege idealclass list are all left unchecked. Every one of
+// those can only ever cause a FALSE POSITIVE -- the hand shows where pressing Use happens to do
+// nothing -- never the reverse, so none of them can hide a genuinely usable trigger. Single player's
+// own equivalent has the same character. Adding them would mean duplicating four more pieces of
+// trigger state here purely to suppress the occasional spurious icon.
 extern void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );
 qboolean G_PointInBounds( vec3_t point, vec3_t mins, vec3_t maxs );
 
