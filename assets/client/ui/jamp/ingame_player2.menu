@@ -539,7 +539,15 @@
 			action
 			{
 				play			"sound/interface/button1"
-				uiScript		updatecharcvars
+				// GalaxyRP: [Profile UI] a second "uiScript updatecharcvars" used to sit alongside the
+				// line below. The two are aliases, not two steps: UI_RunMenuScript (ui_main.c) maps
+				// both names onto the same UI_UpdateCharacterCvars() call -- stock Raven code, because
+				// single player's character.menu says "updatecharcvars" while multiplayer's own
+				// ingame_player2.menu says "updatecharmodel", and one UI module serves both. Firing
+				// both just ran that function twice. It was idempotent and free (it never writes a cvar
+				// it reads, and Cvar_Set2 returns before touching cvar_modifiedFlags when the value is
+				// unchanged), so this is tidiness, not a bug fix. Kept "updatecharmodel" because that
+				// is the name vanilla multiplayer uses and this is a multiplayer menu.
 				uiScript		"updatecharmodel"
 				hide			highlights
 				// GalaxyRP: [Profile UI] was "close ingame_player2 ; close ingame", which only closed
