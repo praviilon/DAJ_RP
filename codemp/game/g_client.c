@@ -4178,7 +4178,13 @@ void ClientSpawn(gentity_t *ent) {
 		do_scale(ent, ent->client->pers.player_scale);
 	}
 
+	// GalaxyRP fix: [gameplay/exploit] clear the chat-protection flag alongside its timer. Resetting
+	// only the timer left player_statuses bit 5 -- the flag G_Damage checks to skip all damage -- set
+	// on a player who respawned while chat-protected, and with the timer back at 0 the clear branch in
+	// ClientThink_real() could never fire for them again, so they stayed permanently invulnerable
+	// while fully able to fight. See the matching comment on that block in g_active.c.
 	ent->client->pers.chat_protection_timer = 0;
+	ent->client->pers.player_statuses &= ~(1 << 5);
 
 	// the respawned flag will be cleared after the attack and jump keys come up
 	client->ps.pm_flags |= PMF_RESPAWNED;

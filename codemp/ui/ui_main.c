@@ -5333,8 +5333,36 @@ static void UI_UpdateSaberCvars ( void )
 	saber_colors_t colorI;
 	char saber1[MAX_QPATH], saber2[MAX_QPATH];
 
-	trap->Cvar_Set ( "saber1", UI_Cvar_VariableString ( "ui_saber" ) );
-	trap->Cvar_Set ( "saber2", UI_Cvar_VariableString ( "ui_saber2" ) );
+	// GalaxyRP fix: [Saber] read, sanitise and normalise the two hilts BEFORE writing them into the
+	// saber1/saber2 cvars below. These are CVAR_USERINFO cvars, and an empty value makes the engine
+	// drop the key from the userinfo string entirely rather than send an empty one -- so an empty
+	// ui_saber2 (which UI_UpdateSaberType() writes for the single and staff types) used to reach the
+	// server as "no saber2 key at all". Because the userinfo flush lands after the command queued at
+	// the end of this function, that stripped key then overwrote the "none" update_saber() had just
+	// stored server-side, and ClientSpawn()'s next-respawn diff called G_SetSaber(ent, 1, "") -- whose
+	// empty-name fallback substitutes the default saber, silently giving the player two sabers. The
+	// normalisation used to happen further down, on the local copies used to build the command only,
+	// which left the cvar itself empty and this whole path open.
+	trap->Cvar_VariableStringBuffer( "ui_saber", saber1, sizeof( saber1 ) );
+	trap->Cvar_VariableStringBuffer( "ui_saber2", saber2, sizeof( saber2 ) );
+
+	// GalaxyRP fix: [security] same quote-injection issue UI_SanitizeAccountArg documents further
+	// down for the login/password/character-name handlers -- these go into a quoted argument of a
+	// string handed to Cmd_ExecuteText below, and the engine's tokenizer has no way to escape a '"'.
+	// These two come from the saber menu's own hilt lists rather than a text field, but they are
+	// ordinary cvars that can be set directly (/set ui_saber ...), so sanitise rather than trust them.
+	UI_SanitizeAccountArg( saber1 );
+	UI_SanitizeAccountArg( saber2 );
+
+	// "none" is the canonical "no second saber" value everywhere else -- it is what the menu's own
+	// single/staff type buttons set ui_saber2 to, and what update_saber() substitutes for a missing
+	// second argument. UI_UpdateSaberType() clears ui_saber2 to an empty string instead, so normalise
+	// that here, before it can reach either the cvar or the command.
+	if ( !saber2[0] )
+		Q_strncpyz( saber2, "none", sizeof( saber2 ) );
+
+	trap->Cvar_Set ( "saber1", saber1 );
+	trap->Cvar_Set ( "saber2", saber2 );
 
 	// GalaxyRP: [Saber RGB] pack before the color1/color2 writes below, so the colour is already in
 	// place by the time the palette slot flips to SABER_RGB and the engine ships the new userinfo.
@@ -5376,25 +5404,6 @@ static void UI_UpdateSaberCvars ( void )
 	// Team/Siege-family gametype -- see saber_switch_allowed() in g_cmds.c) with a chat message
 	// explaining why; update_saber() persists the requested hilt to userinfo either way, so a
 	// refused switch still takes effect on this player's next natural respawn.
-	trap->Cvar_VariableStringBuffer( "ui_saber", saber1, sizeof( saber1 ) );
-	trap->Cvar_VariableStringBuffer( "ui_saber2", saber2, sizeof( saber2 ) );
-
-	// GalaxyRP fix: [security] same quote-injection issue UI_SanitizeAccountArg documents further
-	// down for the login/password/character-name handlers -- these go into a quoted argument of a
-	// string handed to Cmd_ExecuteText, and the engine's tokenizer has no way to escape a '"'. These
-	// two come from the saber menu's own hilt lists rather than a text field, but they are ordinary
-	// cvars that can be set directly (/set ui_saber ...), so sanitize rather than trust the source.
-	UI_SanitizeAccountArg( saber1 );
-	UI_SanitizeAccountArg( saber2 );
-
-	// "none" is the canonical "no second saber" value everywhere else (it is what the menu's own
-	// single/staff type buttons set ui_saber2 to, and what update_saber() substitutes for a missing
-	// second argument). UI_UpdateSaberType() clears ui_saber2 to an empty string instead, though,
-	// and an empty argument would make update_saber() strip the saber2 key out of userinfo entirely
-	// rather than set it to a valid value -- so normalise it here.
-	if ( !saber2[0] )
-		Q_strncpyz( saber2, "none", sizeof( saber2 ) );
-
 	// Nothing sensible to apply without a first hilt, and sending an empty one would likewise strip
 	// the saber1 key out of userinfo server-side; leave the player's saber alone in that case.
 	if ( saber1[0] )

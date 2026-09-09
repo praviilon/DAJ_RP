@@ -923,6 +923,22 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		//GalaxyRP (Alex): [Ammo Recharge] Go check if player can recharge ammo, do it if they can.
 		RegenerateAmmo(ent, client);
 
+		// GalaxyRP fix: [gameplay/exploit] player_statuses bit 5 makes G_Damage return early for this
+		// player (g_combat.c), so leaving it set means total damage immunity. Both the set and the
+		// clear used to live inside the "zyk_chat_protection_timer > 0" block, and the clear also
+		// required chat_protection_timer != 0 -- so the flag could be stranded set, permanently, in
+		// two different ways. (1) An admin setting the cvar to 0 (documented as "0 to disable") while
+		// someone was currently protected: the whole block stops running, so nothing can ever clear
+		// their flag again -- the cvar meant to disable the feature instead made that player's
+		// protection permanent. (2) With no cvar change at all: ClientSpawn() resets
+		// chat_protection_timer to 0 but did not touch bit 5, so a protected player killed by a path
+		// that bypasses G_Damage (the duel-tournament arena and the melee platform both call
+		// player_die() directly) respawned with timer == 0 and the flag still set -- and with the
+		// timer at 0 the old clear branch could never fire again, leaving them invulnerable while
+		// fully able to fight. The clear now runs whenever the player simply isn't talking, regardless
+		// of the timer, and disabling the cvar actively clears any protection still in effect instead
+		// of freezing it. ClientSpawn() also clears the flag alongside the timer now, closing (2) at
+		// its source as well.
 		if (zyk_chat_protection_timer.integer > 0)
 		{ // zyk: chat protection. If 0, it is off. If greater than 0, set the timer to protect the player
 			if (client->ps.eFlags & EF_TALK && client->pers.chat_protection_timer == 0)
@@ -933,11 +949,16 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			{
 				client->pers.player_statuses |= (1 << 5);
 			}
-			else if (client->pers.chat_protection_timer != 0 && !(client->ps.eFlags & EF_TALK))
+			else if (!(client->ps.eFlags & EF_TALK))
 			{
 				client->pers.player_statuses &= ~(1 << 5);
 				client->pers.chat_protection_timer = 0;
 			}
+		}
+		else if ((client->pers.player_statuses & (1 << 5)) || client->pers.chat_protection_timer != 0)
+		{ // zyk: feature disabled -- don't leave anyone holding the protection it granted
+			client->pers.player_statuses &= ~(1 << 5);
+			client->pers.chat_protection_timer = 0;
 		}
 
 		if ((ent->NPC || client->sess.amrpgmode == 2) && client->pers.quest_power_status & (1 << 14) && ent->health > 0)

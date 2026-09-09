@@ -2170,7 +2170,14 @@ qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* d
 	// GalaxyRP fix: [security] this used to go through run_db_query() with the character name
 	// spliced straight into the INSERT text via va("...%s..."). Reachable via /new, using the new
 	// account's own username as its first character's name. Prepare/bind/step directly instead.
-	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)", -1, &stmt, NULL);
+	// GalaxyRP fix: [Saber] saberTwoModel is set explicitly to "none" here, exactly as in
+	// create_new_character()'s own Characters INSERT -- see the longer comment there. Left out, the
+	// column takes its ALTER TABLE default of 'saber_1', and every character-load path reads any
+	// saberTwoModel other than "none" as "this character dual-wields" -- so the account's very first
+	// character (this is the /new registration path) came up dual-wielding, with both slots falling
+	// back to the default saber because 'saber_1' is not a real hilt, without the player ever
+	// choosing it.
+	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3024,14 +3031,17 @@ static void G_SyncNameModelUserinfo( gentity_t *ent, const char *netName, const 
 // character and is now using: Y" (sent by Cmd_Char_f) and "X switched to: Y" (this function's own,
 // unconditional) back to back for the same action. /new (Cmd_Register_F) and /char use both still
 // pass qtrue, unchanged.
-void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, qboolean announce_switch) {
+// GalaxyRP fix: [Char] void -> qboolean. The row-not-found path below used to fall straight through
+// into the success path, so a character that could not actually be loaded was still reported as
+// loaded (see the comment on that branch). Callers now get told whether the switch really happened.
+qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, qboolean announce_switch) {
 	int numberOfChars = 0;
-	
+
 	if (ent->client->sess.loggedin == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^2You must be logged in load a character.\n\"");
 		trap->SendServerCommand(ent - g_entities, "cp \"^2You must be logged in load a character.\n\"");
 
-		return;
+		return qfalse;
 	}
 
 	// GalaxyRP (Alex): [Database] Check to see if character exists or not.
@@ -3041,7 +3051,7 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2does not exist.\n\"", character_name));
 		trap->SendServerCommand(ent - g_entities, va("cp \"^2Character %s ^2does not exist.\n\"", character_name));
 
-		return;
+		return qfalse;
 	}
 
 	// GalaxyRP (Alex): [Database] Select all info from all character related tables.
@@ -3062,7 +3072,7 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		return;
+		return qfalse;
 	}
 	sqlite3_bind_text(stmt, 1, character_name, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 2, ent->client->sess.accountID);
@@ -3071,7 +3081,7 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		return;
+		return qfalse;
 	}
 	if (rc == SQLITE_ROW)
 	{
@@ -3223,6 +3233,26 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		// fails to actually close the connection while any statement on it remains unfinalized. Same
 		// leak class fixed in select_char_id_using_char_name() elsewhere in this file.
 		sqlite3_finalize(stmt);
+
+		// GalaxyRP fix: [Char] this branch used to only finalize and then fall straight through into
+		// everything below -- initialize_rpg_skills(), the deferred kill/respawn,
+		// update_accounts_table_row_with_default_char() and the "Character loaded sucessfully!"
+		// message plus its public broadcast -- despite no character data having been read at all.
+		// numberOfChars == 1 does NOT make this unreachable: that count comes from Characters alone,
+		// while the query above INNER JOINs Skills and Weapons, so a character whose Skills or
+		// Weapons row is missing lands here with its Characters row present. The player was then told
+		// the character had loaded, everyone saw the broadcast, and Accounts.DefaultChar was rewritten
+		// to a character that cannot be loaded -- while pers.CharID/sess.rpgchar still pointed at the
+		// PREVIOUS character, so every later save silently wrote to the old character's row, and the
+		// next /login resolved DefaultChar to the broken character and failed permanently until
+		// someone edited the database by hand. Report the failure and leave the session untouched:
+		// the player simply stays on the character they already had.
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Character %s ^1could not be loaded (its data is incomplete). Your current character is unchanged.\n\"", character_name));
+		trap->SendServerCommand(ent - g_entities, va("cp \"^1Character %s ^1could not be loaded.\n\"", character_name));
+		G_LogPrintf("select_player_character: character '%s' (account %i) has a Characters row but no matching Skills/Weapons row -- load aborted.\n",
+			character_name, ent->client->sess.accountID);
+
+		return qfalse;
 	}
 
 	// GalaxyRP fix: [Account] borrowed from a newer fork of this mod -- call initialize_rpg_skills()
@@ -3261,7 +3291,7 @@ void select_player_character(gentity_t* ent, char *character_name, sqlite3* db, 
 		trap->SendServerCommand(-1, va("chat \"%s switched to: %s\n\"", ent->client->pers.netname, character_name));
 	}
 
-	return;
+	return qtrue;
 }
 
 // GalaxyRP (Alex): [Database] This method displays the list of characters to a player.
@@ -3388,16 +3418,33 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 	// character's name (sess.rpgchar): COALESCE/NULLIF picks it over the DefaultChar subquery whenever
 	// it's non-empty, and falls back to DefaultChar exactly as before when it's empty (a true first
 	// login, or right after /logout -- see the sess.rpgchar reset added to Cmd_LogoutAccount_f).
-	char select_account_table_row[480] = "SELECT *\
+	// GalaxyRP fix: [security/Account] this query joined "FROM Accounts, Characters" with NO
+	// Accounts.AccountID = Characters.AccountID predicate -- a cross join -- and its character-
+	// resolving subquery was not scoped to the account either. Character names are only unique
+	// *within* an account (select_number_of_characters_with_name() filters AccountID AND Name), so
+	// two accounts can legitimately hold the same character name, and the subquery would then return
+	// whichever CharID came first regardless of who owns it. The cross join happily paired that row
+	// with the logging-in account's Accounts row, so /login loaded ANOTHER account's character: its
+	// credits, level, skills and description, with pers.CharID set to that character -- meaning every
+	// subsequent save wrote the logging-in player's state into the victim's row, destroying it. Any
+	// player could trigger it deliberately with /char new <victim's character name>, and it re-fired
+	// on every map change through ClientBegin(). Both halves are now scoped by account: the outer
+	// join is constrained to this account's characters, and the subquery only resolves names within
+	// it (Accounts.AccountID there is a correlated reference to the outer Accounts row -- the inner
+	// FROM Characters shadows only the Characters alias, not Accounts).
+	char select_account_table_row[640] = "SELECT *\
 		FROM Accounts, Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
 		INNER JOIN Weapons\
 		ON Weapons.CharID = Characters.CharID\
-		WHERE Accounts.Username = ? AND Characters.CharID = (\
+		WHERE Accounts.Username = ?\
+		AND Characters.AccountID = Accounts.AccountID\
+		AND Characters.CharID = (\
 			SELECT CharID\
 			FROM Characters\
-			Where Characters.Name = COALESCE(NULLIF(?, ''), (\
+			Where Characters.AccountID = Accounts.AccountID\
+			AND Characters.Name = COALESCE(NULLIF(?, ''), (\
 				SELECT DefaultChar\
 				FROM Accounts\
 				WHERE Accounts.Username = ?))\
@@ -3669,6 +3716,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 // display name (shown with its own colors throughout, e.g. select_character_list()'s listing), not
 // a login credential that needs to be predictable/comparable the way an account username does.
 qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+	int newCharID = 0;
 
 	if (char_name[0] == '\0') {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name cannot be empty.\n\"");
@@ -3731,11 +3779,33 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	// announces it as created, a failed Characters insert has to report qfalse here too, or the
 	// player would be told (and everyone else shown a chat broadcast) that a character was created
 	// and is now in use when no row actually exists for it.
-	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)", -1, &stmt, NULL);
+	// GalaxyRP fix: [Char] all three of this character's rows are now created inside one explicit
+	// transaction, and the Skills/Weapons rows bind their CharID explicitly (see below) instead of
+	// relying on the three tables' independent rowid counters happening to stay in step. Previously a
+	// failure partway through left a Characters row with no Skills/Weapons rows behind it -- which is
+	// exactly the state select_player_character()'s INNER JOINs cannot load, and which used to be
+	// reported to the player as a successful load. All-or-nothing removes that state entirely.
+	if (sqlite3_exec(db, "BEGIN", 0, 0, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		return qfalse;
+	}
+
+	// GalaxyRP fix: [Saber] saberOneModel/saberTwoModel were left out of this INSERT entirely, so both
+	// took the schema default the ALTER TABLE gives them, 'saber_1' (see InitializeGalaxyRpTables() in
+	// g_main.c). The character-load paths treat any saberTwoModel other than the literal "none" as "this
+	// character dual-wields" (see the number_of_sabers logic in select_player_character()), so EVERY
+	// newly created character came up dual-wielding without ever having chosen it -- and since
+	// 'saber_1' is not a real hilt, both slots fell back to the default saber. ClientUserinfoChanged()
+	// then wrote that result straight back to the row, making it permanent. Set the second slot to the
+	// "none" this system uses everywhere else for "no second saber". saberOneModel is deliberately left
+	// to its existing default so the first slot keeps resolving exactly as it does today.
+	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
 		return qfalse;
 	}
 	sqlite3_bind_int(stmt, 1, ent->client->sess.accountID);
@@ -3745,9 +3815,14 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
 		return qfalse;
 	}
 	sqlite3_finalize(stmt);
+
+	// Characters.CharID is an INTEGER PRIMARY KEY, i.e. an alias for the row's rowid, so this is the
+	// CharID the row above just got -- the value the Skills and Weapons rows must be keyed on.
+	newCharID = (int)sqlite3_last_insert_rowid(db);
 
 	// GalaxyRP fix: [correctness] this buffer was sized at 900 bytes, but the two INSERT
 	// statements it initializes (Skills, then Weapons) actually need 1081 bytes including the
@@ -3767,10 +3842,55 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	// character could never actually be loaded. Sized to 1100 (matching the same margin already
 	// used by the near-identical-size update_character_query[1100] elsewhere in this file) rather
 	// than the exact 1081 needed, so it isn't this fragile again the next time a column is added.
-	char create_new_character_query[1100] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0');\
-		INSERT INTO Weapons(AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('0', '0', '0', '0', '0', '0', '0');";
+	// GalaxyRP fix: [Char] these two INSERTs used to run as one combined string through
+	// run_db_query() -> sqlite3_exec(). That had two problems, both fixed here. First, run_db_query()
+	// returns void and swallows every error, yet this function went on to "return qtrue" regardless --
+	// so a failed insert was reported to the caller (and to the player, and in a public broadcast) as
+	// a successfully created character, leaving exactly the orphaned-Characters-row state that
+	// select_player_character() cannot load. Second, neither INSERT named CharID at all: both relied
+	// on Skills' and Weapons' own rowid counters independently landing on the same number as the
+	// Characters row just inserted. Those three counters only stay in step for as long as nothing ever
+	// fails or is deleted unevenly; once they diverge, every character created from then on is keyed
+	// to some other character's Skills/Weapons row, or to none. Both statements are now prepared and
+	// stepped individually with the real CharID bound, and any failure rolls the whole creation back.
+	// They are plain string literals rather than fixed-size char arrays on purpose -- see the sizing
+	// bug this array previously had (it was 900 bytes for 1081 bytes of SQL, silently truncated with
+	// no room for a NUL terminator, so every /char new ran garbage SQL). A pointer to a literal cannot
+	// have that problem again.
+	const char *insert_skills_query = "INSERT INTO Skills(CharID, Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES(?, '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
+	const char *insert_weapons_query = "INSERT INTO Weapons(CharID, AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES(?, '0', '0', '0', '0', '0', '0', '0')";
+	int i = 0;
 
-	run_db_query(create_new_character_query, db, zErrMsg, rc, stmt);
+	for (i = 0; i < 2; i++)
+	{
+		const char *query = (i == 0) ? insert_skills_query : insert_weapons_query;
+
+		rc = sqlite3_prepare(db, query, -1, &stmt, NULL);
+		if (rc != SQLITE_OK)
+		{
+			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+			return qfalse;
+		}
+		sqlite3_bind_int(stmt, 1, newCharID);
+		rc = sqlite3_step(stmt);
+		if (rc != SQLITE_DONE)
+		{
+			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+			return qfalse;
+		}
+		sqlite3_finalize(stmt);
+	}
+
+	if (sqlite3_exec(db, "COMMIT", 0, 0, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+		return qfalse;
+	}
 
 	// GalaxyRP fix: [Char] the "X created a char: Y" broadcast that used to be sent from here is now
 	// sent by Cmd_Char_f instead, once it also knows the immediately-following switch onto this
@@ -4357,9 +4477,14 @@ void Cmd_Char_f(gentity_t *ent) {
 			// the new character sitting unused in the character list. announce_switch is qfalse here
 			// because the combined "created and now using" broadcast below already covers what
 			// select_player_character()'s own "switched to" broadcast would otherwise say a second time.
+			// GalaxyRP fix: [Char] the "created a new character and is now using" broadcast used to be
+			// sent BEFORE the switch was attempted, so it went out even when select_player_character()
+			// could not actually load the character. Now that that function reports whether the load
+			// succeeded, announce only once it actually has.
 			if (create_new_character(ent, charName, db, zErrMsg, rc, stmt)) {
-				trap->SendServerCommand(-1, va("chat \"%s created a new character and is now using: %s\n\"", ent->client->pers.netname, charName));
-				select_player_character(ent, charName, db, zErrMsg, rc, stmt, qfalse);
+				if (select_player_character(ent, charName, db, zErrMsg, rc, stmt, qfalse)) {
+					trap->SendServerCommand(-1, va("chat \"%s created a new character and is now using: %s\n\"", ent->client->pers.netname, charName));
+				}
 				Cmd_GalaxyRpUi_f(ent);
 			}
 			sqlite3_close(db);
