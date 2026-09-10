@@ -2122,6 +2122,8 @@ extern gentity_t *Zyk_NPC_SpawnType(char *npc_type, int x, int y, int z, int yaw
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern void player_restore_force(gentity_t *ent);
 extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
+extern gentity_t *Jedi_CloakPartner( gentity_t *self );
 void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath ) {
 	gentity_t	*ent;
 	int			anim;
@@ -2150,7 +2152,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	// dying with a cloaked rider aboard (or vice versa) takes both down together. No re-cloak lockout
 	// set here -- a dead player is about to respawn and a destroyed vehicle ceases to exist, so the
 	// cooldown wouldn't mean anything.
-	if ( self->client && self->client->ps.powerups[PW_CLOAKED] )
+	// GalaxyRP fix: [Cloak Item] pair-gated -- see the matching change in G_Damage below. A cloaked
+	// rider whose vehicle is destroyed under them was left invisible by the old per-entity test.
+	if ( self->client && Jedi_PairIsCloaked( self ) )
 	{
 		Jedi_DecloakPair( self );
 	}
@@ -4667,6 +4671,8 @@ vec3_t gPainPoint;
 
 extern void Jedi_Decloak( gentity_t *self );
 extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
+extern gentity_t *Jedi_CloakPartner( gentity_t *self );
 extern void Boba_FlyStop( gentity_t *self );
 extern void paralyze_player(int client_id);
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
@@ -4740,10 +4746,25 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	// cloaked vehicle+rider pair takes both down together, and applies the same temporary re-cloak
 	// lockout (3-10s) the old per-ability code used, so getting hit can't be immediately shrugged off by
 	// re-cloaking.
-	if (damage > 0 && targ && targ->client && targ->client->ps.powerups[PW_CLOAKED])
+	// GalaxyRP fix: [Cloak Item] gate on the PAIR, not on this one entity. /use_cloak cloaks the
+	// rider alone and never touches the vehicle, so a solo-cloaked rider sat on an UNCLOAKED
+	// vehicle: this guard tested the vehicle's own flag, found it clear, and returned without ever
+	// calling Jedi_DecloakPair -- which would have found and dropped the rider's cloak. The rider
+	// stayed invisible through their own vehicle's gunfire, damage and destruction.
+	// The re-cloak lockout goes on BOTH halves for the same reason: it is read by each side's own
+	// toggle (ItemUse_UseCloak reads the rider's, Cmd_VehicleCloak_f reads the vehicle's), so
+	// setting it only on whichever half happened to be hit left the other free to re-cloak at once.
+	if (damage > 0 && targ && targ->client && Jedi_PairIsCloaked(targ))
 	{
+		gentity_t *cloakPartner = Jedi_CloakPartner(targ);
+
 		Jedi_DecloakPair(targ);
 		targ->client->cloakToggleTime = level.time + Q_irand(3000, 10000);
+
+		if (cloakPartner)
+		{
+			cloakPartner->client->cloakToggleTime = targ->client->cloakToggleTime;
+		}
 	}
 
 	if (attacker && attacker->client && attacker->client->sess.amrpgmode == 2)

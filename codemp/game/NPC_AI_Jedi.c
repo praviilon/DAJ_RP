@@ -977,20 +977,101 @@ void Jedi_Decloak( gentity_t *self )
 	}
 }
 
+// GalaxyRP fix: [Cloak Item] the pair-partner lookup, factored out of Jedi_DecloakPair below so
+// that every question about a cloak pair -- "who is the other half?", "is either half cloaked?",
+// "take both down" -- is answered by ONE traversal. They used to be answered by hand-inlined copies
+// of this branch, and the copies did not agree: see the guards that call Jedi_PairIsCloaked() now.
+//
+// The CLASS_VEHICLE test MUST come first. ps.m_iVehicleNum is not the "am I a rider" flag it looks
+// like: g_vehicles.c sets a rider's copy to the vehicle's entity number, but it also sets a MANNED
+// VEHICLE's own copy to (pilot client number + 1). So a vehicle carrying a pilot has a non-zero
+// m_iVehicleNum too, and testing it first sent every vehicle down the rider branch, where it looked
+// up g_entities[pilotNum + 1] -- not the pilot, but whichever entity happens to occupy the next
+// slot. Branching on NPC_class first is unambiguous, and the rider branch below then only ever sees
+// a real rider, whose m_iVehicleNum carries no +1.
+//
+// Returns NULL when there is no partner, or when the partner has no client -- so every caller can
+// treat a non-NULL result as safe to dereference through ->client.
+gentity_t *Jedi_CloakPartner( gentity_t *self )
+{
+	if ( !self || !self->client )
+	{
+		return NULL;
+	}
+
+	if ( self->client->NPC_class == CLASS_VEHICLE )
+	{ //self is a vehicle -- the partner is its rider
+		if ( self->m_pVehicle && self->m_pVehicle->m_pPilot )
+		{
+			gentity_t *rider = (gentity_t *)self->m_pVehicle->m_pPilot;
+
+			if ( rider->client )
+			{
+				return rider;
+			}
+		}
+	}
+	else if ( self->client->ps.m_iVehicleNum )
+	{ //self is a rider -- the partner is the vehicle it is on
+		gentity_t *veh = &g_entities[self->client->ps.m_iVehicleNum];
+
+		if ( veh->client )
+		{
+			return veh;
+		}
+	}
+
+	return NULL;
+}
+
+// GalaxyRP fix: [Cloak Item] "is either half of this pair cloaked?". Every decloak-on-event hook
+// used to gate itself on the acting entity's OWN PW_CLOAKED before calling Jedi_DecloakPair -- an
+// optimisation that assumed a cloaked pair is always symmetric. It is not: /use_cloak cloaks the
+// rider alone and never touches the vehicle. So with a solo-cloaked rider on an uncloaked vehicle,
+// the vehicle firing its weapons, taking damage, or being destroyed all tested the VEHICLE's flag,
+// found it clear, and returned without ever calling Jedi_DecloakPair -- which would have found and
+// dropped the rider's cloak perfectly well had it been reached. The rider stayed invisible through
+// their own vehicle's gunfire. Asking about the pair instead of about one entity closes that, and
+// keeps Jedi_DecloakPair (which is idempotent and safe on an uncloaked/unmounted/non-vehicle
+// entity) as the thing that decides what actually comes down.
+qboolean Jedi_PairIsCloaked( gentity_t *self )
+{
+	gentity_t *partner;
+
+	if ( !self || !self->client )
+	{
+		return qfalse;
+	}
+
+	if ( self->client->ps.powerups[PW_CLOAKED] )
+	{
+		return qtrue;
+	}
+
+	partner = Jedi_CloakPartner( self );
+
+	if ( partner && partner->client->ps.powerups[PW_CLOAKED] )
+	{
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 // GalaxyRP fix: [Cloak Item] shared decloak helper -- decloaks `self` (a player OR a vehicle), and
 // if `self` is one half of a mounted rider/vehicle pair where the OTHER half is ALSO currently
 // cloaked, decloaks that half too. This is the single replacement for every previous scattered
 // decloak call (weapon fire, taking damage, dying, manual toggle) so a hit/action on either side of
-// a paired cloak always takes both down together -- the vehicle+rider desync bugs (vehicle fires and
-// only it decloaks, rider fires and only they decloak) were caused by every one of those call sites
-// touching only the one entity they were handed. Deliberately reads each side's PW_CLOAKED live
-// rather than tracking a separate "this cloak was paired" flag -- both entities' current cloak state
-// is already sufficient to reconstruct whether they're paired at the moment this fires, and it's
-// self-healing (a stale/desynced pair auto-corrects the next time either side is decloaked, cloaked,
-// or hit). Safe/idempotent to call on an entity that isn't cloaked, isn't mounted, or isn't a
-// vehicle at all -- see Jedi_Decloak's own internal guard.
+// a paired cloak always takes both down together. Deliberately reads each side's
+// PW_CLOAKED live rather than tracking a separate "this cloak was paired" flag -- both entities'
+// current cloak state is already sufficient to reconstruct whether they're paired at the moment this
+// fires, and it's self-healing (a stale/desynced pair auto-corrects the next time either side is
+// decloaked, cloaked, or hit). Safe/idempotent to call on an entity that isn't cloaked, isn't
+// mounted, or isn't a vehicle at all -- see Jedi_Decloak's own internal guard.
 void Jedi_DecloakPair( gentity_t *self )
 {
+	gentity_t *partner;
+
 	if ( !self || !self->client )
 	{
 		return;
@@ -998,36 +1079,11 @@ void Jedi_DecloakPair( gentity_t *self )
 
 	Jedi_Decloak( self );
 
-	// GalaxyRP fix: [Cloak Item] the CLASS_VEHICLE test MUST come first. ps.m_iVehicleNum is not the
-	// "am I a rider" flag it looks like: g_vehicles.c sets a rider's copy to the vehicle's entity
-	// number, but it also sets a MANNED VEHICLE's own copy to (pilot client number + 1). So a vehicle
-	// carrying a pilot has a non-zero m_iVehicleNum too, and testing it first sent every vehicle down
-	// the rider branch, where it looked up g_entities[pilotNum + 1] -- not the pilot, but whichever
-	// entity happens to occupy the next slot. Two symptoms: the rider never came down with the vehicle
-	// (vehicle fires or is hit, only the vehicle decloaks), and an unrelated cloaked player sitting in
-	// that neighbouring client slot got force-decloaked instead. Branching on NPC_class first is
-	// unambiguous, and the rider branch below then only ever sees a real rider, whose m_iVehicleNum
-	// carries no +1.
-	if ( self->client->NPC_class == CLASS_VEHICLE )
-	{ //self is a vehicle -- take the rider down too, if it's cloaked
-		if ( self->m_pVehicle && self->m_pVehicle->m_pPilot )
-		{
-			gentity_t *rider = (gentity_t *)self->m_pVehicle->m_pPilot;
+	partner = Jedi_CloakPartner( self );
 
-			if ( rider->client && rider->client->ps.powerups[PW_CLOAKED] )
-			{
-				Jedi_Decloak( rider );
-			}
-		}
-	}
-	else if ( self->client->ps.m_iVehicleNum )
-	{ //self is a rider -- take the vehicle down too, if it's cloaked
-		gentity_t *veh = &g_entities[self->client->ps.m_iVehicleNum];
-
-		if ( veh->client && veh->client->ps.powerups[PW_CLOAKED] )
-		{
-			Jedi_Decloak( veh );
-		}
+	if ( partner && partner->client->ps.powerups[PW_CLOAKED] )
+	{
+		Jedi_Decloak( partner );
 	}
 }
 

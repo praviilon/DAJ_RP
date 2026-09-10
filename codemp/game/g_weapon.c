@@ -133,6 +133,7 @@ extern qboolean G_BoxInBounds( vec3_t point, vec3_t mins, vec3_t maxs, vec3_t bo
 extern qboolean G_HeavyMelee( gentity_t *attacker );
 extern void Jedi_Decloak( gentity_t *self );
 extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 
 static void WP_FireEmplaced( gentity_t *ent, qboolean altFire );
 
@@ -5050,7 +5051,12 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 	// own PM_Weapon independently), so a plain per-entity decloak was exactly what caused the
 	// vehicle-fires-only-it-decloaks / rider-fires-only-they-decloak desync bug. Jedi_DecloakPair
 	// takes the other half of a paired cloak down too, whichever side actually fired.
-	if ( ent && ent->client && ent->client->ps.powerups[PW_CLOAKED] )
+	// GalaxyRP fix: [Cloak Item] gate on the PAIR, not on this one entity. /use_cloak cloaks the
+	// rider alone and never touches the vehicle, so a solo-cloaked rider sat on an UNCLOAKED
+	// vehicle: this guard tested the vehicle's own flag, found it clear, and returned without ever
+	// calling Jedi_DecloakPair -- which would have found and dropped the rider's cloak. The rider
+	// stayed invisible through their own vehicle's gunfire, damage and destruction.
+	if ( ent && ent->client && Jedi_PairIsCloaked( ent ) )
 	{
 		Jedi_DecloakPair( ent );
 	}

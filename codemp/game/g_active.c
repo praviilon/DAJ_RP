@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 extern void Jedi_Cloak( gentity_t *self );
 extern void Jedi_Decloak( gentity_t *self );
 extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 
 qboolean PM_SaberInTransition( int move );
 qboolean PM_SaberInStart( int move );
@@ -1374,7 +1375,10 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 			// cloaked player could swing, damage and kill while staying fully invisible. Decloaking on
 			// this event closes it at the one place the saber does announce itself, pair-aware so a
 			// mounted attacker takes their vehicle down with them.
-			if ( ent->client->ps.powerups[PW_CLOAKED] )
+			// GalaxyRP fix: [Cloak Item] pair-gated, same as FireWeapon and G_Damage -- a rider swinging
+			// from the saddle must take a cloaked vehicle down with them even when the rider is not the
+			// cloaked half.
+			if ( Jedi_PairIsCloaked( ent ) )
 			{
 				Jedi_DecloakPair( ent );
 			}

@@ -1476,6 +1476,7 @@ void G_Kill( gentity_t *ent ) {
 }
 
 extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 void paralyze_player(int client_id) {
 	if (client_id == -1)
 	{
@@ -1487,7 +1488,9 @@ void paralyze_player(int client_id) {
 	// delay past the moment a cloaked player would otherwise stay invisible while down. Decloak here too
 	// (pair-aware) so cloak can't survive being downed even when the real kill never happens (e.g. they
 	// get revived instead) or is bypassed straight to a real kill some other way.
-	if ( g_entities[client_id].client && g_entities[client_id].client->ps.powerups[PW_CLOAKED] )
+	// GalaxyRP fix: [Cloak Item] pair-gated -- see the matching change in G_Damage. Going down while
+	// riding a cloaked vehicle must take the vehicle down too, even if the rider was not cloaked.
+	if ( Jedi_PairIsCloaked( &g_entities[client_id] ) )
 	{
 		Jedi_DecloakPair( &g_entities[client_id] );
 	}
@@ -1506,6 +1509,19 @@ void paralyze_player(int client_id) {
 
 	g_entities[client_id].client->invulnerableTimer = level.time + 3000;
 	g_entities[client_id].client->ps.eFlags |= EF_INVULNERABLE;
+
+	// GalaxyRP fix: [Jetpack] stop the jetpack, exactly as player_die() does ("Make sure the jetpack
+	// is turned off", g_combat.c). Going down is this mod's replacement for dying, but it never did
+	// this -- and the three things that follow made the omission unrecoverable rather than untidy:
+	// ClientThink excludes a downed player from PM_DEAD (it tests player_statuses bit 6), so they
+	// stayed in PM_JETPACK; it also refreshes forceHandExtendTime every frame while bit 6 is set, so
+	// the knockdown never expires; and every route to the jetpack toggle -- PM_Weapon's item-use
+	// events and TryUse() alike -- returns early while forceHandExtend != HANDEXTEND_NONE. The
+	// result was a player hovering at zero move speed (knockdown zeroes ps->speed, but the jetpack
+	// block in bg_pmove.c is driven by cmd.upmove and actively hovers, and PM_GroundTrace never
+	// reports ground while PM_JETPACK), unable to switch it off, until the downed timer ran out and
+	// they typed /getup -- and unreachable by a would-be helper, since help_up() needs 65 units.
+	Jetpack_Off( &g_entities[client_id] );
 
 	g_entities[client_id].client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 	g_entities[client_id].client->ps.forceHandExtendTime = level.time + 500;
@@ -14365,12 +14381,16 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 		// GalaxyRP fix: [Cloak Item] decloak on the way down, same as the Death System's own
 		// paralyze_player() does -- being downed must never leave a player invisible, however they got
 		// there. Pair-aware, so a mounted target takes their vehicle down too.
-		if ( g_entities[client_id].client->ps.powerups[PW_CLOAKED] )
+		if ( Jedi_PairIsCloaked( &g_entities[client_id] ) )
 		{
 			Jedi_DecloakPair( &g_entities[client_id] );
 		}
 
 		g_entities[client_id].client->pers.player_statuses |= (1 << 6);
+
+		// GalaxyRP fix: [Jetpack] same as paralyze_player() above -- this path sets the identical
+		// downed state by hand, so it needs the identical jetpack stop.
+		Jetpack_Off( &g_entities[client_id] );
 
 		g_entities[client_id].client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 		g_entities[client_id].client->ps.forceHandExtendTime = level.time + 500;
