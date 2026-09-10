@@ -1873,6 +1873,10 @@ void SaveRegisteredItems( void );
 //
 // g_utils.c
 //
+// GalaxyRP fix: [Death System] qtrue while the player is downed (player_statuses bit 6).
+// See the long comment on the definition in g_utils.c for why the state blocks nothing by itself.
+qboolean G_PlayerIsDowned( gentity_t *ent );
+//
 // GalaxyRP: [Saber RGB] the Characters.saberOneColor/saberTwoColor database columns predate this
 // feature: a previous author added them (INTEGER DEFAULT 1) and a read path, but never a write
 // path, so every existing row still holds the untouched schema default. We reuse those columns

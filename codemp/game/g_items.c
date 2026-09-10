@@ -555,7 +555,10 @@ void ItemUse_Binoculars(gentity_t *ent)
 
 	// GalaxyRP fix: [RPG classes] removed a dead Thermal Vision cooldown check gated on
 	// pers.rpg_class == 2 (Bounty Hunter), which is permanently 0 now.
-	if (ent->client->ps.zoomMode == 0) // not zoomed or currently zoomed with the disruptor
+	// GalaxyRP fix: [Death System] a downed player cannot raise the binoculars. Gates only the
+	// zoom-IN direction, like the cloak item and the jetpack above, so a player who was already
+	// zoomed when they went down can still lower them.
+	if (ent->client->ps.zoomMode == 0 && !G_PlayerIsDowned( ent )) // not zoomed or currently zoomed with the disruptor
 	{
 		ent->client->ps.zoomMode = 2;
 		ent->client->ps.zoomLocked = qfalse;
@@ -570,6 +573,13 @@ void ItemUse_Binoculars(gentity_t *ent)
 
 void ItemUse_Shield(gentity_t *ent)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// them using this while incapacitated. Same explicit guard as the cloak item below.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	PlaceShield(ent);
 }
 
@@ -1159,6 +1169,13 @@ void ItemUse_Sentry( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// them using this while incapacitated. Same explicit guard as the cloak item below.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	VectorSet( mins, -8, -8, 0 );
 	VectorSet( maxs, 8, 8, 24 );
 
@@ -1235,6 +1252,13 @@ void ItemUse_Sentry( gentity_t *ent )
 extern gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
 void ItemUse_Seeker(gentity_t *ent)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// them using this while incapacitated. Same explicit guard as the cloak item below.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	if ( level.gametype == GT_SIEGE && d_siegeSeekerNPC.integer )
 	{//actualy spawn a remote NPC
 		gentity_t *remote = NPC_SpawnType( ent, "remote", NULL, qfalse );
@@ -1295,6 +1319,13 @@ static void MedPackGive(gentity_t *ent, int amount)
 
 void ItemUse_MedPack_Big(gentity_t *ent)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// them using this while incapacitated. Same explicit guard as the cloak item below.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	// zyk: RPG Mode Big Bacta. Recover 150 HP
 	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted), to
 	// player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see g_local.h's
@@ -1307,6 +1338,13 @@ void ItemUse_MedPack_Big(gentity_t *ent)
 
 void ItemUse_MedPack(gentity_t *ent)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// them using this while incapacitated. Same explicit guard as the cloak item below.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	// zyk: RPG Mode Bacta Canister. Recover 75 HP
 	// GalaxyRP fix: [Shop] Holdable Items Upgrade moved from secrets_found bit 0 (never persisted), to
 	// player_settings bit 0 (account-wide), to skill_levels[38] bit 0 (per-character) -- see g_local.h's
@@ -1385,6 +1423,17 @@ void ItemUse_Jetpack( gentity_t *ent )
 		// ent->client->ps.jetpackFuel < 5
 		ent->client->pers.jetpack_fuel < JETPACK_SCALE)
 	{ //too low on fuel to start it up
+		return;
+	}
+
+	// GalaxyRP fix: [Death System] a downed player must not be able to switch the jetpack back ON.
+	// paralyze_player() calls Jetpack_Off() when they go down, but that is one-shot: nothing stopped
+	// them re-enabling it here or via /jetpack, and ClientThink_real() hands any client with
+	// jetPackOn a PM_JETPACK movetype regardless of the downed state -- putting them straight back
+	// into the flying-while-downed state that Jetpack_Off() call was added to end.
+	// Gates only the ON direction, like the cloak item: switching OFF stays reachable.
+	if ( !ent->client->jetPackOn && G_PlayerIsDowned( ent ) )
+	{
 		return;
 	}
 
@@ -1547,6 +1596,14 @@ void G_PrecacheDispensers(void)
 
 void ItemUse_UseDisp(gentity_t *ent, int type)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health. This one was already
+	// blocked in practice by the forceHandExtend test below, but only as a side effect of the
+	// downed state pinning HANDEXTEND_KNOCKDOWN -- the exact accident this fix stops relying on.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	gitem_t *item = NULL;
 	gentity_t *eItem;
 
@@ -2181,6 +2238,14 @@ gentity_t *EWeb_Create(gentity_t *spawner)
 //use the e-web
 void ItemUse_UseEWeb(gentity_t *ent)
 {
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health. This one was already
+	// blocked in practice by the forceHandExtend test below, but only as a side effect of the
+	// downed state pinning HANDEXTEND_KNOCKDOWN -- the exact accident this fix stops relying on.
+	if ( G_PlayerIsDowned( ent ) )
+	{
+		return;
+	}
+
 	if (ent->client->ewebTime > level.time)
 	{ //can't use again yet
 		return;

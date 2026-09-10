@@ -2739,3 +2739,30 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 
 	return current_dist;
 }
+
+// GalaxyRP fix: [Death System] one place that answers "is this player currently downed?", so the
+// rule stops being spelled out as a raw pers.player_statuses bit test at every new call site.
+// Bit 6 is set by paralyze_player() and cleared by help_up(); while it is set the player is lying
+// incapacitated waiting out rp_downed_timer.
+//
+// This matters because a downed player is NOT dead as far as the rest of the code is concerned:
+// paralyze_player() leaves them on 50 health, so every "health <= 0", "EF_DEAD" and "PM_DEAD" test
+// in the codebase says they are perfectly alive. Nothing about the downed state blocks an action on
+// its own -- the only reason a downed player cannot swing a weapon or use Grip/Lightning/Drain/Mind
+// Trick/Push is that ClientThink_real() pins forceHandExtend at HANDEXTEND_KNOCKDOWN, and those
+// particular actions happen to refuse to run during any hand-extend state. That is inherited vanilla
+// knockdown behaviour, not a rule anyone wrote for this system, and everything it does not happen to
+// cover (Heal, Speed, Rage, Protect, Absorb, Seeing, the team powers, and every holdable item) was
+// reachable while downed. Callers that must not be usable while downed test this explicitly instead
+// of relying on that side effect.
+//
+// Existing bit-6 tests elsewhere were deliberately left as they are; this is for new call sites.
+qboolean G_PlayerIsDowned( gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+	{
+		return qfalse;
+	}
+
+	return (ent->client->pers.player_statuses & (1 << 6)) ? qtrue : qfalse;
+}

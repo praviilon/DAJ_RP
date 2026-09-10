@@ -742,6 +742,28 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 		return qfalse;
 	}
 
+	// GalaxyRP fix: [Death System] a downed player cannot START a force power. Every one of the
+	// thirteen powers routes through this function, so this single test covers them all and both
+	// dispatch paths (the GENCMD_FORCE_* switch in g_active.c and the forcepower switch below).
+	// It has to be explicit: paralyze_player() leaves a downed player on 50 health, so the dead
+	// tests just above all pass, and the only powers that refused were Grip/Lightning/Drain/Mind
+	// Trick/Push -- purely because those five also guard on forceHandExtend, which the downed state
+	// happens to pin at HANDEXTEND_KNOCKDOWN. Heal, Speed, Rage, Protect, Absorb, Seeing and the two
+	// team powers had no such guard, so a downed player could sit out rp_downed_timer healing back to
+	// full health (and, with the Shield Heal skill, full shields) and stand up untouched.
+	//
+	// Deliberately placed AFTER the dead tests and nowhere else: every toggle power (Speed, Rage,
+	// Protect, Absorb, Seeing) checks for an already-active power and calls WP_ForcePowerStop BEFORE
+	// reaching this function, so a downed player can still switch OFF something that was running when
+	// they went down -- only starting is blocked. Same shape as the cloak item's downed guard.
+	//
+	// NPCs are unaffected: the Death System never downs them (G_Damage tests !targ->NPC) and
+	// NPC_spawn.c zeroes player_statuses on every spawned NPC.
+	if ( G_PlayerIsDowned( self ) )
+	{
+		return qfalse;
+	}
+
 	if (self->client->ps.pm_flags & PMF_FOLLOW)
 	{ //specs can't use powers through people
 		return qfalse;
