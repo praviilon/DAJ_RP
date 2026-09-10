@@ -4674,7 +4674,7 @@ extern void Jedi_DecloakPair( gentity_t *self );
 extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 extern gentity_t *Jedi_CloakPartner( gentity_t *self );
 extern void Boba_FlyStop( gentity_t *self );
-extern void paralyze_player(int client_id);
+extern void paralyze_player( gentity_t *ent );
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
 void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_t dir, vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t	*client;
@@ -6218,12 +6218,14 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				}
 				//GalaxyRP (Alex): [New Death System] Player was alive, so down them instead of killing them.
 				else {
-					int client_id = -1;
-					client_id = ClientNumberFromString(targ, targ->client->pers.netname, qfalse);
-
-					targ->client->downedTime = rp_downed_timer.integer;
-
-					paralyze_player(client_id);
+					// GalaxyRP fix: [Death System] pass the entity straight through. This used to
+					// recover a client id with ClientNumberFromString() on the victim's own netname,
+					// which resolves an all-digit name as a slot number and otherwise matches the
+					// first client whose name merely CONTAINS the string -- so with "Bob" and "Bobby"
+					// both connected, downing Bob paralyzed Bobby and left Bob at <=0 health, neither
+					// dead nor downed. downedTime is now set inside paralyze_player() too, so the
+					// countdown can no longer be forgotten by a caller.
+					paralyze_player(targ);
 				}
 			}
 			else {
