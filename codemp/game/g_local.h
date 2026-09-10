@@ -618,7 +618,9 @@ typedef struct clientPersistant_s {
 	// 3 - Received Jetpack Flame event - set after client-side receives the Jetpack Upgrade event
 	// 4 - Scaled player
 	// 5 - Chat protection activated for this player
-	// 6 - Paralyzed by an admin
+	// 6 - Downed: lying incapacitated and unable to act. Set both by the Death System (a lethal hit
+	//     that downs instead of killing) and by the admin /paralyze command. Bit 26 says which --
+	//     bit 6 alone is a combat knockdown, bit 6 + bit 26 is an admin paralysis.
 	// 7 - send event so client-side mod knows if this is a Force User or not, to render the Force Shield effect
 	// 8 - using Saber Armor
 	// 9 - using Gun Armor
@@ -638,9 +640,11 @@ typedef struct clientPersistant_s {
 	// 23 - Unique Ability 3
 	// 24 - hit by Ice Bomb
 	// 25 - RPG Mode tutorial
-	// 26 - UNUSED (was "Using nofight command"; the /nofight command and every check that read this
-	//      bit were removed -- see the note where Cmd_NoFight_f used to live in g_cmds.c. Free to reuse,
-	//      but note a returning player's stale bit is harmless only because nothing reads it any more)
+	// 26 - Paralyzed by an admin, as opposed to downed in combat. Always set together with bit 6, never
+	//      on its own. Distinguishes the two states so /getup and /helpup can revive a combat knockdown
+	//      (which is the whole point of the Death System) while refusing an admin punishment. Reused
+	//      from the removed /nofight command; safe because nothing read the old bit any more, and both
+	//      ClientConnect and ClientDisconnect zero the whole field, so no stale bit survives a rejoin.
 	// 27 - Has just lost his duel in Duel Tournament
 	// 28 - Custom Quest npc
 	int player_statuses;
@@ -1876,6 +1880,14 @@ void SaveRegisteredItems( void );
 // GalaxyRP fix: [Death System] qtrue while the player is downed (player_statuses bit 6).
 // See the long comment on the definition in g_utils.c for why the state blocks nothing by itself.
 qboolean G_PlayerIsDowned( gentity_t *ent );
+// GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (player_statuses bit 26, always
+// accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely
+// asks "can this player act?" wants that one; only the revive paths care which it is.
+qboolean G_PlayerIsAdminParalyzed( gentity_t *ent );
+// GalaxyRP fix: [Death System] ends a downed state: clears both status bits and the countdown,
+// releases FL_NOTARGET and plays the get-up animation. Defined in g_cmds.c beside its counterpart
+// RP_EnterDownedState(); called from ClientTimerActions() when an admin paralysis runs out.
+void RP_ReleaseFromDownedState( gentity_t *ent );
 //
 // GalaxyRP: [Saber RGB] the Characters.saberOneColor/saberTwoColor database columns predate this
 // feature: a previous author added them (INTEGER DEFAULT 1) and a read path, but never a write

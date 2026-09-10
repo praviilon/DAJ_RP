@@ -1054,22 +1054,44 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		//GalaxyRP (Alex): [Death System] This timer represents the time that a player has left until they can get up from being downed.
 		if (client->downedTime)
 		{
-			if (client->downedTime <= rp_downed_timer.integer)
+			// GalaxyRP fix: [Death System] this used to be gated on "downedTime <= rp_downed_timer",
+			// which assumed the countdown could never exceed the cvar. /paralyze can now set any
+			// duration up to 900s, so with the shipped rp_downed_timer of 30 an admin paralysis showed
+			// the player nothing at all until its last 30 seconds -- immobile, with no explanation and
+			// no timer. downedTime is the authoritative remaining time, so it is simply displayed.
+			// GalaxyRP fix: [Death System] an admin paralysis says so, and does not advertise /getup or
+			// /helpup, because neither can end one.
+			if (G_PlayerIsAdminParalyzed(ent))
+			{
+				trap->SendServerCommand(ent->s.number, va("cp \"^1You were paralyzed by an admin.\nTime Remaining: %d\"", client->downedTime));
+			}
+			else
 			{
 				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\nTime Remaining: %d\"", client->downedTime));
 			}
 
-
 			client->downedTime--;
 
 			//GalaxyRP (Alex): [Death System] Not paralyzed anymore, means someone else helped you (or you helped yourself with admin permission. Set downed timer to 0 to remove message.
-			if (!(ent->client->pers.player_statuses & (1 << 6))) {
+			if (!G_PlayerIsDowned(ent)) {
 				client->downedTime = 0;
+			}
+			// GalaxyRP fix: [Death System] an admin paralysis releases itself the moment its time is
+			// served. A combat knockdown does not -- there the countdown only unlocks /getup and the
+			// player chooses when to stand -- but /getup and /helpup both refuse an admin paralysis,
+			// so without this the target would stay down forever once the timer ran out.
+			else if (client->downedTime <= 0 && G_PlayerIsAdminParalyzed(ent)) {
+				RP_ReleaseFromDownedState(ent);
+				trap->SendServerCommand(ent->s.number, "print \"^2Your paralysis has worn off.\n\"");
+				trap->SendServerCommand(ent->s.number, "cp \"^2Your paralysis has worn off.\"");
 			}
 		}
 		else {
 			//GalaxyRP (Alex): [Death System] Can get up by themselves, but haven't yet.
-			if (ent->client->pers.player_statuses & (1 << 6)){
+			// An admin paralysis never reaches here -- it auto-releases above the moment its countdown
+			// hits 0 -- but the check keeps this prompt from ever naming /getup and /helpup to someone
+			// they cannot help.
+			if (G_PlayerIsDowned(ent) && !G_PlayerIsAdminParalyzed(ent)){
 				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\n^2You may get up by using ^3/getup\n^2Alternatively, someone else can do ^3/helpup ^3%s.\"", client->pers.netname_nocolor));
 			}
 		}

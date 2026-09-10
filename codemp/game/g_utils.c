@@ -2766,3 +2766,18 @@ qboolean G_PlayerIsDowned( gentity_t *ent )
 
 	return (ent->client->pers.player_statuses & (1 << 6)) ? qtrue : qfalse;
 }
+
+// GalaxyRP fix: [Death System] bit 6 alone cannot tell a combat knockdown from an admin paralysis --
+// it was named "Paralyzed by an admin" before the Death System was built on top of it, and both
+// features have set it ever since. /getup and /helpup must free the first and refuse the second, so
+// /paralyze now also sets bit 26 and this answers which state a player is in. Bit 26 is never set
+// without bit 6, so a caller that only wants "can this player act?" should use G_PlayerIsDowned().
+qboolean G_PlayerIsAdminParalyzed( gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+	{
+		return qfalse;
+	}
+
+	return (ent->client->pers.player_statuses & (1 << 26)) ? qtrue : qfalse;
+}

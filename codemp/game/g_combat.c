@@ -2163,6 +2163,10 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	update_weapons_table_row_with_current_values(self);
 
 	self->client->pers.player_statuses &= ~(1 << 6);
+	// GalaxyRP fix: [Death System] clear the admin-paralysis marker alongside the downed bit. Bit 26
+	// is only ever meaningful together with bit 6, so leaving it set here would strand a stale marker
+	// on a player who died out of an admin paralysis and respawned free.
+	self->client->pers.player_statuses &= ~(1 << 26);
 
 	// zyk: remove any quest_power status from this player
 	self->client->pers.quest_power_status = 0;
