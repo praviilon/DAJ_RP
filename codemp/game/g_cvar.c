@@ -212,6 +212,30 @@ void RP_CVU_rpgMaxLevel(void)
 	}
 }
 
+// GalaxyRP fix: [validation] rp_starting_shield is written straight into ps.stats[STAT_ARMOR], which
+// is a 16-bit netfield (MSG_WriteShort in qcommon/msg.cpp): a value above 32767 arrives at the client
+// as a negative number while the server keeps running damage against the real one. A NEGATIVE value
+// is worse than cosmetic -- in G_Damage (g_combat.c) a negative STAT_ARMOR fails the ">= scaled_damage"
+// test and falls into the proportional branch, where "asave = take * (STAT_ARMOR / scaled_damage)" is
+// itself negative and the following "take -= asave" therefore INCREASES the damage the player takes
+// before the armour is zeroed. One free extra-damage hit per spawn, from a setting that reads like it
+// should merely give less shield. Bounded to [0, 200]: 0 is a legitimate "no starting shield", and 200
+// is double the logged-out maximum health that the shield pickup cap in bg_misc.c already works
+// against, so anything higher is not a balance choice but a mistake.
+void RP_CVU_startingShield(void)
+{
+	if (rp_starting_shield.integer < 0)
+	{
+		trap->Cvar_Set("rp_starting_shield", "0");
+		trap->Cvar_Update(&rp_starting_shield);
+	}
+	else if (rp_starting_shield.integer > 200)
+	{
+		trap->Cvar_Set("rp_starting_shield", "200");
+		trap->Cvar_Update(&rp_starting_shield);
+	}
+}
+
 
 //
 // Cvar table

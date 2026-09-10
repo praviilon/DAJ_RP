@@ -3056,7 +3056,15 @@ void ClientThink_real( gentity_t *ent ) {
 
 				// zyk: this will guarantee that the player has full health at start of the duel
 				ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-				ent->client->ps.stats[STAT_ARMOR] = (int)ceil(((ent->client->pers.skill_levels[30] * 1.0) / 5) * ent->client->pers.max_rpg_health);
+				// GalaxyRP fix: [Duel] this used to apply the RPG Max Shield formula to everyone, with no
+				// amrpgmode check. skill_levels[] and max_rpg_health are never reset on logout, so a
+				// logged-out duellist got either 0 (never logged in on this connection) or a stale value
+				// carried over from whichever character they last played -- a private duel's starting
+				// shield depended on account history rather than on any setting. Gated now, and reading
+				// pers.max_rpg_shield rather than recomputing the formula inline: set_max_shield() in
+				// g_cmds.c keeps that field current on spawn, on level change and on every Max Shield
+				// /skillup, and computes exactly this expression.
+				ent->client->ps.stats[STAT_ARMOR] = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_rpg_shield : rp_starting_shield.integer;
 			}
 
 			if (duelAgainst
@@ -3083,7 +3091,10 @@ void ClientThink_real( gentity_t *ent ) {
 
 				// zyk: this will guarantee that the player has full health at start of the duel TEST
 				duelAgainst->health = duelAgainst->client->ps.stats[STAT_MAX_HEALTH];
-				duelAgainst->client->ps.stats[STAT_ARMOR] = (int)ceil(((duelAgainst->client->pers.skill_levels[30] * 1.0) / 5) * duelAgainst->client->pers.max_rpg_health);
+				// GalaxyRP fix: [Duel] the opponent's side of the same fix applied to the challenger just
+				// above -- see that comment for why the ungated formula was wrong for a logged-out
+				// duellist. Both sides must stay identical or the two duellists enter on different rules.
+				duelAgainst->client->ps.stats[STAT_ARMOR] = (duelAgainst->client->sess.amrpgmode == 2) ? duelAgainst->client->pers.max_rpg_shield : rp_starting_shield.integer;
 			}
 		}
 		else
@@ -3116,7 +3127,13 @@ void ClientThink_real( gentity_t *ent ) {
 			if (ent->health > 0 && ent->client->ps.stats[STAT_HEALTH] > 0)
 			{
 				ent->client->ps.stats[STAT_HEALTH] = ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-				ent->client->ps.stats[STAT_ARMOR] = zyk_starting_shield.integer;
+				// GalaxyRP fix: [Duel] rp_starting_shield is the shield a LOGGED-OUT player spawns with;
+				// an RPG character's is pers.max_rpg_shield, from their Max Shield skill. This line
+				// handed the logged-out value to everyone, so an RPG duellist who WON came out of the
+				// duel with their shield reset to that cvar (0 in the shipped config) instead of the
+				// full shield the line above gives them in health -- winning a duel strictly cost them
+				// shield. Mirrors the two duel-start sites earlier in this function.
+				ent->client->ps.stats[STAT_ARMOR] = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_rpg_shield : rp_starting_shield.integer;
 
 				if (g_spawnInvulnerability.integer)
 				{

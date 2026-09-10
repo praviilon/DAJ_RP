@@ -337,7 +337,6 @@ XCVAR_DEF( zyk_chat_protection_timer,	"0",			NULL,				CVAR_ARCHIVE|CVAR_NORESTAR
 XCVAR_DEF( zyk_change_map_gametype_vote, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_vote_timer,	"0",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_adm_in_other_gametypes, "1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_starting_shield, "25",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_saber_touch_damage, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_duel_saber_touch_damage, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_saberDmgDelay_Idle,		"350",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -381,6 +380,10 @@ XCVAR_DEF( rp_max_rpg_credits,			"500000",		RP_CVU_maxRpgCredits,		CVAR_ARCHIVE|
 // GalaxyRP fix: [cleanup] renamed from zyk_rpg_max_level, same reasoning as rp_max_rpg_credits
 // above. Highest level an RPG character can reach.
 XCVAR_DEF( rp_rpg_max_level,			"100",			RP_CVU_rpgMaxLevel,			CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_starting_shield, same reasoning as the two above.
+// Shield a LOGGED-OUT player spawns with; an RPG character's starting shield comes from their Max
+// Shield skill instead (pers.max_rpg_shield, see set_max_shield in g_cmds.c).
+XCVAR_DEF( rp_starting_shield,			"25",			RP_CVU_startingShield,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
 
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )

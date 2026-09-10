@@ -4127,7 +4127,7 @@ void ClientSpawn(gentity_t *ent) {
 	}
 	else
 	{ // zyk: starting shield of the player
-		client->ps.stats[STAT_ARMOR] = zyk_starting_shield.integer;
+		client->ps.stats[STAT_ARMOR] = rp_starting_shield.integer;
 	}
 
 	G_SetOrigin( ent, spawn_origin );
