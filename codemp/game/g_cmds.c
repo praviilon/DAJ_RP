@@ -13091,7 +13091,7 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 	if (downgrade == qtrue) {
 		if (success == qtrue) {
 
-			if (ent->client->ps.clientNum != ent2->client->ps.clientNum) {
+			if (ent != ent2) {
 
 				strcpy(success_message, "print \"^2You downgraded the target's ^3%s ^2skill by ^3%d ^2points. Current value: ^3%d^2.\n\"");
 			}
@@ -13100,7 +13100,7 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 			}
 		}
 		else {
-			if (ent->client->ps.clientNum != ent2->client->ps.clientNum) {
+			if (ent != ent2) {
 
 				strcpy(success_message, "print \"^1Target already reached the minimum level of ^3%s ^1skill. You can only downgrade by ^3%d ^1points. Nothing was updated. Current value: ^3%d^2.\n\"");
 			}
@@ -13112,7 +13112,7 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 	else {
 		if (success == qtrue) {
 
-			if (ent->client->ps.clientNum != ent2->client->ps.clientNum) {
+			if (ent != ent2) {
 
 				strcpy(success_message, "print \"^2You upgraded the target's ^3%s ^2skill by ^3%d ^2points. Current value: ^3%d^2.\n\"");
 			}
@@ -13123,7 +13123,7 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 
 		}
 		else {
-			if (ent->client->ps.clientNum != ent2->client->ps.clientNum) {
+			if (ent != ent2) {
 
 				strcpy(success_message, "print \"^1Target already reached the maximum level of ^3%s ^1skill. You can only upgrade by ^3%d ^1points. Nothing was updated. Current value: ^3%d^2.\n\"");
 			}
@@ -13134,6 +13134,28 @@ void show_skill_change_message(gentity_t* ent, gentity_t* ent2, qboolean downgra
 	}
 
 	trap->SendServerCommand(ent - g_entities, va(success_message, skills[skill_id].skill_name, number_of_changes, ent2->client->pers.skill_levels[skill_id]));
+
+	// GalaxyRP fix: [Skills] tell the target too. Only the admin issuing the command was ever told, so
+	// a player's skills could be changed out from under them with no indication at all -- the same gap
+	// /removexp had. The code was already inconsistent with itself about this: do_upgrade_skill()'s
+	// "not enough skillpoints" branch DOES message the target, so a FAILED change was announced to
+	// them while a successful one was not.
+	//
+	// Only on success: "target already at max/min, nothing was updated" is a message about the admin's
+	// input, not about anything that happened to the player, so it would be pure noise for them. And
+	// only when the two are different entities -- when an admin acts on themselves the line above has
+	// already told them, in the first person.
+	if (success == qtrue && ent != ent2)
+	{
+		if (downgrade == qtrue)
+		{
+			trap->SendServerCommand(ent2 - g_entities, va("print \"^1Your ^3%s ^1skill was downgraded by ^3%d ^1points. Current value: ^3%d^1.\n\"", skills[skill_id].skill_name, number_of_changes, ent2->client->pers.skill_levels[skill_id]));
+		}
+		else
+		{
+			trap->SendServerCommand(ent2 - g_entities, va("print \"^2Your ^3%s ^2skill was upgraded by ^3%d ^2points. Current value: ^3%d^2.\n\"", skills[skill_id].skill_name, number_of_changes, ent2->client->pers.skill_levels[skill_id]));
+		}
+	}
 }
 
 // GalaxyRP fix: [Skills] downgrading a weapon-granting skill (Saber Attack, or any of the mercenary
@@ -13351,7 +13373,7 @@ qboolean do_upgrade_skill(gentity_t* upgrader, gentity_t* upgradee, int skill_id
 	{
 		if (dont_show_message == qfalse) {
 			trap->SendServerCommand(upgradee - g_entities, "print \"^1You don't have enough skillpoints.\n\"");
-			if (upgrader->client->ps.clientNum != upgradee->client->ps.clientNum) {
+			if (upgrader != upgradee) {
 				trap->SendServerCommand(upgrader - g_entities, "print \"^1Target player doesn't have enough skillpoints.\n\"");
 			}
 		}
@@ -13437,11 +13459,15 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 
 	trap->Argv( 1,  arg1, sizeof( arg1 ) );
 	trap->Argv( 2,  arg2, sizeof( arg2 ) );
-	trap->Argv( 3,  arg3, sizeof( arg3 ) );
 
 	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
 	if (trap->Argc() == 4) {
+		// GalaxyRP fix: [validation] read argv 3 here rather than unconditionally above. Argc() is 3
+		// on the two-argument form, so the old code asked for an argument that does not exist --
+		// harmless (Argv zero-fills an out-of-range index) but it read past the command line.
+		trap->Argv( 3,  arg3, sizeof( arg3 ) );
+
 		number_of_upgrades = atoi(arg3);
 
 		// GalaxyRP fix: [Skills] this optional count argument was never validated -- a zero or negative
@@ -13458,12 +13484,18 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 
 	if (client_id == -1)
 	{
+		// GalaxyRP fix: [validation] say so. This returned silently, so a mistyped player name looked
+		// exactly like a command that did nothing. Same message /givexp and /removexp already print.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
 		return;
 	}
 
-	if (g_entities[client_id].client->sess.amrpgmode != 2)
+	// GalaxyRP fix: [validation] wording unified with the rest of the admin commands that target a
+	// player -- /givexp, /removexp, /createcredits, /givecredits and now /levelup and /leveldown all
+	// use this exact string. The check itself was already in the right place.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Player is not in RPG Mode\n\"") );
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
 		return;
 	}
 
@@ -13503,11 +13535,15 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 
 	trap->Argv( 1,  arg1, sizeof( arg1 ) );
 	trap->Argv( 2,  arg2, sizeof( arg2 ) );
-	trap->Argv( 3,  arg3, sizeof( arg3 ) );
 
 	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
 	if (trap->Argc() == 4) {
+		// GalaxyRP fix: [validation] read argv 3 here rather than unconditionally above. Argc() is 3
+		// on the two-argument form, so the old code asked for an argument that does not exist --
+		// harmless (Argv zero-fills an out-of-range index) but it read past the command line.
+		trap->Argv( 3,  arg3, sizeof( arg3 ) );
+
 		number_of_downgrades = atoi(arg3);
 
 		// GalaxyRP fix: [Skills] see the matching fix comment in Cmd_RpModeUp_f above -- this optional
@@ -13522,12 +13558,18 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 
 	if (client_id == -1)
 	{
+		// GalaxyRP fix: [validation] say so. This returned silently, so a mistyped player name looked
+		// exactly like a command that did nothing. Same message /givexp and /removexp already print.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
 		return;
 	}
 
-	if (g_entities[client_id].client->sess.amrpgmode != 2)
+	// GalaxyRP fix: [validation] wording unified with the rest of the admin commands that target a
+	// player -- /givexp, /removexp, /createcredits, /givecredits and now /levelup and /leveldown all
+	// use this exact string. The check itself was already in the right place.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Player is not in RPG Mode\n\"") );
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
 		return;
 	}
 
@@ -13642,12 +13684,30 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 
 	if (client_id == -1)
 	{
+		// GalaxyRP fix: [validation] say so. This returned silently, so a mistyped player name looked
+		// exactly like a command that did nothing. Same message /givexp and /removexp already print.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
 		return;
 	}
 
 	// GalaxyRP fix: [Cvars] this used to also require zyk_rp_mode.integer == 1 here ("The server is not
 	// at RP Mode"), but the server was always meant to be considered in RP Mode (that cvar's default),
 	// and it has been removed -- so leveling up is unconditionally allowed to admins with ADM_LEVELUP now.
+
+	// GalaxyRP fix: [validation] hoisted above the level checks below. It used to sit at the very
+	// bottom, as the else of the branch that does the work, so a logged-out target was first run
+	// through checks that read pers.level (and, in /leveldown, pers.skillpoints) -- fields that are
+	// NOT reset on logout, so they hold either 1 or a stale value from whichever character that
+	// connection last played. Nothing was ever mutated or persisted (the guard still wrapped the
+	// work), but the admin could be told "Too many levels selected" about a level the target does
+	// not have, instead of being told the target is not logged in. Checking first means every
+	// message below is about a real character. Wording matches Cmd_GiveXp_f/Cmd_RemoveXp_f and the
+	// credit commands, which all use this exact string.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		return;
+	}
 
 	if (g_entities[client_id].client->pers.level + number_of_levels > rp_rpg_max_level.integer) {
 		int max_possible_value = rp_rpg_max_level.integer - g_entities[client_id].client->pers.level;
@@ -13665,28 +13725,25 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (g_entities[client_id].client->sess.amrpgmode == 2)
-	{
-		g_entities[client_id].client->pers.score_modifier = g_entities[client_id].client->pers.level;
-		g_entities[client_id].client->pers.credits_modifier = -10;
-		increase_level(&g_entities[client_id], qtrue, number_of_levels);
+	// GalaxyRP fix: [Dead Code] the "score_modifier = level; credits_modifier = -10;" pair that used to
+	// sit here is gone. Both fields are write-only across the whole tree: every occurrence is a
+	// declaration or an assignment, and the single read (g_combat.c, of an NPC's own credits_modifier)
+	// only copies the value into the attacker's field, which is itself never read. Nothing anywhere
+	// converts either one into score or credits. The -10 was also copied from g_combat.c's "killed a
+	// lower-level player" PENALTY path, which means the opposite of what a level-up should do even if
+	// the field were live. The fields themselves are left in place -- they are still written from
+	// g_combat.c and NPC_spawn.c, and removing them is a separate cleanup.
+	increase_level(&g_entities[client_id], qtrue, number_of_levels);
 
-		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled up. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
+	trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled up. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
 
-		// GalaxyRP fix: [Database] this used to pass ent (the admin issuing the command) instead of the
-		// target -- update_chars_table_row_with_current_values() writes whichever entity it's given, so
-		// the target's new level/skillpoints were applied live in memory but never actually persisted;
-		// only the admin's own (unchanged) row got redundantly rewritten. If the target disconnected
-		// before some unrelated save happened to touch their row, the level-up was silently lost. Fixed
-		// to save the actual target, matching Cmd_GiveXp_f/Cmd_RemoveXp_f below.
-		update_chars_table_row_with_current_values(&g_entities[client_id]);
-
-		return;
-	}
-	else
-	{
-		trap->SendServerCommand( ent-g_entities, va("print \"^1The player must be logged in!\n\"") );
-	}
+	// GalaxyRP fix: [Database] this used to pass ent (the admin issuing the command) instead of the
+	// target -- update_chars_table_row_with_current_values() writes whichever entity it's given, so
+	// the target's new level/skillpoints were applied live in memory but never actually persisted;
+	// only the admin's own (unchanged) row got redundantly rewritten. If the target disconnected
+	// before some unrelated save happened to touch their row, the level-up was silently lost. Fixed
+	// to save the actual target, matching Cmd_GiveXp_f/Cmd_RemoveXp_f below.
+	update_chars_table_row_with_current_values(&g_entities[client_id]);
 }
 
 // GalaxyRP (Alex): [Levelling] Check to see if there's enough free skillpoints to level down. (prevents skillpoints going negative).
@@ -13804,6 +13861,18 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 
 	if (client_id == -1)
 	{
+		// GalaxyRP fix: [validation] say so -- see the matching fix in Cmd_LevelGive_f above.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [validation] hoisted above the two checks below, same reasoning as Cmd_LevelGive_f
+	// above: both of them read fields (pers.level, pers.skillpoints) that logout does not reset, so on
+	// a logged-out target they reported on a stale character instead of saying the target is not
+	// logged in. Wording unified with the rest of the admin commands.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
 		return;
 	}
 
@@ -13820,25 +13889,16 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 		return;
 	}
 
-	if (g_entities[client_id].client->sess.amrpgmode == 2)
-	{
-		g_entities[client_id].client->pers.score_modifier = g_entities[client_id].client->pers.level;
-		g_entities[client_id].client->pers.credits_modifier = -10;
-		decrease_level(&g_entities[client_id], qtrue, number_of_levels);
+	// GalaxyRP fix: [Dead Code] the score_modifier/credits_modifier pair that used to sit here is gone
+	// for the reasons given in Cmd_LevelGive_f above -- both fields are write-only across the tree.
+	decrease_level(&g_entities[client_id], qtrue, number_of_levels);
 
-		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled down. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
+	trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled down. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
 
-		// GalaxyRP fix: [Database] see the matching fix in Cmd_LevelGive_f above -- this used to pass
-		// ent (the admin) instead of the target, so the level-down was applied live but never actually
-		// persisted. Fixed to save the actual target.
-		update_chars_table_row_with_current_values(&g_entities[client_id]);
-
-		return;
-	}
-	else
-	{
-		trap->SendServerCommand(ent - g_entities, va("print \"^1The player must be logged in!\n\""));
-	}
+	// GalaxyRP fix: [Database] see the matching fix in Cmd_LevelGive_f above -- this used to pass
+	// ent (the admin) instead of the target, so the level-down was applied live but never actually
+	// persisted. Fixed to save the actual target.
+	update_chars_table_row_with_current_values(&g_entities[client_id]);
 }
 
 // GalaxyRP (Alex): [XP System] This method returns the amount of XP needed to get to the next level, based on a given level.
