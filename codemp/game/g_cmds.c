@@ -13891,6 +13891,24 @@ void Cmd_GiveXp_f(gentity_t* ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [XP System] refuse outright when the target is already at or above the level cap,
+	// instead of taking the XP and then claiming a level-up that did not happen. Previously the XP was
+	// incremented, increase_level() was called and did nothing (its loop is gated on
+	// "level < rp_rpg_max_level"), and the admin was told "Target player leveled up. Their current
+	// level is: 100" regardless -- a flatly false report. The XP was then reset to 0 as well, so the
+	// counter cycled 0 -> threshold -> 0 forever on a maxed character, consuming XP that could never
+	// convert into anything. ">=" rather than "==" so a character sitting ABOVE the cap (which is what
+	// happens whenever rp_rpg_max_level is lowered below an existing character's level) is refused too.
+	// Same refusal, same wording, as Cmd_LevelGive_f already gives for this case.
+	//
+	// This also makes the "leveled up" message below unconditionally true: with level < the cap,
+	// increase_level(..., 1) always gains exactly one level.
+	if (g_entities[client_id].client->pers.level >= rp_rpg_max_level.integer)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1That player is already at or above the maximum level (%d), operation not done.\n\"", rp_rpg_max_level.integer));
+		return;
+	}
+
 	g_entities[client_id].client->pers.xp++;
 
 	trap->SendServerCommand(&g_entities[client_id] - g_entities, va("chat \"^2You were given XP! Your current XP is: ^3%i^2/^3%i^2\n\"", g_entities[client_id].client->pers.xp, check_xp(g_entities[client_id].client->pers.level)));
@@ -13959,13 +13977,21 @@ void Cmd_RemoveXp_f(gentity_t* ent) {
 		return;
 	}
 
-	if(g_entities[client_id].client->pers.xp == 0) {
+	// GalaxyRP fix: [XP System] "<= 0" rather than "== 0", the same robustness the level-up threshold
+	// in Cmd_GiveXp_f above was given. XP cannot go negative through any live code path, but a value
+	// that ever did (a row edited directly in the database) would fail an exact-zero test and be
+	// decremented further away from zero on every use, with no floor to stop it.
+	if (g_entities[client_id].client->pers.xp <= 0) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player's XP is already at 0. Nothing was done.\n\""));
 		return;
 	}
 
 	g_entities[client_id].client->pers.xp--;
 
+	// GalaxyRP fix: [XP System] tell the target as well. Cmd_GiveXp_f announces itself to the player
+	// it credits; this one reported only to the admin, so a player's XP could drop with no indication
+	// to them at all. Same channel and same shape as the give side, so the two read as a pair.
+	trap->SendServerCommand(&g_entities[client_id] - g_entities, va("chat \"^1One XP point was removed. Your current XP is: ^3%i^1/^3%i^1\n\"", g_entities[client_id].client->pers.xp, check_xp(g_entities[client_id].client->pers.level)));
 	trap->SendServerCommand(ent - g_entities, va("print \"^2Target player's XP was reduced with one point. Their current XP is: ^3%i^2/^3%i^2\n\"", g_entities[client_id].client->pers.xp, check_xp(g_entities[client_id].client->pers.level)));
 
 	update_chars_table_row_with_current_values(&g_entities[client_id]);
@@ -16749,7 +16775,10 @@ command_t commands[] = {
 	{ "flipcoinall",		Cmd_FlipCoinAll_f,		CMD_NOINTERMISSION },
 	{ "givecredits",		Cmd_CreditGive_f,			CMD_RPG | CMD_NOINTERMISSION },
 	{ "giveitem",			Cmd_GiveItem_f,				CMD_LOGGEDIN},
-	{ "givexp",				Cmd_GiveXp_f,				CMD_LOGGEDIN},
+	// GalaxyRP fix: [XP System] CMD_NOINTERMISSION added -- /levelup, /leveldown and /removexp all
+	// carry it and this one did not, so it was the only command in the levelling group that could
+	// still mutate and persist a character during intermission.
+	{ "givexp",				Cmd_GiveXp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "god",				Cmd_God_f,					CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "helpup",				Cmd_Helpup_f,				CMD_ALIVE | CMD_NOINTERMISSION},
 	{ "getup",				Cmd_Getup_f,				CMD_ALIVE | CMD_NOINTERMISSION},
