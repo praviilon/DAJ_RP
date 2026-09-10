@@ -8340,10 +8340,10 @@ void set_max_shield(gentity_t *ent)
 // GalaxyRP fix: [Economy] `pers.credits += credits` here (both plain int) could overflow past
 // INT_MAX and wrap around to a negative value whenever the sum of the player's existing balance
 // and the amount being added exceeded it -- the clamp below only ever checked the upper bound
-// (`> zyk_max_rpg_credits.integer`), so a negative result silently sailed past it and got stored
+// (`> rp_max_rpg_credits.integer`), so a negative result silently sailed past it and got stored
 // and persisted as-is, while every caller (Cmd_CreditCreate_f, Cmd_CreditGive_f) went on to log
 // and broadcast the transaction as a success regardless. Computing the sum in a 64-bit
-// intermediate and clamping into [0, zyk_max_rpg_credits.integer] before it's ever assigned back
+// intermediate and clamping into [0, rp_max_rpg_credits.integer] before it's ever assigned back
 // to the 32-bit field makes the overflow impossible rather than trying to detect it after the
 // fact. Callers additionally cap the requested amount up front (see Cmd_CreditCreate_f/
 // Cmd_CreditGive_f) so the amount they log/broadcast matches what was actually applied.
@@ -8351,9 +8351,18 @@ void add_credits(gentity_t *ent, int credits)
 {
 	long long new_credits = (long long)ent->client->pers.credits + (long long)credits;
 
-	if (new_credits > zyk_max_rpg_credits.integer)
-		new_credits = zyk_max_rpg_credits.integer;
-	else if (new_credits < 0)
+	// GalaxyRP fix: [Economy] these two bounds used to sit in one if/else-if chain, so only one of
+	// them could ever apply and a nonsensical ceiling won outright: with rp_max_rpg_credits set
+	// negative, any sum tripped the upper test first and was assigned that negative ceiling as a
+	// balance, which then persisted to the Characters table. Applying the ceiling first and the
+	// floor second, as two independent tests, makes the result non-negative no matter what the
+	// ceiling holds. rp_max_rpg_credits is separately clamped at the cvar level now
+	// (RP_CVU_maxRpgCredits in g_cvar.c) -- this is belt and braces, since add_credits() is the
+	// last line of defence before a balance is written.
+	if (new_credits > rp_max_rpg_credits.integer)
+		new_credits = rp_max_rpg_credits.integer;
+
+	if (new_credits < 0)
 		new_credits = 0;
 
 	ent->client->pers.credits = (int)new_credits;
@@ -8362,16 +8371,21 @@ void add_credits(gentity_t *ent, int credits)
 // zyk: removes credits from the player
 // GalaxyRP fix: [Economy] same 64-bit-intermediate treatment as add_credits above, for
 // consistency and so this stays safe even if pers.credits or the amount being removed is ever
-// outside the normal [0, zyk_max_rpg_credits.integer] range (e.g. zyk_max_rpg_credits lowered
+// outside the normal [0, rp_max_rpg_credits.integer] range (e.g. rp_max_rpg_credits lowered
 // after a player's balance already exceeded the new cap).
 void remove_credits(gentity_t *ent, int credits)
 {
 	long long new_credits = (long long)ent->client->pers.credits - (long long)credits;
 
+	// GalaxyRP fix: [Economy] same ordering fix as add_credits() above. This one failed the same way
+	// for a different reason: subtracting from a positive balance rarely lands below zero, so the
+	// "already negative?" test was usually false and the else-if handed control to the ceiling test,
+	// which with a negative ceiling wrote a negative balance. Ceiling first, floor last.
+	if (new_credits > rp_max_rpg_credits.integer)
+		new_credits = rp_max_rpg_credits.integer;
+
 	if (new_credits < 0)
 		new_credits = 0;
-	else if (new_credits > zyk_max_rpg_credits.integer)
-		new_credits = zyk_max_rpg_credits.integer;
 
 	ent->client->pers.credits = (int)new_credits;
 }
@@ -8965,7 +8979,10 @@ void initialize_rpg_skills(gentity_t *ent)
 		// zyk: used to add a cooldown between each flame
 		ent->client->cloakDebReduce = 0;
 
-		ent->client->pers.max_force_power = (int)ceil((zyk_max_force_power.value/4.0) * ent->client->pers.skill_levels[54]);
+		// GalaxyRP fix: [Force] divide by the Force Power skill's own max level, not by 4. See
+		// RP_FORCE_POWER_SKILL_MAX_LEVEL in g_local.h -- with the old divisor a maxed character's pool
+		// was 125% of the documented maximum.
+		ent->client->pers.max_force_power = (int)ceil((RP_MAX_FORCE_POWER / (double)RP_FORCE_POWER_SKILL_MAX_LEVEL) * ent->client->pers.skill_levels[54]);
 		ent->client->ps.fd.forcePowerMax = ent->client->pers.max_force_power;
 		ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax;
 
@@ -9361,8 +9378,8 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	ent->client->pers.being_mind_controlled = -1;
 	ent->client->pers.mind_controlled1_id = -1;
 
-	// zyk: resetting the forcePowerMax to the cvar value
-	ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
+	// zyk: resetting the forcePowerMax to the logged-out maximum (RP_MAX_FORCE_POWER, g_local.h)
+	ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER;
 
 	// GalaxyRP fix: [Scale] every other logged-in-only effect here (bitvalue, player_settings, force
 	// powers, health/armor caps, RPG weapons via zyk_remove_guns() below) gets reset to its baseline on
@@ -9534,7 +9551,7 @@ void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 
 void list_rpg_info(gentity_t *ent, gentity_t *target_ent)
 { // zyk: lists general RPG info of this player
-	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, zyk_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
+	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, rp_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
 }
 
 /*
@@ -10402,7 +10419,7 @@ void Cmd_CreditSpend_f(gentity_t *ent) {
 	// logging elsewhere in this file.
 	G_LogPrintf("CreditSpend: %s^7 spent %d credits\n", ent->client->pers.netname, value);
 
-	trap->SendServerCommand(-1, va("chat \"^3Credit System: ^7%s ^7spent ^2%d ^7credits.\n\"", ent->client->pers.netname, value, g_entities));
+	trap->SendServerCommand(-1, va("chat \"^3Credit System: ^7%s ^7spent ^2%d ^7credits.\n\"", ent->client->pers.netname, value));
 
 	trap->SendServerCommand(ent - g_entities, "print \"Done.\n\"");
 }
@@ -10462,8 +10479,8 @@ void Cmd_CreditCreate_f(gentity_t *ent) {
 	// means the amount this command logs and broadcasts to the server always matches what was
 	// actually applied, rather than reporting the huge originally-typed number while silently
 	// applying a smaller clamped one.
-	if (value > zyk_max_rpg_credits.integer)
-		value = zyk_max_rpg_credits.integer;
+	if (value > rp_max_rpg_credits.integer)
+		value = rp_max_rpg_credits.integer;
 
 	// GalaxyRP fix: [validation] this had no equivalent of Cmd_CreditGive_f's own target check --
 	// ClientNumberFromString(..., qfalse) only requires the target be connected, not logged in, so
@@ -10538,10 +10555,10 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 	// GalaxyRP fix: [Economy] same cap as Cmd_CreditCreate_f above -- keeps the amount this
 	// command logs/broadcasts consistent with what add_credits()/remove_credits() actually apply.
 	// The giver's own balance check just below already bounds value in practice (a giver can never
-	// have more than zyk_max_rpg_credits.integer to give), but this keeps the two commands
+	// have more than rp_max_rpg_credits.integer to give), but this keeps the two commands
 	// consistent and stays safe even if that cap is lowered while a player is already over it.
-	if (value > zyk_max_rpg_credits.integer)
-		value = zyk_max_rpg_credits.integer;
+	if (value > rp_max_rpg_credits.integer)
+		value = rp_max_rpg_credits.integer;
 
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
@@ -13164,7 +13181,10 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 		break;
 	case 54:
 		//GalaxyRP (Alex): [Skill] Reset max force power immediately.
-		ent->client->pers.max_force_power = (int)ceil((zyk_max_force_power.value / 4.0) * ent->client->pers.skill_levels[skill_id]);
+		// GalaxyRP fix: [Force] same divisor correction as initialize_rpg_skills() above -- these two
+		// sites must stay in step or a live /skillup would hand out a different cap than the next
+		// respawn recomputes.
+		ent->client->pers.max_force_power = (int)ceil((RP_MAX_FORCE_POWER / (double)RP_FORCE_POWER_SKILL_MAX_LEVEL) * ent->client->pers.skill_levels[skill_id]);
 		ent->client->ps.fd.forcePowerMax = ent->client->pers.max_force_power;
 		// GalaxyRP fix: [Skills] same gap as Max Shield above -- downgrading Force Power lowers
 		// forcePowerMax immediately but never clamped the player's current forcePower down to match,
@@ -13534,40 +13554,46 @@ int calculate_skillpoints_for_level(int level) {
 }
 
 // zyk: gives rpg score to the player
+// GalaxyRP fix: [Levelling] this used to keep a send_message flag and a 128-byte message buffer,
+// filling both inside the loop and then reading neither -- the "New Level" line below was sent
+// unconditionally from a fresh va() call instead. Both are gone, and send_message's actual intent
+// (only announce when something happened) is now honoured: a player who is already at the cap and
+// gains nothing used to be told "You have reached maximum level!" AND "New Level: 100" on the same
+// input, the second of which reported a change that did not occur. The cap notice also used "==",
+// so a character sitting ABOVE the cap -- which is exactly what happens when rp_rpg_max_level is
+// lowered below an existing character's level -- got no message at all and no indication why the
+// level-up did nothing.
 void increase_level(gentity_t* ent, qboolean admin_rp_mode, int number_of_levels)
 {
-	int send_message = 0; // zyk: if its 1, sends the message in player console
-	char message[128];
-
-	strcpy(message, "");
+	int levels_gained = 0;
 
 	// GalaxyRP fix: [Cvars] this used to also check "admin_rp_mode == qfalse && zyk_rp_mode.integer == 1"
 	// here, but every call site in the codebase always passes admin_rp_mode = qtrue, so that check could
 	// never actually trigger even before zyk_rp_mode was removed -- it was already dead code.
 
 	for (int i = 1; i <= number_of_levels; i++) {
-		if (ent->client->pers.level < zyk_rpg_max_level.integer)
+		if (ent->client->pers.level < rp_rpg_max_level.integer)
 		{
 			ent->client->pers.level++;
+			levels_gained++;
 
 			ent->client->pers.skillpoints += calculate_skillpoints_for_level(ent->client->pers.level);
-
-			strcpy(message, va("^3New Level: ^7%d^3, Skillpoints: ^7%d\n", ent->client->pers.level, ent->client->pers.skillpoints));
 
 			// zyk: got a new level, so change the max health and max shield
 			set_max_health(ent);
 			set_max_shield(ent);
-
-			send_message = 1;
-
 		}
 	}
 
-	if (ent->client->pers.level == zyk_rpg_max_level.integer) {
-		trap->SendServerCommand(ent - g_entities, va("chat \"^3You have reached maximum level!\n\""));
+	if (levels_gained > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("chat \"^3New Level: ^7%d^3, Skillpoints: ^7%d\n\"", ent->client->pers.level, ent->client->pers.skillpoints));
 	}
 
-	trap->SendServerCommand(ent - g_entities, va("chat \"^3New Level: ^7%d^3, Skillpoints: ^7%d\n\"", ent->client->pers.level, ent->client->pers.skillpoints));
+	if (ent->client->pers.level >= rp_rpg_max_level.integer)
+	{
+		trap->SendServerCommand(ent - g_entities, va("chat \"^3You have reached maximum level!\n\""));
+	}
 }
 
 /*
@@ -13623,15 +13649,15 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 	// at RP Mode"), but the server was always meant to be considered in RP Mode (that cvar's default),
 	// and it has been removed -- so leveling up is unconditionally allowed to admins with ADM_LEVELUP now.
 
-	if (g_entities[client_id].client->pers.level + number_of_levels > zyk_rpg_max_level.integer) {
-		int max_possible_value = zyk_rpg_max_level.integer - g_entities[client_id].client->pers.level;
+	if (g_entities[client_id].client->pers.level + number_of_levels > rp_rpg_max_level.integer) {
+		int max_possible_value = rp_rpg_max_level.integer - g_entities[client_id].client->pers.level;
 
 		// GalaxyRP fix: [Admin] this printed a negative "Maximum allowed" when the target is already at
-		// or above the cap -- which happens whenever zyk_rpg_max_level is lowered below an existing
+		// or above the cap -- which happens whenever rp_rpg_max_level is lowered below an existing
 		// character's level. The refusal itself was always correct; only the number was nonsense.
 		if (max_possible_value <= 0)
 		{
-			trap->SendServerCommand(ent - g_entities, va("print \"^1That player is already at or above the maximum level (%d), operation not done.\n\"", zyk_rpg_max_level.integer));
+			trap->SendServerCommand(ent - g_entities, va("print \"^1That player is already at or above the maximum level (%d), operation not done.\n\"", rp_rpg_max_level.integer));
 			return;
 		}
 
@@ -13690,12 +13716,17 @@ qboolean check_if_player_can_level_down(gentity_t* ent, gentity_t* target, int n
 	return qtrue;
 }
 
+// GalaxyRP fix: [Levelling] the same three defects fixed in increase_level() above, which this
+// function is a mirror image of: the dead send_message flag and message buffer, and a "New Level"
+// line sent unconditionally even when the loop changed nothing (a character already at level 1).
+// It additionally announced "You have reached maximum level!" -- copied wholesale from
+// increase_level() -- after a command whose entire purpose is to take levels away. That line could
+// only ever fire if the level came out equal to the cap after decreasing it, which cannot happen
+// (rp_rpg_max_level is clamped to at least 10 and the floor here is 1), so it is removed rather
+// than corrected.
 void decrease_level(gentity_t* ent, qboolean admin_rp_mode, int number_of_levels)
 {
-	int send_message = 0; // zyk: if its 1, sends the message in player console
-	char message[128];
-
-	strcpy(message, "");
+	int levels_lost = 0;
 
 	// GalaxyRP fix: [Cvars] this used to also check "admin_rp_mode == qfalse && zyk_rp_mode.integer == 1"
 	// here, but every call site in the codebase always passes admin_rp_mode = qtrue, so that check could
@@ -13712,27 +13743,22 @@ void decrease_level(gentity_t* ent, qboolean admin_rp_mode, int number_of_levels
 				ent->client->pers.skillpoints--;
 
 			ent->client->pers.level--;
-
-			strcpy(message, va("^3New Level: ^7%d^3, Skillpoints: ^7%d\n", ent->client->pers.level, ent->client->pers.skillpoints));
+			levels_lost++;
 
 			// zyk: got a new level, so change the max health and max shield
 			set_max_health(ent);
 			set_max_shield(ent);
-
-			send_message = 1;
-
 		}
 	}
 
-	if (ent->client->pers.level == zyk_rpg_max_level.integer) {
-		trap->SendServerCommand(ent - g_entities, va("chat \"^3You have reached maximum level!\n\""));
+	if (levels_lost > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("chat \"^3New Level: ^7%d^3, Skillpoints: ^7%d\n\"", ent->client->pers.level, ent->client->pers.skillpoints));
 	}
 
-	if (ent->client->pers.level == 1) {
+	if (ent->client->pers.level <= 1) {
 		trap->SendServerCommand(ent - g_entities, va("chat \"^3You have reached minimum level!\n\""));
 	}
-
-	trap->SendServerCommand(ent - g_entities, va("chat \"^3New Level: ^7%d^3, Skillpoints: ^7%d\n\"", ent->client->pers.level, ent->client->pers.skillpoints));
 }
 
 /*
@@ -13851,13 +13877,32 @@ void Cmd_GiveXp_f(gentity_t* ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [validation] CMD_LOGGEDIN in the command table gates the ADMIN issuing this, not
+	// the target, and ClientNumberFromString(..., qfalse) only requires the target be connected. A
+	// not-yet-logged-in target has pers.CharID == 0, so update_chars_table_row_with_current_values()
+	// below runs "UPDATE Characters ... WHERE CharID=0", which matches no row (CharID is a SQLite
+	// INTEGER PRIMARY KEY, always >= 1 for a real character): the XP change was applied to that
+	// connection's memory, never persisted, and lost the moment they logged in or disconnected --
+	// while this command still reported success to both the admin and the target. Same check, same
+	// message, as Cmd_CreditCreate_f and Cmd_LevelGive_f already carry.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		return;
+	}
+
 	g_entities[client_id].client->pers.xp++;
 
 	trap->SendServerCommand(&g_entities[client_id] - g_entities, va("chat \"^2You were given XP! Your current XP is: ^3%i^2/^3%i^2\n\"", g_entities[client_id].client->pers.xp, check_xp(g_entities[client_id].client->pers.level)));
 	trap->SendServerCommand(ent - g_entities, va("print \"^2Target player was given XP. Their current XP is: ^3%i^2/^3%i^2\n\"", g_entities[client_id].client->pers.xp, check_xp(g_entities[client_id].client->pers.level)));
 
 	// GalaxyRP (Alex): [XP System] If player has reached max xp for this level, level them up.
-	if (g_entities[client_id].client->pers.xp == check_xp(g_entities[client_id].client->pers.level)) {
+	// GalaxyRP fix: [XP System] ">=" rather than "==". XP only ever moves one point at a time today,
+	// so an exact match is reached in practice -- but a stored value that ever sits ABOVE its
+	// threshold (a row written under a different check_xp() formula, or edited directly in the
+	// database) could never satisfy "==" again, permanently freezing that character's level with no
+	// symptom other than XP that climbs and never converts. ">=" costs nothing and cannot get stuck.
+	if (g_entities[client_id].client->pers.xp >= check_xp(g_entities[client_id].client->pers.level)) {
 
 		increase_level(&g_entities[client_id], qtrue, 1);
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled up. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
@@ -13897,6 +13942,20 @@ void Cmd_RemoveXp_f(gentity_t* ent) {
 	if (client_id == -1)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [validation] CMD_LOGGEDIN in the command table gates the ADMIN issuing this, not
+	// the target, and ClientNumberFromString(..., qfalse) only requires the target be connected. A
+	// not-yet-logged-in target has pers.CharID == 0, so update_chars_table_row_with_current_values()
+	// below runs "UPDATE Characters ... WHERE CharID=0", which matches no row (CharID is a SQLite
+	// INTEGER PRIMARY KEY, always >= 1 for a real character): the XP change was applied to that
+	// connection's memory, never persisted, and lost the moment they logged in or disconnected --
+	// while this command still reported success to both the admin and the target. Same check, same
+	// message, as Cmd_CreditCreate_f and Cmd_LevelGive_f already carry.
+	if (g_entities[client_id].client->sess.amrpgmode < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
 		return;
 	}
 

@@ -177,7 +177,6 @@ XCVAR_DEF( sv_cheats,					"1",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( sv_fps,						"40",			NULL,				CVAR_ARCHIVE|CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( sv_maxclients,				"8",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARCHIVE,		qfalse )
 XCVAR_DEF( timelimit,					"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
-XCVAR_DEF( zyk_max_force_power,			"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_metal_bolt_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -357,7 +356,6 @@ XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTAR
 // name overstated its scope; matches the rp_ prefix convention used by other RPG-specific cvars
 // (e.g. rp_downed_timer).
 XCVAR_DEF( rp_stun_baton_door_unlock,		"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_rpg_credits, "500000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_allow_emotes to rp_allow_emotes -- matches this
 // codebase's rp_ naming convention for GalaxyRP-authored cvars (see rp_allow_playsound_command above).
 XCVAR_DEF( rp_allow_emotes,					"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -376,7 +374,13 @@ XCVAR_DEF( rp_buying_cooldown,			"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,	
 // GalaxyRP: [Dice] time in milliseconds a player must wait between dice/coin commands. Shared by
 // /roll, /rollall, /flipcoin and /flipcoinall. 0 disables the cooldown entirely.
 XCVAR_DEF( rp_dice_roll_cooldown,		"3000",			RP_CVU_diceRollCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rpg_max_level, "100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_max_rpg_credits -- moves it onto this mod's rp_ prefix
+// alongside the other GalaxyRP-authored cvars, and groups it with them here instead of leaving it
+// stranded among the inherited zyk_ block. Maximum credits a character can hold in RPG Mode.
+XCVAR_DEF( rp_max_rpg_credits,			"500000",		RP_CVU_maxRpgCredits,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_rpg_max_level, same reasoning as rp_max_rpg_credits
+// above. Highest level an RPG character can reach.
+XCVAR_DEF( rp_rpg_max_level,			"100",			RP_CVU_rpgMaxLevel,			CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
 
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )

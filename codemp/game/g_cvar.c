@@ -170,6 +170,48 @@ void RP_CVU_diceRollCooldown(void)
 	}
 }
 
+// GalaxyRP fix: [validation] rp_max_rpg_credits is the upper bound both add_credits() and
+// remove_credits() (g_cmds.c) clamp against. A negative setting used to produce negative balances
+// from BOTH of them: each tests its two bounds in a single if/else-if chain, so whichever bound is
+// hit first wins outright, and with a negative ceiling the ceiling is hit first in add_credits()
+// while remove_credits()'s "already below zero?" test is simply false for any non-negative result.
+// A negative balance then persists to the Characters table like any other. Both functions have been
+// made order-independent as well (see their own fix comments), so this clamp is the second line of
+// defence rather than the only one -- but it is the one that keeps the value an admin inspects
+// honest.
+//
+// The floor is 1 rather than 0: a ceiling of 0 pins every balance at 0, which reads as a broken
+// economy rather than a configured one, and the shop/give/spend commands would all still report
+// success against it. No explicit upper clamp is needed -- vmCvar_t.integer is an int, so INT_MAX
+// is already the highest value this can hold, and a config string beyond it can only come back as
+// some other in-range int (negative ones are caught by the floor below).
+void RP_CVU_maxRpgCredits(void)
+{
+	RP_ClampCvarMinimum(&rp_max_rpg_credits, "rp_max_rpg_credits", 1);
+}
+
+// GalaxyRP fix: [validation] rp_rpg_max_level bounds every RPG character's level, and level feeds
+// straight into set_max_health() (100 + level*2) whose result is published in ps.stats
+// [STAT_MAX_HEALTH] -- a 16-bit netfield (MSG_WriteShort in qcommon/msg.cpp), so a high enough cap
+// wraps every client's health readout negative. At the low end, a cap of 0 or less makes
+// increase_level()'s loop a permanent no-op, silently freezing progression server-wide. Neither
+// failure reports itself, so the value is bounded to a range that is comfortably safe at both ends:
+// 10 is low but playable, 300 is three times the shipped default and nowhere near the netfield
+// limit.
+void RP_CVU_rpgMaxLevel(void)
+{
+	if (rp_rpg_max_level.integer < 10)
+	{
+		trap->Cvar_Set("rp_rpg_max_level", "10");
+		trap->Cvar_Update(&rp_rpg_max_level);
+	}
+	else if (rp_rpg_max_level.integer > 300)
+	{
+		trap->Cvar_Set("rp_rpg_max_level", "300");
+		trap->Cvar_Update(&rp_rpg_max_level);
+	}
+}
+
 
 //
 // Cvar table

@@ -51,6 +51,24 @@ extern vec3_t gPainPoint;
 
 #define BODY_QUEUE_SIZE		8
 
+// GalaxyRP fix: [Force] this replaces the zyk_max_force_power server cvar, which is gone. It was
+// never safely configurable: fd.forcePower is an 8-bit netfield (see PSF(fd.forcePower) in
+// qcommon/msg.cpp), so any pool above 255 wraps modulo 256 on the client and desyncs prediction
+// from the server -- and because a maxed RPG character's pool is derived from this number, the
+// real ceiling on the cvar was lower still. It also silently set the cost of Force Heal and
+// Shield Heal, and the cgame force HUD hardcodes a full bar at 100 regardless (cg_draw.c), so no
+// value other than the shipped one displayed correctly anyway. Fixed at the value the config has
+// always shipped, so behaviour is unchanged for every server that never touched it.
+#define RP_MAX_FORCE_POWER		200
+
+// GalaxyRP fix: [Force] a logged-in character's force pool is this fraction of RP_MAX_FORCE_POWER
+// per level of the Force Power skill (skill index 54). It used to divide by 4 while that skill's
+// max level is 5 (see skills[] in g_cmds.c), so a maxed character ended up with 125% of the
+// supposed maximum -- 250 against a documented cap of 200. Dividing by the skill's actual max
+// level makes level 5 land exactly on RP_MAX_FORCE_POWER, matching how set_max_shield() already
+// divides by the Max Shield skill's own max level of 5.
+#define RP_FORCE_POWER_SKILL_MAX_LEVEL	5
+
 #ifndef INFINITE
 #define INFINITE			1000000
 #endif
@@ -2187,6 +2205,8 @@ void RP_CVU_duelTournamentDuelTime(void);
 void RP_CVU_duelTournamentTimeToStart(void);
 void RP_CVU_sniperBattleTimeToStart(void);
 void RP_CVU_diceRollCooldown(void);
+void RP_CVU_maxRpgCredits(void);
+void RP_CVU_rpgMaxLevel(void);
 
 // GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.

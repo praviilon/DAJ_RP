@@ -446,7 +446,7 @@ void WP_SpawnInitForcePowers( gentity_t *ent )
 
 	// zyk: set max force power for non-rpg mode users
 	if (ent->client->sess.amrpgmode < 2)
-		ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax = zyk_max_force_power.integer;
+		ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER;
 
 	ent->client->ps.fd.forcePowerRegenDebounceTime = level.time;
 	ent->client->ps.fd.forceGripEntityNum = ENTITYNUM_NONE;
@@ -664,6 +664,26 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 	return 1;
 }
 
+// GalaxyRP fix: [Force] Force Heal and Shield Heal used to cost a flat half of the server-wide
+// force maximum. That worked out to 100, but a logged-in character's pool is only a fifth of that
+// maximum per level of the Force Power skill (skill index 54) -- so at skill level 1 the whole pool
+// was 40 and neither heal could EVER be cast, and at level 2 it was affordable only from a
+// completely full bar. Costing half of the caster's OWN maximum instead means every character gets
+// exactly two heals from a full pool, at every skill level, and nothing is unreachable. Logged-out
+// players are unaffected: their maximum is RP_MAX_FORCE_POWER, so this still comes out at the same
+// 100 it always was.
+//
+// The floor of 1 matters: forcePowerMax is legitimately 0 for a character with no levels in Force
+// Power, and for anyone inside a Sniper Battle (see sniper_battle_prepare in g_main.c). A cost of 0
+// would hit the "if ( !drain ) return qtrue;" shortcut in WP_ForcePowerAvailable below and hand
+// those players unlimited free heals.
+static int RP_ForceHealCost( gentity_t *self )
+{
+	int cost = self->client->ps.fd.forcePowerMax / 2;
+
+	return (cost > 0) ? cost : 1;
+}
+
 qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int overrideAmt )
 {
 	int	drain = overrideAmt ? overrideAmt :
@@ -671,7 +691,7 @@ qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int 
 
 	if (forcePower == FP_HEAL) // zyk: added the HEAL condition to keep balance
 	{
-		drain = (zyk_max_force_power.integer/2);
+		drain = RP_ForceHealCost( self );
 	}
 	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
 
@@ -897,15 +917,15 @@ int WP_AbsorbConversion(gentity_t *attacked, int atdAbsLevel, gentity_t *attacke
 
 	if (attacked->client->sess.amrpgmode == 2 && attacked->client->pers.skill_levels[8] == 4)
 	{ // zyk: Absorb 4/4 in RPG Mode absorbs more force
-		addTot = addTot + (zyk_max_force_power.integer/10);
+		addTot = addTot + (RP_MAX_FORCE_POWER/10);
 	}
 
 	attacked->client->ps.fd.forcePower += addTot;
 
 	if (attacked->client->sess.amrpgmode == 2 && attacked->client->ps.fd.forcePower > attacked->client->pers.max_force_power)
 		attacked->client->ps.fd.forcePower = attacked->client->pers.max_force_power;
-	else if (attacked->client->sess.amrpgmode < 2 && attacked->client->ps.fd.forcePower > zyk_max_force_power.integer)
-		attacked->client->ps.fd.forcePower = zyk_max_force_power.integer;
+	else if (attacked->client->sess.amrpgmode < 2 && attacked->client->ps.fd.forcePower > RP_MAX_FORCE_POWER)
+		attacked->client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
 
 	//play sound indicating that attack was absorbed
 	if (attacked->client->forcePowerSoundDebounce < level.time)
@@ -1216,14 +1236,14 @@ void ForceHeal( gentity_t *self )
 	if ( self->health >= self->client->ps.stats[STAT_MAX_HEALTH])
 	{
 		// zyk: Shield Heal skill. Done when player has full HP
-		if (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[36] > 0 && self->client->ps.fd.forcePower >= zyk_max_force_power.integer/2 && self->client->ps.stats[STAT_ARMOR] < self->client->pers.max_rpg_shield)
+		if (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[36] > 0 && self->client->ps.fd.forcePower >= RP_ForceHealCost( self ) && self->client->ps.stats[STAT_ARMOR] < self->client->pers.max_rpg_shield)
 		{
 			self->client->ps.stats[STAT_ARMOR] += 4 * self->client->pers.skill_levels[36];
 
 			if (self->client->ps.stats[STAT_ARMOR] > self->client->pers.max_rpg_shield)
 				self->client->ps.stats[STAT_ARMOR] = self->client->pers.max_rpg_shield;
 
-			self->client->ps.fd.forcePower -= zyk_max_force_power.integer/2;
+			self->client->ps.fd.forcePower -= RP_ForceHealCost( self );
 
 			G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
 		}
@@ -1284,7 +1304,11 @@ void ForceHeal( gentity_t *self )
 	//NOTE: Decided to make all levels instant.
 
 	// zyk: now heal force power requires force based on the force power max cvar
-	self->client->ps.fd.forcePower -= (zyk_max_force_power.integer/2);
+	// GalaxyRP fix: [Force] costs half the caster's own maximum rather than half the server-wide
+	// one -- see RP_ForceHealCost above. WP_ForcePowerUsable() at the top of this function has
+	// already confirmed the pool covers this exact amount (it ends by delegating to
+	// WP_ForcePowerAvailable, which charges FP_HEAL the same helper), so this cannot go negative.
+	self->client->ps.fd.forcePower -= RP_ForceHealCost( self );
 
 	G_Sound( self, CHAN_ITEM, G_SoundIndex("sound/weapons/force/heal.wav") );
 }
@@ -1614,8 +1638,8 @@ void ForceTeamForceReplenish( gentity_t *self )
 
 		if (g_entities[pl[i]].client->sess.amrpgmode == 2 && g_entities[pl[i]].client->ps.fd.forcePower > g_entities[pl[i]].client->pers.max_force_power)
 			g_entities[pl[i]].client->ps.fd.forcePower = g_entities[pl[i]].client->pers.max_force_power;
-		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > zyk_max_force_power.integer) // zyk: now it must be the cvar, because this cvar is the max force
-			g_entities[pl[i]].client->ps.fd.forcePower = zyk_max_force_power.integer;
+		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > RP_MAX_FORCE_POWER) // zyk: this is the max force for a logged-out player (RP_MAX_FORCE_POWER, g_local.h)
+			g_entities[pl[i]].client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
 
 		//At this point we know we got one, so add him into the collective event client bitflag
 		if (!te)
@@ -1962,8 +1986,8 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 				// zyk: changed the code below so we can use the cvar zyk_FORCE_POWER_MAX instead of hardcoded 100 force power max
 				if (traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->ps.fd.forcePower > traceEnt->client->pers.max_force_power)
 					traceEnt->client->ps.fd.forcePower = traceEnt->client->pers.max_force_power;
-				else if (traceEnt->client->sess.amrpgmode < 2 && traceEnt->client->ps.fd.forcePower > zyk_max_force_power.integer)
-					traceEnt->client->ps.fd.forcePower = zyk_max_force_power.integer;
+				else if (traceEnt->client->sess.amrpgmode < 2 && traceEnt->client->ps.fd.forcePower > RP_MAX_FORCE_POWER)
+					traceEnt->client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
 
 				return;
 			}

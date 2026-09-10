@@ -8072,7 +8072,7 @@ void sniper_battle_end()
 			// full server maximum instead of their own, and kept it until their next respawn. This line
 			// predates RPG players being allowed into sniper battles at all (the check that used to
 			// reject them was commented out later), which is why it was never updated.
-			ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : zyk_max_force_power.integer;
+			ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : RP_MAX_FORCE_POWER;
 
 			if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
 				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
@@ -8150,7 +8150,7 @@ void sniper_battle_winner()
 		// GalaxyRP fix: [Sniper Battle] same RPG force-cap bypass fixed in sniper_battle_end() above --
 		// this is the winner's restore, and it handed the winner the raw server maximum regardless of
 		// their own Force Power skill.
-		ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : zyk_max_force_power.integer;
+		ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : RP_MAX_FORCE_POWER;
 
 		ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 20000;
 		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 20000;
