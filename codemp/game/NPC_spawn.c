@@ -4952,11 +4952,9 @@ void Cmd_NPC_f( gentity_t *ent )
 		return;
 	}
 
-	if (g_gametype.integer != GT_FFA && zyk_allow_adm_in_other_gametypes.integer == 0)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"NPC command not allowed in gametypes other than FFA.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Admin] a zyk_allow_adm_in_other_gametypes gate used to sit here, refusing this
+	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
+	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
 	// GalaxyRP fix: [Guardian] a "cant spawn npcs while someone is in a guardian
 	// battle" loop, gated on client->pers.guardian_mode > 0, used to live here.

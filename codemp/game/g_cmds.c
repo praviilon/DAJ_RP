@@ -1031,11 +1031,9 @@ void Cmd_Give_f( gentity_t *ent )
 		return;
 	}
 
-	if (level.gametype != GT_FFA && zyk_allow_adm_in_other_gametypes.integer == 0)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Give command not allowed in gametypes other than FFA.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Admin] a zyk_allow_adm_in_other_gametypes gate used to sit here, refusing this
+	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
+	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
 	if (trap->Argc() != 3)
 	{
@@ -1177,11 +1175,9 @@ void Cmd_Scale_f( gentity_t *ent ) {
 	int client_id = -1;
 	int new_size = 0;
 
-	if (level.gametype != GT_FFA && zyk_allow_adm_in_other_gametypes.integer == 0)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Scale command not allowed in gametypes other than FFA.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Admin] a zyk_allow_adm_in_other_gametypes gate used to sit here, refusing this
+	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
+	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
 	if (trap->Argc() == 2) {
 		trap->Argv(1, arg1, sizeof(arg1));
@@ -1345,11 +1341,9 @@ void Cmd_Noclip_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (g_gametype.integer != GT_FFA && zyk_allow_adm_in_other_gametypes.integer == 0)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Noclip command not allowed in gametypes other than FFA.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Admin] a zyk_allow_adm_in_other_gametypes gate used to sit here, refusing this
+	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
+	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
 	if (ent->client->pers.player_statuses & (1 << 6)) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot noClip while downed!\n\"");
@@ -10200,11 +10194,9 @@ void Cmd_Teleport_f( gentity_t *ent )
 		return;
 	}
 
-	if (g_gametype.integer != GT_FFA && zyk_allow_adm_in_other_gametypes.integer == 0)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Teleport command not allowed in gametypes other than FFA.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Admin] a zyk_allow_adm_in_other_gametypes gate used to sit here, refusing this
+	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
+	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking /teleport while in a guardian battle
 	// used to be here. guardian_mode is permanently 0 now, so it was unreachable.
@@ -16865,7 +16857,7 @@ command_t commands[] = {
 	// carry it and this one did not, so it was the only command in the levelling group that could
 	// still mutate and persist a character during intermission.
 	{ "givexp",				Cmd_GiveXp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "god",				Cmd_God_f,					CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "god",				Cmd_God_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "helpup",				Cmd_Helpup_f,				CMD_ALIVE | CMD_NOINTERMISSION},
 	{ "getup",				Cmd_Getup_f,				CMD_ALIVE | CMD_NOINTERMISSION},
 	{ "ignore",				Cmd_Ignore_f,				CMD_NOINTERMISSION },
