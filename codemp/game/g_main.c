@@ -8078,6 +8078,22 @@ void sniper_battle_end()
 				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
 
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
+
+			// GalaxyRP fix: [Sniper Battle] WP_InitForcePowers() above rebuilds force powers from the
+			// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
+			// That is the correct restore for a logged-out player, but an RPG character's powers come
+			// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
+			// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
+			// build) instead of their own skills, and kept it until their next respawn. Both minigames
+			// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_SniperMode_f (g_cmds.c)
+			// was commented out later -- which is why this half was never added.
+			//
+			// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
+			// players and needs no check of its own. It MUST stay last in this block: it clears weapons
+			// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
+			// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
+			// rpg_lms_prepare() and ClientSpawn().
+			initialize_rpg_skills(ent);
 		}
 
 		level.sniper_players[i] = -1;
@@ -8261,6 +8277,22 @@ void melee_battle_end()
 				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
 
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
+
+			// GalaxyRP fix: [Melee Battle] WP_InitForcePowers() above rebuilds force powers from the
+			// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
+			// That is the correct restore for a logged-out player, but an RPG character's powers come
+			// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
+			// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
+			// build) instead of their own skills, and kept it until their next respawn. Both minigames
+			// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_MeleeMode_f (g_cmds.c)
+			// was commented out later -- which is why this half was never added.
+			//
+			// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
+			// players and needs no check of its own. It MUST stay last in this block: it clears weapons
+			// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
+			// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
+			// rpg_lms_prepare() and ClientSpawn().
+			initialize_rpg_skills(ent);
 		}
 
 		level.melee_players[i] = -1;
