@@ -1609,7 +1609,7 @@ void paralyze_player( gentity_t *ent )
 
 qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 	
-	if (!(target->client->pers.player_statuses & (1 << 6))) {
+	if (!G_PlayerIsDowned(target)) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot help them because they're not downed!\n\"");
 		trap->SendServerCommand(ent - g_entities, "cp \"^1You cannot help them because they're not downed!\n\"");
 
@@ -1663,7 +1663,7 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 	//GalaxyRP (Alex): [Death System] Ent and target are different.
 	else {
 		//GalaxyRP (Alex): [Death System] Can't help someone else get up if you're also down.
-		if (ent->client->pers.player_statuses & (1 << 6)) {
+		if (G_PlayerIsDowned(ent)) {
 			trap->SendServerCommand(ent - g_entities, "print \"^1You cannot help someone else while you're downed!\n\"");
 			trap->SendServerCommand(ent - g_entities, "cp \"^1You cannot help someone else while you're downed!\n\"");
 
@@ -4304,6 +4304,14 @@ void Cmd_Register_F(gentity_t * ent)
 	char username[256] = { 0 }, password[256] = { 0 };
 	int accountID = 0, i = 0;
 
+	// GalaxyRP fix: [Death System] refuse while downed -- same reason and same guard as Cmd_Char_f;
+	// this path reaches the same player_statuses reset and the same deferred G_Kill().
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
@@ -4479,6 +4487,14 @@ void Cmd_Login_F(gentity_t * ent)
 	sqlite3_stmt *stmt = 0;
 	char username[256] = { 0 }, password[256] = { 0 }, comparisonUsername[256] = { 0 }, comparisonPassword[256] = { 0 }, defaultChar[256] = { 0 };
 
+	// GalaxyRP fix: [Death System] refuse while downed -- same reason and same guard as Cmd_Char_f;
+	// this path reaches the same player_statuses reset and the same deferred G_Kill().
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
@@ -4597,6 +4613,21 @@ void Cmd_Char_f(gentity_t *ent) {
 	int argc = trap->Argc();
 	char command[MAX_STRING_CHARS];
 	char charName[MAX_STRING_CHARS];
+
+	// GalaxyRP fix: [Death System] refuse while downed, the same guard G_Kill() already carries so
+	// that /kill cannot be an escape from a downed state. This path was that escape by another route:
+	// select_player_character() zeroes pers.player_statuses -- clearing the downed bit AND the
+	// admin-paralysis bit as a side effect of account bookkeeping, not as a decision anyone made --
+	// and queues pending_relog_kill_time, whose deferred G_Kill() 300ms later then finds nobody
+	// downed to refuse. So /char freed an admin-paralyzed player for the price of one death, and let
+	// a combat-downed player skip the rest of their timer. Gated on G_PlayerIsDowned() rather than
+	// G_PlayerIsAdminParalyzed() to match G_Kill(): both states serve a countdown, and neither should
+	// be escapable by a command that has nothing to do with getting up.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
 
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
@@ -9435,6 +9466,16 @@ Cmd_LogoutAccount_f
 ==================
 */
 void Cmd_LogoutAccount_f( gentity_t *ent ) {
+
+	// GalaxyRP fix: [Death System] refuse while downed. /logout does not clear the downed bits itself,
+	// so unlike /char, /login and /new this closes no live escape -- it is here so the four account
+	// commands share one rule and a future change to the logout path cannot quietly reopen the route.
+	// Placed above save_account() so a refused logout does not write to the database first.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
 
 	save_account(ent, qtrue);
 
@@ -14508,7 +14549,15 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 
 	target = &g_entities[client_id];
 
-	if (G_PlayerIsDowned(target))
+	// GalaxyRP fix: [Death System] toggle on the ADMIN paralysis, not on "downed" generally. Keyed on
+	// G_PlayerIsDowned() this refused to paralyze anyone who happened to be knocked down in combat:
+	// the first /paralyze released them from the knockdown they were serving and only a second one
+	// paralyzed them, so one intent cost two commands and the first had a side effect nobody wanted.
+	// Now one press always means "paralyze" -- on a combat knockdown it replaces that state with an
+	// admin paralysis of the requested length -- and only an existing admin paralysis toggles off.
+	// An admin can still free a merely-downed player: can_player_get_up()'s ADM_GETUP bypass lets
+	// /helpup do it, and that bypass sits below the bit-26 refusal so it cannot lift a paralysis.
+	if (G_PlayerIsAdminParalyzed(target))
 	{ // zyk: if paralyzed, remove it from the target player
 		// GalaxyRP fix: [Death System] shared with the auto-release that fires when the countdown
 		// expires, so a paralysis always ends the same way: both status bits cleared, the countdown
