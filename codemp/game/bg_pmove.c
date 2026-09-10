@@ -7143,6 +7143,26 @@ qboolean canAltFireWeapon(gentity_t* ent) {
 	if (ent->NPC) {
 		return qtrue;
 	}
+
+	// GalaxyRP fix: [Melee] melee's alt-attack is not a weapon mode, it is the kick -- and holding it
+	// together with attack is the grapple. Neither is a per-weapon unlock like the nine ranged cases
+	// below, so neither belongs behind this function's login check, and WP_MELEE reaching the switch
+	// only ever hit "default: return qtrue" for logged-in players anyway. Two things were wrong with
+	// letting it fall through to the login check:
+	//
+	//  - The strip this gates (see PM_Weapon) clears BUTTON_ATTACK as well as BUTTON_ALT_ATTACK, so a
+	//    logged-out player lost the grapple AND the punch that the same press would have produced --
+	//    not just the kick.
+	//  - The call site is #ifdef _GAME, so only the server ran it. The client, which never does,
+	//    predicted the kick and played the animation while the server refused it. Answering before the
+	//    login check makes both sides agree for melee, which removes that mismatch entirely.
+	//
+	// Damage is untouched by this: the melee damage multipliers live in G_Damage and still key on the
+	// Melee skill for RPG players.
+	if (ent->client->ps.weapon == WP_MELEE) {
+		return qtrue;
+	}
+
 	if (ent->client->sess.loggedin == 0) {
 		return qfalse;
 	}

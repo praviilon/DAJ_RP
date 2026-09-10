@@ -81,7 +81,21 @@ XCVAR_DEF( g_charRestrictRGB,			"1",			NULL,				CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_duelWeaponDisable,			"1",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_LATCH,		qtrue )
 XCVAR_DEF( g_debugAlloc,				"0",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( g_debugDamage,				"0",			NULL,				CVAR_NONE,										qfalse )
-XCVAR_DEF( g_debugMelee,				"0",			NULL,				CVAR_SERVERINFO,								qtrue )
+// GalaxyRP fix: [Melee] pinned to 1. Despite the name this was never a debug switch -- it is the
+// master gate for the whole hand-to-hand system: kicks and the grapple (bg_pmove.c), infinite
+// wall-hold, and the wall-interaction rules in g_combat.c/w_force.c. This mod is designed around
+// it being on and the shipped config set it to 1, but the stock default was 0, so any server
+// running its own config without that line silently lost melee combat with no error to explain
+// it. Default is 1 now and RP_CVU_debugMelee (g_cvar.c) forces it back to 1 on any change.
+//
+// Deliberately left registered and CVAR_SERVERINFO rather than removed. pm->debugMelee is read by
+// SHARED pmove code that both the server and the client run for prediction, and the client learns
+// the value from serverinfo (cgs.debugMelee, cg_servercmds.c). Deleting the key would make
+// Info_ValueForKey() return "" -> atoi() 0 on any client still running an older cgame, which
+// would then predict no kick, no grapple and a normal wall-release while this server performs all
+// three. With sv_pure 0 and sv_allowDownload 0 in the shipped config, clients with a stale pk3
+// are the expected case, not an edge case -- so the key stays, pinned.
+XCVAR_DEF( g_debugMelee,				"1",			RP_CVU_debugMelee,	CVAR_SERVERINFO,								qtrue )
 XCVAR_DEF( g_debugMove,					"0",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( g_debugSaberLocks,			"0",			NULL,				CVAR_CHEAT,										qfalse )
 XCVAR_DEF( g_debugServerSkel,			"0",			NULL,				CVAR_CHEAT,										qfalse )

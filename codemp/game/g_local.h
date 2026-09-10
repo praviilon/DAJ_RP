@@ -2208,6 +2208,7 @@ void RP_CVU_diceRollCooldown(void);
 void RP_CVU_maxRpgCredits(void);
 void RP_CVU_rpgMaxLevel(void);
 void RP_CVU_startingShield(void);
+void RP_CVU_debugMelee(void);
 
 // GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.

@@ -236,6 +236,21 @@ void RP_CVU_startingShield(void)
 	}
 }
 
+// GalaxyRP fix: [Melee] g_debugMelee is pinned on -- see the long comment on its XCVAR_DEF in
+// g_xcvar.h for why it is pinned rather than removed. It is not a validation clamp like the ones
+// above: there is no range to enforce, only one supported value, so this snaps anything else back.
+// G_RegisterCvars() runs update callbacks at registration as well as on change, so a config that
+// still says "set g_debugMelee 0" is corrected before the first frame rather than at some later
+// point, and an admin who inspects the cvar always sees the value actually in force.
+void RP_CVU_debugMelee(void)
+{
+	if (g_debugMelee.integer != 1)
+	{
+		trap->Cvar_Set("g_debugMelee", "1");
+		trap->Cvar_Update(&g_debugMelee);
+	}
+}
+
 
 //
 // Cvar table
