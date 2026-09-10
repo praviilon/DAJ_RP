@@ -1528,7 +1528,7 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 		ent->client->pers.player_statuses &= ~(1 << 26);
 	}
 
-	ent->client->downedTime = downedSeconds;
+	ent->client->pers.downedTime = downedSeconds;
 
 	ent->client->invulnerableTimer = level.time + 3000;
 	ent->client->ps.eFlags |= EF_INVULNERABLE;
@@ -1561,7 +1561,7 @@ void RP_ReleaseFromDownedState( gentity_t *ent )
 
 	ent->client->pers.player_statuses &= ~(1 << 6);
 	ent->client->pers.player_statuses &= ~(1 << 26);
-	ent->client->downedTime = 0;
+	ent->client->pers.downedTime = 0;
 
 	if ( ent->flags & FL_NOTARGET )
 	{
@@ -1649,7 +1649,7 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 	// /helpup carry CMD_ALIVE, which rejects spectators, but this cannot rot.
 	if (ent == target) {
 		//GalaxyRP (Alex): [Death System] If player's timer is done, allow them to get up.
-		if (ent->client->downedTime == 0) {
+		if (ent->client->pers.downedTime == 0) {
 			trap->SendServerCommand(ent - g_entities, "print \"^2You got up!\n\"");
 			trap->SendServerCommand(ent - g_entities, "cp \"^2You got up!\n\"");
 			return qtrue;
@@ -1700,6 +1700,10 @@ void help_up(gentity_t* ent, gentity_t* target) {
 		//GalaxyRP (Alex): [Death System] No longer paralyzed.
 		
 		target->client->pers.player_statuses &= ~(1 << 6);
+		// GalaxyRP fix: [Death System] clear the countdown alongside the bit, for the same reason
+		// player_die() does: downedTime lives in pers now and would otherwise outlive the state it
+		// describes until ClientTimerActions()'s next tick.
+		target->client->pers.downedTime = 0;
 
 		if (target->flags & FL_NOTARGET) {
 			target->flags ^= FL_NOTARGET;
@@ -1799,7 +1803,7 @@ void Cmd_Getup_f(gentity_t* ent) {
 	}
 
 	//GalaxyRP (Alex): [Death System] If player's timer is done or he is an admin, allow them to get up.
-	if (ent->client->downedTime == 0 || check_admin_command(ent, ADM_GETUP, qfalse)) {
+	if (ent->client->pers.downedTime == 0 || check_admin_command(ent, ADM_GETUP, qfalse)) {
 		help_up(ent, ent);
 		return;
 	}

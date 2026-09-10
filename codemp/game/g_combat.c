@@ -2167,6 +2167,10 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	// is only ever meaningful together with bit 6, so leaving it set here would strand a stale marker
 	// on a player who died out of an admin paralysis and respawned free.
 	self->client->pers.player_statuses &= ~(1 << 26);
+	// GalaxyRP fix: [Death System] and the countdown with them. downedTime lives in pers now, so it
+	// survives the respawn that follows -- ClientTimerActions() would zero it on its next tick, but
+	// clearing it here keeps the countdown and the bits coherent from the moment of death.
+	self->client->pers.downedTime = 0;
 
 	// zyk: remove any quest_power status from this player
 	self->client->pers.quest_power_status = 0;

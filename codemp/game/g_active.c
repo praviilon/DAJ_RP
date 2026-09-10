@@ -1052,7 +1052,18 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		}
 
 		//GalaxyRP (Alex): [Death System] This timer represents the time that a player has left until they can get up from being downed.
-		if (client->downedTime)
+		//GalaxyRP (Alex): [Death System] Not paralyzed anymore, means someone else helped you (or you helped yourself with admin permission. Set downed timer to 0 to remove message.
+		// GalaxyRP fix: [Death System] hoisted above the display. It used to run after it, which was
+		// harmless only while downedTime lived outside pers and was wiped by every ClientSpawn. Now
+		// that it survives a respawn alongside the status bits, a player finished off while downed --
+		// player_die() clears the bits, then they respawn -- would have seen one stale "You are
+		// downed. Time Remaining: N" a second later, while alive and well. Clearing first keeps the
+		// countdown and the bits in agreement at every point the message can be sent.
+		if (!G_PlayerIsDowned(ent)) {
+			client->pers.downedTime = 0;
+		}
+
+		if (client->pers.downedTime)
 		{
 			// GalaxyRP fix: [Death System] this used to be gated on "downedTime <= rp_downed_timer",
 			// which assumed the countdown could never exceed the cvar. /paralyze can now set any
@@ -1063,24 +1074,20 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			// /helpup, because neither can end one.
 			if (G_PlayerIsAdminParalyzed(ent))
 			{
-				trap->SendServerCommand(ent->s.number, va("cp \"^1You were paralyzed by an admin.\nTime Remaining: %d\"", client->downedTime));
+				trap->SendServerCommand(ent->s.number, va("cp \"^1You were paralyzed by an admin.\nTime Remaining: %d\"", client->pers.downedTime));
 			}
 			else
 			{
-				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\nTime Remaining: %d\"", client->downedTime));
+				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\nTime Remaining: %d\"", client->pers.downedTime));
 			}
 
-			client->downedTime--;
+			client->pers.downedTime--;
 
-			//GalaxyRP (Alex): [Death System] Not paralyzed anymore, means someone else helped you (or you helped yourself with admin permission. Set downed timer to 0 to remove message.
-			if (!G_PlayerIsDowned(ent)) {
-				client->downedTime = 0;
-			}
 			// GalaxyRP fix: [Death System] an admin paralysis releases itself the moment its time is
 			// served. A combat knockdown does not -- there the countdown only unlocks /getup and the
 			// player chooses when to stand -- but /getup and /helpup both refuse an admin paralysis,
 			// so without this the target would stay down forever once the timer ran out.
-			else if (client->downedTime <= 0 && G_PlayerIsAdminParalyzed(ent)) {
+			if (client->pers.downedTime <= 0 && G_PlayerIsAdminParalyzed(ent)) {
 				RP_ReleaseFromDownedState(ent);
 				trap->SendServerCommand(ent->s.number, "print \"^2Your paralysis has worn off.\n\"");
 				trap->SendServerCommand(ent->s.number, "cp \"^2Your paralysis has worn off.\"");

@@ -1082,6 +1082,17 @@ typedef struct clientPersistant_s {
 	// of the intended death animation.
 	int				pending_relog_kill_time;
 
+	// GalaxyRP fix: [Death System] seconds left on a downed player's countdown, decremented once per
+	// second by ClientTimerActions() (g_active.c). This lives in pers, not in gclient_s, because it is
+	// one half of a state whose other half -- player_statuses bits 6 and 26 -- is already here.
+	// ClientSpawn() preserves pers wholesale but memsets everything else, so while the two were split
+	// a respawn kept the "downed" bits and silently zeroed the countdown. That let a downed player skip
+	// the remainder of their timer by changing team (SetTeam -> ClientBegin -> ClientSpawn), and it
+	// stranded an admin-paralyzed player completely: the auto-release only fires while the countdown is
+	// running, and /getup and /helpup both refuse an admin paralysis, so they were stuck with no timer,
+	// no message and no way out. Keeping both halves in pers gives them one lifetime.
+	int				downedTime;
+
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -1388,7 +1399,9 @@ struct gclient_s {
 
 	int	motdTime; // Tr!Force: [Motd] Server motd time
 
-	int downedTime;
+	// GalaxyRP fix: [Death System] downedTime used to live here, in gclient_s. It has moved into
+	// clientPersistant_t above -- see the comment on it there for why the two halves of the downed
+	// state must share a lifetime.
 };
 
 //Interest points
