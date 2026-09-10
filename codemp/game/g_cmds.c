@@ -13462,6 +13462,17 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 
 	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
+	if (client_id == -1)
+	{
+		// GalaxyRP fix: [validation] say so, and say it here rather than after the optional count
+		// argument is parsed below. This returned silently, so a mistyped player name looked exactly
+		// like a command that did nothing; and once it did report, it still sat below the count check,
+		// so a command with BOTH a bad name and a bad count blamed the count. The name is resolved
+		// first, so it should be reported first. Same message /givexp and /removexp already print.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
+		return;
+	}
+
 	if (trap->Argc() == 4) {
 		// GalaxyRP fix: [validation] read argv 3 here rather than unconditionally above. Argc() is 3
 		// on the two-argument form, so the old code asked for an argument that does not exist --
@@ -13480,14 +13491,6 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid number of upgrades. Must be a positive number.\n\"" );
 			return;
 		}
-	}
-
-	if (client_id == -1)
-	{
-		// GalaxyRP fix: [validation] say so. This returned silently, so a mistyped player name looked
-		// exactly like a command that did nothing. Same message /givexp and /removexp already print.
-		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
-		return;
 	}
 
 	// GalaxyRP fix: [validation] wording unified with the rest of the admin commands that target a
@@ -13538,6 +13541,17 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 
 	client_id = ClientNumberFromString( ent, arg1, qfalse );
 
+	if (client_id == -1)
+	{
+		// GalaxyRP fix: [validation] say so, and say it here rather than after the optional count
+		// argument is parsed below. This returned silently, so a mistyped player name looked exactly
+		// like a command that did nothing; and once it did report, it still sat below the count check,
+		// so a command with BOTH a bad name and a bad count blamed the count. The name is resolved
+		// first, so it should be reported first. Same message /givexp and /removexp already print.
+		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
+		return;
+	}
+
 	if (trap->Argc() == 4) {
 		// GalaxyRP fix: [validation] read argv 3 here rather than unconditionally above. Argc() is 3
 		// on the two-argument form, so the old code asked for an argument that does not exist --
@@ -13554,14 +13568,6 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid number of downgrades. Must be a positive number.\n\"" );
 			return;
 		}
-	}
-
-	if (client_id == -1)
-	{
-		// GalaxyRP fix: [validation] say so. This returned silently, so a mistyped player name looked
-		// exactly like a command that did nothing. Same message /givexp and /removexp already print.
-		trap->SendServerCommand(ent - g_entities, "print \"Player not found on server.\n\"");
-		return;
 	}
 
 	// GalaxyRP fix: [validation] wording unified with the rest of the admin commands that target a
