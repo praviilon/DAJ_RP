@@ -12315,13 +12315,34 @@ void Cmd_RemapList_f(gentity_t *ent) {
 	// zyk: makes i start from the first result of the correct page
 	i = results_per_page * (page - 1);
 
+	// GalaxyRP fix: [overflow] each row was appended with strcpy(content, va("%s...", content,
+	// ...)). va() formats into a 32000-byte buffer and knows nothing about the destination, so once
+	// the page passed content's size that strcpy wrote off the end of a stack array. A row is two
+	// MAX_QPATH shader paths, so a full page of eight builds about 1040 bytes into char
+	// content[MAX_STRING_CHARS] -- narrow, but a shader path is 63 characters and this pages
+	// through up to MAX_SHADER_REMAPS entries. The header moves into content so it is written
+	// once, rows are formatted into their own bounded buffer and appended with Q_strcat, and the
+	// message is flushed and continued whenever the next row would not fit. Same text, same order.
+	strcpy(content, "\n^3Old Shader   -   New Shader\n\n^7");
+
 	while (i < (results_per_page * page) && i < zyk_get_remap_count())
 	{
-		strcpy(content, va("%s%s - %s\n", content, remappedShaders[i].oldShader, remappedShaders[i].newShader));
+		char entry[(MAX_QPATH * 2) + 16];
+
+		Com_sprintf(entry, sizeof(entry), "%s - %s\n", remappedShaders[i].oldShader, remappedShaders[i].newShader);
+
+		if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+		{
+			trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
+			strcpy(content, "");
+		}
+
+		Q_strcat(content, sizeof(content), entry);
 		i++;
 	}
 
-	trap->SendServerCommand(ent->s.number, va("print \"\n^3Old Shader   -   New Shader\n\n^7%s\n\"", content));
+	Q_strcat(content, sizeof(content), "\n");
+	trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
 }
 
 /*
@@ -12690,18 +12711,48 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		{
 			char content[1024];
 
-			strcpy(content, "");
+			// the old single send was va("print \"\n%s\n\"", content) -- the leading newline now
+			// lives in the buffer so it is written once, ahead of any flush
+			strcpy(content, "\n");
 
 			if (this_ent->inuse)
 			{ 
+				// GalaxyRP fix: [overflow] each pair was appended with strcpy(content, va("%s...",
+				// content, ...)). va() formats into a 32000-byte buffer and knows nothing about the
+				// destination, so once the listing passed content's size that strcpy wrote off the
+				// end of a stack array. This is the widest of these by far: an entity carries up to
+				// MAX_SPAWN_VARS (64) key/value pairs holding up to MAX_SPAWN_VARS_CHARS (4096)
+				// characters between them, plus 7 bytes of decoration each, so a map entity with a
+				// large spawn string builds several times char content[1024]. Pairs are now
+				// formatted into their own bounded buffer and appended with Q_strcat, and the
+				// message is flushed and continued whenever the next pair would not fit.
+				//
+				// entry is sized at the flush threshold rather than at MAX_SPAWN_VARS_CHARS on
+				// purpose. A single pair longer than that is truncated in the display instead of
+				// being carried whole, which keeps content at or below the threshold and so keeps
+				// every message inside the 1022 characters SV_SendServerCommand will send -- a
+				// buffer big enough for the largest possible pair would produce a message the
+				// engine drops silently, which is how this listing could vanish rather than
+				// overflow.
 				while (i < level.zyk_spawn_strings_values_count[entity_id])
 				{
-					strcpy(content, va("%s^3%s: ^7%s\n", content, level.zyk_spawn_strings[this_ent->s.number][i], level.zyk_spawn_strings[this_ent->s.number][i + 1]));
+					char entry[RP_LIST_FLUSH_AT];
+
+					Com_sprintf(entry, sizeof(entry), "^3%s: ^7%s\n", level.zyk_spawn_strings[this_ent->s.number][i], level.zyk_spawn_strings[this_ent->s.number][i + 1]);
+
+					if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+					{
+						trap->SendServerCommand(ent - g_entities, va("print \"%s\"", content));
+						strcpy(content, "");
+					}
+
+					Q_strcat(content, sizeof(content), entry);
 
 					i += 2;
 				}
 
-				trap->SendServerCommand(ent - g_entities, va("print \"\n%s\n\"", content));
+				Q_strcat(content, sizeof(content), "\n");
+				trap->SendServerCommand(ent - g_entities, va("print \"%s\"", content));
 			}
 			else
 			{
@@ -15185,28 +15236,46 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 	if (number_of_args == 1)
 	{
+		// GalaxyRP fix: [overflow] each row was appended with strcpy(content, va("%s...", content,
+		// ...)). va() formats into a 32000-byte buffer and knows nothing about the destination, so
+		// once the list passed content's size that strcpy wrote off the end of a stack array. This
+		// is the widest of these: a row carries a 35-character netname AND a 47-byte IP field
+		// (NET_ADDRSTRMAXLEN), so a full server builds about 3700 bytes into char
+		// content[MAX_STRING_CHARS] and nine connected players is already enough. Rows are now
+		// formatted into their own bounded buffer and appended with Q_strcat, and the message is
+		// flushed and continued whenever the next row would not fit. Same text, same order.
 		for (i = 0; i < level.maxclients; i++)
 		{
 			gentity_t *player = &g_entities[i];
 
 			if (player && player->client && player->client->pers.connected != CON_DISCONNECTED)
 			{
-				strcpy(content, va("%s%d - %s ^7- %s - ",content,player->s.number,player->client->pers.netname,player->client->sess.IP));
+				char entry[MAX_NETNAME + NET_ADDRSTRMAXLEN + 64];
+
+				Com_sprintf(entry, sizeof(entry), "%d - %s ^7- %s - ", player->s.number, player->client->pers.netname, player->client->sess.IP);
 
 				if (player->client->sess.amrpgmode > 0)
 				{
 					if (player->client->pers.bitvalue != 0)
-						strcpy(content, va("%s^3(admin)",content));
+						Q_strcat(entry, sizeof(entry), "^3(admin)");
 					else
-						strcpy(content, va("%s^3(logged)",content));
+						Q_strcat(entry, sizeof(entry), "^3(logged)");
 				}
 
 				if (player->client->sess.amrpgmode == 2)
 				{
-					strcpy(content, va("%s ^3(rpg)",content));
+					Q_strcat(entry, sizeof(entry), " ^3(rpg)");
 				}
 
-				strcpy(content, va("%s^7\n",content));
+				Q_strcat(entry, sizeof(entry), "^7\n");
+
+				if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"%s\"", content) );
+					strcpy(content, "");
+				}
+
+				Q_strcat(content, sizeof(content), entry);
 			}
 		}
 
@@ -16156,6 +16225,7 @@ void duel_show_table(gentity_t *ent)
 	{
 		gentity_t *player_ent = &g_entities[sorted_players[i]];
 		char ally_name[36];
+		char entry[(MAX_NETNAME * 2) + 64];
 
 		if (level.duel_allies[sorted_players[i]] != -1 && level.duel_allies[level.duel_allies[sorted_players[i]]] == sorted_players[i])
 		{ // zyk: show ally if they both added each other as a team
@@ -16166,10 +16236,27 @@ void duel_show_table(gentity_t *ent)
 			strcpy(ally_name, "");
 		}
 
-		strcpy(content, va("%s^7%s^7%s^7: ^3%d  ^1%d\n", content, player_ent->client->pers.netname, ally_name, level.duel_players[player_ent->s.number], level.duel_players_hp[player_ent->s.number]));
+		// GalaxyRP fix: [overflow] this row was appended with strcpy(content, va("%s...", content,
+		// ...)). va() formats into a 32000-byte buffer and knows nothing about the destination, so
+		// once the table passed content's size that strcpy wrote off the end of a stack array.
+		// Unlike Cmd_DuelTable_f, which pages at eight rows, this lists every duelist: 32 of them
+		// builds about 1880 bytes into char content[1024], and it overflows from 18 onwards. Rows
+		// are now formatted into their own bounded buffer and appended with Q_strcat, and the
+		// message is flushed and continued whenever the next row would not fit. Same text, same
+		// order, same recipient.
+		Com_sprintf(entry, sizeof(entry), "^7%s^7%s^7: ^3%d  ^1%d\n", player_ent->client->pers.netname, ally_name, level.duel_players[player_ent->s.number], level.duel_players_hp[player_ent->s.number]);
+
+		if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+		{
+			trap->SendServerCommand(show_table_id, va("print \"%s\"", content));
+			strcpy(content, "");
+		}
+
+		Q_strcat(content, sizeof(content), entry);
 	}
 
-	trap->SendServerCommand(show_table_id, va("print \"%s\n\"", content));
+	Q_strcat(content, sizeof(content), "\n");
+	trap->SendServerCommand(show_table_id, va("print \"%s\"", content));
 }
 
 void Cmd_DuelTable_f(gentity_t *ent) {
@@ -16436,17 +16523,32 @@ void Cmd_SniperTable_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [overflow] this list was built with strcpy(buf, va("%s...", buf, ...)). va()
+	// formats into a 32000-byte buffer and knows nothing about the destination, so once the text
+	// passed the buffer's size that strcpy wrote off the end of a stack array -- 24 bytes of header plus 32 rows of 45 is 1465 into char content[1024]. Rows are now
+	// formatted into their own bounded buffer and appended with Q_strcat, and the message is
+	// flushed and continued whenever the next row would not fit. Same text, same order.
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		if (level.sniper_players[i] != -1)
 		{ // zyk: a player in Sniper Battle
 			gentity_t *player_ent = &g_entities[i];
+			char entry[MAX_NETNAME + 64];
 
-			strcpy(content, va("%s^7%s   ^3%d\n", content, player_ent->client->pers.netname, level.sniper_players[i]));
+			Com_sprintf(entry, sizeof(entry), "^7%s   ^3%d\n", player_ent->client->pers.netname, level.sniper_players[i]);
+
+			if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+			{
+				trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
+				strcpy(content, "");
+			}
+
+			Q_strcat(content, sizeof(content), entry);
 		}
 	}
 
-	trap->SendServerCommand(ent->s.number, va("print \"%s\n\"", content));
+	Q_strcat(content, sizeof(content), "\n");
+	trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
 }
 
 /*
@@ -16647,17 +16749,32 @@ void Cmd_RpgLmsTable_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [overflow] this list was built with strcpy(buf, va("%s...", buf, ...)). va()
+	// formats into a 32000-byte buffer and knows nothing about the destination, so once the text
+	// passed the buffer's size that strcpy wrote off the end of a stack array -- 18 bytes of header plus 32 rows of 45 is 1459 into char content[1024]. Rows are now
+	// formatted into their own bounded buffer and appended with Q_strcat, and the message is
+	// flushed and continued whenever the next row would not fit. Same text, same order.
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		if (level.rpg_lms_players[i] != -1)
 		{ // zyk: a player in RPG LMS Battle
 			gentity_t *player_ent = &g_entities[i];
+			char entry[MAX_NETNAME + 64];
 
-			strcpy(content, va("%s^7%s   ^3%d\n", content, player_ent->client->pers.netname, level.rpg_lms_players[i]));
+			Com_sprintf(entry, sizeof(entry), "^7%s   ^3%d\n", player_ent->client->pers.netname, level.rpg_lms_players[i]);
+
+			if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
+			{
+				trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
+				strcpy(content, "");
+			}
+
+			Q_strcat(content, sizeof(content), entry);
 		}
 	}
 
-	trap->SendServerCommand(ent->s.number, va("print \"%s\n\"", content));
+	Q_strcat(content, sizeof(content), "\n");
+	trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
 }
 
 /*
