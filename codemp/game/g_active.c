@@ -1035,6 +1035,25 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 	if (rp_loginRequired.integer && !ent->NPC && !(ent->r.svFlags & SVF_BOT) &&
 		!client->sess.loggedin && client->sess.sessionTeam != TEAM_SPECTATOR)
 	{
+		// GalaxyRP fix: [rp_loginRequired] say why. This used to move the player to Spectator without
+		// a word, so anyone joining a team with the cvar on was yanked back a second later with no
+		// explanation and no idea what to do about it -- rp_pluginRequired at least prints a reason.
+		// Deliberately a console print, not a centerprint: a "cp" replaces whatever is already on
+		// screen, and rp_pluginRequired's own warning is a cp, so a second one would wipe it for a
+		// player who fails both checks. Console lines stack, so the two coexist.
+		//
+		// Fires once per join attempt rather than once per second: reaching this point at all means
+		// the player is a live non-spectator, and SetTeam() below cannot refuse a Spectator request
+		// from here -- its only such refusal is the Siege "tempSpectate >= level.time" guard, and a
+		// client in tempSpectate never reaches ClientTimerActions(), because ClientThink_real()
+		// returns into SpectatorThink() above it on that same condition. So the move always lands,
+		// this function stops running for them, and the message is not repeated until they try again.
+		//
+		// Both commands named here work from Spectator -- /login carries no dispatch flags at all and
+		// /new only CMD_NOINTERMISSION -- so the player can act on this without leaving the state it
+		// puts them in.
+		trap->SendServerCommand(ent->s.number, "print \"^3You must be logged in to join the game. Use ^2/login <name> <password>^3, or ^2/new <name> <password>^3 to create an account.\n\"");
+
 		SetTeam(ent, "spectator");
 		return;
 	}
