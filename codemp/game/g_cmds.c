@@ -1735,14 +1735,14 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 		}
 		else {
 			trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
-			trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
+			trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\n\"", target->client->pers.netname));
 			// GalaxyRP fix: [Death System] and tell the target. This bypass returns before the
 			// ordinary other-player branch below, which is the only place that sent them anything,
 			// so an admin with Instant Revive hauled someone to their feet in silence -- from any
 			// distance, since the bypass skips the range check too. Same two messages that branch
 			// sends, word for word, so both routes read identically to the player being helped.
 			trap->SendServerCommand(target - g_entities, va("cp \"^2%s helped you up!\"", ent->client->pers.netname));
-			trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\"", ent->client->pers.netname));
+			trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\n\"", ent->client->pers.netname));
 		}
 
 		return qtrue;
@@ -1790,12 +1790,12 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 		}
 
 		trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
-		trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
+		trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\n\"", target->client->pers.netname));
 		// GalaxyRP fix: [Chat] target - g_entities. This one was never actually wrong -- a downed
 		// player is a real player, never a follower, so their ps.clientNum is their own -- but it is
 		// the same fragile spelling as the three sites that were, so it is normalised with them.
 		trap->SendServerCommand(target - g_entities, va("cp \"^2%s helped you up!\"", ent->client->pers.netname));
-		trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\"", ent->client->pers.netname));
+		trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\n\"", ent->client->pers.netname));
 
 		return qtrue;
 	}
@@ -11283,14 +11283,15 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// command (ADM_ADMPROTECT) -- this was originally gated behind ADM_GIVEADM ("Give Admin"), but
 		// ADM_ADMPROTECT's own in-game help text (see the command_number == ADM_ADMPROTECT branch
 		// further down in this file) already documents it as "With this flag, a player can use Admin
-		// Protect option in /settings to protect himself from admin commands" -- i.e. the codebase
-		// itself designates ADM_ADMPROTECT, not ADM_GIVEADM, as the permission for this. Corrected here
-		// to match. It's also the same flag that gates whether Admin Protect has any effect once it IS
-		// on (see the 6 enforcement sites in Cmd_Give_f, Cmd_Scale_f and Cmd_Teleport_f), so a player
-		// can now only turn the setting on if it can actually do something for them. Turning it back
-		// OFF is never gated, so a player can always give up their own protection. Bit 13 is inverted
-		// (clear == ON, set == OFF -- see the status-line block above), so "turning ON" is the branch
-		// just below that is about to CLEAR the bit, i.e. the bit must currently be SET.
+		// Protect option in /settings to self-protect from gameplay-related admin commands" -- i.e.
+		// the codebase itself designates ADM_ADMPROTECT, not ADM_GIVEADM, as the permission for this.
+		// Corrected here to match. It is also the same flag that gates whether Admin Protect has any
+		// effect once it IS on (see the 6 enforcement sites in Cmd_Give_f, Cmd_Scale_f and
+		// Cmd_Teleport_f), so a player can now only turn the setting on if it can actually do
+		// something for them. Turning it back OFF is never gated, so a player can always give up
+		// their own protection. Bit 13 is inverted (clear == ON, set == OFF -- see the status-line
+		// block above), so "turning ON" is the branch just below that is about to CLEAR the bit,
+		// i.e. the bit must currently be SET.
 		// check_admin_command() prints the standard "You need the Admin Protect admin command" error
 		// and returns qfalse when the caller lacks it, matching every other admin-gated command in this
 		// file.
@@ -13178,7 +13179,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_ADMPROTECT)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nWith this flag, a player can use Admin Protect option in ^3/settings ^7to protect himself from admin commands\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nWith this flag, a player can use Admin Protect option in ^3/settings ^7to self-protect from gameplay-related admin commands\n\n\"" );
 		}
 		else if (command_number == ADM_ENTITYSYSTEM)
 		{
