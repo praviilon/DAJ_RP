@@ -6418,6 +6418,22 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 	char ooc_text[700] = "";
 	int broadcast_distance = 999999999;
 
+	// GalaxyRP: [Chat] /ooc. OOC is not a delivery mode of its own -- it is SAY_ALL plus ooc_flag,
+	// the state the branch below produces when /say_team is used in a non-team gametype. SAY_OOC
+	// exists only to reach that same state on demand, so it is translated here and nothing
+	// downstream ever sees it: the switch, the receiver loop and G_SayTo() all deal in SAY_ALL
+	// exactly as they already do for the /say_team route. Translating it BEFORE the gametype test
+	// is what makes /ooc gametype-independent, the way Cmd_AllyChat_f's hard-coded SAY_ALLY makes
+	// /allychat gametype-independent -- and it means OOC is now global in team gametypes too,
+	// since the ooc branch of the SAY_ALL case breaks before `distance = 700` is ever reached.
+	if ( mode == SAY_OOC ) {
+		ooc_flag = 1;
+		mode = SAY_ALL;
+	}
+
+	// zyk: /say_team outside a team gametype is OOC chat. Kept as a legacy alias now that /ooc
+	// exists -- Cmd_SayTeam_f is unchanged, so it still yields SAY_ALLY for a player with allies,
+	// SAY_TEAM in team gametypes, and OOC only here.
 	if ( level.gametype < GT_TEAM && mode == SAY_TEAM ) {
 		ooc_flag = 1;
 		mode = SAY_ALL;
@@ -6684,6 +6700,36 @@ static void Cmd_SayTeam_f( gentity_t *ent ) {
 		G_Say( ent, NULL, (level.gametype>=GT_TEAM) ? SAY_TEAM : SAY_ALLY, p );
 	else
 		G_Say( ent, NULL, (level.gametype>=GT_TEAM) ? SAY_TEAM : SAY_TEAM, p );
+}
+
+/*
+==================
+Cmd_OOC_f
+
+GalaxyRP: [Chat] out-of-character chat as a command of its own.
+
+OOC used to be reachable only as a side effect of /say_team in a non-team gametype, and
+Cmd_SayTeam_f sends SAY_ALLY instead once the player has allies -- so in FFA anyone with even one
+ally had no way to speak OOC at all, and in a team gametype nobody did. Sending SAY_OOC forces the
+channel in every gametype, the way Cmd_AllyChat_f's hard-coded SAY_ALLY forces ally chat.
+
+Deliberately silent when given no arguments, matching Cmd_Say_f, Cmd_SayTeam_f and Cmd_AllyChat_f.
+==================
+*/
+static void Cmd_OOC_f( gentity_t *ent ) {
+	char *p = NULL;
+
+	if ( trap->Argc () < 2 )
+		return;
+
+	p = ConcatArgs( 1 );
+
+	if ( strlen( p ) >= MAX_SAY_TEXT ) {
+		p[MAX_SAY_TEXT-1] = '\0';
+		G_SecurityLogPrintf( "Cmd_OOC_f from %d (%s) has been truncated: %s\n", ent->s.number, ent->client->pers.netname, p );
+	}
+
+	G_Say( ent, NULL, SAY_OOC, p );
 }
 
 /*
@@ -17389,6 +17435,7 @@ command_t commands[] = {
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
+	{ "ooc",				Cmd_OOC_f,					CMD_NOINTERMISSION },	// GalaxyRP: [Chat] out-of-character chat, forced in every gametype
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "unparalyze",			Cmd_Unparalyze_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },

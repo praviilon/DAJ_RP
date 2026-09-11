@@ -1833,6 +1833,10 @@ typedef enum {
 #define SAY_TEAM	1
 #define SAY_TELL	2
 #define SAY_ALLY	3 // zyk: added new say mode
+// GalaxyRP: [Chat] /ooc. Not a delivery mode of its own: G_Say() translates it to SAY_ALL with
+// ooc_flag set, before the gametype test, so nothing downstream ever sees this value. Game module
+// only -- no cgame, UI or wire use, so adding it changes nothing a client can observe.
+#define SAY_OOC		4
 
 /*
 Ghoul2 Insert Start
