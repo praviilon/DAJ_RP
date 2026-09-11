@@ -872,6 +872,131 @@ Actions that happen once a second
 ==================
 */
 extern int zyk_max_magic_power(gentity_t* ent);
+/*
+==============
+RP_DownedTimerTick
+
+One second of a downed player's countdown: the on-screen timer, the decrement, and the auto-release
+that ends an admin paralysis once its time is served.
+
+GalaxyRP fix: [Death System] split out of ClientTimerActions() because that function is only ever
+reached by a player who is alive and in the world. ClientThink_real() returns into
+ClientIntermissionThink() and into SpectatorThink() long before it, and returns again just above it
+for a player waiting to respawn -- so a downed player who became a spectator froze their own
+countdown. An admin paralysis then never expired: the target could sit the entire punishment out as
+a free-flying camera and rejoin still paralysed with the same time remaining. The tick lives here so
+the spectator path can drive it too, via RP_SpectatorDownedTimer() below. Being downed is state that
+lives in pers and survives a respawn; its countdown should be served in wall-clock time wherever the
+player happens to be, not only while they are standing in the world.
+==============
+*/
+static void RP_DownedTimerTick( gentity_t *ent )
+{
+	gclient_t *client;
+
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	client = ent->client;
+
+	//GalaxyRP (Alex): [Death System] This timer represents the time that a player has left until they can get up from being downed.
+	//GalaxyRP (Alex): [Death System] Not paralyzed anymore, means someone else helped you (or you helped yourself with admin permission. Set downed timer to 0 to remove message.
+	// GalaxyRP fix: [Death System] hoisted above the display. It used to run after it, which was
+	// harmless only while downedTime lived outside pers and was wiped by every ClientSpawn. Now
+	// that it survives a respawn alongside the status bits, a player finished off while downed --
+	// player_die() clears the bits, then they respawn -- would have seen one stale "You are
+	// downed. Time Remaining: N" a second later, while alive and well. Clearing first keeps the
+	// countdown and the bits in agreement at every point the message can be sent.
+	if (!G_PlayerIsDowned(ent)) {
+		client->pers.downedTime = 0;
+	}
+
+	if (client->pers.downedTime)
+	{
+		// GalaxyRP fix: [Death System] this used to be gated on "downedTime <= rp_downed_timer",
+		// which assumed the countdown could never exceed the cvar. /paralyze can now set any
+		// duration up to 900s, so with the shipped rp_downed_timer of 30 an admin paralysis showed
+		// the player nothing at all until its last 30 seconds -- immobile, with no explanation and
+		// no timer. downedTime is the authoritative remaining time, so it is simply displayed.
+		// GalaxyRP fix: [Death System] an admin paralysis says so, and does not advertise /getup or
+		// /helpup, because neither can end one.
+		if (G_PlayerIsAdminParalyzed(ent))
+		{
+			trap->SendServerCommand(ent->s.number, va("cp \"^1You were paralyzed by an admin.\nTime Remaining: %d\"", client->pers.downedTime));
+		}
+		else
+		{
+			trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\nTime Remaining: %d\"", client->pers.downedTime));
+		}
+
+		client->pers.downedTime--;
+
+		// GalaxyRP fix: [Death System] an admin paralysis releases itself the moment its time is
+		// served. A combat knockdown does not -- there the countdown only unlocks /getup and the
+		// player chooses when to stand -- but /getup and /helpup both refuse an admin paralysis,
+		// so without this the target would stay down forever once the timer ran out.
+		if (client->pers.downedTime <= 0 && G_PlayerIsAdminParalyzed(ent)) {
+			RP_ReleaseFromDownedState(ent);
+			trap->SendServerCommand(ent->s.number, "print \"^2Your paralysis has worn off.\n\"");
+			trap->SendServerCommand(ent->s.number, "cp \"^2Your paralysis has worn off.\"");
+		}
+	}
+	else {
+		//GalaxyRP (Alex): [Death System] Can get up by themselves, but haven't yet.
+		// An admin paralysis never reaches here -- it auto-releases above the moment its countdown
+		// hits 0 -- but the check keeps this prompt from ever naming /getup and /helpup to someone
+		// they cannot help.
+		// GalaxyRP fix: [Death System] and not while spectating, now that this tick also runs on
+		// the spectator path: /getup carries CMD_ALIVE and refuses a spectator outright, so
+		// naming it to one would be advertising a command that cannot work.
+		if (G_PlayerIsDowned(ent) && !G_PlayerIsAdminParalyzed(ent) &&
+			client->sess.sessionTeam != TEAM_SPECTATOR && client->tempSpectate < level.time){
+			trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\n^2You may get up by using ^3/getup\n^2Alternatively, someone else can do ^3/helpup ^3%s.\"", client->pers.netname_nocolor));
+		}
+	}
+}
+
+/*
+==============
+RP_SpectatorDownedTimer
+
+Drives RP_DownedTimerTick() at 1Hz for a client ClientTimerActions() will not be called for, reusing
+the same client->timeResidual accumulator. The two drivers are mutually exclusive within a think --
+ClientThink_real() returns immediately after calling this one -- so the residual is still consumed
+exactly once per think, and a player crossing between the two paths carries their part-second over.
+
+Does nothing at all for an ordinary spectator, so their residual is left exactly as it was, which is
+the behaviour every non-downed client had before.
+==============
+*/
+static void RP_SpectatorDownedTimer( gentity_t *ent, int msec )
+{
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	if ( !G_PlayerIsDowned( ent ) && !ent->client->pers.downedTime )
+	{ // nothing to count down and nothing stale to clear
+		return;
+	}
+
+	if ( msec < 1 )
+	{ // a followed client can report bad times; never wind the accumulator backwards
+		return;
+	}
+
+	ent->client->timeResidual += msec;
+
+	while ( ent->client->timeResidual >= 1000 )
+	{
+		ent->client->timeResidual -= 1000;
+		RP_DownedTimerTick( ent );
+	}
+}
+
 void ClientTimerActions( gentity_t *ent, int msec ) {
 	gclient_t	*client;
      	char 		serverMotd[MAX_STRING_CHARS];
@@ -1051,57 +1176,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			client->sess.vote_timer--;
 		}
 
-		//GalaxyRP (Alex): [Death System] This timer represents the time that a player has left until they can get up from being downed.
-		//GalaxyRP (Alex): [Death System] Not paralyzed anymore, means someone else helped you (or you helped yourself with admin permission. Set downed timer to 0 to remove message.
-		// GalaxyRP fix: [Death System] hoisted above the display. It used to run after it, which was
-		// harmless only while downedTime lived outside pers and was wiped by every ClientSpawn. Now
-		// that it survives a respawn alongside the status bits, a player finished off while downed --
-		// player_die() clears the bits, then they respawn -- would have seen one stale "You are
-		// downed. Time Remaining: N" a second later, while alive and well. Clearing first keeps the
-		// countdown and the bits in agreement at every point the message can be sent.
-		if (!G_PlayerIsDowned(ent)) {
-			client->pers.downedTime = 0;
-		}
-
-		if (client->pers.downedTime)
-		{
-			// GalaxyRP fix: [Death System] this used to be gated on "downedTime <= rp_downed_timer",
-			// which assumed the countdown could never exceed the cvar. /paralyze can now set any
-			// duration up to 900s, so with the shipped rp_downed_timer of 30 an admin paralysis showed
-			// the player nothing at all until its last 30 seconds -- immobile, with no explanation and
-			// no timer. downedTime is the authoritative remaining time, so it is simply displayed.
-			// GalaxyRP fix: [Death System] an admin paralysis says so, and does not advertise /getup or
-			// /helpup, because neither can end one.
-			if (G_PlayerIsAdminParalyzed(ent))
-			{
-				trap->SendServerCommand(ent->s.number, va("cp \"^1You were paralyzed by an admin.\nTime Remaining: %d\"", client->pers.downedTime));
-			}
-			else
-			{
-				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\nTime Remaining: %d\"", client->pers.downedTime));
-			}
-
-			client->pers.downedTime--;
-
-			// GalaxyRP fix: [Death System] an admin paralysis releases itself the moment its time is
-			// served. A combat knockdown does not -- there the countdown only unlocks /getup and the
-			// player chooses when to stand -- but /getup and /helpup both refuse an admin paralysis,
-			// so without this the target would stay down forever once the timer ran out.
-			if (client->pers.downedTime <= 0 && G_PlayerIsAdminParalyzed(ent)) {
-				RP_ReleaseFromDownedState(ent);
-				trap->SendServerCommand(ent->s.number, "print \"^2Your paralysis has worn off.\n\"");
-				trap->SendServerCommand(ent->s.number, "cp \"^2Your paralysis has worn off.\"");
-			}
-		}
-		else {
-			//GalaxyRP (Alex): [Death System] Can get up by themselves, but haven't yet.
-			// An admin paralysis never reaches here -- it auto-releases above the moment its countdown
-			// hits 0 -- but the check keeps this prompt from ever naming /getup and /helpup to someone
-			// they cannot help.
-			if (G_PlayerIsDowned(ent) && !G_PlayerIsAdminParalyzed(ent)){
-				trap->SendServerCommand(ent->s.number, va("cp \"^1You are downed.\n^2You may get up by using ^3/getup\n^2Alternatively, someone else can do ^3/helpup ^3%s.\"", client->pers.netname_nocolor));
-			}
-		}
+		RP_DownedTimerTick( ent );
 
 		// Tr!Force: [Motd] Show server motd
 		if (client->motdTime)
@@ -2610,6 +2685,11 @@ void ClientThink_real( gentity_t *ent ) {
 
 	// spectators don't do much
 	if ( client->sess.sessionTeam == TEAM_SPECTATOR || client->tempSpectate >= level.time ) {
+		// GalaxyRP fix: [Death System] except serve a downed countdown, which must keep running
+		// wherever the player is. See RP_DownedTimerTick() for why this cannot be left to
+		// ClientTimerActions(), which both returns below never reach.
+		RP_SpectatorDownedTimer( ent, msec );
+
 		if ( client->sess.spectatorState == SPECTATOR_SCOREBOARD ) {
 			return;
 		}

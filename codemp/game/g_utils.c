@@ -2742,8 +2742,12 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 
 // GalaxyRP fix: [Death System] one place that answers "is this player currently downed?", so the
 // rule stops being spelled out as a raw pers.player_statuses bit test at every new call site.
-// Bit 6 is set by paralyze_player() and cleared by help_up(); while it is set the player is lying
-// incapacitated waiting out rp_downed_timer.
+// Bit 6 is set in one place, RP_EnterDownedState() (g_cmds.c) -- reached both by paralyze_player()
+// for a combat knockdown and by the admin /paralyze command -- and cleared in four:
+// RP_ReleaseFromDownedState() (the complete counterpart, used by the countdown's auto-release and by
+// /unparalyze), help_up() (/getup and /helpup), player_die(), and G_Damage()'s branch for finishing
+// off a player who was already down. While the bit is set the player is lying incapacitated, serving
+// pers.downedTime: rp_downed_timer seconds for a knockdown, or whatever /paralyze was given.
 //
 // This matters because a downed player is NOT dead as far as the rest of the code is concerned:
 // paralyze_player() leaves them on 50 health, so every "health <= 0", "EF_DEAD" and "PM_DEAD" test

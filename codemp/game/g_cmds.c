@@ -805,6 +805,17 @@ void Cmd_Emote_f( gentity_t *ent )
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking emotes during boss battles used to be
 	// here. guardian_mode is permanently 0 now, so it was unreachable.
 
+	// GalaxyRP fix: [Death System] say so explicitly. The knockdown test just below does already
+	// cover a downed player in practice -- ClientThink_real() pins their forceHandExtend at
+	// HANDEXTEND_KNOCKDOWN for the whole duration -- but that is a side effect of how the state is
+	// presented, not a rule anyone wrote, and it is exactly the kind of accidental coverage the force
+	// power and holdable item guards were added to stop relying on. This also gives the right reason.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	if (ent->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot use emotes while knocked down\n\"");
@@ -1635,8 +1646,18 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 
 	//GalaxyRP (Alex): [Death System] Ent has permission, they can revive anyone.
 	if (check_admin_command(ent, ADM_GETUP, qfalse)) {
-		trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
-		trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
+		// GalaxyRP fix: [Death System] including themselves. This bypass sits above the self/other
+		// split below and only ever had the other-player wording, so an admin with Instant Revive
+		// typing /getup was told "You helped <their own name> up." Same two messages the ordinary
+		// self path uses, so the only thing the admin bypass changes for them is skipping the timer.
+		if (ent == target) {
+			trap->SendServerCommand(ent - g_entities, "print \"^2You got up!\n\"");
+			trap->SendServerCommand(ent - g_entities, "cp \"^2You got up!\n\"");
+		}
+		else {
+			trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
+			trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
+		}
 
 		return qtrue;
 	}
@@ -5568,6 +5589,33 @@ void Cmd_Team_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] a downed player may not change team. SetTeam() below respawns
+	// them through ClientBegin()/ClientSpawn(), and the downed state survives that (bits 6 and 26 and
+	// pers.downedTime all live in pers) -- so this was a free full-health respawn without ending the
+	// countdown, and "/team spectator" additionally parked them somewhere ClientThink_real() returns
+	// before the countdown tick, which used to freeze an admin paralysis outright. Both root causes
+	// are fixed elsewhere now (ClientSpawn() re-applies FL_NOTARGET, RP_DownedTimerTick() runs on the
+	// spectator path), but a player serving a punishment still has no business changing team, so the
+	// guard stays as the policy. Deliberately in the command, NOT in SetTeam(): that has ~18 callers,
+	// nearly all of them machinery -- the Duel/PowerDuel queue rotation, bot joins, Siege, and
+	// rp_loginRequired's force-to-spectator -- which must be able to move a client regardless.
+	// The same guard is on /follow, /follownext, /followprev and /siegeclass, the other player-driven
+	// routes into SetTeam().
+	//
+	// It refuses LEAVING the world, not returning to it, which is why it exempts a client who is
+	// already spectating. A downed player cannot get there by any of these four commands any
+	// more, but the machinery still can -- rcon's forceteam and the Duel queue rotation both call
+	// SetTeam() directly -- and a combat knockdown parked in Spectator has no way out on its own:
+	// its countdown reaching 0 only unlocks /getup, which carries CMD_ALIVE and refuses a
+	// spectator, and /helpup needs a body to stand next to. Without the exemption that is a soft
+	// lock until they disconnect. (An admin paralysis would free itself either way, now that
+	// RP_DownedTimerTick() runs on the spectator path.)
+	if (G_PlayerIsDowned(ent) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	if ( ent->client->switchTeamTime > level.time ) {
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "NOSWITCH")) );
 		return;
@@ -5775,6 +5823,14 @@ void Cmd_SiegeClass_f( gentity_t *ent )
 	if ( ent->client->switchClassTime > level.time )
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "NOCLASSSWITCH")) );
+		return;
+	}
+
+	// GalaxyRP fix: [Death System] the third player-driven route into SetTeam() -- a class change
+	// can switch team and then respawns with ClientBegin(). Same refusal as /team and /follow.
+	if (G_PlayerIsDowned(ent) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
 		return;
 	}
 
@@ -6016,6 +6072,15 @@ void Cmd_Follow_f( gentity_t *ent ) {
 	int		i;
 	char	arg[MAX_TOKEN_CHARS];
 
+	// GalaxyRP fix: [Death System] /follow promotes a live player to spectator with its own
+	// SetTeam(ent, "spectator") call further down, so it is a second route out of the world for a
+	// downed player and needs the same refusal Cmd_Team_f carries. See the long comment there.
+	if (G_PlayerIsDowned(ent) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	if ( ent->client->sess.spectatorState == SPECTATOR_NOT && ent->client->switchTeamTime > level.time ) {
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "NOSWITCH")) );
 		return;
@@ -6076,6 +6141,14 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir ) {
 	int		clientnum;
 	int		original;
 	qboolean	looped = qfalse;
+
+	// GalaxyRP fix: [Death System] same refusal as /follow -- this one carries /follownext and
+	// /followprev, which are thin wrappers around it, and it promotes to spectator the same way.
+	if (G_PlayerIsDowned(ent) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
 
 	if ( ent->client->sess.spectatorState == SPECTATOR_NOT && ent->client->switchTeamTime > level.time ) {
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "NOSWITCH")) );
@@ -9861,9 +9934,14 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/sabercolor <1|2> <r g b>/<color name>: ^7Sets the RGB or a preset color of saber 1 or 2. Run with no arguments to see current colors.\n\
 ^3/saberblade <1|2> <type>: ^7Sets the RGB blade style (classic/flame1/electric1/flame2/electric2) of saber 1 or 2.\n\
 ^3/updatesaber: ^7Applies your saber menu pick instantly, no respawn needed.\n\
-^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\
-^3/getup: ^7Revives current player from downed state.\n\
-^3/helpup <player name>: ^7Revives another player from downed state.\n\
+^3/scale <player name (optional)/help> <size>: ^7Scales character model (default is 100). ^3Help ^7lists in-game values compared to real life measurements. ^1(Only admins can scale other players)\n\"");
+				// GalaxyRP fix: [Death System] split here for the same reason the Misc section above is
+				// split twice: saying what /getup and /helpup actually do -- neither ends an admin
+				// paralysis, only a combat knockdown -- took this block past SV_SendServerCommand's hard
+				// 1022 characters, and going over does not truncate, it silently drops the whole section.
+				trap->SendServerCommand(ent - g_entities, "print \"\
+^3/getup: ^7Gets you up from a combat knockdown, once your timer runs out. Cannot end an admin paralysis.\n\
+^3/helpup <player name>: ^7Helps a nearby player up from a combat knockdown. Cannot end an admin paralysis.\n\
 ^3/training <on|off>: ^7Turns training saber mode (near-zero damage) on or off.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
@@ -11535,6 +11613,16 @@ void Cmd_Drop_f( gentity_t *ent ) {
 	vec3_t uorg, vecnorm, thispush_org;
 	int current_ammo = 0;
 	int ammo_count = 0;
+
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so CMD_ALIVE waves them through
+	// and nothing else here stopped them throwing their weapon (or their selected holdable, on melee)
+	// away while lying incapacitated. Same explicit test the force powers and holdable items use --
+	// the knockdown animation that pins them down blocks weapon FIRE, but never reached this command.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
 
 	if (weapon == WP_NONE || weapon == WP_EMPLACED_GUN || weapon == WP_TURRET)
 	{ //can't have this

@@ -4252,6 +4252,18 @@ void ClientSpawn(gentity_t *ent) {
 			// zyk: if player is paralyzed by an admin, keeps him that way
 			if (ent->client->pers.player_statuses & (1 << 6))
 			{
+				// GalaxyRP fix: [Death System] and keeps him untargetable with it. The downed state
+				// itself survives a respawn -- player_statuses bits 6 and 26 and pers.downedTime all
+				// live in pers, which ClientSpawn() preserves wholesale -- but FL_NOTARGET does not:
+				// it sits on ent->flags, which this function clears outright with "ent->flags = 0"
+				// further up. So a downed player who respawned (a team change is the reachable route,
+				// but rcon's forceteam and the duel-queue rotation reach ClientSpawn() the same way)
+				// came back still downed, still on the clock, and alone among downed players in being
+				// shootable by NPCs and turrets again. RP_EnterDownedState() (g_cmds.c) sets this flag
+				// when the state begins; this block is where the rest of the state's presentation is
+				// already re-applied after a respawn, so the flag belongs here with it.
+				ent->flags |= FL_NOTARGET;
+
 				ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 				ent->client->ps.forceHandExtendTime = level.time + 500;
 				ent->client->ps.velocity[2] += 150;

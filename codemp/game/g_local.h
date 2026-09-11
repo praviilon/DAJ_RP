@@ -1899,7 +1899,10 @@ qboolean G_PlayerIsDowned( gentity_t *ent );
 qboolean G_PlayerIsAdminParalyzed( gentity_t *ent );
 // GalaxyRP fix: [Death System] ends a downed state: clears both status bits and the countdown,
 // releases FL_NOTARGET and plays the get-up animation. Defined in g_cmds.c beside its counterpart
-// RP_EnterDownedState(); called from ClientTimerActions() when an admin paralysis runs out.
+// RP_EnterDownedState(). Two callers: RP_DownedTimerTick() (g_active.c) when an admin paralysis
+// serves out its countdown, and Cmd_Unparalyze_f() when an admin ends one early. help_up() does the
+// same job for a combat knockdown with its own copy, because it additionally handles the two-player
+// case and the post-revive grace period.
 void RP_ReleaseFromDownedState( gentity_t *ent );
 //
 // GalaxyRP: [Saber RGB] the Characters.saberOneColor/saberTwoColor database columns predate this
