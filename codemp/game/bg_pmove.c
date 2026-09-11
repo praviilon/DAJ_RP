@@ -7198,6 +7198,22 @@ qboolean canAltFireWeapon(gentity_t* ent) {
 		}
 		return qfalse;
 		break;
+	// GalaxyRP fix: [Weapons] WP_DEMP2 was missing from this switch, so it fell through to the
+	// "default: return qtrue" below and its alt fire worked at skill level 1 -- the only one of the
+	// ten ranged weapons with no skill gate, while its own skill description claimed "Level 2
+	// unlocks the alternate fire mode" like all the others. The gap sits exactly where WP_DEMP2
+	// belongs in the weapon enum (between WP_REPEATER and WP_FLECHETTE), which is what marks it as an
+	// omission rather than a deliberate carve-out: melee, the one real carve-out, is answered above
+	// this function's login check with its own explanation.
+	//
+	// Note this only ever removed the SKILL gate, never the login one -- that check sits above the
+	// switch, so DEMP2 alt fire was already refused for logged-out players like every other weapon.
+	case WP_DEMP2:
+		if (ent->client->pers.skill_levels[24] > 1) {
+			return qtrue;
+		}
+		return qfalse;
+		break;
 	case WP_FLECHETTE:
 		if (ent->client->pers.skill_levels[25] > 1) {
 			return qtrue;

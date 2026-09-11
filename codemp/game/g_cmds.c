@@ -108,18 +108,18 @@ const skill_t skills[] = {
 	// of ForceTeamForceReplenish() in an earlier, unrelated fix (see the matching comments in
 	// w_force.c); the description text was simply never updated to match.
 	{5, "Team Energize",		"restores some force power to players near you",																																																																	"force",	"dark",		FP_TEAM_FORCE},
-	{4, "Stun Baton",			"attacks someone with a small electric charge. Has %d damage multiplied by the stun baton level. With Stun Baton Upgrade, can destroy or move some other objects, and also decloaks enemies and decrease their moving speed for some seconds",																	"weapons",	"merc",		WP_STUN_BATON},
-	{2, "Blaster Pistol",		"the popular Star Wars pistol used by Han Solo in the movies. Normal fire is a single blaster shot, alternate fire allows you to fire a powerful charged shot. The charged shot causes a lot more damage depending on how much it was charged",																	"weapons",	"merc",		WP_BRYAR_PISTOL},
-	{2, "E11 Blaster Rifle",	"the rifle used by the Storm Troopers. Normal fire is a single shot, while the alternate fire is the rapid fire. Level 2 unlocks the alternate fire mode.",																																										"weapons",	"merc",		WP_BLASTER},
-	{2, "Disruptor",			"the sniper, used by the rodians ingame. Normal fire is a shot that causes %d damage, alternate fire allows zoom and a charged shot that when fully charged. Level 2 unlocks the alternate fire mode.",																																					"weapons",	"merc",		WP_DISRUPTOR},
-	{2, "Bowcaster",			"the famous weapon used by Chewbacca. Normal fire can be charged to fire up to 5 shots at once. Level 2 unlocks the alternate fire mode.",																																																				"weapons",	"merc",		WP_BOWCASTER},
-	{2, "Repeater",				"a powerful weapon with a rapid fire and a plasma bomb. Normal fire shoots the rapid fire, and does %d damage. Alt fire fires the plasma bomb. Level 2 unlocks the alternate fire mode.",																																									"weapons",	"merc",		WP_REPEATER},
-	{2, "DEMP2",				"a very powerful weapon against machine npc and some vehicles, causing more damage to them and stunning them. Normal fire does %d damage and alt fire can be charged. Level 2 unlocks the alternate fire mode.",																																			"weapons",	"merc",		WP_DEMP2},
-	{2, "Flechette",			"this weapon is similar to a shotgun. Normal fire causes %d damage. Alt fire shoots 2 bombs. Level 2 unlocks the alternate fire mode.",																																																					"weapons",	"merc",		WP_FLECHETTE},
-	{2, "Rocket Launcher",		"a powerful explosive weapon. Normal fire shoots a rocket causing %d damage. Alt fire shoots a homing missile. Level 2 unlocks the alternate fire mode.",																																																	"weapons",	"merc",		WP_ROCKET_LAUNCHER},
-	{2, "Concussion Rifle",		"it shoots a powerful shot that has a big damage area. Alt fire shoots a ray similar to disruptor shots, but it can go through force fields and can throw the enemy on the ground. Level 2 unlocks the alternate fire mode.",																															"weapons",	"merc",		WP_CONCUSSION},
-	{2, "Bryar Pistol",			"very similar to the blaster pistol, but this one has a better fire rate with normal shot. Level 2 unlocks the alternate fire mode.",																																																					"weapons",	"merc",		WP_BRYAR_OLD},
-	{3, "Melee",				"increases the damage of your melee attacks (punches, kicks and grabs). Each level deals more damage.",																																	"weapons",	"merc",		0},
+	{4, "Stun Baton",			"attacks someone with a small electric charge. Each level deals more damage. With Stun Baton Upgrade, opens doors including locked ones, moves elevators, and slows enemies for some seconds",																	"weapons",	"merc",		WP_STUN_BATON},
+	{2, "Blaster Pistol",		"the popular Star Wars pistol used by Han Solo in the movies. Alt fire is a charged shot: the longer the charge, the more damage. Level 2 unlocks the alternate fire mode.",																	"weapons",	"merc",		WP_BRYAR_PISTOL},
+	{2, "E11 Blaster Rifle",	"the rifle used by the Storm Troopers. Normal fire is a single shot, alt fire is rapid fire. Level 2 unlocks the alternate fire mode.",																																										"weapons",	"merc",		WP_BLASTER},
+	{2, "Disruptor",			"the sniper, used by the rodians ingame. Normal fire is a single shot. Alt fire allows zoom and a charged shot. Level 2 unlocks the alternate fire mode.",																																					"weapons",	"merc",		WP_DISRUPTOR},
+	{2, "Bowcaster",			"the famous weapon used by Chewbacca. Normal fire can be charged to fire several shots at once. Level 2 unlocks the alternate fire mode.",																																																				"weapons",	"merc",		WP_BOWCASTER},
+	{2, "Repeater",				"a powerful weapon with a rapid fire and a plasma bomb. Normal fire is the rapid fire, alt fire launches the plasma bomb. Level 2 unlocks the alternate fire mode.",																																									"weapons",	"merc",		WP_REPEATER},
+	{2, "DEMP2",				"very effective against machine npcs and some vehicles, stunning them for longer than other targets. Alt fire can be charged. Level 2 unlocks the alternate fire mode.",																																			"weapons",	"merc",		WP_DEMP2},
+	{2, "Flechette",			"works like a shotgun. Alt fire shoots 2 bombs. Level 2 unlocks the alternate fire mode.",																																																					"weapons",	"merc",		WP_FLECHETTE},
+	{2, "Rocket Launcher",		"a powerful explosive weapon. Normal fire shoots a rocket, alt fire a homing missile. Level 2 unlocks the alternate fire mode.",																																																	"weapons",	"merc",		WP_ROCKET_LAUNCHER},
+	{2, "Concussion Rifle",		"shoots a powerful blast with a big damage area. Alt fire is a ray like the disruptor's, but it goes through force fields and knocks the enemy down. Level 2 unlocks the alternate fire mode.",																															"weapons",	"merc",		WP_CONCUSSION},
+	{2, "Bryar Pistol",			"like the blaster pistol but fires twice as fast. Level 2 unlocks the alternate fire mode.",																																																					"weapons",	"merc",		WP_BRYAR_OLD},
+	{3, "Melee",				"increases the damage of your punches, kicks and grabs. Each level deals more.",																																	"weapons",	"merc",		0},
 	{5, "Max Shield",			"The max shield (armor) the player can have. Each level increases 20 per cent of max shield the player can have",																																																"protect",	"merc",		0},
 	{4, "Shield Strength",		"Each level increases your shield resistance by 7 per cent",																																																													"protect",	"merc",		0},
 	{4, "Health Strength",		"Each level increases your health resistance by 7 per cent",																																																													"protect",	"merc",		0},
@@ -10606,7 +10606,7 @@ void Cmd_Stuff_f( gentity_t *ent ) {
 				// mechanic is opening/unlocking doors and elevators) and "decloak enemies" (no longer
 				// upgrade-specific since the cloak-sync overhaul made ANY damage decloak a cloaked
 				// target, with or without this upgrade -- see G_Damage's centralized decloak hook).
-				trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, and move elevators. Also decreases their running speed for some seconds\n\n\"");
+				trap->SendServerCommand( ent-g_entities, "print \"\n^3Stun Baton Upgrade: ^7allows stun baton to open any door, including locked ones, and move elevators. Also decreases enemies' running speed for some seconds\n\n\"");
 			}
 			else
 			{
