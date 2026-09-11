@@ -6589,7 +6589,20 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 		{
 			if (mode == SAY_ALL) {
 
-				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE))
+				// GalaxyRP fix: [Chat] spectators hear ordinary chat regardless of range, matching the
+				// two other distance-scoped receiver loops -- the chat_modifiers dispatch above (every
+				// /me, /do, /my, /shout and language variant) and zyk_send_chat_within_distance()
+				// (/roll and /flipcoin), both of which already exempted them. Plain chat was the only
+				// one that did not, so a spectator heard every in-character action on the map but only
+				// ordinary conversation within 700 units -- backwards, since following a conversation
+				// is most of what spectating is for. An admin holding ADM_IGNORECHATDISTANCE was never
+				// affected either way; this is about spectators who do not hold it.
+				//
+				// Safe on a stale client slot: this loop validates nothing before reading other->client
+				// (g_entities[i].client is assigned for every slot in G_InitGame, so it is never NULL),
+				// but an unoccupied slot reads TEAM_FREE rather than TEAM_SPECTATOR, and G_SayTo()
+				// below rejects any slot that is not inuse/connected before sending anything.
+				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 				{
 					if (ooc_flag == 1) {
 						G_SayTo(ent, other, mode, color, name, ooc_text, locMsg);
@@ -8929,8 +8942,9 @@ static qboolean zyk_parse_dice_arg(const char *arg, int *number_of_dice, int *ma
 // every /me, /do, /my and /shout variant in chat_modifiers[] above is distance-scoped. This sends an
 // already-formatted chat line to the players who would have received a /me from this player, and
 // matches the receiver rules the chat_modifiers dispatch in G_Say uses: an admin holding
-// ADM_IGNORECHATDISTANCE hears everything, and spectators always hear everything. G_Say's own loop is
-// deliberately left alone -- this is a second caller of the same rules, not a refactor of the first.
+// ADM_IGNORECHATDISTANCE hears everything, and spectators always hear everything. G_Say's own loops
+// are deliberately left in place -- this is a third caller of the same rules, not a refactor of them.
+// All three now agree on both clauses; plain chat was the last to gain the spectator one.
 static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const char *message)
 {
 	int i = 0;
@@ -8953,8 +8967,9 @@ static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const ch
 			// StopFollowing -- so ps.clientNum on a follower is the FOLLOWED player's number. Using it
 			// meant the follower received nothing while the player they were watching received the same
 			// line once more per follower. i is this slot's own index and is always correct. (The
-			// chat_modifiers loop in G_Say above still has this same defect; it is older and out of
-			// scope here, but it is the reason this code was written this way.)
+			// chat_modifiers loop in G_Say carried the same defect when this was written, which is why
+			// this code was written this way; it has since been corrected there too -- see the
+			// "send to j, not other->client->ps.clientNum" comment on that loop.)
 			trap->SendServerCommand(i, message);
 		}
 	}
