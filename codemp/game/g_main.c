@@ -5030,6 +5030,129 @@ qboolean zyk_is_ally(gentity_t *ent, gentity_t *other)
 	return qfalse;
 }
 
+/*
+GalaxyRP fix: [NPC] the one place that breaks an NPC's follow link to its leader.
+
+The three-line dance -- drop the /order guard and /order cover bits, drop the leader, fall back
+to BS_STAND_GUARD -- was open-coded in TryUse() and again in ClientDisconnect(), and is now
+needed in two more places (see zyk_release_player_npcs() and zyk_npc_leader_lost() below). Four
+hand-written copies is four chances for them to drift apart, which is exactly how
+NPC_CheckCharmed() ended up clearing the leader without the order bits. One function now.
+
+goalEntity is cleared too when it is the leader: NPC_BSFollowLeader() parks the leader there as
+the move goal whenever it closes or backs off, and NPC_SlideMoveToGoal() reads
+goalEntity->r.currentOrigin without an inuse test. G_ClearEnemy() does the same for the enemy
+pointer, for the same reason.
+
+Vehicles keep their behaviour untouched, matching the guard TryUse() and Cmd_Order_f() already
+apply -- BS_STAND_GUARD is meaningless for a vehicle and its bState is driven by its rider.
+*/
+void zyk_release_npc_from_leader(gentity_t *npc_ent)
+{
+	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)
+		return;
+
+	npc_ent->client->pers.player_statuses &= ~(1 << 18);
+	npc_ent->client->pers.player_statuses &= ~(1 << 19);
+
+	if (npc_ent->client->leader && npc_ent->NPC->goalEntity == npc_ent->client->leader)
+	{
+		npc_ent->NPC->goalEntity = NULL;
+	}
+
+	npc_ent->client->leader = NULL;
+
+	if (npc_ent->client->NPC_class != CLASS_VEHICLE)
+	{
+		npc_ent->NPC->tempBehavior = BS_STAND_GUARD;
+	}
+}
+
+/*
+GalaxyRP fix: [NPC] should this NPC still be following the player it is following?
+
+TryUse() tests OnSameTeam() once, at the moment the Use key claims the NPC, and nothing ever
+looked again. Everything that test depends on can change a second later, and none of it did
+anything: the leader could go to spectator and keep an escort walking to wherever
+SpectatorClientEndFrame() had copied their playerState origin to -- for a following spectator
+that is the position of whoever they are watching, so an NPC could be aimed at a live player it
+was never given to -- or simply switch team and keep NPCs claimed as the other side.
+
+Note that re-running OnSameTeam() by itself catches none of this. Its player-versus-NPC arm
+returns qtrue for any ET_PLAYER against an ET_NPC on NPCTEAM_PLAYER and returns before it ever
+looks at sessionTeam, so it reads the same both before and after any team change, spectator
+included. The conditions that actually change are spelled out here instead.
+
+Red/blue switches are handled where they happen, in SetTeam() and SetTeamQuick(); this is the
+per-frame net under them, for the routes that write sessionTeam directly and never call either
+(StopFollowing() is the obvious one).
+
+Two kinds of link are deliberately out of scope. Mind Trick 3 charm sets leader as well, but
+NPC_CheckCharmed() owns that link and restores the NPC's original teams when charmedTime runs
+out, so it is left alone. ICARUS SET_LEADER can name another NPC as the leader, and a map script
+pointing one NPC at another has nothing to do with the Use key.
+*/
+qboolean zyk_npc_leader_lost(gentity_t *npc_ent)
+{
+	gentity_t *leader = NULL;
+
+	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)
+		return qfalse;
+
+	leader = npc_ent->client->leader;
+
+	if (!leader)
+		return qfalse;
+
+	if (npc_ent->NPC->charmedTime > level.time)
+		return qfalse;
+
+	if (leader->s.number >= MAX_CLIENTS || !leader->client)
+		return qfalse;
+
+	if (!leader->inuse || leader->client->pers.connected != CON_CONNECTED)
+		return qtrue;
+
+	if (leader->client->sess.sessionTeam == TEAM_SPECTATOR)
+		return qtrue;
+
+	return qfalse;
+}
+
+/*
+GalaxyRP fix: [NPC] release every NPC this player is leading.
+
+Called from SetTeam() and SetTeamQuick() when a player actually changes team. Charmed NPCs are
+skipped for the reason given on zyk_npc_leader_lost() above -- the player is still in the game
+here, so there is no dangling pointer to force the issue, unlike ClientDisconnect(), which
+releases them too because it has to.
+
+Starts at MAX_CLIENTS like Cmd_Order_f() and ClientDisconnect(): NPCs never hold a client slot.
+*/
+void zyk_release_player_npcs(gentity_t *ent)
+{
+	int i = 0;
+
+	if (!ent || !ent->client)
+		return;
+
+	for (i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t *npc_ent = &g_entities[i];
+
+		if (!npc_ent->inuse || !npc_ent->client || !npc_ent->NPC)
+			continue;
+
+		if (npc_ent->client->leader != ent)
+			continue;
+
+		if (npc_ent->NPC->charmedTime > level.time)
+			continue;
+
+		zyk_release_npc_from_leader(npc_ent);
+	}
+}
+
 // zyk: counts how many allies this player has
 int zyk_number_of_allies(gentity_t *ent, qboolean in_rpg_mode)
 {

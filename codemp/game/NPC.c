@@ -1816,6 +1816,22 @@ void NPC_Think ( gentity_t *self)//, int msec )
 		return;
 	}
 
+	// GalaxyRP fix: [NPC] re-check the leader every think, instead of trusting the single
+	// OnSameTeam() test TryUse() ran when the Use key claimed this NPC. SetTeam() and SetTeamQuick()
+	// already release on a team change; this is the net under them, for the paths that write
+	// sessionTeam without going through either -- StopFollowing() being the plain example -- and for
+	// a leader whose client slot has gone away. zyk_npc_leader_lost() spells out the conditions and
+	// says which links it deliberately leaves alone.
+	//
+	// Placed above the dead/frozen/vehicle early-returns below rather than inside
+	// NPC_ExecuteBState(), so that an NPC which is not currently running a bState still lets go: the
+	// point is to stop holding the pointer, and those NPCs are precisely the ones that would hold it
+	// longest.
+	if (zyk_npc_leader_lost(self) == qtrue)
+	{
+		zyk_release_npc_from_leader(self);
+	}
+
 	// dead NPCs have a special think, don't run scripts (for now)
 	//FIXME: this breaks deathscripts
 	if ( self->health <= 0 )

@@ -820,6 +820,16 @@ void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin)
 		G_ValidateSiegeClassForTeam(ent, team);
 	}
 
+	// GalaxyRP fix: [NPC] release any NPCs this player is leading when the team actually changes,
+	// matching the call SetTeam() makes at its own commit point -- see the longer comment there for
+	// why re-running OnSameTeam() would catch nothing. This path exists separately because SetTeam()'s
+	// Siege branch reaches SetTeamQuick() and returns before getting that far, and because g_saga.c
+	// and ClientBegin() call it directly.
+	if (ent->client->sess.sessionTeam != team)
+	{
+		zyk_release_player_npcs(ent);
+	}
+
 	ent->client->sess.sessionTeam = team;
 
 	if (team == TEAM_SPECTATOR)

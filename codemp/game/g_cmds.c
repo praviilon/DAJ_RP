@@ -5530,6 +5530,21 @@ void SetTeam( gentity_t *ent, char *s ) {
 	// execute the team change
 	//
 
+	// GalaxyRP fix: [NPC] the change is committed from here down, so this is where a player lets go
+	// of the NPCs they were leading. TryUse() tested OnSameTeam() once, when the Use key claimed the
+	// NPC, and nobody ever looked again -- so an escort claimed on red stayed claimed on blue, and an
+	// escort claimed alive stayed claimed from the spectator camera, walking to whatever origin
+	// SpectatorClientEndFrame() had copied into that player's playerState. Re-running OnSameTeam()
+	// here would catch neither: its player-versus-NPC arm answers qtrue for any ET_PLAYER against an
+	// ET_NPC on NPCTEAM_PLAYER and returns before it reads sessionTeam at all, so it reads the same
+	// on both sides of every team change. The team change itself is the signal.
+	//
+	// Deliberately here and not in Cmd_Team_f(): SetTeam() is the one funnel every team change goes
+	// through, player-driven or not, and the sibling forced routes (g_active.c's idle kick,
+	// ClientBegin()'s bot handling, g_saga.c) all land here too. SetTeamQuick() gets its own call,
+	// since the Siege branch above reaches it without passing this point.
+	zyk_release_player_npcs( ent );
+
 	//If it's siege then show the mission briefing for the team you just joined.
 //	if (level.gametype == GT_SIEGE && team != TEAM_SPECTATOR)
 //	{
@@ -10210,7 +10225,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
 ^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
-^3/order <action>: ^7Orders NPC to perform an action.\n\
+^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\

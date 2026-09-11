@@ -38,6 +38,9 @@ void WP_SaberAddG2Model( gentity_t *saberent, const char *saberModel, qhandle_t 
 void WP_SaberRemoveG2Model( gentity_t *saberent );
 extern qboolean WP_SaberStyleValidForSaber( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int saberAnimLevel );
 extern qboolean WP_UseFirstValidSaberStyle( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int *saberAnimLevel );
+// GalaxyRP fix: [NPC] declared here rather than by including b_local.h, which this file has never
+// pulled in. ClientDisconnect() uses it to drop the departing player as any NPC's enemy.
+extern void G_ClearEnemy( gentity_t *self );
 
 forcedata_t Client_Force[MAX_CLIENTS];
 
@@ -4627,6 +4630,25 @@ void ClientDisconnect( int clientNum ) {
 	// order bits, drop the leader, stand guard -- so the NPC stays in the world and can be claimed
 	// by anyone, and no behaviour here is new. Scans from MAX_CLIENTS like Cmd_Order_f(), since
 	// NPCs never occupy a client slot.
+	//
+	// GalaxyRP fix: [NPC] the same sweep now also drops this player as an NPC's enemy, which dangled
+	// in exactly the way leader did and for the same reason: nothing here, in player_die() or in
+	// G_FreeEntity() ever clears an inbound reference, and health is not zeroed on the way out, so a
+	// player who quit while alive stayed a live, valid-looking target.
+	//
+	// NPC_ExecuteBState() does carry a `if ( !NPC->enemy->inuse ) G_ClearEnemy()` net, but it is not
+	// enough on its own. It runs after NPC_RunBehavior(), so the bState gets one full pass against
+	// the departed player first -- firing at the origin they left from, and in NPC_BSFollowLeader()
+	// handing that same pointer to other NPCs as their enemy through the leader->enemy branch. And
+	// NPC_Think() returns before ever reaching it when the NPC is dead, ICARUS-frozen, riding or
+	// driving a vehicle, or simply has not hit nextBStateThink yet, so for those the stale pointer
+	// survives until they think again -- indefinitely, in the frozen and vehicle cases. Since client
+	// slots are recycled, that window is the whole bug: whoever connects into this slot next inherits
+	// being shot at, having done nothing.
+	//
+	// G_ClearEnemy() rather than a bare assignment, because it also drops the lookTarget and the move
+	// goal when they point at the same entity. lastEnemy is only ever compared, never dereferenced,
+	// but it is cleared too so that a recycled slot is not mistaken for "the enemy I just fought".
 	for (i = MAX_CLIENTS; i < level.num_entities; i++)
 	{
 		gentity_t *npc_ent = &g_entities[i];
@@ -4634,16 +4656,22 @@ void ClientDisconnect( int clientNum ) {
 		if (!npc_ent->inuse || !npc_ent->client || !npc_ent->NPC)
 			continue;
 
-		if (npc_ent->client->leader != ent)
-			continue;
-
-		npc_ent->client->pers.player_statuses &= ~(1 << 18);
-		npc_ent->client->pers.player_statuses &= ~(1 << 19);
-		npc_ent->client->leader = NULL;
-
-		if (npc_ent->client->NPC_class != CLASS_VEHICLE)
+		if (npc_ent->enemy == ent)
 		{
-			npc_ent->NPC->tempBehavior = BS_STAND_GUARD;
+			G_ClearEnemy(npc_ent);
+		}
+
+		if (npc_ent->lastEnemy == ent)
+		{
+			npc_ent->lastEnemy = NULL;
+		}
+
+		// Charmed NPCs are released here as well, unlike the team-change path in
+		// zyk_release_player_npcs(): NPC_CheckCharmed() would not clear the leader until charmedTime
+		// expires, and this pointer cannot be left standing for that long.
+		if (npc_ent->client->leader == ent)
+		{
+			zyk_release_npc_from_leader(npc_ent);
 		}
 	}
 
