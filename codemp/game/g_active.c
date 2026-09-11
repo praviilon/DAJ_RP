@@ -879,15 +879,18 @@ RP_DownedTimerTick
 One second of a downed player's countdown: the on-screen timer, the decrement, and the auto-release
 that ends an admin paralysis once its time is served.
 
-GalaxyRP fix: [Death System] split out of ClientTimerActions() because that function is only ever
-reached by a player who is alive and in the world. ClientThink_real() returns into
-ClientIntermissionThink() and into SpectatorThink() long before it, and returns again just above it
-for a player waiting to respawn -- so a downed player who became a spectator froze their own
-countdown. An admin paralysis then never expired: the target could sit the entire punishment out as
-a free-flying camera and rejoin still paralysed with the same time remaining. The tick lives here so
-the spectator path can drive it too, via RP_SpectatorDownedTimer() below. Being downed is state that
-lives in pers and survives a respawn; its countdown should be served in wall-clock time wherever the
-player happens to be, not only while they are standing in the world.
+GalaxyRP fix: [Death System] split out of ClientTimerActions(), which is only ever reached by a
+player who is alive and in the world: ClientThink_real() returns into ClientIntermissionThink() and
+into SpectatorThink() long before it, and returns again just above it for a player waiting to
+respawn. A downed player who became a spectator therefore froze their own countdown, and an admin
+paralysis never expired -- the target could sit the entire punishment out as a free-flying camera and
+rejoin still paralysed with the same time remaining. Being downed is state that lives in pers and
+survives a respawn; its countdown is served in wall-clock seconds wherever the player happens to be.
+
+RP_RunDownedTimer() below is the one driver, called from ClientEndFrame() which runs once per server
+frame for every connected client -- spectators, followers and intermission included -- and paced by
+the server frame delta rather than by a client's usercmd timing. See downedTimeResidual in g_local.h
+for why msec was the wrong clock for this.
 ==============
 */
 static void RP_DownedTimerTick( gentity_t *ent )
@@ -960,39 +963,54 @@ static void RP_DownedTimerTick( gentity_t *ent )
 
 /*
 ==============
-RP_SpectatorDownedTimer
+RP_RunDownedTimer
 
-Drives RP_DownedTimerTick() at 1Hz for a client ClientTimerActions() will not be called for, reusing
-the same client->timeResidual accumulator. The two drivers are mutually exclusive within a think --
-ClientThink_real() returns immediately after calling this one -- so the residual is still consumed
-exactly once per think, and a player crossing between the two paths carries their part-second over.
+Paces RP_DownedTimerTick() at 1Hz off the server frame clock. Called from ClientEndFrame(), which
+G_RunFrame() runs exactly once per server frame for every in-use client slot, above the point where
+spectators are split off -- so this reaches a player in the world, a free-flying spectator, a
+follower and a client sitting in intermission alike, and reaches each of them at the same rate.
 
-Does nothing at all for an ordinary spectator, so their residual is left exactly as it was, which is
-the behaviour every non-downed client had before.
+The frame delta is clamped: a single pathological delta (a server hitch, or a level.time that jumped)
+must not turn the catch-up loop into thousands of iterations, each sending a server command.
+
+ClientSpawn() calls ClientEndFrame() directly as part of settling a respawn, and SpectatorClientEndFrame()
+can reach ClientBegin() -> ClientSpawn() and so nest one inside another. Those add at most an extra
+frame delta or two to the accumulator on a respawn -- bounded, one-off, and far below the one-second
+resolution this counts in.
 ==============
 */
-static void RP_SpectatorDownedTimer( gentity_t *ent, int msec )
+static void RP_RunDownedTimer( gentity_t *ent )
 {
-	if ( !ent || !ent->client )
+	int frameMsec;
+
+	if ( !ent || !ent->client || ent->s.number >= MAX_CLIENTS )
 	{
 		return;
 	}
 
 	if ( !G_PlayerIsDowned( ent ) && !ent->client->pers.downedTime )
-	{ // nothing to count down and nothing stale to clear
+	{ // not downed and nothing stale left over -- keep the accumulator clean and do nothing
+		ent->client->downedTimeResidual = 0;
 		return;
 	}
 
-	if ( msec < 1 )
-	{ // a followed client can report bad times; never wind the accumulator backwards
-		return;
-	}
+	frameMsec = level.time - level.previousTime;
 
-	ent->client->timeResidual += msec;
-
-	while ( ent->client->timeResidual >= 1000 )
+	if ( frameMsec < 1 )
 	{
-		ent->client->timeResidual -= 1000;
+		return;
+	}
+
+	if ( frameMsec > 1000 )
+	{ // see the note above: bound the loop below to a single pass
+		frameMsec = 1000;
+	}
+
+	ent->client->downedTimeResidual += frameMsec;
+
+	while ( ent->client->downedTimeResidual >= 1000 )
+	{
+		ent->client->downedTimeResidual -= 1000;
 		RP_DownedTimerTick( ent );
 	}
 }
@@ -1175,8 +1193,6 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		{ // zyk: countdown of the vote timer
 			client->sess.vote_timer--;
 		}
-
-		RP_DownedTimerTick( ent );
 
 		// Tr!Force: [Motd] Show server motd
 		if (client->motdTime)
@@ -2685,11 +2701,6 @@ void ClientThink_real( gentity_t *ent ) {
 
 	// spectators don't do much
 	if ( client->sess.sessionTeam == TEAM_SPECTATOR || client->tempSpectate >= level.time ) {
-		// GalaxyRP fix: [Death System] except serve a downed countdown, which must keep running
-		// wherever the player is. See RP_DownedTimerTick() for why this cannot be left to
-		// ClientTimerActions(), which both returns below never reach.
-		RP_SpectatorDownedTimer( ent, msec );
-
 		if ( client->sess.spectatorState == SPECTATOR_SCOREBOARD ) {
 			return;
 		}
@@ -4620,6 +4631,13 @@ void ClientEndFrame( gentity_t *ent ) {
 			ent->client->ps.stats[STAT_USE_HINT] = 0;
 		}
 	}
+
+	// GalaxyRP fix: [Death System] serve a downed player's countdown, here for the same structural
+	// reason the block above is here: this runs for every client every server frame, and it runs
+	// ABOVE the spectator split below. ClientTimerActions() reaches neither a spectator nor a client
+	// in intermission, so a countdown left to it stopped the moment its owner left the world. See
+	// RP_RunDownedTimer() and RP_DownedTimerTick() above.
+	RP_RunDownedTimer( ent );
 
 	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR ) {
 		SpectatorClientEndFrame( ent );

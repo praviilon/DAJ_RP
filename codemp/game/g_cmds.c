@@ -1541,6 +1541,10 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 
 	ent->client->pers.downedTime = downedSeconds;
 
+	// GalaxyRP fix: [Death System] start the countdown on a whole second rather than inheriting
+	// whatever part-second was left over from a previous stay in this state.
+	ent->client->downedTimeResidual = 0;
+
 	ent->client->invulnerableTimer = level.time + 3000;
 	ent->client->ps.eFlags |= EF_INVULNERABLE;
 
@@ -1554,6 +1558,47 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 	ent->client->ps.velocity[2] += 150;
 	ent->client->ps.forceDodgeAnim = 0;
 	ent->client->ps.quickerGetup = qtrue;
+}
+
+/*
+==================
+RP_ClearDownedState
+
+GalaxyRP fix: [Death System] the one place the downed state is torn down. It clears the four fields
+that make it up -- player_statuses bits 6 and 26, pers.downedTime, and FL_NOTARGET -- and does
+nothing else: no animation, no message, no grace period, so every caller can still present the exit
+its own way.
+
+There used to be three hand-written copies of this and only one of them was complete. player_die()
+cleared all three status fields; help_up() cleared bit 6 and the countdown but not bit 26; and
+G_Damage()'s branch for finishing off a player who is already down cleared bit 6 alone and left the
+other two to player_die(), which has three early returns (dead pm_type, intermission, no attacker)
+above its own cleanup. Both incomplete copies were safe, but only because of a guard somewhere else
+-- can_player_get_up() refuses bit 26 before help_up() ever runs, and G_Damage() normalises a NULL
+attacker to the world entity before it reaches that branch -- which is a property of the call sites,
+not of the code doing the clearing. The residue if either guarantee ever lapsed is bit 26 set with
+bit 6 clear: a player walking around free whom /paralyze refuses as "already paralyzed" and only
+/unparalyze can reset. Routing all four callers through here makes it impossible by construction.
+
+FL_NOTARGET is cleared only when bit 6 was actually set, tested before the bit is cleared, so this
+never strips the flag from someone who has it for another reason -- the /notarget cheat, or a cloak.
+==================
+*/
+void RP_ClearDownedState( gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	if ( G_PlayerIsDowned( ent ) && (ent->flags & FL_NOTARGET) )
+	{
+		ent->flags &= ~FL_NOTARGET;
+	}
+
+	ent->client->pers.player_statuses &= ~(1 << 6);
+	ent->client->pers.player_statuses &= ~(1 << 26);
+	ent->client->pers.downedTime = 0;
 }
 
 // GalaxyRP fix: [Death System] the counterpart to RP_EnterDownedState(): clears both status bits,
@@ -1570,14 +1615,7 @@ void RP_ReleaseFromDownedState( gentity_t *ent )
 		return;
 	}
 
-	ent->client->pers.player_statuses &= ~(1 << 6);
-	ent->client->pers.player_statuses &= ~(1 << 26);
-	ent->client->pers.downedTime = 0;
-
-	if ( ent->flags & FL_NOTARGET )
-	{
-		ent->flags &= ~FL_NOTARGET;
-	}
+	RP_ClearDownedState( ent );
 
 	// same selection help_up() uses for a player getting up unaided
 	switch ( ent->client->pers.skill_levels[0] )
@@ -1657,6 +1695,13 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 		else {
 			trap->SendServerCommand(ent - g_entities, va("cp \"^2You helped %s up.\"", target->client->pers.netname));
 			trap->SendServerCommand(ent - g_entities, va("print \"^2You helped %s up.\"", target->client->pers.netname));
+			// GalaxyRP fix: [Death System] and tell the target. This bypass returns before the
+			// ordinary other-player branch below, which is the only place that sent them anything,
+			// so an admin with Instant Revive hauled someone to their feet in silence -- from any
+			// distance, since the bypass skips the range check too. Same two messages that branch
+			// sends, word for word, so both routes read identically to the player being helped.
+			trap->SendServerCommand(target - g_entities, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
+			trap->SendServerCommand(target - g_entities, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
 		}
 
 		return qtrue;
@@ -1720,15 +1765,11 @@ void help_up(gentity_t* ent, gentity_t* target) {
 	if (can_player_get_up(ent, target)) {
 		//GalaxyRP (Alex): [Death System] No longer paralyzed.
 		
-		target->client->pers.player_statuses &= ~(1 << 6);
-		// GalaxyRP fix: [Death System] clear the countdown alongside the bit, for the same reason
-		// player_die() does: downedTime lives in pers now and would otherwise outlive the state it
-		// describes until ClientTimerActions()'s next tick.
-		target->client->pers.downedTime = 0;
-
-		if (target->flags & FL_NOTARGET) {
-			target->flags ^= FL_NOTARGET;
-		}
+		// GalaxyRP fix: [Death System] through the shared clear. This used to zero bit 6, the
+		// countdown and FL_NOTARGET by hand and leave bit 26 behind -- harmless only because
+		// can_player_get_up() refuses an admin paralysis above, a guarantee held at the call site
+		// rather than here. See RP_ClearDownedState().
+		RP_ClearDownedState( target );
 
 		if (ent != target) {
 			play_animation(ent, BOTH_HELPUP, 1000);

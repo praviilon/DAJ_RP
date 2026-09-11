@@ -2162,15 +2162,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	// GalaxyRP (Alex): [Database] Update just the ammo table with the current values on death.
 	update_weapons_table_row_with_current_values(self);
 
-	self->client->pers.player_statuses &= ~(1 << 6);
-	// GalaxyRP fix: [Death System] clear the admin-paralysis marker alongside the downed bit. Bit 26
-	// is only ever meaningful together with bit 6, so leaving it set here would strand a stale marker
-	// on a player who died out of an admin paralysis and respawned free.
-	self->client->pers.player_statuses &= ~(1 << 26);
-	// GalaxyRP fix: [Death System] and the countdown with them. downedTime lives in pers now, so it
-	// survives the respawn that follows -- ClientTimerActions() would zero it on its next tick, but
-	// clearing it here keeps the countdown and the bits coherent from the moment of death.
-	self->client->pers.downedTime = 0;
+	// GalaxyRP fix: [Death System] dying ends a downed state, and ends all of it: both status bits,
+	// the countdown (which lives in pers and would otherwise survive the respawn that follows) and
+	// FL_NOTARGET. This was three hand-written lines that had to be kept in step with the other exits
+	// by hand; it is one shared call now. See RP_ClearDownedState() in g_cmds.c.
+	RP_ClearDownedState( self );
 
 	// zyk: remove any quest_power status from this player
 	self->client->pers.quest_power_status = 0;
@@ -6219,7 +6215,16 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				if (targ->client->pers.player_statuses & (1 << 6)) {
-					targ->client->pers.player_statuses &= ~(1 << 6);
+					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used
+					// to zero that one bit and leave pers.downedTime and bit 26 to player_die() --
+					// which returns early, above its own cleanup, on an intermission or a NULL
+					// attacker. G_Damage() normalises a NULL attacker to the world entity long before
+					// this point so that half was unreachable, but the intermission half was not, and
+					// the residue is bit 26 set with bit 6 clear: a player walking around free whom
+					// /paralyze then refuses as "already paralyzed". Clearing here is also the right
+					// order -- it must happen before targ->die(), because several checks (the respawn
+					// gate in ClientThink_real(), the PM_DEAD assignment) read bit 6.
+					RP_ClearDownedState( targ );
 
 					targ->die(targ, inflictor, attacker, take, mod);
 					G_ActivateBehavior(targ, BSET_DEATH);

@@ -1256,6 +1256,18 @@ struct gclient_s {
 	// like health / armor countdowns and regeneration
 	int			timeResidual;
 
+	// GalaxyRP fix: [Death System] the downed countdown's own accumulator, deliberately NOT
+	// timeResidual. That one is fed by ClientThink_real()'s msec, which is only "time since this
+	// client's last think" when Pmove() ran last think and stamped ps.commandTime -- true for a
+	// player in the world and for a free-flying spectator, but false for a SPECTATOR_FOLLOW client,
+	// whose whole playerState (commandTime included) is overwritten each frame with the followed
+	// player's by SpectatorClientEndFrame(). This one is fed by the server frame delta instead
+	// (level.time - level.previousTime, in RP_RunDownedTimer(), g_active.c), so a downed player's
+	// countdown is served in wall-clock seconds wherever they are and whatever their client is doing.
+	// Like timeResidual it is zeroed by ClientSpawn(), so a respawn loses at most the part-second in
+	// progress; RP_EnterDownedState() zeroes it too so a countdown always starts on a whole second.
+	int			downedTimeResidual;
+
 	char		*areabits;
 
 	int			g2LastSurfaceHit; //index of surface hit during the most recent ghoul2 collision performed on this client.
@@ -1897,6 +1909,13 @@ qboolean G_PlayerIsDowned( gentity_t *ent );
 // accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely
 // asks "can this player act?" wants that one; only the revive paths care which it is.
 qboolean G_PlayerIsAdminParalyzed( gentity_t *ent );
+// GalaxyRP fix: [Death System] clears the downed state's four fields together -- player_statuses
+// bits 6 and 26, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no messages, no
+// grace period. Every exit from the state goes through it (RP_ReleaseFromDownedState() and help_up()
+// in g_cmds.c, player_die() and G_Damage()'s finish-off branch in g_combat.c) so none of them can
+// clear one field and forget another, which is how bit 26 used to be left behind. FL_NOTARGET is
+// only touched when bit 6 was actually set, so a /notarget cheat on an undowned player survives.
+void RP_ClearDownedState( gentity_t *ent );
 // GalaxyRP fix: [Death System] ends a downed state: clears both status bits and the countdown,
 // releases FL_NOTARGET and plays the get-up animation. Defined in g_cmds.c beside its counterpart
 // RP_EnterDownedState(). Two callers: RP_DownedTimerTick() (g_active.c) when an admin paralysis
