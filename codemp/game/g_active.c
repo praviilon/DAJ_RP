@@ -1185,24 +1185,53 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 		//GalaxyRP (Alex): [Stat Regen] Never regen while downed or dead.
 		if (ent->health > 0 && !(ent->client->pers.player_statuses & (1 << 6))) {
-			if ((ent->health + health_regen_amount) <= client->pers.max_rpg_health) {
-				if (client->ps.legsAnim == BOTH_MEDITATE) {
-					ent->health += health_regen_amount*2;
-				}
-				else {
-					if (rp_allow_passive_regen.integer) {
-						ent->health += health_regen_amount;
-					}
+			// GalaxyRP fix: [Stat Regen] top up to the maximum, instead of refusing any tick that
+			// would not fit a whole step.
+			//
+			// The guard used to be "value + amount <= max", which stops as soon as you are within
+			// amount-1 of full and then leaves you there for good, because the next tick fails the
+			// same test. Where you settled depended on how much damage you happened to take, and
+			// levelling the skill made it worse rather than better: at amount 1 you always reached
+			// full, at amount 6 you could sit five points short of your own maximum forever.
+			//
+			// Meditating went wrong in the other direction. The guard was written against amount
+			// while the branch under it added amount * 2, so it overshot the maximum by up to amount
+			// and stayed there -- nothing in the tree decays health or shield back down, so the only
+			// way off was to get hit.
+			//
+			// Testing "below the maximum" and clamping after the add fixes both ends and changes
+			// nothing in between: every tick that used to fire still fires, with the same amount, and
+			// meditating is still worth exactly double. The two resources are still decided
+			// independently, so a full health bar does not hold back shield regen or the reverse.
+			//
+			// A value already ABOVE the maximum is left alone rather than clamped down. Shield in
+			// particular can be raised past max_rpg_shield by other means, and quietly draining it
+			// here would be a new behaviour rather than a fix.
+			int health_gain = 0;
+			int shield_gain = 0;
+
+			if (client->ps.legsAnim == BOTH_MEDITATE) {
+				health_gain = health_regen_amount * 2;
+				shield_gain = shield_regen_amount * 2;
+			}
+			else if (rp_allow_passive_regen.integer) {
+				health_gain = health_regen_amount;
+				shield_gain = shield_regen_amount;
+			}
+
+			if (health_gain > 0 && ent->health < client->pers.max_rpg_health) {
+				ent->health += health_gain;
+
+				if (ent->health > client->pers.max_rpg_health) {
+					ent->health = client->pers.max_rpg_health;
 				}
 			}
-			if ((client->ps.stats[STAT_ARMOR] + shield_regen_amount) <= client->pers.max_rpg_shield){
-				if (client->ps.legsAnim == BOTH_MEDITATE) {
-					client->ps.stats[STAT_ARMOR] += shield_regen_amount * 2;
-				}
-				else {
-					if (rp_allow_passive_regen.integer) {
-						client->ps.stats[STAT_ARMOR] += shield_regen_amount;
-					}
+
+			if (shield_gain > 0 && client->ps.stats[STAT_ARMOR] < client->pers.max_rpg_shield) {
+				client->ps.stats[STAT_ARMOR] += shield_gain;
+
+				if (client->ps.stats[STAT_ARMOR] > client->pers.max_rpg_shield) {
+					client->ps.stats[STAT_ARMOR] = client->pers.max_rpg_shield;
 				}
 			}
 		}
