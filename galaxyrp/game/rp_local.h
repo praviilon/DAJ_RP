@@ -201,6 +201,7 @@ void		send_rpg_events(int send_event_timer);
 int			zyk_get_remap_count();
 void		zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qboolean broadcast_message, ...);
 qboolean	zyk_can_deflect_shots(gentity_t *ent);
+void		zyk_clear_npc_order_bits(gentity_t *npc_ent);
 void		zyk_release_npc_from_leader(gentity_t *npc_ent);
 qboolean	zyk_npc_leader_lost(gentity_t *npc_ent);
 void		zyk_release_player_npcs(gentity_t *ent);

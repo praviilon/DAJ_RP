@@ -5031,6 +5031,26 @@ qboolean zyk_is_ally(gentity_t *ent, gentity_t *other)
 }
 
 /*
+GalaxyRP fix: [NPC] drop the /order guard and /order cover bits.
+
+These two bits are the only thing NPC_ValidEnemy() consults before it starts asking
+zyk_is_ally(leader, ent) who is friendly, and a NULL leader answers "nobody" for everyone -- so an
+NPC carrying an order bit without a leader treats its own side as valid enemies. The bits must
+therefore never outlive the leader they were given under, which makes "clear the orders" an
+operation worth naming rather than two lines to remember to copy. Every site that drops a leader
+calls this: the release below, and Q3_SetLeader(), which sets and clears client->leader without
+going anywhere near a bState.
+*/
+void zyk_clear_npc_order_bits(gentity_t *npc_ent)
+{
+	if (!npc_ent || !npc_ent->client)
+		return;
+
+	npc_ent->client->pers.player_statuses &= ~(1 << 18);
+	npc_ent->client->pers.player_statuses &= ~(1 << 19);
+}
+
+/*
 GalaxyRP fix: [NPC] the one place that breaks an NPC's follow link to its leader.
 
 The three-line dance -- drop the /order guard and /order cover bits, drop the leader, fall back
@@ -5052,8 +5072,7 @@ void zyk_release_npc_from_leader(gentity_t *npc_ent)
 	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)
 		return;
 
-	npc_ent->client->pers.player_statuses &= ~(1 << 18);
-	npc_ent->client->pers.player_statuses &= ~(1 << 19);
+	zyk_clear_npc_order_bits(npc_ent);
 
 	if (npc_ent->client->leader && npc_ent->NPC->goalEntity == npc_ent->client->leader)
 	{

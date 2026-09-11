@@ -2241,8 +2241,28 @@ static void Q3_SetLeader( int entID, const char *name )
 		return;
 	}
 
+	// GalaxyRP fix: [NPC] drop the /order guard and /order cover bits whenever this changes the
+	// leader. This was the last route in the tree that moved client->leader without them, and the
+	// NONE/NULL branch below was the damaging half: NPC_ValidEnemy() reads those bits and then asks
+	// zyk_is_ally(leader, ent) who is friendly, which a NULL leader answers "nobody" to -- so an NPC
+	// a player had claimed and set to /order guard, then handed back by a map script, treated every
+	// player on its own side as a valid enemy. TryUse(), Cmd_Order_f(), NPC_CheckCharmed() and
+	// zyk_release_npc_from_leader() all keep the bits and the leader together; this did not.
+	//
+	// Cleared on the assignment branch too, so the orders never carry over to a leader who was not
+	// the one given them. Nothing is lost by that: bits 18 and 19 are set only by Cmd_Order_f(), and
+	// ICARUS has no way to set them, so a script reassigning a leader cannot have meant to keep them.
+	// Both calls sit on the two statements that actually write client->leader, not above the branch:
+	// the else branch has two early returns that leave the leader alone, and a SET_LEADER naming a
+	// missing or dead entity must not quietly strip a player's orders on its way out.
+	//
+	// Only the bits. Deliberately NOT zyk_release_npc_from_leader(), which also forces
+	// BS_STAND_GUARD: a script that sets a leader on a wandering or scripted NPC and later clears it
+	// expects its own bState to survive, and NPC_BSFollowLeader() already stands an NPC down by
+	// itself on the next think when it finds the leader gone.
 	if( !Q_stricmp("NONE", name) || !Q_stricmp("NULL", name))
 	{
+		zyk_clear_npc_order_bits( ent );
 		ent->client->leader = NULL;
 	}
 	else
@@ -2261,6 +2281,7 @@ static void Q3_SetLeader( int entID, const char *name )
 		}
 		else
 		{
+			zyk_clear_npc_order_bits( ent );
 			ent->client->leader = leader;
 		}
 	}

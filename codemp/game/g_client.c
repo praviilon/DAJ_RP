@@ -4675,6 +4675,44 @@ void ClientDisconnect( int clientNum ) {
 		}
 	}
 
+	// GalaxyRP fix: [NPC] do the same for the other players' enemy pointers, which reach NPCs by a
+	// second route.
+	//
+	// player_die() sets self->enemy to whoever killed you (g_combat.c) and G_Damage() sets it to
+	// whoever last hurt you; nothing ever clears either, and ClientSpawn() does not reset them on the
+	// way back in. An escort NPC reads its leader's enemy directly in NPC_BSFollowLeader() and adopts
+	// it with G_SetEnemy(), a path that never consults NPC_ValidEnemy(). G_SetEnemy() does refuse an
+	// entity with inuse == 0, so a freed slot is safe -- but the moment the slot is recycled the
+	// pointer is live again, and the escort opens fire on whoever just connected, for being killed by
+	// someone who has already left. Clearing the inbound references here removes the whole sequence.
+	//
+	// A plain assignment rather than G_ClearEnemy(): that helper exists to keep an NPC's lookTarget
+	// and move goal in step with its enemy, and these are players, with neither.
+	for (i = 0; i < level.maxclients; i++)
+	{
+		gentity_t *player_ent = &g_entities[i];
+
+		if (!player_ent->inuse || !player_ent->client)
+			continue;
+
+		if (player_ent->enemy == ent)
+		{
+			player_ent->enemy = NULL;
+		}
+
+		if (player_ent->lastEnemy == ent)
+		{
+			player_ent->lastEnemy = NULL;
+		}
+	}
+
+	// And this player's own outbound pointers, unconditionally: the slot is about to be handed to
+	// the next person who connects, and ClientSpawn() would not clear these for them. Left alone,
+	// the newcomer inherits a grudge against whoever killed the previous occupant -- and hands it
+	// to their own escort NPCs the first time they claim one.
+	ent->enemy = NULL;
+	ent->lastEnemy = NULL;
+
 	// zyk: player is no longer part of the race, testing if it must be finished
 	if (level.quest_map == 17)
 	{
