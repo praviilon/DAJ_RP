@@ -6332,6 +6332,36 @@ G_Say
 ==================
 */
 
+/*
+==================
+zyk_chat_is_ignored
+
+GalaxyRP fix: [Chat] true when 'other' has /ignore'd 'ent'.
+
+This test used to live only inside G_SayTo(), which meant /ignore covered exactly the chat that
+goes through G_SayTo -- plain say, OOC, team, ally and /tell -- and silently missed the two
+delivery paths that call trap->SendServerCommand() directly: the chat_modifiers loop in G_Say()
+(all 34 RP modifiers: /me, /do, /my, /force, /shout, the languages, /npc, /comm, /thought) and
+zyk_send_chat_within_distance() (/roll and /flipcoin). On an RP server the modifiers are most of
+what anyone actually says, so ignoring a player silenced their ordinary conversation while every
+emote and action they performed still appeared. Extracted here so all three senders share one
+test and it cannot drift again.
+
+The 31 split is the storage layout, not an off-by-one: ignored_players[victim] is an int[2] and
+slot numbers 0..30 live in word 0, 31 and up in word 1 at bit (number - 31).
+==================
+*/
+static qboolean zyk_chat_is_ignored( gentity_t *ent, gentity_t *other )
+{
+	if ( !ent || !other || !other->client )
+		return qfalse;
+
+	if ( ent->s.number < 31 )
+		return (level.ignored_players[other->s.number][0] & (1 << ent->s.number)) ? qtrue : qfalse;
+
+	return (level.ignored_players[other->s.number][1] & (1 << (ent->s.number - 31))) ? qtrue : qfalse;
+}
+
 static void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, const char *name, const char *message, char *locMsg )
 {
 	if (!other) {
@@ -6372,8 +6402,7 @@ static void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, cons
 	}
 
 	// zyk: if player is ignored, then he cant say anything to the target player
-	if ((ent->s.number < 31 && level.ignored_players[other->s.number][0] & (1 << ent->s.number)) || 
-		(ent->s.number >= 31 && level.ignored_players[other->s.number][1] & (1 << (ent->s.number - 31))))
+	if ( zyk_chat_is_ignored( ent, other ) )
 	{
 		return;
 	}
@@ -6514,6 +6543,12 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 
 					other = &g_entities[j];
 					if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
+						continue;
+					// GalaxyRP fix: [Chat] honour /ignore here too. This loop sends straight to the
+					// client and never reaches G_SayTo(), where the test used to live, so every RP
+					// modifier ignored the ignore list. Checked before the range test so it applies
+					// at any distance, exactly as it does for the chat G_SayTo() delivers.
+					if (zyk_chat_is_ignored(ent, other))
 						continue;
 					if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[i].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 					{
@@ -9022,6 +9057,12 @@ static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const ch
 		if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
 			continue;
 
+		// GalaxyRP fix: [Chat] honour /ignore here too -- see zyk_chat_is_ignored(). This sender
+		// also bypasses G_SayTo(), so /roll and /flipcoin used to reach a player who had ignored
+		// the roller. Checked before the range test, like the other two senders.
+		if (zyk_chat_is_ignored(ent, other))
+			continue;
+
 		if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance ||
 			other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) ||
 			other->client->sess.sessionTeam == TEAM_SPECTATOR)
@@ -9991,7 +10032,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 
 			if (Q_stricmp( arg1, "help" ) == 0)
 			{
-				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list protect: ^7lists protection skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n\n\"");
+				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list protect: ^7lists protection skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n^2/list chat: ^7lists chat commands and RP chat modifiers\n\n\"");
 			}
 			else if (Q_stricmp( arg1, "force" ) == 0 || Q_stricmp( arg1, "weapons" ) == 0 || Q_stricmp( arg1, "protect" ) == 0 || 
 					 Q_stricmp( arg1, "ammo" ) == 0 || Q_stricmp( arg1, "items" ) == 0)
@@ -10061,7 +10102,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/stuff item <number (optional)> ^7or ^3/stuff upgrade <number (optional)>: ^7Shows info about merchandise. Run without a number to list available options in that category.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Ally System--------\n\
 ^3/allyadd <player name>: ^7Adds a player as an ally.\n\
-^3/allychat <text>: ^7Sends message to your allies.\n\
+^3/allychat <text>: ^7Sends message to your allies. Any distance, every gametype.\n\
 ^3/allyremove <player name>: ^7Removes player from allies.\n\
 ^3/allylist: ^7Lists your allies.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
@@ -10081,7 +10122,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/order <action>: ^7Orders NPC to perform an action.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
-^3/ignore <player name>: ^7Ignores chat of a player.\n\
+^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\
 ^3/ignorelist: ^7Lists ignored players.\n\
 ^3/jetpack: ^7Gives or removes jetpack from the player.\n\"");
 				// GalaxyRP fix: [Commands] split off into its own SendServerCommand call -- the Misc
@@ -10108,6 +10149,60 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/training <on|off>: ^7Turns training saber mode (near-zero damage) on or off.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
+			}
+			else if (Q_stricmp( arg1, "chat" ) == 0)
+			{
+				// GalaxyRP: [Chat] /list chat. The 34 entries of chat_modifiers[] were undocumented
+				// everywhere -- not in /list commands, not in any menu, not in GalaxyRP.html -- and
+				// /list commands has no room left for them (its tightest block runs at 937 of the
+				// 1022 bytes SV_SendServerCommand will carry). They are documented here as 10 families
+				// plus the range rule rather than 34 separate lines, which is both shorter and closer
+				// to how they are actually built.
+				//
+				// The four chat commands that already appear under Misc in /list commands are repeated
+				// here on purpose, so this section is complete on its own; the wording is kept
+				// identical in both places so a grep finds them together.
+				//
+				// Ranges come from the constants at the top of this file: VOICE_DISTANCE_LOW 65,
+				// VOICE_DISTANCE 600, SHOUT_DISTANCE 1500, VOICE_DISTANCE_LONG/ACTION_DISTANCE_LONG
+				// 2000, ACTION_DISTANCE_LOW 200, ACTION_DISTANCE 1200, BROADCAST_DISTANCE. Plain speech
+				// is the hardcoded 700 in G_Say(), which is deliberately not VOICE_DISTANCE.
+				//
+				// "Modifiers work on normal speech only" is exact: the chat_modifiers loop sits inside
+				// case SAY_ALL and below the ooc_flag branch, which breaks before reaching it, so /ooc,
+				// /say_team, /allychat and /tell all deliver a modifier as literal text.
+				trap->SendServerCommand(ent - g_entities, "print \"\n\
+^2Chat\n\
+\n\
+^3--------Chat Commands--------\n\
+^3/say <text>: ^7Normal speech, 700 units. This is what the chat box sends.\n\
+^3/say_team <text>: ^7Team chat in team gametypes. Otherwise ally chat if you have allies, OOC if not.\n\
+^3/ooc <text>: ^7Out-of-character chat. Server-wide, in every gametype.\n\
+^3/allychat <text>: ^7Sends message to your allies. Any distance, every gametype.\n\
+^3/tell <player name or id> <text>: ^7Private message to one player.\n\
+^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\
+^3/ignorelist: ^7Lists ignored players.\n\
+^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
+\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Chat Modifiers--------\n\
+^7Type a modifier at the start of a chat box message: ^3/me draws a blaster.\n\
+^7Modifiers work on normal speech only - the chat box, or ^3/say^7.\n\
+^7Most take a range suffix: ^3low ^7to whisper, ^3long ^7to carry further, ^3all ^7for server-wide.\n\
+\n\
+^7Speech ranges: ^3low ^765, normal 700, ^3shout ^71500, ^3long ^72000, ^3all ^7server-wide.\n\
+^7Action ranges: ^3low ^7200, normal 1200, ^3long ^72000, ^3all ^7server-wide.\n\
+\n\"");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/me <action>: ^7Actions. ^3/melow /melong /meall\n\
+^3/do <text>: ^7Descriptions of the world around you. ^3/dolow /dolong /doall\n\
+^3/my <text>: ^7Descriptions of something of yours. ^3/mylow /mylong /myall\n\
+^3/force <action>: ^7Force actions. ^3/forcelow /forcelong /forceall\n\
+^3/shout <text>: ^7Shouting, 1500 units. ^3/shoutlong /shoutall ^7(no low variant)\n\
+^3/low ^7or ^3/long ^7or ^3/all <text>: ^7Normal speech at another range.\n\
+^3/npc <text>: ^7Speak as an NPC, 600 units. ^3/npclow /npcall ^7(no long variant)\n\
+^3/c ^7or ^3/comm <text>: ^7Comlink message. Server-wide.\n\
+^3/thought <text>: ^7A thought. Server-wide.\n\
+^3/ryl /ryl2 /rodian /huttese /catharese /mando <text>: ^7Speak a language, 600 units.\n\
+\n\"");
 			}
 			else
 			{ // zyk: the player can also list the specific info of a skill passing the skill number as argument
