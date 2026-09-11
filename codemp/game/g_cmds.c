@@ -1547,7 +1547,7 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 
 // GalaxyRP fix: [Death System] the counterpart to RP_EnterDownedState(): clears both status bits,
 // releases FL_NOTARGET and plays the get-up animation. Used by the admin-paralysis auto-release when
-// the countdown expires and by /paralyze's own toggle-off, so an admin paralysis always ends the same
+// the countdown expires and by the /unparalyze command, so an admin paralysis always ends the same
 // way. help_up() keeps its own copy of this because it additionally handles the two-player case
 // (helper animation, both players' messages) and the post-revive grace period.
 void RP_ReleaseFromDownedState( gentity_t *ent )
@@ -1617,9 +1617,9 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 	}
 
 	// GalaxyRP fix: [Death System] an admin paralysis is a punishment, not a combat knockdown, and
-	// neither /getup nor /helpup may end one -- only waiting out the countdown or a second /paralyze.
+	// neither /getup nor /helpup may end one -- only waiting out the countdown or an admin's /unparalyze.
 	// Deliberately ABOVE the ADM_GETUP bypass below, so a second admin cannot lift another admin's
-	// paralysis through the revive commands either; /paralyze is the one way. The wording avoids
+	// paralysis through the revive commands either; /unparalyze is the one way. The wording avoids
 	// naming /getup and /helpup, since neither is a route out of this state.
 	if (G_PlayerIsAdminParalyzed(target)) {
 		if (ent == target) {
@@ -9797,7 +9797,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
 ^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/silence <player name>: ^7Silences the player.\n\
-^3/paralyze <player name> <seconds (optional, 30-900, default 30)>: ^7Paralyzes the player. Use it again on the same player to release them early.\n\
+^3/paralyze <player name> <seconds (optional, 30-900, default 30)>: ^7Paralyzes the player.\n\
+^3/unparalyze <player name>: ^7Releases a player paralyzed by an admin.\n\
 ^3/admkick <player name>: ^7Kicks player from the server.\n\
 ^3/killother <player name>: ^7Kills a player.\n\
 ^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\
@@ -13030,7 +13031,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_PARALYZE)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/paralyze <player name or ID> <seconds (optional, 30-900, default 30)> ^7to paralyze a player for that long. Use it again on the same player to release them early\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/paralyze <player name or ID> <seconds (optional, 30-900, default 30)> ^7to paralyze a player for that long, or ^3/unparalyze <player name or ID> ^7to release them early. Both share this admin command\n\n\"" );
 		}
 		else if (command_number == ADM_GIVE)
 		{
@@ -14518,7 +14519,7 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 	// RP_PARALYZE_DEFAULT_SECONDS; with it, for the number of seconds given.
 	if ( trap->Argc() != 2 && trap->Argc() != 3 )
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"^1Command Usage: ^3/paralyze ^2<player name or ID> <seconds (optional, %d-%d, default %d)>\n^7Use it again on the same player to release them early.\n\"",
+		trap->SendServerCommand( ent-g_entities, va("print \"^1Command Usage: ^3/paralyze ^2<player name or ID> <seconds (optional, %d-%d, default %d)>\n^7Use ^3/unparalyze ^7to release a paralyzed player early.\n\"",
 			RP_PARALYZE_MIN_SECONDS, RP_PARALYZE_MAX_SECONDS, RP_PARALYZE_DEFAULT_SECONDS) );
 		return;
 	}
@@ -14549,73 +14550,127 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 
 	target = &g_entities[client_id];
 
-	// GalaxyRP fix: [Death System] toggle on the ADMIN paralysis, not on "downed" generally. Keyed on
-	// G_PlayerIsDowned() this refused to paralyze anyone who happened to be knocked down in combat:
-	// the first /paralyze released them from the knockdown they were serving and only a second one
-	// paralyzed them, so one intent cost two commands and the first had a side effect nobody wanted.
-	// Now one press always means "paralyze" -- on a combat knockdown it replaces that state with an
-	// admin paralysis of the requested length -- and only an existing admin paralysis toggles off.
-	// An admin can still free a merely-downed player: can_player_get_up()'s ADM_GETUP bypass lets
-	// /helpup do it, and that bypass sits below the bit-26 refusal so it cannot lift a paralysis.
+	// GalaxyRP fix: [Death System] /paralyze only ever paralyzes now -- releasing is /unparalyze's job
+	// (Cmd_Unparalyze_f below). This used to be a toggle, which made one command mean two opposite
+	// things depending on state the admin could not see, so a repeated or mistyped /paralyze silently
+	// pardoned the player it was meant to punish. Refusing here leaves the running countdown untouched.
+	//
+	// Note this refuses an ADMIN paralysis only. A player merely knocked down in combat is still
+	// paralyzed by this command -- that state is replaced with an admin paralysis of the requested
+	// length -- because refusing those would let a lucky knockdown shield someone from the command.
+	// An admin can still free a merely-downed player with /helpup: can_player_get_up()'s ADM_GETUP
+	// bypass allows it, and that bypass sits below the bit-26 refusal so it cannot lift a paralysis.
 	if (G_PlayerIsAdminParalyzed(target))
-	{ // zyk: if paralyzed, remove it from the target player
-		// GalaxyRP fix: [Death System] shared with the auto-release that fires when the countdown
-		// expires, so a paralysis always ends the same way: both status bits cleared, the countdown
-		// zeroed, FL_NOTARGET released and the get-up animation played. This branch also releases a
-		// player merely downed in combat, which is the admin override it has always been.
-		RP_ReleaseFromDownedState(target);
-
-		trap->SendServerCommand( ent-g_entities, va("print \"Target player %s ^7is no longer paralyzed\n\"", target->client->pers.netname) );
-		trap->SendServerCommand( client_id, va("print \"You are no longer paralyzed\n\"") );
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Target player %s ^7is already paralyzed. Use ^3/unparalyze ^7to release them.\n\"", target->client->pers.netname) );
+		return;
 	}
-	else
-	{ // zyk: paralyze the target player
-		// GalaxyRP fix: [Death System] refuse a dead or spectating target. The command had no
-		// target-state checks at all: paralyzing a corpse or a spectator set a status bit that
-		// survives respawn in pers, so they came back already paralyzed with no way to have earned it.
-		if (target->health <= 0 || target->client->ps.stats[STAT_HEALTH] <= 0 ||
-			(target->client->ps.eFlags & EF_DEAD) || target->client->ps.pm_type == PM_DEAD)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"Target player must be alive.\n\"" );
-			return;
-		}
 
-		if (target->client->sess.sessionTeam == TEAM_SPECTATOR || target->client->tempSpectate >= level.time)
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"Target player is spectating.\n\"" );
-			return;
-		}
-
-		// GalaxyRP fix: [Death System] get the target off any vehicle FIRST. The Death System refuses
-		// to down a mounted player at all, because being downed never touches ps.m_iVehicleNum or a
-		// hideRider vehicle's Ghost()-applied EF_NODRAW/SVF_NOCLIENT state -- only player_die()'s
-		// rider-dismount block clears those, and it does not run for a player who is merely downed.
-		// A rider paralyzed this way was left invisible, non-collidable and welded to the vehicle for
-		// the whole duration. Ejecting here reaches the same clean state by a different route, so an
-		// admin can still paralyze someone who happens to be riding something.
-		if (target->client->NPC_class != CLASS_VEHICLE && target->client->ps.m_iVehicleNum)
-		{
-			gentity_t *veh = &g_entities[target->client->ps.m_iVehicleNum];
-
-			if (veh->inuse && veh->client && veh->m_pVehicle)
-			{
-				veh->m_pVehicle->m_pVehicleInfo->Eject(veh->m_pVehicle, (bgEntity_t *)target, qtrue);
-			}
-		}
-
-		// GalaxyRP fix: [Death System] this used to set the downed state up by hand and had drifted
-		// from the Death System's own copy -- most importantly it never set downedTime, so the
-		// countdown sat at 0, the target was told "You may get up by using /getup", and one command
-		// released them. Shares RP_EnterDownedState() now, which sets the countdown, FL_NOTARGET and
-		// the brief spawn-style invulnerability alongside the status bit.
-		// Deliberately NOT paralyze_player(): that is the Death System's own wrapper and additionally
-		// forces the target to 50 health and counts a death against them. An admin paralysis leaves
-		// health exactly as it was and is not a death.
-		RP_EnterDownedState( target, seconds, qtrue );
-
-		trap->SendServerCommand( ent-g_entities, va("print \"Paralyzed the target player %s ^7for %d seconds\n\"", target->client->pers.netname, seconds) );
-		trap->SendServerCommand( client_id, va("print \"You were paralyzed by an admin for %d seconds\n\"", seconds) );
+	// GalaxyRP fix: [Death System] refuse a dead or spectating target. The command had no
+	// target-state checks at all: paralyzing a corpse or a spectator set a status bit that
+	// survives respawn in pers, so they came back already paralyzed with no way to have earned it.
+	if (target->health <= 0 || target->client->ps.stats[STAT_HEALTH] <= 0 ||
+		(target->client->ps.eFlags & EF_DEAD) || target->client->ps.pm_type == PM_DEAD)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Target player must be alive.\n\"" );
+		return;
 	}
+
+	if (target->client->sess.sessionTeam == TEAM_SPECTATOR || target->client->tempSpectate >= level.time)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Target player is spectating.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [Death System] get the target off any vehicle FIRST. The Death System refuses
+	// to down a mounted player at all, because being downed never touches ps.m_iVehicleNum or a
+	// hideRider vehicle's Ghost()-applied EF_NODRAW/SVF_NOCLIENT state -- only player_die()'s
+	// rider-dismount block clears those, and it does not run for a player who is merely downed.
+	// A rider paralyzed this way was left invisible, non-collidable and welded to the vehicle for
+	// the whole duration. Ejecting here reaches the same clean state by a different route, so an
+	// admin can still paralyze someone who happens to be riding something.
+	if (target->client->NPC_class != CLASS_VEHICLE && target->client->ps.m_iVehicleNum)
+	{
+		gentity_t *veh = &g_entities[target->client->ps.m_iVehicleNum];
+
+		if (veh->inuse && veh->client && veh->m_pVehicle)
+		{
+			veh->m_pVehicle->m_pVehicleInfo->Eject(veh->m_pVehicle, (bgEntity_t *)target, qtrue);
+		}
+	}
+
+	// GalaxyRP fix: [Death System] this used to set the downed state up by hand and had drifted
+	// from the Death System's own copy -- most importantly it never set downedTime, so the
+	// countdown sat at 0, the target was told "You may get up by using /getup", and one command
+	// released them. Shares RP_EnterDownedState() now, which sets the countdown, FL_NOTARGET and
+	// the brief spawn-style invulnerability alongside the status bit.
+	// Deliberately NOT paralyze_player(): that is the Death System's own wrapper and additionally
+	// forces the target to 50 health and counts a death against them. An admin paralysis leaves
+	// health exactly as it was and is not a death.
+	RP_EnterDownedState( target, seconds, qtrue );
+
+	trap->SendServerCommand( ent-g_entities, va("print \"Paralyzed the target player %s ^7for %d seconds\n\"", target->client->pers.netname, seconds) );
+	trap->SendServerCommand( client_id, va("print \"You were paralyzed by an admin for %d seconds\n\"", seconds) );
+}
+
+/*
+==================
+Cmd_Unparalyze_f
+
+GalaxyRP fix: [Death System] the release half of /paralyze, split out into a command of its own.
+/paralyze used to toggle, so the same words meant "punish" or "pardon" depending on state the admin
+could not see; the two are separate commands now and each does exactly one thing.
+
+Deliberately refuses anyone who is not ADMIN-paralyzed, a player knocked down in combat included.
+A combat knockdown is served by the Death System's own countdown and ends with /helpup, or with the
+player's own /getup once that countdown runs out -- an admin holding Instant Revive can already do it
+through /helpup's ADM_GETUP bypass, so there is nothing for this command to add there.
+
+Shares the Paralyze admin command rather than taking a permission bit of its own, the same way
+/killother shares Kick: the admin who can apply a paralysis is the admin who should be able to lift
+one, and a new bit would have to be granted separately to every admin who already has Paralyze.
+==================
+*/
+void Cmd_Unparalyze_f( gentity_t *ent ) {
+	char arg1[MAX_STRING_CHARS];
+	int client_id = -1;
+	gentity_t *target = NULL;
+
+	if (!check_admin_command(ent, ADM_PARALYZE, qtrue))
+	{
+		return;
+	}
+
+	if ( trap->Argc() != 2 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/unparalyze ^2<player name or ID>\n^7Releases a player paralyzed by an admin.\n\"" );
+		return;
+	}
+
+	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	client_id = ClientNumberFromString( ent, arg1, qfalse );
+
+	if (client_id == -1)
+	{
+		return;
+	}
+
+	target = &g_entities[client_id];
+
+	if (!G_PlayerIsAdminParalyzed(target))
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Target player %s ^7is not paralyzed.\n\"", target->client->pers.netname) );
+		return;
+	}
+
+	// Shared with the auto-release that fires when the countdown expires, so a paralysis always ends
+	// the same way: both status bits cleared, the countdown zeroed, FL_NOTARGET released and the
+	// get-up animation played.
+	RP_ReleaseFromDownedState( target );
+
+	trap->SendServerCommand( ent-g_entities, va("print \"Target player %s ^7is no longer paralyzed\n\"", target->client->pers.netname) );
+	trap->SendServerCommand( client_id, "print \"You are no longer paralyzed\n\"" );
 }
 
 /*
@@ -17009,7 +17064,12 @@ int cmdcmp( const void *a, const void *b ) {
 }
 
 
-/* This array MUST be sorted correctly by alphabetical name field */
+// GalaxyRP fix: [cleanup] dropped the old "This array MUST be sorted correctly by alphabetical
+// name field" comment. It has not been true for a long time -- "spawnplatform" and "spawndummy"
+// sit between "paralyze" and "playsound", among others -- and nothing requires it: ClientCommand()
+// looks entries up with Q_LinearSearch() (q_shared.c), which walks the array from index 0 and does
+// not care about order. Grouping related commands together is fine; new entries go wherever they
+// read best.
 command_t commands[] = {
 	{ "addbot",				Cmd_AddBot_f,				0 },
 	{ "admkick",			Cmd_AdmKick_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
@@ -17125,6 +17185,7 @@ command_t commands[] = {
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "unparalyze",			Cmd_Unparalyze_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "spawnplatform",		Cmd_SpawnPlatform_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "spawndummy",			Cmd_SpawnDummy_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	// GalaxyRP fix: [validation] this used to have no CMD_LOGGEDIN flag at all -- a connected but not
