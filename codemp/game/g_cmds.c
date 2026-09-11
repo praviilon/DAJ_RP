@@ -6421,6 +6421,41 @@ static void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, cons
 	}
 }
 
+/*
+==================
+zyk_chat_word_char
+
+GalaxyRP fix: [Chat] true when c continues a word, which is how G_Say() decides a chat modifier
+was written as a word of its own rather than as the start of a longer one.
+
+The first cut of that test accepted only a space or the end of the line. That kept "/method
+actors only" and "/come on" out of the modifier path, but it also threw away ordinary RP writing:
+"/me, then waves", "/me: waves", "/do. the door opens" and "/all! everyone" all fell through to
+plain chat, which they had not done before. Accepting "anything that is not a letter or a digit"
+fixes those and reopens a worse hole -- /c is two characters, so "/c'mon everyone" would go out
+server-wide as "'mon everyone".
+
+Treating the apostrophe as part of a word settles both: punctuation that ends a sentence ends the
+word, punctuation that lives inside one does not. The only thing that costs is "/me's hand
+twitches", and /my already produces that exact line -- /me formats as "%s^3%s" and /my as
+"%s^3's %s", so "/my hand twitches" and "/me's hand twitches" render identically.
+
+The digit rule carries exactly one pair: without it /ryl would swallow /ryl2. Bytes at 0x80 and
+above count as word characters so a UTF-8 character right after a modifier reads as part of the
+word. Written out as explicit ASCII ranges rather than isalnum() -- no locale dependence, and no
+signed-char undefined behaviour on a high-bit byte.
+
+A NUL is not a word character, so end-of-line needs no separate test: a bare "/me" still matches.
+==================
+*/
+static qboolean zyk_chat_word_char( char c )
+{
+	unsigned char u = (unsigned char)c;
+
+	return ( (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') ||
+	         (u >= '0' && u <= '9') || u == '\'' || u == '_' || u >= 0x80 ) ? qtrue : qfalse;
+}
+
 void delete_chat_command(char *original_text, int no_of_chars) {
 	char text[MAX_SAY_TEXT] = "";
 	for (int i = no_of_chars; i < strlen(original_text); i++) {
@@ -6540,8 +6575,11 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 			if (strncmp(text, chat_modifiers[i].chat_modifier, mod_len) != 0)
 				continue;
 
-			// a modifier is a whole word: end of line, or a space before the message
-			if (text[mod_len] != '\0' && text[mod_len] != ' ')
+			// a modifier only counts when the word ends right after it -- see
+			// zyk_chat_word_char(). End of line qualifies, and so does any punctuation that does
+			// not live inside a word, so "/me, then waves" and "/do. the door opens" work while
+			// "/method actors only" and "/c'mon everyone" stay plain chat.
+			if (zyk_chat_word_char(text[mod_len]))
 				continue;
 
 			if (mod_len > best_len) {
