@@ -5786,8 +5786,27 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		self->client->ps.weaponTime = 0;
 		self->client->ps.weaponstate = WEAPON_READY;
 	}
+	// GalaxyRP fix: [Death System] never run the knockdown get-up machine for a downed player. This
+	// block is precisely the thing that must not happen while player_statuses bit 6 is set, and until
+	// now nothing said so: the downed state was enforced only by ClientThink_real() holding
+	// forceHandExtendTime permanently in the future, which starves this "else if" of its second
+	// condition. Starvation is not a guarantee. ClientThink_real() skips that refresh whenever the
+	// player is noclipping, disintegrating or being Force Gripped, and half a second of lapse was
+	// enough: G_SpecialRollGetup() below reads the VICTIM'S OWN movement keys, so a downed player held
+	// in a grip and shoved around simply rolled to their feet, and a second lapse took them from
+	// "up but frozen" (forceDodgeAnim set) to the chain's final else, HANDEXTEND_WEAPONREADY, and full
+	// mobility -- still flagged downed, still FL_NOTARGET, still counting down. Gating on the state
+	// itself removes every timing margin and survives any future movetype branch.
+	//
+	// Safe at both ends. On release, RP_ReleaseFromDownedState() and help_up() (g_cmds.c) clear bit 6
+	// through RP_ClearDownedState() BEFORE calling play_animation(), so the stand-up animation is not
+	// blocked. On death, player_die() and G_Damage()'s finish-off branch clear it before targ->die(),
+	// so this block's own "health < 1 -> HANDEXTEND_NONE" cleanup still runs for a corpse. The "if"
+	// above -- which zeroes saberMove/weaponTime while the knockdown is held -- is deliberately NOT
+	// gated: that one is part of keeping a downed player down.
 	else if (self->client->ps.forceHandExtend != HANDEXTEND_NONE &&
-		self->client->ps.forceHandExtendTime < level.time)
+		self->client->ps.forceHandExtendTime < level.time &&
+		!G_PlayerIsDowned(self))
 	{
 		if (self->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN &&
 			!self->client->ps.forceDodgeAnim)

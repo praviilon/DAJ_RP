@@ -2744,6 +2744,37 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.eFlags &= ~EF_JETPACK;
 	}
 
+	// zyk: paralyzed by an admin. Keep him this way
+	// GalaxyRP fix: [Death System] hoisted out of the movetype chain below, and it now asserts the
+	// knockdown instead of only postponing its expiry.
+	//
+	// It used to sit in the innermost else of that chain -- not noclipping, not disintegrating, not
+	// dead, and not Force Gripped -- so any of those four states stopped it. And all it wrote was
+	// forceHandExtendTime, which keeps a downed player down only indirectly, by starving the get-up
+	// machine in WP_ForcePowersUpdate() (w_force.c) of its "forceHandExtendTime < level.time"
+	// condition. Half a second of lapse was enough for that machine to run, and G_SpecialRollGetup()
+	// reads the downed player's own movement keys: held in a Force Grip and shoved around, they
+	// rolled to their feet, and a second lapse carried them to HANDEXTEND_WEAPONREADY and full
+	// mobility while still flagged downed. Resuming the refresh afterwards held nothing, because
+	// forceHandExtend had already been changed and this never set it back.
+	//
+	// Writing all three fields makes the state self-repairing: whatever overwrote forceHandExtend is
+	// undone on the next think. That also clears up a long-standing cosmetic -- Force Grip's squeeze
+	// sets HANDEXTEND_CHOKE on its victim, which used to stick for the rest of the countdown, so a
+	// gripped player spent it choking instead of lying down. forceDodgeAnim 0 is the "still down"
+	// variant in bg_pmove.c's HANDEXTEND_KNOCKDOWN case (non-zero selects a get-up animation), and is
+	// what RP_EnterDownedState() sets on the way in.
+	//
+	// Running above the chain means this also applies while gripped, so the knockdown pose now wins
+	// over the choke pose. The real guarantee is the gate in WP_ForcePowersUpdate(); this is the
+	// repair that keeps the presentation honest and stops any single missed frame mattering.
+	if (client->pers.player_statuses & (1 << 6))
+	{
+		client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+		client->ps.forceDodgeAnim = 0;
+		client->ps.forceHandExtendTime = level.time + 500;
+	}
+
 	if ( client->noclip ) {
 		client->ps.pm_type = PM_NOCLIP;
 	} else if ( client->ps.eFlags & EF_DISINTEGRATION ) {
@@ -2791,11 +2822,6 @@ void ClientThink_real( gentity_t *ent ) {
 					//prevent anything from being done for 400ms after holster
 					client->ps.weaponTime = 400;
 				}
-			}
-
-			if (client->pers.player_statuses & (1 << 6))
-			{ // zyk: paralyzed by an admin. Keep him this way
-				client->ps.forceHandExtendTime = level.time + 500;
 			}
 		}
 	}
