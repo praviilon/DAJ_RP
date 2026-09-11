@@ -1915,7 +1915,11 @@ void TryUse( gentity_t *ent )
 	// got_all_amulets/universe_quest_artifacts_checker calls and quest_puzzle_order reads it was the
 	// only user of.
 
-	if (target->NPC && target->client && target->s.NPC_class != CLASS_VEHICLE && OnSameTeam(ent,target))
+	// GalaxyRP fix: [NPC] a dead NPC could be claimed as a follower -- there was no health test
+	// here, so pressing Use on a corpse set leader and BS_FOLLOW_LEADER on it. Taken from the
+	// upstream Zyk mod, which carries target->health > 0 in this same condition; this fork
+	// predates that change.
+	if (target->NPC && target->client && target->health > 0 && target->s.NPC_class != CLASS_VEHICLE && OnSameTeam(ent,target))
 	{
 		if (!target->client->leader)
 		{ // zyk: setting the npc leader so he follows the player

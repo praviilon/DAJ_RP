@@ -4602,6 +4602,51 @@ void ClientDisconnect( int clientNum ) {
 		G_AddEvent(player_ent, EV_USE_ITEM14, (ent->s.number + MAX_CLIENTS));
 	}
 
+	// GalaxyRP fix: [NPC] release any NPC that was following this player.
+	//
+	// client->leader is a raw gentity_t *, and nothing cleared it when the leader left: not this
+	// function, not player_die(), and not G_FreeEntity(), which never clears inbound references.
+	// g_entities is a static array, so the stale pointer always addressed valid memory -- this was
+	// never a crash -- but it went wrong three ways:
+	//
+	//  1. The NPC was orphaned for good. TryUse() only claims an NPC when leader is NULL and only
+	//     releases one when leader is the player pressing Use, so a non-NULL pointer to a departed
+	//     player matched neither branch: nobody could take the NPC and nobody could free it. It
+	//     kept walking to leader->r.currentOrigin, the position the player left from.
+	//
+	//  2. Client slots are recycled, so the next person to connect into this slot inherited the
+	//     NPCs -- and /order commanded them, since it matches on leader == ent. Spawning needs
+	//     ADM_NPC, so what transferred was typically an admin's escort.
+	//
+	//  3. Worst of the three: an NPC under /order guard or /order cover picks its targets in
+	//     NPC_ValidEnemy() by asking zyk_is_ally(leader, ent) -- its leader's ally list. The loop
+	//     above has just zeroed that list, so every same-team player became a valid enemy, and
+	//     once the slot was reused the newcomer's ally list silently decided who the NPC shot.
+	//
+	// Releasing is exactly what TryUse() does when the leader presses Use again -- clear the two
+	// order bits, drop the leader, stand guard -- so the NPC stays in the world and can be claimed
+	// by anyone, and no behaviour here is new. Scans from MAX_CLIENTS like Cmd_Order_f(), since
+	// NPCs never occupy a client slot.
+	for (i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t *npc_ent = &g_entities[i];
+
+		if (!npc_ent->inuse || !npc_ent->client || !npc_ent->NPC)
+			continue;
+
+		if (npc_ent->client->leader != ent)
+			continue;
+
+		npc_ent->client->pers.player_statuses &= ~(1 << 18);
+		npc_ent->client->pers.player_statuses &= ~(1 << 19);
+		npc_ent->client->leader = NULL;
+
+		if (npc_ent->client->NPC_class != CLASS_VEHICLE)
+		{
+			npc_ent->NPC->tempBehavior = BS_STAND_GUARD;
+		}
+	}
+
 	// zyk: player is no longer part of the race, testing if it must be finished
 	if (level.quest_map == 17)
 	{

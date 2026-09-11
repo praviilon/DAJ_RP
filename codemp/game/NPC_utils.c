@@ -1204,7 +1204,10 @@ qboolean NPC_ValidEnemy( gentity_t *ent )
 		}
 	}
 	//Can't be on the same team
-	if ( ent->client->playerTeam == NPCS.NPC->client->playerTeam )
+	// GalaxyRP fix: [NPC] require a valid client pointer on the NPC before reading playerTeam off
+	// it. Taken from the upstream Zyk mod, whose own comment on this line reads "zyk: added the
+	// first condition, must be a valid client pointer"; this fork predates that change.
+	if ( NPCS.NPC->client && ent->client->playerTeam == NPCS.NPC->client->playerTeam )
 	{
 		// zyk: npc received order to guard or cover, attack anyone besides the player or his allies
 		if (NPCS.NPC->client->pers.player_statuses & (1 << 18) || NPCS.NPC->client->pers.player_statuses & (1 << 19))
@@ -1732,6 +1735,15 @@ void NPC_CheckCharmed( void )
 		NPCS.NPC->client->enemyTeam		= NPCS.NPC->genericValue2;
 		NPCS.NPC->s.teamowner			= NPCS.NPC->genericValue3;
 
+		// GalaxyRP fix: [NPC] drop the /order guard and /order cover bits along with the leader.
+		// Only the leader was cleared here, so an NPC charmed with Mind Trick 3, given /order guard
+		// and then left to snap out of it kept the order bit with a NULL leader. NPC_ValidEnemy()
+		// reads that bit and then asks zyk_is_ally(leader, ent) about a NULL leader, which answers
+		// no for everyone -- so the NPC reverted to its original team and treated every one of its
+		// own side as a valid enemy. TryUse() and Cmd_Order_f() always move these two bits together
+		// with the leader; this is the one place that did not.
+		NPCS.NPC->client->pers.player_statuses &= ~(1 << 18);
+		NPCS.NPC->client->pers.player_statuses &= ~(1 << 19);
 		NPCS.NPC->client->leader = NULL;
 		if ( NPCS.NPCInfo->tempBehavior == BS_FOLLOW_LEADER )
 		{
