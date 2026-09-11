@@ -41,6 +41,18 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // construction rather than by two separately-maintained "15"s drifting apart.
 #define MAX_CHARACTERS_PER_ACCOUNT 15
 
+// GalaxyRP fix: [Chat] how many characters of payload a single SendServerCommand may carry.
+// SV_SendServerCommand silently drops the entire message -- not the tail, the whole thing -- once
+// the formatted command passes 1022 characters, and the wrapper around a printed line
+// ("print \"" plus a newline and a closing quote) costs 9 of those, so anything at or below this
+// leaves room to spare. Cmd_AllyList_f() and Cmd_IgnoreList_f() flush their accumulated lists at
+// it, and zyk_print_long_line() splits a single long line at it; all three have the same ceiling
+// for the same reason, so they share one number.
+//
+// Declared here rather than beside Cmd_AllyList_f() (where it used to live) only so that the news
+// printer, which sits much earlier in this file, can reach it.
+#define RP_LIST_FLUSH_AT 900
+
 //rww - for getting bot commands...
 int AcceptBotCommand(char *cmd, gentity_t *pl);
 //end rww
@@ -2967,9 +2979,105 @@ void delete_weapons_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char*
 */
 
 // GalaxyRP (Alex): [Database] INSERT This method inserts a new row in the news table, requires the channel and text be passed into it.
+/*
+GalaxyRP fix: [Database] copy a TEXT column into a fixed-size buffer safely.
+
+The news reads used to do strcpy(dest, sqlite3_column_text(stmt, n)) straight into a
+char[MAX_STRING_CHARS]. Two problems with that. sqlite3_column_text() returns NULL for a NULL
+column, and strcpy() with a NULL source is undefined behaviour, not an empty string -- the News
+table declares neither channel nor text NOT NULL, so only the fact that insert_news_table_row() is
+the sole writer kept that off the table. And the copy was unbounded: it happened to fit because
+/newsadd's arguments come through trap->Argv() into buffers of the same size, so nothing the mod
+itself stores can be too long, but that is a property of the caller, not of the copy.
+
+It also returns const unsigned char *, which strcpy() takes as const char * -- three -Wpointer-sign
+warnings, silenced here by casting once in the one place that knows why it is safe.
+*/
+static void zyk_db_column_string(char *dest, int dest_size, sqlite3_stmt *stmt, int column)
+{
+	const unsigned char *value = NULL;
+
+	if (!dest || dest_size < 1)
+		return;
+
+	value = sqlite3_column_text(stmt, column);
+
+	if (!value)
+	{
+		dest[0] = '\0';
+		return;
+	}
+
+	Q_strncpyz(dest, (const char *)value, dest_size);
+}
+
+/*
+GalaxyRP fix: [Database] print a line of unknown length, splitting it rather than losing it.
+
+display_news() sent a whole news entry as one print, and select_news_channels() sent a whole
+channel name as one. SV_SendServerCommand drops the entire message once the formatted command
+passes 1022 characters, so a long entry did not arrive truncated -- it did not arrive at all, and
+the reader saw the entry's header and footer with nothing between them.
+
+That was not yet reachable through /newsadd, but only just: the console line that carries the
+command is itself bounded at MAX_STRING_CHARS, which leaves at most 1011 characters of news text
+with a one-character channel name, and the old wrapper cost exactly 11. It fit by a single byte,
+with nothing anywhere saying so -- a longer date format, one more colour code in the wrapper, or a
+row written by an older build or by hand would all have crossed it silently. Splitting removes the
+cliff instead of measuring the distance to it.
+
+Short lines are unaffected: anything inside the budget goes out as exactly one print, the same as
+before. The prefix is re-sent on every chunk so a colour code survives the split, and a chunk never
+ends on a bare '^', which would tear a colour code in half across two messages.
+*/
+static void zyk_print_long_line(gentity_t *ent, const char *prefix, const char *text)
+{
+	char chunk[RP_LIST_FLUSH_AT + 1];
+	int prefix_len = 0;
+	int budget = 0;
+	int len = 0;
+	int pos = 0;
+
+	if (!ent || !ent->client)
+		return;
+
+	if (!prefix)
+		prefix = "";
+
+	if (!text)
+		text = "";
+
+	prefix_len = (int)strlen(prefix);
+	budget = RP_LIST_FLUSH_AT - prefix_len;
+	len = (int)strlen(text);
+
+	if (budget < 1)
+		budget = 1;
+
+	if (len == 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", prefix));
+		return;
+	}
+
+	while (pos < len)
+	{
+		int take = ((len - pos) > budget) ? budget : (len - pos);
+
+		if (take > 1 && (pos + take) < len && text[pos + take - 1] == '^')
+			take--;
+
+		memcpy(chunk, text + pos, take);
+		chunk[take] = '\0';
+
+		trap->SendServerCommand(ent - g_entities, va("print \"%s%s\n\"", prefix, chunk));
+
+		pos += take;
+	}
+}
+
 void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 	sqlite3* db;
-	char* zErrMsg = 0;
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
@@ -3011,7 +3119,6 @@ void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 // GalaxyRP (Alex): [Database] SELECT This method selects all the unique channels from the news table.
 void select_news_channels(gentity_t* ent) {
 	sqlite3* db;
-	char* zErrMsg = 0;
 	int rc;
 	sqlite3_stmt* stmt = 0;
 	char channelName[MAX_STRING_CHARS];
@@ -3041,6 +3148,13 @@ void select_news_channels(gentity_t* ent) {
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		// GalaxyRP fix: [Database] close the handle on the way out. Both error paths in this
+		// function finalized the statement and returned without ever calling sqlite3_close(), so
+		// every failed query leaked a connection -- and this one is reached from /newschannels,
+		// which carries no login or admin gate at all, so the leak was drivable from outside.
+		// insert_news_table_row() and delete_news_table_row_with_id() already close on every path;
+		// the two SELECTs were the odd ones out.
+		sqlite3_close(db);
 		return;
 	}
 	rc = sqlite3_step(stmt);
@@ -3048,13 +3162,14 @@ void select_news_channels(gentity_t* ent) {
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		sqlite3_close(db);
 		return;
 	}
 	while (rc == SQLITE_ROW)
 	{
 		// GalaxyRP (Alex): [Database] Grab all the channels line by line.
-		strcpy(channelName, sqlite3_column_text(stmt, 0));
-		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", channelName));
+		zyk_db_column_string(channelName, sizeof(channelName), stmt, 0);
+		zyk_print_long_line(ent, "", channelName);
 		rc = sqlite3_step(stmt);
 	}
 
@@ -3067,14 +3182,19 @@ void select_news_channels(gentity_t* ent) {
 void display_news(gentity_t* ent, int newsID, char* newsText, char* date) {
 
 	trap->SendServerCommand(ent - g_entities, va("print \"^3--------------------------|%i|%s|----------------------\n\"",newsID, date));
-	trap->SendServerCommand(ent - g_entities, va("print \"^2%s\n\"", newsText));
-	trap->SendServerCommand(ent - g_entities, va("print \"^3-------------------------------------------------------------\n\"", date));
+	// GalaxyRP fix: [Database] the entry text is the one part of this whose length is not known in
+	// advance, so it goes through the splitter -- see zyk_print_long_line(). An entry that fits is
+	// still sent as exactly one print, unchanged.
+	zyk_print_long_line(ent, "^2", newsText);
+	// GalaxyRP fix: [cleanup] dropped a stray `date` argument to this format string, which has no
+	// conversion specifier to consume it. Harmless to varargs, but it read as though the footer was
+	// meant to show the date and silently did not.
+	trap->SendServerCommand(ent - g_entities, "print \"^3-------------------------------------------------------------\n\"");
 	return;
 }
 
 void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries) {
 	sqlite3* db;
-	char* zErrMsg = 0;
 	int rc;
 	sqlite3_stmt* stmt = 0;
 	char newsText[MAX_STRING_CHARS], date[MAX_STRING_CHARS];
@@ -3102,6 +3222,10 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		// GalaxyRP fix: [Database] close the handle on the way out -- same leak as the one fixed in
+		// select_news_channels() above, and this is the worse of the two: /news is public as well,
+		// and it hits the database on every invocation with no cooldown.
+		sqlite3_close(db);
 		return;
 	}
 	sqlite3_bind_text(stmt, 1, channel, -1, SQLITE_TRANSIENT);
@@ -3111,6 +3235,7 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		sqlite3_close(db);
 		return;
 	}
 	while (rc == SQLITE_ROW)
@@ -3118,8 +3243,8 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 		if (i <= numberOfEntries) {
 			// GalaxyRP (Alex): [Database] Grab all the news texts line by line.
 			newsID = sqlite3_column_int(stmt, 0);
-			strcpy(newsText, sqlite3_column_text(stmt, 1));
-			strcpy(date, sqlite3_column_text(stmt, 2));
+			zyk_db_column_string(newsText, sizeof(newsText), stmt, 1);
+			zyk_db_column_string(date, sizeof(date), stmt, 2);
 
 			display_news(ent, newsID, newsText, date);
 		}
@@ -11216,13 +11341,6 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 Cmd_AllyList_f
 ==================
 */
-// GalaxyRP fix: [Chat] the point at which Cmd_AllyList_f() and Cmd_IgnoreList_f() flush what they
-// have built so far. SV_SendServerCommand silently drops the entire message once the formatted
-// command passes 1022 characters, and the wrapper around a list ("print \"" plus a closing quote)
-// costs 9 of those, so anything at or below this leaves room to spare. Both lists have the same
-// ceiling for the same reason, so they share one number.
-#define RP_LIST_FLUSH_AT 900
-
 void Cmd_AllyList_f( gentity_t *ent ) {
 	// GalaxyRP fix: [Ally] this was built by repeatedly doing
 	//
@@ -16881,7 +16999,8 @@ Cmd_UpdateNews_f
 void Cmd_UpdateNews_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
 	char arg2[MAX_STRING_CHARS];
-	FILE *news_file = NULL;
+	// GalaxyRP fix: [cleanup] removed a dead 'FILE *news_file = NULL;' local here, left over from
+	// when news was file-backed rather than stored in the News table.
 
 	if (!check_admin_command(ent, ADM_UPDATENEWS, qtrue))
 	{
@@ -17834,9 +17953,13 @@ command_t commands[] = {
 	{ "modversion",			Cmd_ModVersion_f,			CMD_NOINTERMISSION },
 	{ "new",				Cmd_Register_F,				CMD_NOINTERMISSION },
 	{ "news",				Cmd_News_f,					0 },
-	{ "newsadd",			Cmd_UpdateNews_f,					CMD_LOGGEDIN },
+	// GalaxyRP fix: [Admin] both news-writing commands gain CMD_NOINTERMISSION, matching the 121
+	// other rows in this table that carry it -- writing to the news table during intermission served
+	// no purpose and was simply an omission. /news and /newschannels are deliberately left alone:
+	// reading the board while waiting for the map to change is exactly when you would want to.
+	{ "newsadd",			Cmd_UpdateNews_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "newschannels",		Cmd_NewsChannels_f,					0 },
-	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN },
+	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
