@@ -6445,7 +6445,10 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 			strcat(ooc_text, text);
 			strcat(ooc_text, end);
 
-			ooc_text;
+			// GalaxyRP fix: [Chat] a bare `ooc_text;` expression statement stood here. It evaluated
+			// the array's decayed address and threw it away -- no effect on anything -- and was the
+			// sole source of this file's two -Wunused-value warnings (gcc "statement with no effect",
+			// clang "expression result unused"). Removed.
 
 			G_LogPrintf("ooc: %s: %s\n", ent->client->pers.netname, text);
 			Com_sprintf(name, sizeof(name), "%s%c%c"EC": ", ent->client->pers.netname, Q_COLOR_ESCAPE, COLOR_WHITE);
@@ -6530,7 +6533,12 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 			return;
 
 		//This should be visible at all times
-		G_LogPrintf( "sayteam: %s: %s\n", ent->client->pers.netname, ooc_text);
+		// GalaxyRP fix: [Chat] logged ooc_text instead of text. ooc_text is written in exactly one
+		// place -- the OOC branch of the SAY_ALL case above -- and that branch also reassigns mode
+		// to SAY_ALL, which is the only assignment to mode anywhere in this function. So SAY_TEAM
+		// can never be reached with ooc_text holding anything, and every genuine team-chat line was
+		// written to the log as an empty string. Logs text, like every other say log here.
+		G_LogPrintf( "sayteam: %s: %s\n", ent->client->pers.netname, text);
 		if (Team_GetLocationMsg(ent, location, sizeof(location)))
 		{
 			Com_sprintf (name, sizeof(name), EC"(%s%c%c"EC")"EC": ",
@@ -6613,7 +6621,18 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 					continue;
 			}
 			else
-				G_SayTo(ent, other, mode, color, name, ooc_text, locMsg);
+			{
+				// GalaxyRP fix: [Chat] sent ooc_text instead of text, so genuine team chat delivered an
+				// empty message to every team-mate. This arm is reachable only with mode == SAY_TEAM
+				// (the outer test admits SAY_ALL and SAY_TEAM, the inner one takes SAY_ALL), and mode
+				// is SAY_TEAM only in team gametypes. ooc_text is filled in just one place -- the OOC
+				// branch of the SAY_ALL case -- which also sets mode to SAY_ALL, the function's only
+				// assignment to mode; so that branch and this arm are mutually exclusive and ooc_text
+				// was still its "" initialiser every time. Unnoticed because the mod runs FFA, where
+				// Cmd_SayTeam_f routes SAY_TEAM to SAY_ALLY or to OOC and never reaches here. Sends
+				// text, which is what the SAY_TEAM case prepared name, color and locMsg for.
+				G_SayTo(ent, other, mode, color, name, text, locMsg);
+			}
 		}
 		else
 			G_SayTo(ent, other, mode, color, name, text, locMsg);
