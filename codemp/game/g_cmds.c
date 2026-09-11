@@ -11201,39 +11201,76 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 Cmd_AllyList_f
 ==================
 */
+// GalaxyRP fix: [Chat] the point at which Cmd_AllyList_f() and Cmd_IgnoreList_f() flush what they
+// have built so far. SV_SendServerCommand silently drops the entire message once the formatted
+// command passes 1022 characters, and the wrapper around a list ("print \"" plus a closing quote)
+// costs 9 of those, so anything at or below this leaves room to spare. Both lists have the same
+// ceiling for the same reason, so they share one number.
+#define RP_LIST_FLUSH_AT 900
+
 void Cmd_AllyList_f( gentity_t *ent ) {
-	char message[1024];
+	// GalaxyRP fix: [Ally] this was built by repeatedly doing
+	//
+	//     strcpy(message, va("%s^7%s ^3(ally)", message, netname));
+	//
+	// into a char message[1024]. va() formats into a 32000-byte buffer and knows nothing about
+	// where the result is going, so once the accumulated list passed 1024 bytes that strcpy wrote
+	// off the end of a stack array. It did not take a crowded server: at the 36-character netname
+	// limit it overflows at 22 one-way allies, or 17 players once entries carry both "(ally)" and
+	// "(added you)", and 31 players listed both ways builds 1923 bytes. One player could reach it
+	// alone -- /allyadd caps nothing and excludes no one, so allying enough clients and running
+	// /allylist was enough. Well before that the message crossed the 1022-byte wire limit and
+	// SV_SendServerCommand dropped the whole list without a word.
+	//
+	// Each entry is now formatted into its own bounded buffer and appended with Q_strcat, and the
+	// message is flushed and continued whenever the next entry would not fit -- the same shape
+	// Cmd_IgnoreList_f() uses, and the same one /list commands uses for its sections.
+	char message[MAX_STRING_CHARS];
+	char entry[MAX_NETNAME + 64];
 	int i = 0;
+	int listed = 0;
 
 	strcpy(message,"");
 
 	for (i = 0; i < level.maxclients; i++)
 	{
-		int shown = 0;
 		gentity_t *this_ent = &g_entities[i];
+		qboolean mine = (zyk_is_ally(ent, this_ent) == qtrue);
+		qboolean theirs = (zyk_is_ally(this_ent, ent) == qtrue);
 
-		if (zyk_is_ally(ent,this_ent) == qtrue)
+		// zyk_is_ally() already requires the other side to be a connected client, so an empty
+		// slot can satisfy neither test and netname below is always a real name.
+		if (mine == qfalse && theirs == qfalse)
 		{
-			strcpy(message,va("%s^7%s ^3(ally)",message,this_ent->client->pers.netname));
-			shown = 1;
-		}
-		if (this_ent && this_ent->client && this_ent->client->pers.connected == CON_CONNECTED && zyk_is_ally(this_ent,ent) == qtrue)
-		{
-			if (shown == 1)
-				strcpy(message,va("%s ^3(added you)",message));
-			else
-				strcpy(message,va("%s^7%s ^3(added you)",message,this_ent->client->pers.netname));
-
-			shown = 1;
+			continue;
 		}
 
-		if (shown == 1)
+		Com_sprintf(entry, sizeof(entry), "^7%s%s%s\n",
+			this_ent->client->pers.netname,
+			(mine == qtrue) ? " ^3(ally)" : "",
+			(theirs == qtrue) ? " ^3(added you)" : "");
+
+		if ((int)(strlen(message) + strlen(entry)) > RP_LIST_FLUSH_AT)
 		{
-			strcpy(message,va("%s\n",message));
+			trap->SendServerCommand( ent-g_entities, va("print \"%s\"", message) );
+			strcpy(message,"");
 		}
+
+		Q_strcat(message, sizeof(message), entry);
+		listed++;
 	}
 
-	trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", message) );
+	// GalaxyRP fix: [Ally] say so, rather than printing a bare empty line.
+	if (listed == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^7You have no allies.\n\"" );
+		return;
+	}
+
+	if (message[0] != '\0')
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s\"", message) );
+	}
 }
 
 void zyk_add_ally(gentity_t *ent, int client_id)
@@ -15273,12 +15310,6 @@ void Cmd_Ignore_f( gentity_t *ent ) {
 Cmd_IgnoreList_f
 ==================
 */
-// GalaxyRP fix: [Chat] the point at which Cmd_IgnoreList_f() flushes what it has built so far.
-// SV_SendServerCommand silently drops the entire message once the formatted command passes 1022
-// characters, and the wrapper around the list ("print \"" plus a closing quote) costs 9 of those,
-// so anything at or below this leaves room to spare.
-#define RP_IGNORELIST_FLUSH_AT 900
-
 void Cmd_IgnoreList_f(gentity_t *ent) {
 	int i = 0;
 	int listed = 0;
@@ -15314,7 +15345,7 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 		// oversized message whole and says nothing. 31 names at the 36-byte maximum is about 1200
 		// characters, comfortably past the 1022 ceiling. Now it continues in another message
 		// instead, the same way /list commands already splits its sections.
-		if ((int)(strlen(ignored_players) + strlen(player->client->pers.netname) + 3) > RP_IGNORELIST_FLUSH_AT)
+		if ((int)(strlen(ignored_players) + strlen(player->client->pers.netname) + 3) > RP_LIST_FLUSH_AT)
 		{
 			trap->SendServerCommand(ent->s.number, va("print \"%s\"", ignored_players));
 			strcpy(ignored_players, "");

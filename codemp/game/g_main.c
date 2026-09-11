@@ -4990,18 +4990,41 @@ void zyk_NPC_Kill_f( char *name )
 }
 
 // zyk: tests if ent has other as ally
+/*
+GalaxyRP fix: [Ally] the raw bitfield test, with no other conditions attached.
+
+An ally list is two ints: ally1 holds client slots 0-15 and ally2 holds 16 and up at bit
+(slot - 16). That split was open-coded in four places -- here, zyk_add_ally(), zyk_remove_ally()
+and ClientDisconnect() -- which is three chances for them to disagree. Reading now goes through
+this one function, and writing already went through the add/remove pair.
+
+It also removes an undefined shift. zyk_is_ally() used to read:
+
+    if (slot > 15 && (ally2 & (1 << (slot - 16)))) return qtrue;
+    else if (ally1 & (1 << slot))                  return qtrue;
+
+The else branch runs whenever the first condition is false -- including when the slot IS above 15
+and its ally2 bit simply is not set. That evaluated 1 << slot for slots up to 31, and 1 << 31 on a
+signed int is undefined behaviour. It also asked ally1 about a slot ally1 never stores, so a stray
+bit in its high half would have reported a stranger as an ally. Branching on the slot number
+rather than on the bit test makes both impossible.
+*/
+qboolean zyk_ally_bit_set(gentity_t *owner, int client_id)
+{
+	if (!owner || !owner->client || client_id < 0 || client_id >= MAX_CLIENTS)
+		return qfalse;
+
+	if (client_id > 15)
+		return (owner->client->sess.ally2 & (1 << (client_id - 16))) ? qtrue : qfalse;
+
+	return (owner->client->sess.ally1 & (1 << client_id)) ? qtrue : qfalse;
+}
+
 qboolean zyk_is_ally(gentity_t *ent, gentity_t *other)
 {
 	if (ent && other && !ent->NPC && !other->NPC && ent != other && ent->client && other->client && other->client->pers.connected == CON_CONNECTED)
 	{
-		if (other->s.number > 15 && (ent->client->sess.ally2 & (1 << (other->s.number-16))))
-		{
-			return qtrue;
-		}
-		else if (ent->client->sess.ally1 & (1 << other->s.number))
-		{
-			return qtrue;
-		}
+		return zyk_ally_bit_set(ent, other->s.number);
 	}
 
 	return qfalse;

@@ -193,8 +193,10 @@ Common / new functions
 =====================================================================
 */
 
+qboolean	zyk_ally_bit_set(gentity_t *owner, int client_id);
 qboolean	zyk_is_ally(gentity_t *ent, gentity_t *other);
 int			zyk_number_of_allies(gentity_t *ent, qboolean in_rpg_mode);
+void		zyk_remove_ally(gentity_t *ent, int client_id);
 void		send_rpg_events(int send_event_timer);
 int			zyk_get_remap_count();
 void		zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qboolean broadcast_message, ...);

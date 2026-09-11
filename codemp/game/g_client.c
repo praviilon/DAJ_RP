@@ -4578,20 +4578,28 @@ void ClientDisconnect( int clientNum ) {
 	}
 
 	// zyk: cleaning ally ids of other players who have this player as ally
+	//
+	// GalaxyRP fix: [Ally] test the bit directly instead of going through zyk_is_ally(). That
+	// helper requires ent->client->pers.connected == CON_CONNECTED, and this function sets that
+	// field to CON_DISCONNECTED a few dozen lines further down -- so the clear worked only
+	// because of the order those two statements happen to sit in. Anything that moved the
+	// disconnect flag earlier would have left every other player holding an ally bit for a slot
+	// the next person to connect would inherit, with nothing to show for it. The bit test and the
+	// clear now both go through the ally helpers, which know the ally1/ally2 layout.
 	for (i = 0; i < level.maxclients; i++)
 	{
 		gentity_t *player_ent = &g_entities[i];
 
-		if (zyk_is_ally(player_ent,ent) == qtrue)
-		{
-			if (ent->s.number > 15)
-				player_ent->client->sess.ally2 &= ~(1 << (ent->s.number-16));
-			else
-				player_ent->client->sess.ally1 &= ~(1 << ent->s.number);
+		if (!player_ent->client)
+			continue;
 
-			// zyk: sending event to update radar at client-side
-			G_AddEvent(player_ent, EV_USE_ITEM14, (ent->s.number + MAX_CLIENTS));
-		}
+		if (zyk_ally_bit_set(player_ent, ent->s.number) == qfalse)
+			continue;
+
+		zyk_remove_ally(player_ent, ent->s.number);
+
+		// zyk: sending event to update radar at client-side
+		G_AddEvent(player_ent, EV_USE_ITEM14, (ent->s.number + MAX_CLIENTS));
 	}
 
 	// zyk: player is no longer part of the race, testing if it must be finished
