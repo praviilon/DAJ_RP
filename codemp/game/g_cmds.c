@@ -6817,6 +6817,13 @@ ally had no way to speak OOC at all, and in a team gametype nobody did. Sending 
 channel in every gametype, the way Cmd_AllyChat_f's hard-coded SAY_ALLY forces ally chat.
 
 Deliberately silent when given no arguments, matching Cmd_Say_f, Cmd_SayTeam_f and Cmd_AllyChat_f.
+
+The dispatch row carries no flags, like /say, /say_team and /tell -- and unlike /allychat, which
+this command was first modelled on. /allychat was the wrong thing to copy: /ooc replaces a
+/say_team route, and /say_team keeps working during intermission. Matching /allychat meant OOC was
+reachable at the end-of-map scoreboard by pressing the team-chat key (in a non-team gametype, with
+no allies) but not by the command built for it, which is backwards on a server where OOC is where
+people actually talk once the round is over.
 ==================
 */
 static void Cmd_OOC_f( gentity_t *ent ) {
@@ -11312,6 +11319,22 @@ void Cmd_AllyAdd_f( gentity_t *ent ) {
 ==================
 Cmd_AllyChat_f
 ==================
+*/
+/*
+GalaxyRP fix: [Chat] the dispatch row carries no flags, like /say, /say_team, /tell and /ooc.
+
+It used to carry CMD_NOINTERMISSION, which was never a decision about ally chat -- it is simply
+the default almost every row in this table picked up (115 of 137 carry it). The flag exists to
+stop gameplay-affecting commands while the scoreboard is up; chat is not one, which is why the
+vanilla say modes were always ungated. Nothing here needs anything intermission takes away
+either: SAY_ALLY ignores distance, zyk_is_ally() reads sess.ally1/ally2 which are persistent, and
+MoveClientToIntermission() changes pm_type rather than sessionTeam, so G_SayTo()'s gates are
+unaffected.
+
+The refusal was not even quiet -- it printed CANNOT_TASK_INTERMISSION (allychat) while /say and
+/say_team kept working alongside it, so the channels were split for no reason a player could see.
+And CheckIntermissionExit() has no upper bound: below the five-second floor it waits for somebody
+to press ready, so on a server where nobody does, that state can hold for minutes.
 */
 void Cmd_AllyChat_f( gentity_t *ent ) { // zyk: allows chatting with allies
 	char *p = NULL;
@@ -17593,7 +17616,7 @@ command_t commands[] = {
 	{ "admmap",				Cmd_AdmMap_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "anim",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "allyadd",			Cmd_AllyAdd_f,				CMD_NOINTERMISSION },
-	{ "allychat",			Cmd_AllyChat_f,				CMD_NOINTERMISSION },
+	{ "allychat",			Cmd_AllyChat_f,				0 },					// GalaxyRP: [Chat] a say mode, so no flags -- see Cmd_AllyChat_f
 	{ "allylist",			Cmd_AllyList_f,				CMD_NOINTERMISSION },
 	{ "allyremove",			Cmd_AllyRemove_f,			CMD_NOINTERMISSION },
 	{ "attributes",			Cmd_Attributes_f,			CMD_LOGGEDIN },
@@ -17654,7 +17677,7 @@ command_t commands[] = {
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
-	{ "ooc",				Cmd_OOC_f,					CMD_NOINTERMISSION },	// GalaxyRP: [Chat] out-of-character chat, forced in every gametype
+	{ "ooc",				Cmd_OOC_f,					0 },					// GalaxyRP: [Chat] out-of-character chat, forced in every gametype -- see Cmd_OOC_f for the flags
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "unparalyze",			Cmd_Unparalyze_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
