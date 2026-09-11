@@ -680,7 +680,9 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Duel Arena",				ADM_DUELARENA			},
 	{ "Change Map",				ADM_CHANGEMAP			},
 	{ "Create Item",			ADM_CREATEITEM			},
-	{ "God Mode",				ADM_GOD					},
+	// GalaxyRP fix: [Admin] title updated to reflect /notarget now sharing this bit -- see the
+	// GalaxyRP fix comment in Cmd_Notarget_f.
+	{ "God Mode / No Target",	ADM_GOD					},
 	{ "Level Give",				ADM_LEVELUP				},
 	{ "Skill Give",				ADM_SKILL				},
 	{ "Create Credits",			ADM_CREATECREDITS		},
@@ -1326,6 +1328,22 @@ argv(0) notarget
 void Cmd_Notarget_f( gentity_t *ent ) {
 	char *msg = NULL;
 
+	// GalaxyRP fix: [Admin] this command had no gate of any kind. Upstream (New Zyk) carries
+	// CMD_CHEAT on its dispatch row, so it only runs with sv_cheats set; this fork dropped that flag
+	// and added the server-wide chat announcement below, which left any connected player -- logged in
+	// or not -- one word away from permanent immunity to every NPC, turret, seeker, sentry gun and
+	// vehicle turret on the map, since all of them test FL_NOTARGET before picking a target.
+	//
+	// Gated on ADM_GOD rather than a new permission bit, the same way /killother shares Kick: the two
+	// are the same kind of self-applied invulnerability toy, so an admin trusted with one is trusted
+	// with the other, and no existing admin account needs a migration to keep working. The dispatch
+	// row also gains CMD_LOGGEDIN to match /god and /noclip -- belt and braces, since pers.bitvalue
+	// is only ever populated for a logged-in account, but it produces the right refusal message.
+	if (!check_admin_command(ent, ADM_GOD, qtrue))
+	{
+		return;
+	}
+
 	ent->flags ^= FL_NOTARGET;
 	if ( !(ent->flags & FL_NOTARGET) )
 		msg = "^1OFF";
@@ -1700,8 +1718,8 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 			// so an admin with Instant Revive hauled someone to their feet in silence -- from any
 			// distance, since the bypass skips the range check too. Same two messages that branch
 			// sends, word for word, so both routes read identically to the player being helped.
-			trap->SendServerCommand(target - g_entities, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
-			trap->SendServerCommand(target - g_entities, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
+			trap->SendServerCommand(target - g_entities, va("cp \"^2%s helped you up!\"", ent->client->pers.netname));
+			trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\"", ent->client->pers.netname));
 		}
 
 		return qtrue;
@@ -1753,8 +1771,8 @@ qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
 		// GalaxyRP fix: [Chat] target - g_entities. This one was never actually wrong -- a downed
 		// player is a real player, never a follower, so their ps.clientNum is their own -- but it is
 		// the same fragile spelling as the three sites that were, so it is normalised with them.
-		trap->SendServerCommand(target - g_entities, va("cp \"^2 %s helped you up!.\"", ent->client->pers.netname));
-		trap->SendServerCommand(target - g_entities, va("print \"^2 %s helped you up!.\"", ent->client->pers.netname));
+		trap->SendServerCommand(target - g_entities, va("cp \"^2%s helped you up!\"", ent->client->pers.netname));
+		trap->SendServerCommand(target - g_entities, va("print \"^2%s helped you up!\"", ent->client->pers.netname));
 
 		return qtrue;
 	}
@@ -9907,6 +9925,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/skillup <player name> <skill number> <number of levels (optional)>: ^7upgrades a skill.\n\
 ^3/skilldown <player name> <skill number> <number of levels (optional)>: ^7downgrades a skill.\n\
 ^3/god: ^7Makes you invincible.\n\
+^3/notarget: ^7Makes NPCs, turrets and seekers ignore you.\n\
 ^3/players <player name(optional)> <force/weapons/protect/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
 ^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
@@ -13188,7 +13207,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_GOD)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/God ^7to make you invinsible\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/god ^7to make yourself invincible, or ^3/notarget ^7to make NPCs and turrets ignore you. Both share this admin command\n\n\"");
 		}
 		else if (command_number == ADM_LEVELUP)
 		{
@@ -17310,7 +17329,7 @@ command_t commands[] = {
 	{ "newschannels",		Cmd_NewsChannels_f,					0 },
 	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "notarget",			Cmd_Notarget_f,				CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
