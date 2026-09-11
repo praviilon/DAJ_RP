@@ -6440,12 +6440,13 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 	char		*locMsg = NULL;
 	//distance for distance-based chat
 	int distance = 999999999;
-	//This is the limit where the chat text will stop appearing at
-	int max_voice_distance = 600;
 	//variable used for OOC chat (or team chat)
 	int ooc_flag = 0;
 	char ooc_text[700] = "";
-	int broadcast_distance = 999999999;
+	// GalaxyRP fix: [cleanup] max_voice_distance (600) and broadcast_distance (999999999) were
+	// declared and initialised here and never read by anything -- both compilers warned. The
+	// values they held live in the VOICE_DISTANCE / BROADCAST_DISTANCE constants at the top of
+	// this file, which is where chat_modifiers[] already takes them from.
 
 	// GalaxyRP: [Chat] /ooc. OOC is not a delivery mode of its own -- it is SAY_ALL plus ooc_flag,
 	// the state the branch below produces when /say_team is used in a non-team gametype. SAY_OOC
@@ -6502,74 +6503,103 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 			break;
 		}
 
-		char *output = NULL;
-
-		// these two have to be in the same order, one if the distance to the modifiers, so the order has to match
-		// in chat_modifiers, shorter strings have to be AFTER the longer string (e.g. /me HAS to be AFTER /melong, otherwise it'll pick /me instead)
-
-		char slash = '/';
-
-		const char *ptr = strchr(text, slash);
-		int index_of_slash = -1;
-		if (ptr) {
-			index_of_slash = ptr - text;
-		}
+		// GalaxyRP fix: [Chat] pick the chat modifier by a longest-prefix match that has to be
+		// followed by a space or by the end of the line. This replaces a strstr() over the whole
+		// message guarded only by "the line starts with some slash", which was wrong twice over:
+		//
+		//  1. strstr() found a modifier ANYWHERE in the line, so any message beginning with '/'
+		//     that merely mentioned another modifier was dispatched as that modifier, at its
+		//     range, with the first strlen(modifier) characters eaten out of the message -- and
+		//     since /low, /long and /all sit at indices 0, 1 and 2 they won nearly every contest.
+		//     "/me says use /all to broadcast" went out server-wide as "says use /all to
+		//     broadcast"; "/shout Everyone use /all for server chat!" as "ut Everyone use...".
+		//
+		//  2. the first entry whose string appeared anywhere won, so the table's own rule -- a
+		//     shorter modifier must be listed after every longer one it prefixes -- had to hold by
+		//     hand, and it did not: /npc preceded /npclow and /npcall, making both unreachable
+		//     ("/npclow psst" spoke at 600 units as "low psst"). Taking the LONGEST prefix makes
+		//     table order irrelevant, so that class of mistake cannot come back. All 34 entries
+		//     resolve to themselves under this rule; the 19 prefix pairs (/c before /catharese and
+		//     /comm, /me before /melow..., /ryl before /ryl2, and the rest) are all decided by
+		//     length, not position.
+		//
+		// Requiring a delimiter closes a third, older hole: neither the old code nor a bare prefix
+		// test needed anything after the modifier, so ordinary words fired it. /c is two characters,
+		// so "/come on, we're leaving" broadcast "ome on, we're leaving" to the whole server;
+		// likewise "/doctor arrives", "/allies gather", "/lowering the ramp", "/cargo bay is
+		// sealed", "/comment on the plan". A modifier now has to be a whole word.
+		//
+		// Matching stays case sensitive, exactly as strstr() was: "/ME waves" is plain chat today
+		// and still is.
+		int best = -1;
+		int best_len = 0;
 
 		for (int i = 0; i < ARRAY_LEN(chat_modifiers); i++) {
-			output = strstr(text, chat_modifiers[i].chat_modifier);
+			int mod_len = strlen(chat_modifiers[i].chat_modifier);
 
-			
-			if (output && index_of_slash == 0) {
-				delete_chat_command(text, strlen(chat_modifiers[i].chat_modifier));
-				// GalaxyRP fix: [Chat] the arguments meant for va()'s "%s: %s: %s\n" format were
-				// being passed to the outer G_LogPrintf() call instead, so va() formatted its
-				// string with zero of the three %s values it needed. That made it read
-				// nonexistent variadic arguments (garbage stack/register values) as string
-				// pointers, which crashed the server almost every time any chat modifier
-				// (/c, /low, /long, /me, /do, /force, /my, /shout, the language modifiers, etc)
-				// was used. The three values now go directly to G_LogPrintf(), matching the
-				// plain-chat log call a few lines below.
-				G_LogPrintf("%s: %s: %s\n", chat_modifiers[i].chat_modifier, ent->client->pers.netname, text);
+			if (strncmp(text, chat_modifiers[i].chat_modifier, mod_len) != 0)
+				continue;
 
-				// GalaxyRP fix: [Chat] this used to iterate j < level.numConnectedClients while
-				// indexing g_entities[j] directly, which only lines up with the actual connected
-				// clients when they happen to occupy a contiguous block of the lowest-numbered
-				// slots. Any gap (a lower-numbered player disconnecting while a higher-numbered
-				// one stays connected, for example) meant some connected players never got the
-				// message while an empty slot's stale/zeroed clientNum could get sent to instead.
-				// Now iterates every valid client slot (like the plain-chat loop below already
-				// does) and skips any slot that isn't an actual connected player.
-				for (j = 0; j < level.maxclients; j++) {
+			// a modifier is a whole word: end of line, or a space before the message
+			if (text[mod_len] != '\0' && text[mod_len] != ' ')
+				continue;
 
-					other = &g_entities[j];
-					if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
-						continue;
-					// GalaxyRP fix: [Chat] honour /ignore here too. This loop sends straight to the
-					// client and never reaches G_SayTo(), where the test used to live, so every RP
-					// modifier ignored the ignore list. Checked before the range test so it applies
-					// at any distance, exactly as it does for the chat G_SayTo() delivers.
-					if (zyk_chat_is_ignored(ent, other))
-						continue;
-					if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[i].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
-					{
-						// GalaxyRP fix: [Chat] send to j, not other->client->ps.clientNum. A recipient
-						// must be addressed by their own entity index: SpectatorClientEndFrame
-						// (g_active.c) copies the followed player's whole playerState over a
-						// follower's, clientNum included, and only StopFollowing puts it back, so on
-						// a follower that field names the player they are WATCHING. Every
-						// distance-scoped RP modifier routes through this one loop -- /me, /do, /my,
-						// /shout, /low, the language ones -- so a spectator following a player saw
-						// none of them while that player received each line twice, once more per
-						// follower. The condition just above deliberately lets spectators hear
-						// everything regardless of distance, which is exactly the case this broke.
-						trap->SendServerCommand(j, va(chat_modifiers[i].chat_format, ent->client->pers.netname, text));
-					}
-					else
-						continue;
-				}
-
-				return;
+			if (mod_len > best_len) {
+				best = i;
+				best_len = mod_len;
 			}
+		}
+
+		if (best != -1) {
+			delete_chat_command(text, best_len);
+			// GalaxyRP fix: [Chat] the arguments meant for va()'s "%s: %s: %s\n" format were
+			// being passed to the outer G_LogPrintf() call instead, so va() formatted its
+			// string with zero of the three %s values it needed. That made it read
+			// nonexistent variadic arguments (garbage stack/register values) as string
+			// pointers, which crashed the server almost every time any chat modifier
+			// (/c, /low, /long, /me, /do, /force, /my, /shout, the language modifiers, etc)
+			// was used. The three values now go directly to G_LogPrintf(), matching the
+			// plain-chat log call a few lines below.
+			G_LogPrintf("%s: %s: %s\n", chat_modifiers[best].chat_modifier, ent->client->pers.netname, text);
+
+			// GalaxyRP fix: [Chat] this used to iterate j < level.numConnectedClients while
+			// indexing g_entities[j] directly, which only lines up with the actual connected
+			// clients when they happen to occupy a contiguous block of the lowest-numbered
+			// slots. Any gap (a lower-numbered player disconnecting while a higher-numbered
+			// one stays connected, for example) meant some connected players never got the
+			// message while an empty slot's stale/zeroed clientNum could get sent to instead.
+			// Now iterates every valid client slot (like the plain-chat loop below already
+			// does) and skips any slot that isn't an actual connected player.
+			for (j = 0; j < level.maxclients; j++) {
+
+				other = &g_entities[j];
+				if (!other->inuse || !other->client || other->client->pers.connected != CON_CONNECTED)
+					continue;
+				// GalaxyRP fix: [Chat] honour /ignore here too. This loop sends straight to the
+				// client and never reaches G_SayTo(), where the test used to live, so every RP
+				// modifier ignored the ignore list. Checked before the range test so it applies
+				// at any distance, exactly as it does for the chat G_SayTo() delivers.
+				if (zyk_chat_is_ignored(ent, other))
+					continue;
+				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[best].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
+				{
+					// GalaxyRP fix: [Chat] send to j, not other->client->ps.clientNum. A recipient
+					// must be addressed by their own entity index: SpectatorClientEndFrame
+					// (g_active.c) copies the followed player's whole playerState over a
+					// follower's, clientNum included, and only StopFollowing puts it back, so on
+					// a follower that field names the player they are WATCHING. Every
+					// distance-scoped RP modifier routes through this one loop -- /me, /do, /my,
+					// /shout, /low, the language ones -- so a spectator following a player saw
+					// none of them while that player received each line twice, once more per
+					// follower. The condition just above deliberately lets spectators hear
+					// everything regardless of distance, which is exactly the case this broke.
+					trap->SendServerCommand(j, va(chat_modifiers[best].chat_format, ent->client->pers.netname, text));
+				}
+				else
+					continue;
+			}
+
+			return;
 		}
 
 		G_LogPrintf( "say: %s: %s\n", ent->client->pers.netname, text );
@@ -9116,6 +9146,14 @@ static void zyk_roll(gentity_t *ent, int distance)
 	int total = 0;
 	int i = 0;
 
+	// GalaxyRP fix: [Chat] honour /silence. /roll and /rollall broadcast text to every player in range
+	// through zyk_send_chat_within_distance(), which never reaches G_Say(), so a silenced player
+	// could keep rolling dice at everyone. Refused silently, the way every other silenced chat path
+	// returns without comment, and before the cooldown is consumed so being silenced does not
+	// also cost the player their next roll.
+	if (ent->client->pers.player_statuses & (1 << 0))
+		return;
+
 	if (trap->Argc() != 2)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<faces> ^1or ^2/roll ^3<dice>d<faces>^1.\n^1Examples: ^2/roll ^320^1, ^2/roll ^32d6\n\"");
@@ -9189,6 +9227,14 @@ Cmd_FlipCoin_f
 static void zyk_flip_coin(gentity_t *ent, int distance)
 {
 	char message[MAX_STRING_CHARS] = { 0 };
+
+	// GalaxyRP fix: [Chat] honour /silence. /flipcoin and /flipcoinall broadcast text to every player in range
+	// through zyk_send_chat_within_distance(), which never reaches G_Say(), so a silenced player
+	// could keep flipping coins at everyone. Refused silently, the way every other silenced chat path
+	// returns without comment, and before the cooldown is consumed so being silenced does not
+	// also cost the player their next roll.
+	if (ent->client->pers.player_statuses & (1 << 0))
+		return;
 
 	if (trap->Argc() != 1)
 	{
@@ -15166,8 +15212,15 @@ void Cmd_Ignore_f( gentity_t *ent ) {
 Cmd_IgnoreList_f
 ==================
 */
+// GalaxyRP fix: [Chat] the point at which Cmd_IgnoreList_f() flushes what it has built so far.
+// SV_SendServerCommand silently drops the entire message once the formatted command passes 1022
+// characters, and the wrapper around the list ("print \"" plus a closing quote) costs 9 of those,
+// so anything at or below this leaves room to spare.
+#define RP_IGNORELIST_FLUSH_AT 900
+
 void Cmd_IgnoreList_f(gentity_t *ent) {
 	int i = 0;
+	int listed = 0;
 	char ignored_players[MAX_STRING_CHARS];
 	gentity_t *player = NULL;
 
@@ -15175,19 +15228,52 @@ void Cmd_IgnoreList_f(gentity_t *ent) {
 
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
-		if (i < 31 && level.ignored_players[ent->s.number][0] & (1 << i))
+		// GalaxyRP fix: [Chat] the two arms of this test used to differ only in which word of the
+		// bitfield they read, and each then repeated the same body. Folded into one condition.
+		if (i < 31)
 		{
-			player = &g_entities[i];
-			strcpy(ignored_players, va("%s%s^7\n", ignored_players, player->client->pers.netname));
+			if (!(level.ignored_players[ent->s.number][0] & (1 << i)))
+				continue;
 		}
-		else if (i >= 31 && level.ignored_players[ent->s.number][1] & (1 << (i - 31)))
+		else if (!(level.ignored_players[ent->s.number][1] & (1 << (i - 31))))
 		{
-			player = &g_entities[i];
-			strcpy(ignored_players, va("%s%s^7\n", ignored_players, player->client->pers.netname));
+			continue;
 		}
+
+		// GalaxyRP fix: [Chat] skip a slot nobody is in. This read pers.netname unconditionally,
+		// so a bit left over from a player who had since disconnected printed whatever name was
+		// stale in that slot. (ClientDisconnect now clears those bits, so this is a backstop.)
+		player = &g_entities[i];
+		if (!player->inuse || !player->client || player->client->pers.connected != CON_CONNECTED)
+			continue;
+
+		// GalaxyRP fix: [Chat] flush before this entry could carry the message past the limit.
+		// The list was built into one MAX_STRING_CHARS buffer and sent in a single print, so a
+		// player with enough ignored names simply got NOTHING -- SV_SendServerCommand drops an
+		// oversized message whole and says nothing. 31 names at the 36-byte maximum is about 1200
+		// characters, comfortably past the 1022 ceiling. Now it continues in another message
+		// instead, the same way /list commands already splits its sections.
+		if ((int)(strlen(ignored_players) + strlen(player->client->pers.netname) + 3) > RP_IGNORELIST_FLUSH_AT)
+		{
+			trap->SendServerCommand(ent->s.number, va("print \"%s\"", ignored_players));
+			strcpy(ignored_players, "");
+		}
+
+		Q_strcat(ignored_players, sizeof(ignored_players), va("%s^7\n", player->client->pers.netname));
+		listed++;
 	}
 
-	trap->SendServerCommand(ent->s.number, va("print \"%s^7\n\"", ignored_players));
+	// GalaxyRP fix: [Chat] say so, rather than printing a bare empty line.
+	if (listed == 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^7You are not ignoring anyone.\n\"");
+		return;
+	}
+
+	if (ignored_players[0] != '\0')
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"%s\"", ignored_players));
+	}
 }
 
 // GalaxyRP fix: these were only forward-declared further down in this file (right before

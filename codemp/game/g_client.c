@@ -4534,6 +4534,21 @@ void ClientDisconnect( int clientNum ) {
 	level.ignored_players[ent->s.number][0] = 0;
 	level.ignored_players[ent->s.number][1] = 0;
 
+	// GalaxyRP fix: [Chat] also clear this player's bit from everyone ELSE's list. Only their own
+	// row was cleared, but the list is keyed by client slot and slots are recycled: if A had
+	// /ignore'd B in slot 7, B left and C connected into slot 7, A silently ignored C without ever
+	// asking to. Clearing the column costs one pass over the client slots, once per disconnect.
+	//
+	// The trade is that an ignore no longer survives the ignored player reconnecting, which is the
+	// right way round -- forgetting is recoverable with one command, inheriting is not noticeable.
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		if ( ent->s.number < 31 )
+			level.ignored_players[i][0] &= ~(1 << ent->s.number);
+		else
+			level.ignored_players[i][1] &= ~(1 << (ent->s.number - 31));
+	}
+
 	// zyk: duelist disconnected. Reset him from duels
 	if (level.duel_players[ent->s.number] > -1)
 	{
