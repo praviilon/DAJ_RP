@@ -660,8 +660,20 @@ typedef struct admin_command_description_s {
 	int			number;
 } admin_command_description_t;
 
+// GalaxyRP fix: [Admin] four titles here had drifted from the labels in
+// assets/server/galaxyrp_calculator.html, which is the tool people actually use to build a
+// permission bitmask -- so the checkbox someone ticked and the name /adminlist printed back at them
+// did not match. The calculator's wording is the clearer of the two and is what has been adopted:
+// "NPC" -> "NPC Spawn", "Level Give" -> "Upgrade Levels", "Skill Give" -> "Upgrade Skills". The
+// fourth was an outright typo on this side -- "Ignore Char Distance" for a permission that gates
+// CHAT distance, as its own enum name (ADM_IGNORECHATDISTANCE) and its /adminlist help text both
+// say. The calculator's one typo, "Paralize", was corrected there to match "Paralyze" here.
+//
+// These strings are display-only: /adminlist's table, check_admin_command()'s refusal message,
+// /adminup and /admindown's confirmations and the server log all print them, and nothing parses
+// them, so renaming is safe. Longest is now 20 characters, well inside print_row()'s 33 columns.
 const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
-	{ "NPC",					ADM_NPC					},
+	{ "NPC Spawn",				ADM_NPC					},
 	{ "No Clip",				ADM_NOCLIP				},
 	{ "Give Admin",				ADM_GIVEADM				},
 	{ "Teleport",				ADM_TELE				},
@@ -683,10 +695,10 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	// GalaxyRP fix: [Admin] title updated to reflect /notarget now sharing this bit -- see the
 	// GalaxyRP fix comment in Cmd_Notarget_f.
 	{ "God Mode / No Target",	ADM_GOD					},
-	{ "Level Give",				ADM_LEVELUP				},
-	{ "Skill Give",				ADM_SKILL				},
+	{ "Upgrade Levels",			ADM_LEVELUP				},
+	{ "Upgrade Skills",			ADM_SKILL				},
 	{ "Create Credits",			ADM_CREATECREDITS		},
-	{ "Ignore Char Distance",	ADM_IGNORECHATDISTANCE	},
+	{ "Ignore Chat Distance",	ADM_IGNORECHATDISTANCE	},
 	{ "Give XP",				ADM_XP					},
 	{ "Update News",			ADM_UPDATENEWS			},
 	{ "Remove News",			ADM_REMOVENEWS			},
@@ -1341,6 +1353,17 @@ void Cmd_Notarget_f( gentity_t *ent ) {
 	// is only ever populated for a logged-in account, but it produces the right refusal message.
 	if (!check_admin_command(ent, ADM_GOD, qtrue))
 	{
+		return;
+	}
+
+	// GalaxyRP fix: [Death System] and refuse while downed, for the same reason /noclip does. This
+	// toggle is an XOR over the very flag the downed state owns: RP_EnterDownedState() sets
+	// FL_NOTARGET to make a downed player untargetable, so an admin typing this mid-countdown flips
+	// their own protection off and lies there shootable by every NPC and turret. Ordered after the
+	// permission check so a player without God Mode is told the more fundamental reason first.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
 		return;
 	}
 
