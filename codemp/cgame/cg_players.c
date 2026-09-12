@@ -9674,8 +9674,24 @@ void CG_Player( centity_t *cent ) {
 		VectorClear(cent->modelScale);
 	}
 
+	// GalaxyRP fix: [Vehicles] a rider used to be dragged along behind the vehicle he was sitting on.
+	// This block exponentially chases cent->lerpOrigin toward its target, which lags it by roughly one
+	// frame of travel -- growing with speed, closing again at a standstill. The vehicle itself is
+	// already exempt (the m_iVehicleNum test below), but its rider was not, so the swoop rendered at
+	// its exact predicted origin while the player chased the seat. The rider's origin is DERIVED from
+	// the vehicle's "*driver" bolt -- set by AttachRidersGeneric() inside the vehicle's own pmove for
+	// the player we predict, and re-bolted further down in this function for everyone else -- so it is
+	// already as smooth as the vehicle is. Smoothing it cannot remove jitter that isn't there; it only
+	// adds lag. Skip riders, using the same "riding a vehicle" test this function already uses below.
+	//
+	// This is stock behaviour, not something we introduced -- OpenJK and TaystJK carry the identical
+	// block. It just never fires under TaystJK because it defaults cg_smoothClients to 0 where OpenJK
+	// (and therefore we) default it to 1. Fixing the block rather than the cvar default keeps on-foot
+	// smoothing, which is what the cvar is actually for, and fixes every player regardless of the
+	// value already archived in their config.
 	if ((cg_smoothClients.integer || cent->currentState.heldByClient) && (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD || cent->currentState.eType == ET_TERRAIN) &&
-		!(cent->currentState.eFlags2 & EF2_HYPERSPACE) && cg.predictedPlayerState.m_iVehicleNum != cent->currentState.number)
+		!(cent->currentState.eFlags2 & EF2_HYPERSPACE) && cg.predictedPlayerState.m_iVehicleNum != cent->currentState.number &&
+		!(cent->currentState.m_iVehicleNum && cent->currentState.NPC_class != CLASS_VEHICLE))
 	{ //always smooth when being thrown
 		vec3_t			posDif;
 		float			smoothFactor;
