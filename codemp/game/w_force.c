@@ -691,6 +691,27 @@ static int RP_ForceHealCost( gentity_t *self )
 	return (cost > 0) ? cost : 1;
 }
 
+// GalaxyRP fix: [Force] WP_ForcePowerStart()'s overrideAmt means different things to different
+// powers. For most it is a force COST; for FP_DRAIN, FP_LIGHTNING and FP_SPEED the case arms
+// instead read it as a DURATION ("if (overrideAmt) duration = overrideAmt;"). Drain and Lightning
+// were given an escape hatch in WP_ForcePowerAvailable() so their duration is never mistaken for a
+// price, but Speed never was -- so Jedi_DodgeEvasion()'s ForceSpeed(self, 500) asked the gate for
+// 500 force. The pool tops out at RP_MAX_FORCE_POWER (200), so that check could never pass and the
+// force-dodge under g_forceDodge 2 never actually granted Speed, while still arming the shared
+// deactivate lock and starting the looping speed sound.
+//
+// The real cost is the one WP_ForcePowerStart() goes on to charge: overrideAmt * 0.025 (12 force
+// for the 500ms dodge). Both sites call this helper so the gate and the charge cannot drift apart
+// again. The floor of 1 matters because BG_ForcePowerDrain() treats a drain of 0 as "look the cost
+// up in the table" -- without it, a short enough duration would truncate to 0, sail through the
+// "if (!drain) return qtrue" shortcut as free, and then be charged the full table price of 50.
+static int RP_ForceSpeedCost( int overrideAmt )
+{
+	int cost = (int)(overrideAmt * 0.025);
+
+	return (cost > 0) ? cost : 1;
+}
+
 qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int overrideAmt )
 {
 	int	drain = overrideAmt ? overrideAmt :
@@ -699,6 +720,12 @@ qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int 
 	if (forcePower == FP_HEAL) // zyk: added the HEAL condition to keep balance
 	{
 		drain = RP_ForceHealCost( self );
+	}
+	// GalaxyRP fix: [Force] for Speed an overrideAmt is a duration, not a price -- charge what
+	// WP_ForcePowerStart() will actually take for it rather than the raw millisecond count.
+	if (forcePower == FP_SPEED && overrideAmt)
+	{
+		drain = RP_ForceSpeedCost( overrideAmt );
 	}
 	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
 
@@ -1244,7 +1271,9 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 	if ((int)forcePower == FP_SPEED && overrideAmt)
 	{
 		// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User drain-reduction branch unreachable
-		BG_ForcePowerDrain( &self->client->ps, forcePower, overrideAmt*0.025 );
+		// GalaxyRP fix: [Force] routed through the same helper WP_ForcePowerAvailable() gates on, so
+		// the price quoted and the price charged are the same number by construction.
+		BG_ForcePowerDrain( &self->client->ps, forcePower, RP_ForceSpeedCost( overrideAmt ) );
 	}
 	else if ((int)forcePower != FP_GRIP && (int)forcePower != FP_DRAIN)
 	{ //grip and drain drain as damage is done
@@ -1463,11 +1492,17 @@ void ForceTeamHeal( gentity_t *self )
 	}
 
 	// GalaxyRP (Alex): [Force Powers] For levels 4 and 5 heal a fixed amount, otherwise, based on how many people are healed
-	if (self->client->ps.fd.forcePowerLevel[FP_TEAM_HEAL] == FORCE_LEVEL_4 && numpl > 2)
+	// GalaxyRP fix: [Force] both arms used to also require numpl > 2, so with one or two allies a
+	// level 4 or 5 healer fell through to the count-scaled arms below and delivered exactly what a
+	// level 1 healer does -- the upgrade was invisible in the most common case. It also made the
+	// payout run backwards: healing two allies gave 30 each while healing three gave 50 each. The
+	// count guard is dropped so the fixed amount really is fixed, as the comment above says. Levels
+	// 1 to 3 keep the count scaling untouched.
+	if (self->client->ps.fd.forcePowerLevel[FP_TEAM_HEAL] == FORCE_LEVEL_4)
 	{
 		healthadd = 40;
 	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_HEAL] == FORCE_LEVEL_5 && numpl > 2)
+	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_HEAL] == FORCE_LEVEL_5)
 	{
 		healthadd = 50;
 	}
@@ -1620,10 +1655,13 @@ void ForceTeamForceReplenish( gentity_t *self )
 	}
 
 	// zyk: decreased amount of force recovered. Default values in order: 50, 33 and 25
-	if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_4 && numpl > 2) {
+	// GalaxyRP fix: [Force] same count-guard removal as Team Heal above -- levels 4 and 5 pay their
+	// fixed amount regardless of how many allies are in range, instead of silently dropping to the
+	// level-1 payout whenever fewer than three were caught.
+	if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_4) {
 		poweradd = 40;
 	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_5 && numpl > 2) {
+	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_5) {
 		poweradd = 50;
 	}
 	else if (numpl == 1)
