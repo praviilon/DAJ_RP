@@ -4704,6 +4704,13 @@ void ClientEndFrame( gentity_t *ent ) {
 		{
 			ent->client->ps.stats[STAT_USE_HINT] = 0;
 		}
+
+		// GalaxyRP fix: [Force] publish the true Force Jump level for the client's movement
+		// prediction. The copy the engine networks inside playerState is a 2-bit field and silently
+		// truncates levels 4 and 5 to 0 and 1; see STAT_FORCE_JUMP_LEVEL in bg_public.h. Written
+		// unconditionally and every frame so it tracks /skillup, respawns and logout with no extra
+		// bookkeeping -- the playerState delta only spends bits on the frames where it changes.
+		ent->client->ps.stats[STAT_FORCE_JUMP_LEVEL] = ent->client->ps.fd.forcePowerLevel[FP_LEVITATION];
 	}
 
 	// GalaxyRP fix: [Death System] serve a downed player's countdown, here for the same structural

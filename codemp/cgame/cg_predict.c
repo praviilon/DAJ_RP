@@ -30,6 +30,30 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 static	pmove_t		cg_pmove;
 
+/*
+=============
+CG_RestoreForceJumpLevel
+
+The engine networks ps.fd.forcePowerLevel[FP_LEVITATION] in a 2-bit field, so Force Jump 4 and 5
+arrive as 0 and 1 (see STAT_FORCE_JUMP_LEVEL in bg_public.h). The server publishes the real level in
+stats[STAT_FORCE_JUMP_LEVEL]; put it back before Pmove runs so client prediction indexes the same row
+of forceJumpHeight[]/forceJumpStrength[]/forceJumpHeightMax[] that the server used.
+
+This only ever corrects UPWARD, which is what makes it safe to run unconditionally. Truncation can
+only ever lower the value (4 -> 0, 5 -> 1), so a stat that is not greater than what arrived carries
+no information -- including the 0 a server that predates this fix would send, and the 0 a player with
+no Force Jump has. In both of those cases the comparison fails and the received value stands.
+=============
+*/
+static void CG_RestoreForceJumpLevel( playerState_t *ps )
+{
+	if ( ps->stats[STAT_FORCE_JUMP_LEVEL] > ps->fd.forcePowerLevel[FP_LEVITATION]
+		&& ps->stats[STAT_FORCE_JUMP_LEVEL] < NUM_FORCE_POWER_LEVELS )
+	{
+		ps->fd.forcePowerLevel[FP_LEVITATION] = ps->stats[STAT_FORCE_JUMP_LEVEL];
+	}
+}
+
 static	int			cg_numSolidEntities;
 static	centity_t	*cg_solidEntities[MAX_ENTITIES_IN_SNAPSHOT];
 static	int			cg_numTriggerEntities;
@@ -942,6 +966,7 @@ void CG_PredictPlayerState( void ) {
 	if ( !cg.validPPS ) {
 		cg.validPPS = qtrue;
 		cg.predictedPlayerState = cg.snap->ps;
+		CG_RestoreForceJumpLevel( &cg.predictedPlayerState );
 		if (CG_Piloting(cg.snap->ps.m_iVehicleNum))
 		{
 			cg.predictedVehicleState = cg.snap->vps;
@@ -1041,6 +1066,7 @@ void CG_PredictPlayerState( void ) {
 	if ( cg.nextSnap && !cg.nextFrameTeleport && !cg.thisFrameTeleport ) {
 		cg.nextSnap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
 		cg.predictedPlayerState = cg.nextSnap->ps;
+		CG_RestoreForceJumpLevel( &cg.predictedPlayerState );
 		if (CG_Piloting(cg.nextSnap->ps.m_iVehicleNum))
 		{
 			cg.predictedVehicleState = cg.nextSnap->vps;
@@ -1049,6 +1075,7 @@ void CG_PredictPlayerState( void ) {
 	} else {
 		cg.snap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
 		cg.predictedPlayerState = cg.snap->ps;
+		CG_RestoreForceJumpLevel( &cg.predictedPlayerState );
 		if (CG_Piloting(cg.snap->ps.m_iVehicleNum))
 		{
 			cg.predictedVehicleState = cg.snap->vps;

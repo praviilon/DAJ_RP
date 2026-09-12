@@ -577,7 +577,19 @@ typedef enum {
 	// costs nothing on the frames where it does not flip. Chosen over a spare EF_ flag because
 	// BG_PlayerStateToEntityState() copies eFlags into the player's entityState -- an eFlags bit
 	// would be broadcast to every client on the server, while stats[] stays private to its owner.
-	STAT_USE_HINT
+	STAT_USE_HINT,
+	// GalaxyRP fix: [Force] the engine networks ps.fd.forcePowerLevel[FP_LEVITATION] in a 2-bit field
+	// (msg.cpp), which carries 0-3. Force Jump reaches level 5 in RPG mode, and MSG_WriteBits does not
+	// clamp -- it counts the overflow and writes the low bits -- so a client received level 4 as 0 and
+	// level 5 as 1. Client-side movement prediction then ran against forceJumpHeight[0]/[1] while the
+	// server used [4]/[5], and the two disagreed identically every frame, which is why high-level
+	// force jumps mispredict. msg.cpp is engine code and is not built by this mod, so the field cannot
+	// be widened without shipping a custom engine. This stat carries the true level instead: stats[]
+	// is networked as a MAX_STATS-wide changed-mask plus a 16-bit short per changed slot, so it holds
+	// 0-5 without trouble, it is private to its owner rather than broadcast, and slot 10 was free.
+	// The server publishes it in ClientEndFrame() and CG_PredictPlayerState() restores the real level
+	// before Pmove runs. See cg_predict.c for why the restore only ever corrects upward.
+	STAT_FORCE_JUMP_LEVEL
 } statIndex_t;
 
 

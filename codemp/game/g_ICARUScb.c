@@ -3985,7 +3985,11 @@ static void Q3_SetForcePowerLevel ( int entID, int forcePower, int forceLevel )
 {
 	gentity_t	*self  = &g_entities[entID];
 
-	if ( forcePower < FP_FIRST || forceLevel >= NUM_FORCE_POWERS )
+	// GalaxyRP fix: [Scripts] this tested forceLevel against NUM_FORCE_POWERS -- the wrong variable
+	// against the wrong bound -- so forcePower itself was never checked for an upper limit and a
+	// script passing an out-of-range power index wrote past the end of forcePowerLevel[] in the
+	// playerState below.
+	if ( forcePower < FP_FIRST || forcePower >= NUM_FORCE_POWERS )
 	{
 		G_DebugPrint( WL_ERROR, "Q3_SetForcePowerLevel: Force Power index %d out of range (%d-%d)\n", forcePower, FP_FIRST, (NUM_FORCE_POWERS-1) );
 		return;

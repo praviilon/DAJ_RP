@@ -8730,7 +8730,6 @@ int zyk_max_magic_power(gentity_t *ent)
 // function has any other caller.
 
 extern void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance);
-extern void magic_sense(gentity_t *ent, int duration);
 extern void healing_water(gentity_t *ent, int heal_amount);
 extern void earthquake(gentity_t *ent, int stun_time, int strength, int distance);
 extern void blowing_wind(gentity_t *ent, int distance, int duration);

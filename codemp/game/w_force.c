@@ -2332,17 +2332,21 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 
 				if (modPowerLevel != -1)
 				{
-					if (!modPowerLevel)
+					// GalaxyRP fix: [Force] this used to be an if/else chain with arms for
+					// modPowerLevel 0, 1 and 2 only. modPowerLevel is the attacker's Drain level minus
+					// the defender's Absorb level (WP_AbsorbConversion), and in vanilla that could
+					// never exceed 2 -- Drain capped at 3 and an Absorb of 0 returns -1 earlier -- so
+					// the chain was complete. Raising Drain to 5 while Absorb stays capped at 3 lets
+					// the difference reach 3 or 4, which matched no arm and left dmg at its full
+					// value: Absorb 1 cut Drain 3 from 4 damage to 2 but did nothing whatsoever
+					// against Drain 4 or 5, while still refunding force and playing the absorb sound
+					// so it looked like it had worked. Written as a clamp rather than more arms
+					// because that is what the old chain computed for every reachable case
+					// (modPowerLevel is always below dmg here) and it cannot go stale if either
+					// power's level range changes again.
+					if (modPowerLevel < dmg)
 					{
-						dmg = 0;
-					}
-					else if (modPowerLevel == 1)
-					{
-						dmg = 1;
-					}
-					else if (modPowerLevel == 2)
-					{
-						dmg = 2;
+						dmg = modPowerLevel;
 					}
 				}
 				//G_Damage( traceEnt, self, self, dir, impactPoint, dmg, 0, MOD_FORCE_DARK );
@@ -4407,6 +4411,17 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 		if ( self->client->ps.fd.forcePowerLevel[FP_DRAIN] < FORCE_LEVEL_2 )
 		{//don't do it again for 3 seconds, minimum...
 			self->client->ps.fd.forcePowerDebounce[FP_DRAIN] = level.time + 3000;
+		}
+		// GalaxyRP fix: [Force] level 2 had NO arm here and the chain has no else, so it was the one
+		// drain level that never had a cooldown written at all. WP_ForcePowerStart() zeroes
+		// forcePowerDebounce on every activation and ForceShootDrain() only gates on that value being
+		// in the future, so Drain 2 could be fired every single frame -- strictly better than Drain 3
+		// and Drain 4. Vanilla read "< FORCE_LEVEL_2 -> 3000" / "else -> 1500"; that else became
+		// "else if (== FORCE_LEVEL_3)" when the level 4 and 5 arms were added, orphaning level 2.
+		// 2000ms keeps the cooldown curve monotonic across the five levels (3000/2000/1500/1000/0).
+		else if (self->client->ps.fd.forcePowerLevel[FP_DRAIN] == FORCE_LEVEL_2)
+		{
+			self->client->ps.fd.forcePowerDebounce[FP_DRAIN] = level.time + 2000;
 		}
 		else if(self->client->ps.fd.forcePowerLevel[FP_DRAIN] == FORCE_LEVEL_3)
 		{// GalaxyRP (Alex): [Force Powers] Level 3 has a lower cooldown

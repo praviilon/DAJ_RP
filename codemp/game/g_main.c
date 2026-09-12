@@ -5637,30 +5637,17 @@ void chaos_power(gentity_t *ent, int distance, int duration)
 	}
 }
 
-// zyk: Magic Sense
-void magic_sense(gentity_t *ent, int duration)
-{
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{ // zyk: Universe Power
-		duration += 1000;
-	}
-
-	// GalaxyRP fix: [RPG Class] Magic Master Unique Skill duration bonus removed — rpg_class is permanently 0
-
-	// zyk: Magic Sense gets more duration based on Sense skill level
-	duration += (ent->client->pers.skill_levels[4] * 1000);
-
-	// GalaxyRP fix: [Skills] this used to also add duration based on pers.skill_levels[55]
-	// (Improvements) -- that skill is now reserved/unused (see the matching fix comment in
-	// do_upgrade_skill() in g_cmds.c), so this bonus has been removed outright.
-
-	ent->client->ps.forceAllowDeactivateTime = level.time + duration;
-	ent->client->ps.fd.forcePowerLevel[FP_SEE] = ent->client->pers.skill_levels[4];
-	ent->client->ps.fd.forcePowersActive |= (1 << FP_SEE);
-	ent->client->ps.fd.forcePowerDuration[FP_SEE] = level.time + duration;
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/weapons/force/see.wav"));
-}
+// GalaxyRP fix: [Magic] magic_sense() removed. The player-facing magic dispatch in
+// Cmd_ForceUse_f()/the grab-anim block in g_cmds.c was deleted earlier as permanently
+// unreachable (every power it could trigger is gated on pers.defeated_guardians or
+// pers.universe_quest_progress, which only add_new_char() ever writes, always to 0), and that
+// deletion took magic_sense()'s only call site with it. Its siblings magic_shield(),
+// magic_disable() and magic_explosion() survive because the custom-quest-NPC block further
+// down this file still calls them; nothing anywhere called magic_sense(). It also wrote
+// pers.skill_levels[4] straight into forcePowerLevel[FP_SEE] with no amrpgmode guard while
+// activating the power, which would have left a logged-out player at Sense level 0 with Force
+// Sight switched on. Its two cvars (zyk_enable_magic_sense, zyk_magic_sense_mp_cost) are gone
+// from g_xcvar.h with it.
 
 // zyk: Lightning Dome
 extern void zyk_lightning_dome_detonate( gentity_t *ent );
