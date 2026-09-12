@@ -4631,12 +4631,47 @@ void NPC_Spawn_f( gentity_t *ent )
 NPC_Kill_f
 */
 extern stringID_table_t TeamTable[];
+
+/*
+GalaxyRP fix: [NPC] resolve a team name written either way.
+
+The two subcommands that take a team disagreed on spelling. /npc team compared against the short
+names ("player", "enemy", ...) while /npc kill team went through GetIDForString(TeamTable, ...),
+whose entries are built with ENUM2STRING and so are the full enum names ("NPCTEAM_ENEMY", ...).
+So "/npc kill team enemy" -- the obvious thing to type, and what the /npc usage listing shows for
+the other subcommand -- matched nothing. Both now accept either spelling.
+
+Returns -1 when the name is not a team. NPCTEAM_FREE is a real team whose value is 0, so it cannot
+double as the failure value: that conflation is exactly what made "kill team enemy" fail in
+silence. GetIDForString already returns -1 for an unknown string, so the two agree.
+*/
+static int zyk_team_from_string( const char *name )
+{
+	if ( !name || !name[0] )
+		return -1;
+
+	if ( !Q_stricmp( name, "player" ) )
+		return NPCTEAM_PLAYER;
+	if ( !Q_stricmp( name, "enemy" ) )
+		return NPCTEAM_ENEMY;
+	if ( !Q_stricmp( name, "neutral" ) )
+		return NPCTEAM_NEUTRAL;
+	if ( !Q_stricmp( name, "free" ) )
+		return NPCTEAM_FREE;
+
+	return GetIDForString( TeamTable, name );
+}
+
 void NPC_Kill_f( void )
 {
 	int			n;
 	gentity_t	*player;
 	char		name[1024];
 	npcteam_t	killTeam = NPCTEAM_FREE;
+	// GalaxyRP fix: [NPC] "was a team given?" used to be inferred from killTeam != NPCTEAM_FREE,
+	// which cannot express "kill the teamless NPCs" -- NPCTEAM_FREE is a real team. Tracked
+	// separately so every one of the four teams is selectable.
+	qboolean	killByTeam = qfalse;
 	qboolean	killNonSF = qfalse;
 
 	trap->Argv(2, name, 1024);
@@ -4674,9 +4709,13 @@ void NPC_Kill_f( void )
 		}
 		else
 		{
-			killTeam = GetIDForString( TeamTable, name );
+			// GalaxyRP fix: [NPC] this tested the result against NPCTEAM_FREE (0) while the lookup
+			// reports failure as -1, so an unknown team name skipped the error entirely and left
+			// killTeam at -1 -- matching no NPC, killing nothing, and saying nothing. The same
+			// confusion rejected "NPCTEAM_FREE" itself as unrecognised.
+			int resolvedTeam = zyk_team_from_string( name );
 
-			if ( killTeam == NPCTEAM_FREE )
+			if ( resolvedTeam == -1 )
 			{
 				Com_Printf( S_COLOR_RED"NPC_Kill Error: team '%s' not recognized\n", name );
 				Com_Printf( S_COLOR_RED"Valid team names are:\n");
@@ -4687,6 +4726,9 @@ void NPC_Kill_f( void )
 				Com_Printf( S_COLOR_RED"nonally - kills all but your teammates\n" );
 				return;
 			}
+
+			killTeam = (npcteam_t)resolvedTeam;
+			killByTeam = qtrue;
 		}
 	}
 
@@ -4893,7 +4935,7 @@ void NPC_Kill_f( void )
 		}
 		else if ( player && player->NPC && player->client )
 		{
-			if ( killTeam != NPCTEAM_FREE )
+			if ( killByTeam )
 			{
 				if ( player->client->playerTeam == killTeam )
 				{
@@ -4905,7 +4947,15 @@ void NPC_Kill_f( void )
 					}
 				}
 			}
-			else if( (player->NPC_type && Q_stricmp( name, player->NPC_type ) == 0) // zyk: now it will use NPC_type instead of targetname
+			// GalaxyRP fix: [NPC] this matched NPC_type only. NPC_Spawn_f has always accepted a name
+			// ("/npc spawn stormtrooper johnny") and NPC_SpawnType stores it as the NPC's targetname,
+			// but nothing ever matched on it, so a named NPC could not be killed by its name -- the
+			// upstream TaystJK/vanilla code matches targetname and zyk swapped it for NPC_type.
+			// Trying targetname first and falling back to NPC_type keeps both: "/npc kill johnny"
+			// kills that one NPC, "/npc kill stormtrooper" still clears the whole type. Targetname
+			// wins a tie because it is the name an admin deliberately chose.
+			else if( (player->targetname && Q_stricmp( name, player->targetname ) == 0)
+				|| (player->NPC_type && Q_stricmp( name, player->NPC_type ) == 0)
 				|| Q_stricmp( name, "all" ) == 0 )
 			{
 				if (!(player->m_pVehicle && player->m_pVehicle->m_pPilot))
@@ -5041,22 +5091,27 @@ void Cmd_NPC_f( gentity_t *ent )
 				// g_cmds.c), and level.guardian_quest has been removed along with it, so this guard is
 				// removed too.
 
-				if (Q_stricmp(cmd2,"player") == 0)
+				// GalaxyRP fix: [NPC] this compared against the short names only, while
+				// /npc kill team accepted only the full NPCTEAM_* spellings. Both subcommands now
+				// take either form. An unrecognised name is still ignored, exactly as before.
+				int newTeam = zyk_team_from_string(cmd2);
+
+				if (newTeam == NPCTEAM_PLAYER)
 				{
 					thisent->client->playerTeam = NPCTEAM_PLAYER;
 					thisent->client->enemyTeam = NPCTEAM_ENEMY;
 				}
-				else if (Q_stricmp(cmd2,"enemy") == 0)
+				else if (newTeam == NPCTEAM_ENEMY)
 				{
 					thisent->client->playerTeam = NPCTEAM_ENEMY;
 					thisent->client->enemyTeam = NPCTEAM_PLAYER;
 				}
-				else if (Q_stricmp(cmd2,"neutral") == 0)
+				else if (newTeam == NPCTEAM_NEUTRAL)
 				{
 					thisent->client->playerTeam = NPCTEAM_NEUTRAL;
 					thisent->client->enemyTeam = NPCTEAM_NEUTRAL;
 				}
-				else if (Q_stricmp(cmd2,"free") == 0)
+				else if (newTeam == NPCTEAM_FREE)
 				{
 					thisent->client->playerTeam = NPCTEAM_FREE;
 					thisent->client->enemyTeam = NPCTEAM_FREE;

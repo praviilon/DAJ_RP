@@ -10355,6 +10355,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
 ^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
 ^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight.\n\
+^7Press ^3Use ^7on a friendly NPC to make it follow you, and again to dismiss it.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\
@@ -13670,7 +13671,18 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 
 		if (command_number == ADM_NPC)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/npc spawn <name> ^7to spawn a npc. Use ^3/npc spawn vehicle <name> ^7to spawn a vehicle. Use ^3/npc kill all ^7to kill all npcs\n\n\"" );
+			// GalaxyRP fix: [Admin] this listed spawn and "kill all" only. /npc also has team,
+			// showbounds and score, and kill takes more forms than the one shown -- none of which
+			// appeared anywhere, here or in /list commands, so the only way to find them was to read
+			// Cmd_NPC_f(). The team names are given in their short form because that is what a player
+			// will type and what the /npc usage listing already shows; zyk_team_from_string() accepts
+			// the full NPCTEAM_* spellings too. score is called out as server-console output because
+			// NPC_PrintScore() uses Com_Printf, so the admin who runs it sees nothing client-side.
+			trap->SendServerCommand( ent-g_entities, "print \"\n^3/npc spawn <type> <targetname (optional)>^7: spawns an npc. ^3/npc spawn vehicle <type> <targetname (optional)>^7: spawns a vehicle.\n\
+^3/npc kill <targetname or type>^7: kills npcs with that targetname or type. ^3/npc kill all^7: kills every npc.\n\
+^3/npc kill team <player/enemy/neutral/free or nonally>^7: kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
+^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc you are looking at.\n\
+^3/npc showbounds^7: toggles npc bounding boxes. ^3/npc score <targetname (optional)>^7: prints npc scores to the server console.\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
 		{
@@ -13706,11 +13718,11 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_KICK)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/admkick <player name or ID> ^7to kick a player from the server, or ^3/killother <player name or ID> ^7to instantly kill a player. Both share this admin command\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/admkick <player name or ID> ^7to kick a player from the server, or ^3/killother <player name or ID> ^7to instantly kill a player.\n\n\"" );
 		}
 		else if (command_number == ADM_PARALYZE)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/paralyze <player name or ID> <seconds (optional, 30-900, default 30)> ^7to paralyze a player for that long, or ^3/unparalyze <player name or ID> ^7to release them early. Both share this admin command\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/paralyze <player name or ID> <seconds (optional, 30-900, default 30)> ^7to paralyze a player for that long, or ^3/unparalyze <player name or ID> ^7to release them early.\n\n\"" );
 		}
 		else if (command_number == ADM_GIVE)
 		{
@@ -13738,7 +13750,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_GOD)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/god ^7to make yourself invincible, or ^3/notarget ^7to make NPCs and turrets ignore you. Both share this admin command\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/god ^7to make yourself invincible, or ^3/notarget ^7to make NPCs and turrets ignore you.\n\n\"");
 		}
 		else if (command_number == ADM_LEVELUP)
 		{
