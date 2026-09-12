@@ -1832,6 +1832,13 @@ void NPC_Think ( gentity_t *self)//, int msec )
 		zyk_release_npc_from_leader(self);
 	}
 
+	// GalaxyRP fix: [NPC] an NPC under /order guard must not walk after its leader. See
+	// zyk_hold_guarding_npc() (g_main.c) for why BS_STAND_GUARD does not reach NPC_BSStandGuard()
+	// for most NPC classes, and why clearing the goal is the whole fix. Runs every think, next to
+	// the leader check above and ahead of NPC_ExecuteBState() below, because a class AI can re-take
+	// the leader as its goal on any frame -- doing this once when the order is given would not hold.
+	zyk_hold_guarding_npc(self);
+
 	// dead NPCs have a special think, don't run scripts (for now)
 	//FIXME: this breaks deathscripts
 	if ( self->health <= 0 )

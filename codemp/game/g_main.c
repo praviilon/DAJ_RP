@@ -5111,6 +5111,52 @@ NPC_CheckCharmed() owns that link and restores the NPC's original teams when cha
 out, so it is left alone. ICARUS SET_LEADER can name another NPC as the leader, and a map script
 pointing one NPC at another has nothing to do with the Use key.
 */
+/*
+Stop an NPC under a /order guard from walking after the player it is guarding for.
+
+/order guard sets NPC->tempBehavior = BS_STAND_GUARD, and the behaviour that name promises --
+NPC_BSStandGuard(), which issues no movement at all -- is only ever reached from inside
+NPC_BSFollowLeader(), whose opening test reads the guard bit. But BS_STAND_GUARD routes the NPC
+AWAY from NPC_BSFollowLeader: NPC_RunBehavior() dispatches by class, and thirteen of the seventeen
+behaviour sets map BS_STAND_GUARD onto their own <class>_Default AI instead (NPC_BehaviorSet_Jedi
+-> NPC_BSJedi_Default, NPC_BehaviorSet_Stormtrooper -> NPC_BSST_Default, and so on). Those AIs end
+with the shape
+
+	if ( UpdateGoal() ) { ucmd.buttons |= BUTTON_WALKING; NPC_MoveToGoal( qtrue ); }
+
+and goalEntity is still the leader, left there by NPC_BSFollowLeader() while the NPC was following
+-- /order guard never clears it. So the NPC kept following, and because those paths force
+BUTTON_WALKING unconditionally while the real follow code only walks inside a short close-range
+band, it followed at walk speed instead of run speed. That speed difference is what the bug looked
+like from the outside; the following itself was the actual defect.
+
+Dropping the goal when it is the leader is deliberately the whole fix. It is the one thing that
+makes the NPC walk toward the player, and clearing it leaves every other part of the class AI
+untouched -- enemy acquisition, shooting, repositioning, cover, class-specific moves. NPCs whose
+behaviour set does fall through to NPC_BehaviorSet_Default keep working exactly as before, because
+NPC_BSDefault() reacts to a null goal by calling NPC_BSFollowLeader(), which reads the guard bit and
+lands on NPC_BSStandGuard() -- the intended behaviour, reached by the route that already worked.
+
+Scoped by the guard bit and by the goal actually being the leader, so a map- or script-spawned NPC
+is untouched: those never carry bit 18, which only Cmd_Order_f() sets.
+*/
+void zyk_hold_guarding_npc(gentity_t *npc_ent)
+{
+	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)
+		return;
+
+	if (!npc_ent->client->leader)
+		return;
+
+	if (!(npc_ent->client->pers.player_statuses & (1 << 18)))
+		return;
+
+	if (npc_ent->NPC->goalEntity == npc_ent->client->leader)
+	{
+		npc_ent->NPC->goalEntity = NULL;
+	}
+}
+
 qboolean zyk_npc_leader_lost(gentity_t *npc_ent)
 {
 	gentity_t *leader = NULL;
