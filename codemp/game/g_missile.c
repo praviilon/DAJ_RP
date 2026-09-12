@@ -704,15 +704,23 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 				G_DeflectMissile(otherOwner, ent, fwd);
 			}
 			// GalaxyRP (Alex): [Combat] Def 3 25% chance to reflect
+			// GalaxyRP fix: [Combat] these four calls passed `other` (the lightsaber entity that the
+			// missile actually struck) where every surrounding arm passes `otherOwner` (the player
+			// holding it). G_ReflectMissile/G_DeflectMissile use that argument for the
+			// "am I the missile's owner" self-check, for the bounce vector origin, and to reassign
+			// missile->r.ownerNum -- so at Defense 3 and 4 the shot bounced off the saber's origin
+			// rather than the player's, a player reflecting his own shot was not recognised as its
+			// owner (so it could come back and hit him), and the reflected missile ended up owned by
+			// a non-client entity, breaking kill attribution. Defense 1, 2 and 5 were already correct.
 			else if (otherDefLevel == FORCE_LEVEL_3)
 			{
 				if (Q_irand(0, 3))
 				{
-					G_DeflectMissile(other, ent, fwd);
+					G_DeflectMissile(otherOwner, ent, fwd);
 				}
 				else
 				{
-					G_ReflectMissile(other, ent, fwd);
+					G_ReflectMissile(otherOwner, ent, fwd);
 				}
 			}
 			// GalaxyRP (Alex): [Combat] Def 4 50% chance to reflect
@@ -720,11 +728,11 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			{
 				if (Q_irand(0, 1))
 				{
-					G_DeflectMissile(other, ent, fwd);
+					G_DeflectMissile(otherOwner, ent, fwd);
 				}
 				else
 				{
-					G_ReflectMissile(other, ent, fwd);
+					G_ReflectMissile(otherOwner, ent, fwd);
 				}
 			}
 			// GalaxyRP (Alex): [Combat] Def 5 100% chance to reflect

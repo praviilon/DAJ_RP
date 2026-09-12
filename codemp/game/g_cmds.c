@@ -9581,10 +9581,12 @@ void initialize_rpg_skills(gentity_t *ent)
 		if (ent->client->pers.skill_levels[10] == 0)
 			ent->client->ps.fd.forcePowersKnown &= ~(1 << FP_PROTECT);
 
-		if (ent->client->pers.skill_levels[10] < 4)
-			ent->client->ps.fd.forcePowerLevel[FP_PROTECT] = ent->client->pers.skill_levels[10];
-		else
-			ent->client->ps.fd.forcePowerLevel[FP_PROTECT] = FORCE_LEVEL_3;
+		// GalaxyRP fix: [Force] Protect used to be pinned to FORCE_LEVEL_3 here, copying the cap
+		// Lightning needs (Lightning drives ps.activeForcePass, which cg_players.c renders as Force
+		// Drain above FORCE_LEVEL_3). Protect never touches activeForcePass -- only Lightning and
+		// Drain do -- so the cap bought nothing and left the level-4/5 arms in G_Damage unreachable,
+		// making Protect 4 and 5 no better than Protect 3. Assigning the real level lights them up.
+		ent->client->ps.fd.forcePowerLevel[FP_PROTECT] = ent->client->pers.skill_levels[10];
 
 		// zyk: loading Mind Trick value
 		if (!(ent->client->ps.fd.forcePowersKnown & (1 << FP_TELEPATHY)) && ent->client->pers.skill_levels[11] > 0)
@@ -9631,10 +9633,13 @@ void initialize_rpg_skills(gentity_t *ent)
 		if (ent->client->pers.skill_levels[16] == 0)
 			ent->client->ps.fd.forcePowersKnown &= ~(1 << FP_RAGE);
 
-		if (ent->client->pers.skill_levels[16] < 4)
-			ent->client->ps.fd.forcePowerLevel[FP_RAGE] = ent->client->pers.skill_levels[16];
-		else
-			ent->client->ps.fd.forcePowerLevel[FP_RAGE] = FORCE_LEVEL_3;
+		// GalaxyRP fix: [Force] Rage used to be pinned to FORCE_LEVEL_3 here for the same
+		// copied-from-Lightning reason as Protect above, but with no compensating bonus effects of
+		// its own -- pers.skill_levels[16] had no reader anywhere outside the two skill-list
+		// displays. That made Rage 4 and 5 completely inert: the duration, recovery-time and
+		// health-drain arms written for them in w_force.c were all unreachable. Rage never touches
+		// ps.activeForcePass either, so the cap is simply dropped.
+		ent->client->ps.fd.forcePowerLevel[FP_RAGE] = ent->client->pers.skill_levels[16];
 
 		// zyk: loading Team Energize value
 		if (!(ent->client->ps.fd.forcePowersKnown & (1 << FP_TEAM_FORCE)) && ent->client->pers.skill_levels[17] > 0)
@@ -14098,22 +14103,31 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 	// admitting skill_id == 9 here fixes Heal in place, the same way skill_id == 5 is already
 	// special-cased below for the saber weapon bit.
 	if (strcmp(skills[skill_id].category,"force") == 0 && (skills[skill_id].value_internal != 0 || skill_id == 9)) {
-		// GalaxyRP fix: Absorb, Protect and Lightning are capped at ps.fd.forcePowerLevel ==
-		// FORCE_LEVEL_3 in the DB-load path below (see the "loading Absorb/Protect/Lightning
-		// value" blocks a bit further down in this file) -- their levels 4 and 5 are meant to be
-		// applied purely as bonus effects keyed off pers.skill_levels[] directly (see e.g. the
-		// "Lightning level 4/5" damage bonus in ForceLightningDamage()), never by actually raising
-		// forcePowerLevel past 3. That's because the client renders Force Lightning's FX based on
-		// ps.activeForcePass, which is set to forcePowerLevel[FP_LIGHTNING] every time Lightning
-		// is activated (see WP_ForcePowerStart) -- and cg_players.c treats any activeForcePass
-		// above FORCE_LEVEL_3 as a *Drain* effect, not Lightning (this is the same encoding
-		// vanilla JKA uses for NPC dark side attacks). This code path (the immediate, in-place
-		// effect of a /skillup or /skilldown) didn't apply that cap, so upgrading Lightning to
-		// level 4 or 5 set forcePowerLevel[FP_LIGHTNING] to 4/5 unclamped, and the very next use
+		// GalaxyRP fix: Absorb and Lightning are capped at ps.fd.forcePowerLevel == FORCE_LEVEL_3 in
+		// the DB-load path below (see the "loading Absorb/Lightning value" blocks a bit further down
+		// in this file) -- their levels 4 and 5 are meant to be applied purely as bonus effects
+		// keyed off pers.skill_levels[] directly (see e.g. the "Lightning level 4/5" damage bonus in
+		// ForceLightningDamage(), or the skill_levels[8] force bonus in WP_AbsorbConversion()),
+		// never by actually raising forcePowerLevel past 3. That's because the client renders Force
+		// Lightning's FX based on ps.activeForcePass, which is set to forcePowerLevel[FP_LIGHTNING]
+		// every time Lightning is activated (see WP_ForcePowerStart) -- and cg_players.c treats any
+		// activeForcePass above FORCE_LEVEL_3 as a *Drain* effect, not Lightning (this is the same
+		// encoding vanilla JKA uses for NPC dark side attacks). This code path (the immediate,
+		// in-place effect of a /skillup or /skilldown) didn't apply that cap, so upgrading Lightning
+		// to level 4 or 5 set forcePowerLevel[FP_LIGHTNING] to 4/5 unclamped, and the very next use
 		// of Force Lightning rendered as Force Drain until the next respawn re-ran the (correctly
 		// clamped) DB-load path and put it back to 3. Applying the same cap here keeps this path
 		// consistent with the DB-load path so the bug can't resurface after a skill change.
-		if ((skills[skill_id].value_internal == FP_ABSORB || skills[skill_id].value_internal == FP_PROTECT || skills[skill_id].value_internal == FP_LIGHTNING)
+		//
+		// GalaxyRP fix: [Force] FP_PROTECT used to be in this list too, and has been dropped along
+		// with the matching cap on the DB-load path -- the two paths must agree, or a /skillup would
+		// be silently undone by the next respawn. Protect never writes ps.activeForcePass (only
+		// Lightning and Drain do), so it never needed the cap, and the cap was leaving its level-4
+		// and level-5 arms in G_Damage unreachable. Force Rage was capped on the DB-load path for
+		// the same copied reason and has been uncapped there as well; it was never listed here,
+		// which is exactly the inconsistency that let /skillup grant Rage 4/5 until the next
+		// respawn quietly took it away again.
+		if ((skills[skill_id].value_internal == FP_ABSORB || skills[skill_id].value_internal == FP_LIGHTNING)
 			&& ent->client->pers.skill_levels[skill_id] >= 4) {
 			ent->client->ps.fd.forcePowerLevel[skills[skill_id].value_internal] = FORCE_LEVEL_3;
 		}

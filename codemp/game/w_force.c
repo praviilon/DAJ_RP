@@ -152,7 +152,14 @@ const int mindTrickTime[NUM_FORCE_POWER_LEVELS] =
 	0,//none
 	5000,
 	10000,
-	15000
+	15000,
+	// GalaxyRP fix: [Force] this table is declared [NUM_FORCE_POWER_LEVELS] (6) but only ever
+	// supplied four initializers, so levels 4 and 5 were implicitly 0. It is indexed by
+	// forcePowerLevel[FP_TELEPATHY] when setting an NPC's charmedTime/confusionTime, so Mind Trick
+	// at level 4 or 5 set the expiry to level.time + 0 and wore off the same frame it was applied --
+	// mind trick did nothing at all to NPCs. Continuing the existing 5000ms-per-level progression.
+	20000,
+	25000
 };
 
 void WP_InitForcePowers( gentity_t *ent ) {
@@ -937,8 +944,11 @@ int WP_AbsorbConversion(gentity_t *attacked, int atdAbsLevel, gentity_t *attacke
 		addTot = 1;
 	}
 
-	if (attacked->client->sess.amrpgmode == 2 && attacked->client->pers.skill_levels[8] == 4)
-	{ // zyk: Absorb 4/4 in RPG Mode absorbs more force
+	// GalaxyRP fix: [Force] this was `== 4`, so Absorb 5 silently lost the bonus that Absorb 4 got
+	// while still keeping the level-4 no-upkeep-drain benefit (which tests `< FORCE_LEVEL_4`).
+	// Spending the points to go 4 -> 5 was a straight downgrade of 20 force per absorbed hit.
+	if (attacked->client->sess.amrpgmode == 2 && attacked->client->pers.skill_levels[8] >= FORCE_LEVEL_4)
+	{ // zyk: Absorb 4/4 and above in RPG Mode absorbs more force
 		addTot = addTot + (RP_MAX_FORCE_POWER/10);
 	}
 

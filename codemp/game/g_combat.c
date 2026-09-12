@@ -4846,6 +4846,14 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			damage = (int)ceil(damage * 1.06);
 		else if (attacker->client->ps.fd.forcePowerLevel[FP_RAGE] == 3)
 			damage = (int)ceil(damage * 1.09);
+		// GalaxyRP fix: [Force] this chain stopped at level 3 with no else, which was harmless while
+		// forcePowerLevel[FP_RAGE] was capped there. With the cap removed it would have handed
+		// Rage 4 and 5 no damage bonus at all -- worse than Rage 3 -- so the existing +0.03/level
+		// progression is continued.
+		else if (attacker->client->ps.fd.forcePowerLevel[FP_RAGE] == 4)
+			damage = (int)ceil(damage * 1.12);
+		else if (attacker->client->ps.fd.forcePowerLevel[FP_RAGE] == 5)
+			damage = (int)ceil(damage * 1.15);
 	}
 
 	if (attacker && attacker->client && (attacker->NPC || attacker->client->sess.amrpgmode == 2) && attacker->client->pers.quest_power_status & (1 << 3))
@@ -5887,10 +5895,17 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 					}
 				}
 
+				// GalaxyRP fix: [Force] these arms were unreachable while forcePowerLevel[FP_PROTECT]
+				// was capped at 3, and carried hamt values that only made sense while they were.
+				// subamt is (maxtake * hamt) + (take - maxtake) and take is then reduced by subamt,
+				// so hamt 1.0f zeroes incoming damage outright and 1.20f overshoots into the
+				// negative clamp -- both are total invulnerability for as long as the player has any
+				// force left. Retuned to continue the existing 0.40 / 0.60 / 0.80 progression so
+				// Protect 5 beats Protect 4 beats Protect 3 without anyone becoming unkillable.
 				else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_4)
 				{
 					famt = 0.125f;
-					hamt = 1.0f;
+					hamt = 0.87f;
 					if (maxtake > 600)
 					{
 						maxtake = 600;
@@ -5900,7 +5915,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_5)
 				{
 					famt = 0.0625f;
-					hamt = 1.20f;
+					hamt = 0.92f;
 					if (maxtake > 800)
 					{
 						maxtake = 800;
@@ -5982,9 +5997,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		{
 			if (targ->client->ps.fd.forcePower)
 			{
-				float force_decrease_change = 1.0; // zyk: Protect 4/4 will make player lose less force
+				float force_decrease_change = 1.0; // zyk: Protect 4/4 and above will make player lose less force
 
-				if (targ->client->sess.amrpgmode == 2 && targ->client->pers.skill_levels[10] == 4)
+				// GalaxyRP fix: [Force] this was `== 4`, so Protect 5 lost the halved force drain
+				// that Protect 4 received -- the same off-by-one the Absorb bonus had.
+				if (targ->client->sess.amrpgmode == 2 && targ->client->pers.skill_levels[10] >= 4)
 					force_decrease_change = 0.5;
 
 				if (targ->client->forcePowerSoundDebounce < level.time)
@@ -6051,6 +6068,13 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				take = (int)ceil(take*0.7);
 			else if (targ->client->ps.fd.forcePowerLevel[FP_RAGE] == 3)
 				take = (int)ceil(take*0.55);
+			// GalaxyRP fix: [Force] same as the outgoing-damage chain above -- this stopped at level
+			// 3, so with the cap removed Rage 4 and 5 would have taken full damage. Continuing the
+			// existing -0.15/level progression.
+			else if (targ->client->ps.fd.forcePowerLevel[FP_RAGE] == 4)
+				take = (int)ceil(take*0.40);
+			else if (targ->client->ps.fd.forcePowerLevel[FP_RAGE] == 5)
+				take = (int)ceil(take*0.25);
 		}
 
 		if (!targ->NPC && targ->client && targ->client->sess.amrpgmode == 2)

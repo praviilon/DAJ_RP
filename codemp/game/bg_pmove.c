@@ -181,7 +181,14 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		20,//FP_TELEPATHY,//instant
 		60,//FP_GRIP,//hold/duration
 		1,//FP_LIGHTNING,//hold/duration
-		100,//FP_RAGE,//duration
+		// GalaxyRP fix: [Force] was 100. This row only became reachable when the FORCE_LEVEL_3 cap
+		// on forcePowerLevel[FP_RAGE] was removed (see initialize_rpg_skills in g_cmds.c), and at
+		// 100 it would have locked Rage out entirely for any character whose force pool is under
+		// that -- the pool is 40 * the Force Power skill, so Force Power 1 and 2 (40 and 80) could
+		// no longer switch Rage on at all, having been able to at the level-3 cost of 50. Lowered
+		// so levels 4 and 5 still cost more to activate than levels 1-3 without taking the power
+		// away from anyone who has it today.
+		60,//FP_RAGE,//duration
 		20,//FP_PROTECT,//duration
 		10,//FP_ABSORB,//duration
 		80,//FP_TEAM_HEAL,//instant
@@ -202,7 +209,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		20,//FP_TELEPATHY,//instant
 		80,//FP_GRIP,//hold/duration
 		1,//FP_LIGHTNING,//hold/duration
-		100,//FP_RAGE,//duration
+		// GalaxyRP fix: [Force] was 100, lowered for the same reason as the level-4 row above.
+		70,//FP_RAGE,//duration
 		20,//FP_PROTECT,//duration
 		5,//FP_ABSORB,//duration
 		90,//FP_TEAM_HEAL,//instant

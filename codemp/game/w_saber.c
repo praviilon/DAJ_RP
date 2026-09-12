@@ -9535,11 +9535,16 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 			blockFactor = 0.3f;
 		}
 	}
-	if (self->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] == FORCE_LEVEL_4)
+	// GalaxyRP fix: [Force] these two tests used to be standalone `if`s, so the FORCE_LEVEL_3 test
+	// below started a fresh if/else chain whose terminal `else` returns 0. A player with Saber
+	// Defense 4 or 5 therefore set blockFactor, missed every arm of that chain, and fell through to
+	// `return 0` -- i.e. never autoblocked at all, strictly worse than Defense 1. Joining all five
+	// arms into one chain makes the level-4 and level-5 block factors actually take effect.
+	else if (self->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] == FORCE_LEVEL_4)
 	{
 		blockFactor = 0.5f;
 	}
-	if (self->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] == FORCE_LEVEL_3)
+	else if (self->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] == FORCE_LEVEL_3)
 	{
 		blockFactor = 0.7f;
 	}
