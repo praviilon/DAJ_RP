@@ -205,6 +205,7 @@ void		zyk_clear_npc_order_bits(gentity_t *npc_ent);
 void		zyk_release_npc_from_leader(gentity_t *npc_ent);
 qboolean	zyk_npc_leader_lost(gentity_t *npc_ent);
 void		zyk_hold_guarding_npc(gentity_t *npc_ent);
+qboolean	zyk_npc_can_take_orders(gentity_t *npc_ent, gentity_t *leader);
 void		zyk_release_player_npcs(gentity_t *ent);
 
 #endif // __RP_LOCAL_H__

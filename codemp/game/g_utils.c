@@ -1930,10 +1930,16 @@ void TryUse( gentity_t *ent )
 		}
 		else if (target->client->leader == ent)
 		{ // zyk: npc will stop follow the player, which is the leader
-			target->client->pers.player_statuses &= ~(1 << 18);
-			target->client->pers.player_statuses &= ~(1 << 19);
-			target->client->leader = NULL;
-			target->NPC->tempBehavior = BS_STAND_GUARD;
+			// GalaxyRP fix: [NPC] this used to open-code the release and left NPC->goalEntity still
+			// pointing at the player. NPC_BSFollowLeader() parks the leader there while the NPC is
+			// following (both its close-in and back-off branches do, and at Use range the NPC is
+			// always in one of them), UpdateGoal() only rejects a goal whose entity is not inuse, and
+			// ReachedGoal() clears it only on an actual touch rather than on proximity -- so a
+			// dismissed NPC kept walking at the player until it bumped into them, and chased them if
+			// they moved off. zyk_release_npc_from_leader() clears the goal along with the leader and
+			// the order bits; it is otherwise identical here, since the vehicle test it makes on
+			// tempBehavior is already guaranteed by the outer condition.
+			zyk_release_npc_from_leader(target);
 		}
 	}
 

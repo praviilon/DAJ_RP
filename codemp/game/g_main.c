@@ -5140,6 +5140,50 @@ lands on NPC_BSStandGuard() -- the intended behaviour, reached by the route that
 Scoped by the guard bit and by the goal actually being the leader, so a map- or script-spawned NPC
 is untouched: those never carry bit 18, which only Cmd_Order_f() sets.
 */
+/*
+Can this NPC be given a /order?
+
+The three verbs used to repeat one condition three times, which is how the two gaps below went
+unnoticed. One test now, so the three branches cannot drift apart.
+
+CLASS_WAMPA and CLASS_REMOTE are excluded for the same reason CLASS_VEHICLE already was: their AI
+never reads the behaviour state, so no order can change what they do. NPC_RunBehavior() calls
+NPC_BSWampa_Default() directly for a wampa and discards bState entirely, and
+NPC_BehaviorSet_Remote() ignores its bState parameter and always calls NPC_BSRemote_Default(). But
+/order guard and /order cover also set bits 18 and 19, and NPC_ValidEnemy() reads those to decide
+that anyone not on the leader's ally list is a valid target -- reached from these classes through
+NPC_CheckEnemyExt() -> NPC_FindEnemy() -> NPC_ValidEnemy(). So on those two classes an order moved
+nothing and changed nothing visible, while quietly turning the NPC on its own side. Note this is
+NOT true of the rancor, which looks similar but is fine: NPC_BehaviorSet_Rancor() has no
+BS_FOLLOW_LEADER case and so falls through to NPC_BehaviorSet_Default(), which does handle it.
+
+Charmed NPCs are excluded because the command was the only part of the order system that did not
+already skip them. zyk_npc_leader_lost() and zyk_release_player_npcs() both bail on charmedTime, on
+the grounds that NPC_CheckCharmed() owns the leader link for as long as the charm lasts -- but
+Cmd_Order_f() would happily stamp an order onto a charmed NPC, and those same release paths then
+refused to take it off again. Ordering one meant its leader and order bits survived a team change
+or a switch to spectator that would have cleared them for any other NPC, leaving it hunting its own
+team on behalf of someone no longer in the game.
+*/
+qboolean zyk_npc_can_take_orders(gentity_t *npc_ent, gentity_t *leader)
+{
+	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)
+		return qfalse;
+
+	if (!leader || npc_ent->client->leader != leader)
+		return qfalse;
+
+	if (npc_ent->client->NPC_class == CLASS_VEHICLE ||
+		npc_ent->client->NPC_class == CLASS_WAMPA ||
+		npc_ent->client->NPC_class == CLASS_REMOTE)
+		return qfalse;
+
+	if (npc_ent->NPC->charmedTime > level.time)
+		return qfalse;
+
+	return qtrue;
+}
+
 void zyk_hold_guarding_npc(gentity_t *npc_ent)
 {
 	if (!npc_ent || !npc_ent->client || !npc_ent->NPC)

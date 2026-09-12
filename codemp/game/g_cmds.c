@@ -15137,8 +15137,7 @@ void Cmd_Order_f( gentity_t *ent ) {
 			{
 				gentity_t *this_ent = &g_entities[i];
 
-				if (this_ent && this_ent->client && this_ent->NPC && this_ent->client->NPC_class != CLASS_VEHICLE && 
-					this_ent->client->leader == ent)
+				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
 					this_ent->client->pers.player_statuses &= ~(1 << 18);
 					this_ent->client->pers.player_statuses &= ~(1 << 19);
@@ -15153,8 +15152,7 @@ void Cmd_Order_f( gentity_t *ent ) {
 			{
 				gentity_t *this_ent = &g_entities[i];
 
-				if (this_ent && this_ent->client && this_ent->NPC && this_ent->client->NPC_class != CLASS_VEHICLE && 
-					this_ent->client->leader == ent)
+				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
 					this_ent->NPC->tempBehavior = BS_STAND_GUARD;
 					this_ent->client->pers.player_statuses &= ~(1 << 19);
@@ -15169,8 +15167,7 @@ void Cmd_Order_f( gentity_t *ent ) {
 			{
 				gentity_t *this_ent = &g_entities[i];
 
-				if (this_ent && this_ent->client && this_ent->NPC && this_ent->client->NPC_class != CLASS_VEHICLE && 
-					this_ent->client->leader == ent)
+				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
 					this_ent->NPC->tempBehavior = BS_FOLLOW_LEADER;
 					this_ent->client->pers.player_statuses &= ~(1 << 18);
