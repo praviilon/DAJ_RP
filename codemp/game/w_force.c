@@ -3918,6 +3918,23 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					{
 						int randfact = 0;
 
+						// GalaxyRP fix: [Force Powers] >= FORCE_LEVEL_3 for the top arm, not ==.
+						//
+						// forcePowerLevels_t runs to FORCE_LEVEL_5 and initialize_rpg_skills() feeds
+						// forcePowerLevel[FP_PULL] straight from skill_levels[2], whose Pull skill maxes
+						// at 5 -- so a character with Pull 4 or 5 matched none of these three arms,
+						// randfact stayed 0, and "Q_irand(1, 10) <= 0" is never true. The disarm below
+						// could not fire at all, against players or NPCs. Levelling Pull past 3 removed
+						// the ability outright: 100% at level 3, 0% at levels 4 and 5.
+						//
+						// Level 3 already means "always", so 4 and 5 land on the same 10 rather than
+						// anything stronger -- there is nothing above certainty to give them.
+						//
+						// The visionArc chain near the top of this function was extended for levels 4
+						// and 5 when the cap was raised; this chain and the knockdown below were the two
+						// the sweep missed. Fourteen of the seventeen exact FORCE_LEVEL_3 tests in this
+						// file handle 4/5 already, DoGripAction() covers them with its own
+						// "gripLevel > FORCE_LEVEL_3" branch, and these two were the remainder.
 						if (modPowerLevel == FORCE_LEVEL_1)
 						{
 							randfact = 3;
@@ -3926,7 +3943,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 						{
 							randfact = 7;
 						}
-						else if (modPowerLevel == FORCE_LEVEL_3)
+						else if (modPowerLevel >= FORCE_LEVEL_3)
 						{
 							randfact = 10;
 						}
@@ -3961,7 +3978,19 @@ void ForceThrow( gentity_t *self, qboolean pull )
 
 				if ((modPowerLevel > otherPushPower || push_list[x]->client->ps.m_iVehicleNum) && push_list[x]->client)
 				{
-					if (modPowerLevel == FORCE_LEVEL_3 &&
+					// GalaxyRP fix: [Force Powers] >= FORCE_LEVEL_3, same cause as the disarm chain above:
+					// this is the level-3 knockdown, and an exact test meant Push or Pull at 4 or 5 --
+					// reachable since the force cap was raised to 5 -- knocked nobody down at all. It
+					// cost both powers their signature effect at exactly the levels a player pays most
+					// for.
+					//
+					// Note the reach below is "64 * ((modPowerLevel - otherPushPower) - 1)", which was
+					// already written to scale with the attacker's level and has simply never run above
+					// 3. Letting it do so is the point of the fix rather than a separate buff, and it
+					// stays self-balancing: it keys on the DIFFERENCE between attacker and defender, so
+					// a level 5 push still only reaches 64 units against someone defending at level 3,
+					// the same as level 3 against a level 1.
+					if (modPowerLevel >= FORCE_LEVEL_3 &&
 						push_list[x]->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN)
 					{
 						dirLen = VectorLength(pushDir);
