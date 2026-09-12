@@ -38,7 +38,7 @@ extern void Jedi_Cloak( gentity_t *self );
 
 extern void Q3_SetParm (int entID, int parmNum, const char *parmValue);
 extern team_t TranslateTeamName( const char *name );
-extern char	*TeamNames[TEAM_NUM_TEAMS];
+extern char	*TeamNames[NPCTEAM_NUM_TEAMS];
 
 extern void PM_SetTorsoAnimTimer( gentity_t *ent, int *torsoAnimTimer, int time );
 extern void PM_SetLegsAnimTimer( gentity_t *ent, int *legsAnimTimer, int time );
@@ -4695,7 +4695,7 @@ void NPC_Kill_f( void )
 		{
 			Com_Printf( S_COLOR_RED"NPC_Kill Error: 'npc kill team' requires a team name!\n" );
 			Com_Printf( S_COLOR_RED"Valid team names are:\n");
-			for ( n = (TEAM_FREE + 1); n < TEAM_NUM_TEAMS; n++ )
+			for ( n = NPCTEAM_FREE; n < NPCTEAM_NUM_TEAMS; n++ )
 			{
 				Com_Printf( S_COLOR_RED"%s\n", TeamNames[n] );
 			}
@@ -4719,7 +4719,7 @@ void NPC_Kill_f( void )
 			{
 				Com_Printf( S_COLOR_RED"NPC_Kill Error: team '%s' not recognized\n", name );
 				Com_Printf( S_COLOR_RED"Valid team names are:\n");
-				for ( n = (TEAM_FREE + 1); n < TEAM_NUM_TEAMS; n++ )
+				for ( n = NPCTEAM_FREE; n < NPCTEAM_NUM_TEAMS; n++ )
 				{
 					Com_Printf( S_COLOR_RED"%s\n", TeamNames[n] );
 				}

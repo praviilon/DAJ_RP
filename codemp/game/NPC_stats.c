@@ -148,11 +148,24 @@ stringID_table_t BSETTable[] =
 extern stringID_table_t WPTable[];
 extern stringID_table_t FPTable[];
 
-char	*TeamNames[TEAM_NUM_TEAMS] =
+// GalaxyRP fix: [NPC] this held NPC team names but was sized by team_t, and its entries did not
+// line up with npcteam_t: positions 1 and 2 read "player" and "enemy" while the enum has
+// NPCTEAM_ENEMY = 1 and NPCTEAM_PLAYER = 2, so TeamNames[NPCTEAM_ENEMY] gave back "player".
+// Nothing indexes it that way today -- its only live readers are the two "valid team names are:"
+// listings in NPC_Kill_f(), which print every entry in order and so were merely out of order rather
+// than wrong -- but TranslateTeamName() below walks it and returns the index as a team, and would
+// have handed back the opposite team the moment anyone uncommented it. Reordered to match the enum,
+// which is the safe direction: npcteam_t is load-bearing across .npc parsing, TeamTable,
+// OnSameTeam() and every NPC's playerTeam, so it is the array that moves, not the enum.
+//
+// Index 0 was an empty string and the listings started at 1 to skip it, so "free" -- a real team,
+// and one zyk_team_from_string() accepts -- was never offered to the admin. It is spelled out now
+// and the loops start at 0.
+char	*TeamNames[NPCTEAM_NUM_TEAMS] =
 {
-	"",
-	"player",
+	"free",
 	"enemy",
+	"player",
 	"neutral"
 };
 
