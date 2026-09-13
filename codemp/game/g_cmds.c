@@ -12988,7 +12988,10 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 		strcpy(key,"");
 
 		// zyk: setting the entity classname
-		zyk_main_set_entity_field(new_ent, "classname", G_NewString(arg1));
+		// GalaxyRP fix: [Entity System] zyk_main_set_entity_field() G_NewString()s both arguments
+		// itself, so wrapping them here allocated a second copy that was thrown away immediately.
+		// Every other caller in the mod already passes its string straight through.
+		zyk_main_set_entity_field(new_ent, "classname", arg1);
 
 		for(i = 2; i < number_of_args; i++)
 		{
@@ -13011,7 +13014,9 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 			{ // zyk: value
 				trap->Argv( i, arg2, sizeof( arg2 ) );
 
-				zyk_main_set_entity_field(new_ent, G_NewString(key), G_NewString(arg2));
+				// GalaxyRP fix: [Entity System] see the classname above -- the helper makes its own
+				// copies, so these two allocations were pure waste, once per key/value pair typed.
+				zyk_main_set_entity_field(new_ent, key, arg2);
 			}
 		}
 
@@ -13215,7 +13220,9 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			{ // zyk: value
 				trap->Argv(i, arg2, sizeof(arg2));
 
-				zyk_main_set_entity_field(this_ent, G_NewString(key), G_NewString(arg2));
+				// GalaxyRP fix: [Entity System] as in Cmd_EntAdd_f -- the helper copies both
+				// arguments itself, so these two allocations were discarded the moment it returned.
+				zyk_main_set_entity_field(this_ent, key, arg2);
 			}
 		}
 
@@ -13677,15 +13684,24 @@ void Cmd_EntList_f( gentity_t *ent ) {
 	else
 	{ // zyk: search by classname, targetname or target
 		int found_entities = 0;
+		// GalaxyRP fix: [Entity System] the three G_NewString(arg1) calls below used to sit inside
+		// the loop CONDITION, so the search term was copied into the G_Alloc pool once per entity
+		// scanned -- up to three times each, and up to 1022 entities. The pool is 4 MB and is never
+		// freed for the life of the map, so a single "/entlist <long string>" burned roughly a
+		// megabyte and three or four of them reached G_Alloc's "failed on allocation" ERR_DROP.
+		// strstr only reads its needle, so one copy outside the loop does the same job. The copy is
+		// kept rather than dropped because G_NewString also turns a typed backslash-n into a real
+		// linefeed, and that is what the search term has always meant.
+		char *search_term = G_NewString(arg1);
 
 		for (i = 0; i < level.num_entities; i++)
 		{
 			target_ent = &g_entities[i];
 
 			if (target_ent && 
-				((target_ent->classname && strstr(target_ent->classname, G_NewString(arg1))) ||
-				 (target_ent->targetname && strstr(target_ent->targetname, G_NewString(arg1))) ||
-				 (target_ent->target && strstr(target_ent->target, G_NewString(arg1)))))
+				((target_ent->classname && strstr(target_ent->classname, search_term)) ||
+				 (target_ent->targetname && strstr(target_ent->targetname, search_term)) ||
+				 (target_ent->target && strstr(target_ent->target, search_term))))
 			{
 				zyk_entlist_append(ent, message, sizeof(message), &len, i, target_ent);
 				found_entities++;

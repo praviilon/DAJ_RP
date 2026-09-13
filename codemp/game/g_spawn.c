@@ -1230,10 +1230,16 @@ void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 				i += 2;
 
 				// zyk: moves all keys after this one 2 positions to remove the key
+				// GalaxyRP fix: [Entity System] this used to re-G_NewString() every surviving pair,
+				// so removing one key from a full entity allocated up to 126 fresh copies of strings
+				// that were already in the pool and already owned by this row. The slots hold
+				// pointers to storage that lives as long as the map, so moving the pointers is both
+				// correct and free. The slots left behind at the end are never read again because
+				// the count below is what bounds every reader.
 				while (i < level.zyk_spawn_strings_values_count[ent->s.number])
 				{
-					level.zyk_spawn_strings[ent->s.number][i - 2] = G_NewString(level.zyk_spawn_strings[ent->s.number][i]);
-					level.zyk_spawn_strings[ent->s.number][i - 1] = G_NewString(level.zyk_spawn_strings[ent->s.number][i + 1]);
+					level.zyk_spawn_strings[ent->s.number][i - 2] = level.zyk_spawn_strings[ent->s.number][i];
+					level.zyk_spawn_strings[ent->s.number][i - 1] = level.zyk_spawn_strings[ent->s.number][i + 1];
 
 					i += 2;
 				}
@@ -1356,9 +1362,21 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	// same limit regardless, so neither array can be written past its end even if the count is stale.
 	while (j < level.zyk_spawn_strings_values_count[ent->s.number] && i < MAX_SPAWN_VARS)
 	{
+		// GalaxyRP fix: [Entity System] the two G_NewString() calls that used to be here allocated a
+		// fresh copy of every key and value on every spawn and every /entedit, and level.spawnVars is
+		// only read by the G_Spawn* helpers during the G_CallSpawn() below -- the row it points at
+		// outlives that by the whole life of the entity, so pointing straight at it is safe.
+		//
+		// It also removes a real inconsistency. G_ParseField on the line above is handed the stored
+		// string, while G_SpawnString() used to hand the SP_ function a G_NewString() of it, i.e. the
+		// same value translated one more time. For anything set through /entadd that made no
+		// difference -- G_NewString never emits a backslash followed by 'n', because it consumes that
+		// pair, so it is idempotent on its own output -- but the entity-file loader now stores its
+		// tokens untranslated on purpose, and a value from a preset that really contains a backslash
+		// and an 'n' would have been read two different ways by the two halves of this function.
 		G_ParseField(level.zyk_spawn_strings[ent->s.number][j], level.zyk_spawn_strings[ent->s.number][j + 1], ent);
-		level.spawnVars[i][0] = G_NewString(level.zyk_spawn_strings[ent->s.number][j]);
-		level.spawnVars[i][1] = G_NewString(level.zyk_spawn_strings[ent->s.number][j + 1]);
+		level.spawnVars[i][0] = level.zyk_spawn_strings[ent->s.number][j];
+		level.spawnVars[i][1] = level.zyk_spawn_strings[ent->s.number][j + 1];
 
 		i++;
 		j += 2;

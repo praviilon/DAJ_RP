@@ -3374,9 +3374,25 @@ void zyk_regen_unit_think(gentity_t *ent)
 
 		if (this_ent && this_ent->client && this_ent->s.number < MAX_CLIENTS && this_ent->health > 0)
 		{ // zyk: must be a player that is alive
+			// GalaxyRP fix: [Entity System] each of the four tests below used to add count to the
+			// player's current value and compare the sum against the maximum. "count" comes straight
+			// off an /entadd, so a large one overflowed the int BEFORE the comparison: the sum wrapped
+			// negative, read as under the maximum, and the "+=" then wrapped the player's health,
+			// armour, force or magic power negative. Nothing here goes through G_Damage, so a player
+			// driven below zero this way never died, never respawned and just lay there -- which is
+			// exactly what the count < 0 clamp in SP_ZykRegenUnit was written to prevent, reached
+			// from the other end of the range.
+			//
+			// Widening the sum is the whole fix: (long long)a + b cannot overflow for any pair of
+			// ints, and every outcome is otherwise identical, so nothing about how a regen unit
+			// behaves changes. add_credits() in g_cmds.c already guards its own arithmetic this way.
+			// NOTE comparing the headroom instead -- count < (max - current) -- looks tidier and is
+			// wrong: that subtraction overflows in its own right once the current value is far
+			// enough below the maximum, which is precisely the state the old bug could leave a
+			// player in.
 			if (ent->spawnflags & 1)
 			{
-				if ((this_ent->health + ent->count) < this_ent->client->ps.stats[STAT_MAX_HEALTH])
+				if (((long long)this_ent->health + ent->count) < this_ent->client->ps.stats[STAT_MAX_HEALTH])
 					this_ent->health += ent->count;
 				else
 					this_ent->health = this_ent->client->ps.stats[STAT_MAX_HEALTH];
@@ -3388,7 +3404,7 @@ void zyk_regen_unit_think(gentity_t *ent)
 				if (this_ent->client->sess.amrpgmode == 2)
 					max_shield = this_ent->client->pers.max_rpg_shield;
 
-				if ((this_ent->client->ps.stats[STAT_ARMOR] + ent->count) < max_shield)
+				if (((long long)this_ent->client->ps.stats[STAT_ARMOR] + ent->count) < max_shield)
 					this_ent->client->ps.stats[STAT_ARMOR] += ent->count;
 				else
 					this_ent->client->ps.stats[STAT_ARMOR] = max_shield;
@@ -3396,7 +3412,7 @@ void zyk_regen_unit_think(gentity_t *ent)
 
 			if (ent->spawnflags & 4)
 			{
-				if ((this_ent->client->ps.fd.forcePower + ent->count) < this_ent->client->ps.fd.forcePowerMax)
+				if (((long long)this_ent->client->ps.fd.forcePower + ent->count) < this_ent->client->ps.fd.forcePowerMax)
 					this_ent->client->ps.fd.forcePower += ent->count;
 				else
 					this_ent->client->ps.fd.forcePower = this_ent->client->ps.fd.forcePowerMax;
@@ -3406,7 +3422,7 @@ void zyk_regen_unit_think(gentity_t *ent)
 			{
 				int max_magic_power = zyk_max_magic_power(this_ent);
 
-				if ((this_ent->client->pers.magic_power + ent->count) < max_magic_power)
+				if (((long long)this_ent->client->pers.magic_power + ent->count) < max_magic_power)
 				{
 					this_ent->client->pers.magic_power += ent->count;
 					send_rpg_events(2000);
