@@ -7054,6 +7054,7 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 
 // zyk: controls the quest powers stuff
 extern void initialize_rpg_skills(gentity_t *ent);
+extern void zyk_apply_character_loadout(gentity_t *ent);
 void quest_power_events(gentity_t *ent)
 {
 	if (ent && ent->client)
@@ -8092,11 +8093,28 @@ void sniper_battle_end()
 			// was commented out later -- which is why this half was never added.
 			//
 			// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
-			// players and needs no check of its own. It MUST stay last in this block: it clears weapons
-			// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
-			// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
+			// players and needs no check of its own. It MUST stay ahead of the loadout call below: it
+			// clears weapons the character has no skill for, and the unconditional WP_BRYAR_PISTOL line
+			// above would otherwise put back a pistol an RPG character has not unlocked. Same pattern as
 			// rpg_lms_prepare() and ClientSpawn().
 			initialize_rpg_skills(ent);
+
+			// GalaxyRP fix: [Sniper Battle] sniper_battle_prepare() above hands every participant a
+			// disruptor (ps.weapon is left on WP_MELEE, but nothing stops them selecting it) and a
+			// jetpack. initialize_rpg_skills() then takes both away from an RPG character who has no
+			// Sniper/Jetpack skill -- but ownership is all it touches. Nothing re-pointed ps.weapon, so
+			// a player holding the disruptor when the battle ended was left holding a weapon they no
+			// longer own, and PM_BeginWeaponChange() refuses to switch to an unowned weapon, so they
+			// were stuck with it; and nothing cleared client->jetPackOn, which is what actually drives
+			// PM_JETPACK (ClientThink_real() never consults the ownership bit), so a player still in
+			// the air simply kept flying. Both lasted until their next respawn, which the battle does
+			// not force. This is the same finishing pass the character-switch commands perform -- see
+			// zyk_apply_character_loadout() in g_cmds.c.
+			//
+			// Like initialize_rpg_skills() itself, this only reaches RPG characters: a logged-out
+			// player's disruptor and jetpack are still theirs as far as the ownership bits are
+			// concerned, so the helper correctly leaves both alone.
+			zyk_apply_character_loadout(ent);
 		}
 
 		level.sniper_players[i] = -1;

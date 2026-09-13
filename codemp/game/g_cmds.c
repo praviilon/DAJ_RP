@@ -2931,6 +2931,62 @@ void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zEr
 	sqlite3_finalize(stmt);
 }
 
+// GalaxyRP fix: [Account] the part of a character switch that initialize_rpg_skills() does not do.
+// /login, /new, /char new and /char use all apply the new character synchronously and then schedule a
+// kill, and the respawn that kill causes is what used to finish the job. That respawn cannot be relied
+// on: G_Kill() silently no-ops for a paralyzed player and in GT_DUEL/GT_POWERDUEL with
+// g_allowDuelSuicide off, so those players kept the previous character's leftovers indefinitely.
+//
+// Two things were left behind, both of which ClientSpawn() does and initialize_rpg_skills() does not:
+//
+//  1. A running jetpack. Ownership is now cleared by initialize_rpg_skills() (see the mask there), but
+//     a jetpack already in flight has to be switched off as well, the way zyk_remove_guns() does it.
+//  2. The held weapon. Nothing re-points ps.weapon when its STAT_WEAPONS bit is taken away, and the
+//     player cannot fix it themselves: PM_BeginWeaponChange() refuses any weapon they do not own, so
+//     they are stuck holding it. The fallback order matches ClientSpawn's (saber, then Bryar Pistol,
+//     then melee) rather than zyk_remove_guns()'s unconditional melee, because the new character may
+//     well own a saber.
+//
+// Ammo is deliberately NOT handled here. Both switch paths already restore the character's saved
+// ammo counts inline, in the same SQLITE_ROW branch that sets pers.CharID -- select_player_character()
+// reads the Weapons columns of its own JOIN, and select_account_and_default_character_data() does the
+// same for /login -- and nothing between there and here writes ps.ammo. Re-running
+// select_weapons_table_row_from_entity() would only repeat a query whose result is already in place.
+// (ClientSpawn's per-weapon "fill to the zyk_max_*_ammo cvars" loop is not the relevant comparison
+// either: it sits inside the GT_SIEGE-with-a-class branch and never runs in ordinary play.)
+//
+// Deliberately its own function, called from each site that needs it rather than folded into
+// initialize_rpg_skills(): that has eight callers, and re-pointing a held weapon in all of them would
+// change what the quest and minigame restore paths do. The call sites are the two character-switch
+// paths below (select_player_character() for /new, /char new and /char use; Cmd_Login_F() for /login)
+// and sniper_battle_end() in g_main.c, which takes away a disruptor and a jetpack the same way.
+void zyk_apply_character_loadout( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	// 1. a jetpack this character has no skill for must be switched off, not just un-owned
+	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_JETPACK)) && ent->client->jetPackOn)
+	{
+		Jetpack_Off(ent);
+	}
+
+	// deselect a holdable that is no longer owned, and decloak if the Cloak Item went with it
+	zyk_adjust_holdable_items(ent);
+
+	// 2. the held weapon, if this character does not own it
+	if (ent->client->ps.weapon <= WP_NONE || ent->client->ps.weapon >= WP_NUM_WEAPONS ||
+		!(ent->client->ps.stats[STAT_WEAPONS] & (1 << ent->client->ps.weapon)))
+	{
+		if (ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))
+			ent->client->ps.weapon = WP_SABER;
+		else if (ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_BRYAR_PISTOL))
+			ent->client->ps.weapon = WP_BRYAR_PISTOL;
+		else
+			ent->client->ps.weapon = WP_MELEE;
+	}
+}
+
 // GalaxyRP (Alex): [Database] UPDATE This method updated a weapons table row with information contained within the entity with which it's called.
 void update_weapons_table_row_with_current_values(gentity_t* ent) {
 
@@ -3652,6 +3708,11 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// initialize_rpg_skills() again via ClientSpawn -- that second call is idempotent (same skill_levels[]
 	// in, same result out), so there's no double-apply side effect from calling it twice.
 	initialize_rpg_skills(ent);
+
+	// GalaxyRP fix: [Account] finish the parts of the switch initialize_rpg_skills() does not cover --
+	// see zyk_apply_character_loadout() for what and why. Covers /new, /char new and /char use, which
+	// all reach the character through this function; /login has its own call in Cmd_Login_F().
+	zyk_apply_character_loadout(ent);
 
 	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
@@ -4797,6 +4858,10 @@ void Cmd_Login_F(gentity_t * ent)
 	}
 
 	initialize_rpg_skills(ent);
+
+	// GalaxyRP fix: [Account] same finishing pass select_player_character() performs for
+	// /new and /char -- see zyk_apply_character_loadout().
+	zyk_apply_character_loadout(ent);
 
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
 		// GalaxyRP fix: [Model] don't call G_Kill() in the same frame as the model change performed by
@@ -9802,7 +9867,14 @@ void initialize_rpg_skills(gentity_t *ent)
 			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_DET_PACK);
 
 		// zyk: reseting initial holdable items of the player
-		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] &= ~(1 << HI_SEEKER) & ~(1 << HI_BINOCULARS) & ~(1 << HI_SENTRY_GUN) & ~(1 << HI_EWEB) & ~(1 << HI_CLOAK) & ~(1 << HI_SHIELD) & ~(1 << HI_MEDPAC) & ~(1 << HI_MEDPAC_BIG);
+		// GalaxyRP fix: [Account] HI_JETPACK was missing from this mask while being granted from
+		// skill_levels[34] a few lines below, so this block cleared eight items and re-granted nine.
+		// Switching to a character without the Jetpack skill therefore left the jetpack owned, and only
+		// ClientSpawn's "STAT_HOLDABLE_ITEMS = 0" (g_client.c) ever took it away -- which never happens
+		// for a player whose relog kill is refused (G_Kill() no-ops while paralyzed, and in
+		// GT_DUEL/GT_POWERDUEL with g_allowDuelSuicide off). Listed here so every holdable is derived
+		// from the current character's skills, the same way the other eight already were.
+		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] &= ~(1 << HI_SEEKER) & ~(1 << HI_BINOCULARS) & ~(1 << HI_SENTRY_GUN) & ~(1 << HI_EWEB) & ~(1 << HI_CLOAK) & ~(1 << HI_SHIELD) & ~(1 << HI_MEDPAC) & ~(1 << HI_MEDPAC_BIG) & ~(1 << HI_JETPACK);
 
 		if (ent->client->pers.skill_levels[46] > 0)
 			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_BINOCULARS);
