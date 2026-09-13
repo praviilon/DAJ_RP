@@ -13,6 +13,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - RGB lightsaber colors, persisted per character. Shaders and textures are courtesy of JAPro/TaystJK.
 - `rp_loginRequired` cvar: optionally forces any player who isn't logged into an account to stay in Spectator.
 - `/admmap <gametype> <map>` admin command to change map and gametype together, gated by a repurposed admin bit.
+- `/admweather` admin command, gated by a new "Weather" admin bit: sets the weather for everyone on the server, stacking up to 8 effects at once, with `/admweather default` to put back the weather the map was built with and `/admweather clear` to switch it all off. It reuses a fixed block of effect slots instead of spending a new one on every change, so the weather can be changed freely without running the map out of them, and players who were already connected see the same sky as players who join later.
 - `/training` command: toggles a reduced-damage training saber mode. This one is courtesy of Alex.
 - Client-side sync commands (`supdatemodel`, `supdatename`, `supdatesaber`): push server-corrected model/name/saber values back to the client's own cvars so the console and menus no longer show stale values after a database-driven login, character switch, or rejected saber choice.
 - `/help` output rewritten to reflect the current command list, including several commands that existed but were undocumented.

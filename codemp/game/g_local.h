@@ -75,6 +75,33 @@ extern vec3_t gPainPoint;
 // next frame, so the damage landed at server framerate.
 #define RP_FX_RUNNER_MIN_DAMAGE_DELAY	100
 
+// GalaxyRP: [Weather] /admweather reserves a fixed, contiguous block of CS_EFFECTS slots and
+// rewrites EVERY slot in it on every change, with a counter appended so each string differs from
+// the last and therefore actually re-broadcasts.
+//
+// This shape is forced by how weather works. The engine's world-effect parser is a command stream,
+// not a state assignment: "*rain" then "*snow" gives rain AND snow, and the only removal it offers
+// is "*clear", which wipes everything. Meanwhile a client that joins later replays the whole
+// CS_EFFECTS table in SLOT ORDER (cg_main.c), while a client already connected runs each string as
+// its configstring changes. So the only way both populations end up looking at the same sky is for
+// the teardown to be part of every rebuild rather than a separate command someone has to remember.
+//
+// The layers are right-aligned in the block and every slot below them holds the teardown, so a
+// shorter recipe simply grows the padding and the surplus "*clear"s always land before the layers.
+// The padding must never be an EMPTY configstring: the client's replay loop stops at the first
+// empty slot, so a blank would silently hide every slot above it from everyone who joins later.
+#define ZYK_WEATHER_MAX_LAYERS		8	// most weather layers one recipe may hold
+#define ZYK_WEATHER_SLOTS			(ZYK_WEATHER_MAX_LAYERS + 1)	// layers plus one teardown slot
+#define ZYK_WEATHER_MAX_BASE		4	// most of the map's own weather commands we remember
+#define ZYK_WEATHER_CMD_LENGTH		96	// longest command we build, "*constantwind ( x y z )"
+#define ZYK_WEATHER_MAX_CLOUDS		5	// MAX_PARTICLE_CLOUDS in the renderer's tr_WorldEffects.cpp
+#define ZYK_WEATHER_MAX_WINDS		10	// MAX_WIND_ZONES there
+#define ZYK_WEATHER_DEBOUNCE		2000	// one change rewrites every slot, so do not allow a flood
+#define ZYK_WEATHER_WIND_LIMIT		10000	// per-axis cap on a constant wind velocity
+#define ZYK_WEATHER_DUST_MIN		1
+#define ZYK_WEATHER_DUST_MAX		10000	// the renderer allocates this many particles unchecked
+
+
 #define RP_MAX_FORCE_POWER		250
 
 // GalaxyRP: [Force] the pool a player who is not logged in gets, and the ceiling the three clamps
@@ -1803,6 +1830,20 @@ typedef struct level_locals_s {
 	// zyk: amount of keys and values stored in this entity
 	int zyk_spawn_strings_values_count[ENTITYNUM_MAX_NORMAL];
 
+	// GalaxyRP: [Weather] /admweather state. The block is claimed lazily, on the first use of the
+	// command in a map, and that timing is deliberate: claiming it in G_InitGame would put it below
+	// the effects the entity preset registers a second into the map, and those would then replay
+	// AFTER the teardown for anyone joining later. Claimed on demand, the block is always the
+	// highest weather slots in use, so it always has the last word.
+	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
+	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts
+	int zyk_weather_debounce_time;
+	qboolean zyk_weather_use_base;	// whether the map's own weather is part of the current recipe
+	int zyk_weather_base_count;
+	char zyk_weather_base[ZYK_WEATHER_MAX_BASE][ZYK_WEATHER_CMD_LENGTH];
+	int zyk_weather_layer_count;
+	char zyk_weather_layers[ZYK_WEATHER_MAX_LAYERS][ZYK_WEATHER_CMD_LENGTH];
+
 	// zyk: Custom Quests, missions and fields
 	char *zyk_custom_quest_missions[MAX_CUSTOM_QUESTS][MAX_CUSTOM_QUEST_MISSIONS][MAX_CUSTOM_QUEST_FIELDS];
 
@@ -1907,6 +1948,7 @@ void ItemUse_Shield(gentity_t *ent);
 void ItemUse_Sentry(gentity_t *ent);
 
 void zyk_training_pole_damage(gentity_t *ent);
+void Cmd_AdmWeather_f( gentity_t *ent );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
 void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);

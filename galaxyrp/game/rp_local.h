@@ -97,6 +97,12 @@ typedef enum {
 	ADM_REMOVENEWS,
 	ADM_MUSIC,
 	ADM_GETUP,
+	// GalaxyRP: [Weather] /admweather. APPENDED, not inserted: an admin permission is a bit
+	// POSITION in this enum and every account stores the resulting bitmask in the database, so
+	// adding a name anywhere above this point renumbers every bit below it and silently changes
+	// what every saved permission means. New bits go here, immediately before ADM_NUM_CMDS.
+	// pers.bitvalue is a 32-bit int, so this one (bit 27) leaves three more before the sign bit.
+	ADM_WEATHER,
 	ADM_NUM_CMDS
 
 } zyk_admin_t;

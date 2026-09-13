@@ -715,7 +715,8 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Update News",			ADM_UPDATENEWS			},
 	{ "Remove News",			ADM_REMOVENEWS			},
 	{ "Play Music",				ADM_MUSIC				},
-	{ "Instant Revive",			ADM_GETUP				}
+	{ "Instant Revive",			ADM_GETUP				},
+	{ "Weather",				ADM_WEATHER				}
 };
 
 qboolean check_admin_command(gentity_t* ent, int admin_command, qboolean with_message) {
@@ -10492,7 +10493,11 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
 ^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
 ^3/duelpause: ^7Pauses/resumes the Duel Tournament.\n\
-^3/admmap <gametype number> <map name>: ^7Changes the server to a different map and gametype.\n\
+^3/admmap <gametype number> <map name>: ^7Changes the server to a different map and gametype.\n\" ");
+				// GalaxyRP: [Weather] split here rather than appending -- SV_SendServerCommand drops
+				// any formatted message over 1022 characters WHOLE and without a word, and adding the
+				// /admweather line to the block above took it to 1093.
+				trap->SendServerCommand(ent - g_entities, "print \"^3/admweather <effect (optional)>: ^7Sets the weather for everyone on the server. Run with no arguments to see the current weather, or ^3/admweather list ^7for the effects.\n\
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
 ^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
@@ -14244,6 +14249,12 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		{
 			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/getup ^7and ^3/helpup <player name> ^7to revive yourself and other players from downed state\n\n\"");
 		}
+		else if (command_number == ADM_WEATHER)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/admweather <effect> ^7to set the weather for everyone on the server, and ^3/admweather add <effect> ^7to layer another one on top of it.\n\
+^3/admweather default ^7puts back the weather the map was built with, ^3/admweather clear ^7switches it all off and ^3/admweather remove <number> ^7drops one layer.\n\
+Run ^3/admweather ^7on its own to see the current weather, or ^3/admweather list ^7for the effects you can use\n\n\"");
+		}
 		else
 		{
 			// GalaxyRP fix: [Admin] the numeric-help chain above had no fallback for an
@@ -15579,6 +15590,609 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 
 	trap->SendConsoleCommand( EXEC_APPEND, va("g_gametype %i\n", gtype) );
 	trap->SendConsoleCommand( EXEC_APPEND, va("map %s\n", mapname) );
+}
+
+/*
+==================
+/admweather -- weather for the whole server
+
+Weather is not state anywhere. The game module owns a table of effect strings (CS_EFFECTS), the
+client runs every "*"-prefixed one through the renderer's world-effect parser, and that parser is a
+COMMAND STREAM: "*rain" followed by "*snow" gives rain AND snow, and the only removal it offers is
+"*clear", which wipes the lot. On top of that, a client joining later replays the whole table in
+slot order while a client already connected runs each string as its configstring changes.
+
+Left alone, that gives you a choice of two broken behaviours, and the two mods that have tried this
+picked one each. Registering a fresh effect string per change (what /entadd zyk_weather does today)
+keeps every client consistent but spends one of ~63 slots each time, and running out is a server
+drop for everyone. Reusing a single slot (what JA++'s /amweather does) is cheap but incoherent:
+connected players accumulate every command ever issued while a late joiner sees only the last one,
+so the same server shows different skies to different people, permanently.
+
+This command does neither. It reserves ZYK_WEATHER_SLOTS contiguous slots once, and every change
+rewrites ALL of them -- the teardown in the low slots, the layers right-aligned above it, and a
+counter on each so the strings differ from last time and actually re-broadcast. Whichever way a
+client arrives at that block, it reads the same sequence in the same order, so everyone ends up
+looking at the same sky. See the block comment on ZYK_WEATHER_MAX_LAYERS in g_local.h.
+==================
+*/
+
+typedef enum {
+	ZYK_WFX_CLOUD,		// a particle cloud -- the renderer keeps at most ZYK_WEATHER_MAX_CLOUDS
+	ZYK_WFX_WIND,		// a wind zone -- at most ZYK_WEATHER_MAX_WINDS
+	ZYK_WFX_UNKNOWN
+} zyk_weather_kind_t;
+
+typedef struct zyk_weather_effect_s {
+	const char			*name;
+	int					args;	// how many whole numbers the admin supplies
+	zyk_weather_kind_t	kind;
+} zyk_weather_effect_t;
+
+// zyk: the effects /admweather offers. The engine parses nineteen commands; these are the ones
+// worth handing an admin.
+//
+// Left out on purpose:
+//   outsidepain, outsideshake -- parsed, but dead in multiplayer. They set a flag and nothing in
+//       codemp reads it (R_IsShaking and R_IsOutsideCausingPain have no callers at all); only the
+//       single-player build wires them up.
+//   die -- a heavier teardown than clear that also drops the map's WEATHER ZONES, and a zone cannot
+//       be put back at runtime, because misc_weather_zone is read from the BSP's own entity lump by
+//       cgame and never from an entity spawned here. Losing them costs indoor/outdoor culling for
+//       the rest of the map.
+//   zone -- an indoor/outdoor culling hint rather than weather, and one added after the client has
+//       built its point cache renders nothing at all inside it. More misleading than useful.
+//   freeze -- incompatible with this command by construction. It is a TOGGLE ("mFrozen = !mFrozen"),
+//       so a rebuild would flip it every time; nothing resets it, not even clear or die; and it
+//       would therefore end up in a different state on a late joiner than on everyone else, which is
+//       the exact problem the rest of this design exists to avoid.
+// /entadd zyk_weather still reaches all nineteen for anyone who wants them.
+static const zyk_weather_effect_t zyk_weather_effects[] = {
+	{ "lightrain",		0,	ZYK_WFX_CLOUD	},
+	{ "rain",			0,	ZYK_WFX_CLOUD	},
+	{ "heavyrain",		0,	ZYK_WFX_CLOUD	},
+	{ "acidrain",		0,	ZYK_WFX_CLOUD	},
+	{ "snow",			0,	ZYK_WFX_CLOUD	},
+	{ "sand",			0,	ZYK_WFX_CLOUD	},
+	{ "fog",			0,	ZYK_WFX_CLOUD	},
+	{ "heavyrainfog",	0,	ZYK_WFX_CLOUD	},
+	{ "light_fog",		0,	ZYK_WFX_CLOUD	},
+	{ "spacedust",		1,	ZYK_WFX_CLOUD	},
+	{ "wind",			0,	ZYK_WFX_WIND	},
+	{ "constantwind",	3,	ZYK_WFX_WIND	},
+	{ "gustingwind",	0,	ZYK_WFX_WIND	}
+};
+
+#define ZYK_WEATHER_NUM_EFFECTS ((int)(sizeof(zyk_weather_effects) / sizeof(zyk_weather_effects[0])))
+
+// zyk: StringIsInteger() rejects a leading minus, and a wind velocity needs one
+static qboolean zyk_weather_is_number( const char *s )
+{
+	int i = 0;
+
+	if (!s || !s[0])
+		return qfalse;
+
+	if (s[0] == '-')
+		i = 1;
+
+	if (!s[i])
+		return qfalse;
+
+	for (; s[i] != '\0'; i++)
+	{
+		if (!isdigit((unsigned char)s[i]))
+			return qfalse;
+	}
+
+	return qtrue;
+}
+
+static const zyk_weather_effect_t *zyk_weather_find_effect( const char *name )
+{
+	int i = 0;
+
+	for (i = 0; i < ZYK_WEATHER_NUM_EFFECTS; i++)
+	{
+		if (Q_stricmp(zyk_weather_effects[i].name, name) == 0)
+			return &zyk_weather_effects[i];
+	}
+
+	return NULL;
+}
+
+// zyk: which kind of effect a finished command string is, so the renderer's own limits can be
+// checked before a layer is accepted rather than letting it be dropped in silence
+static zyk_weather_kind_t zyk_weather_command_kind( const char *command )
+{
+	char name[32];
+	const zyk_weather_effect_t *effect = NULL;
+	int i = 0;
+
+	if (!command || command[0] != '*')
+		return ZYK_WFX_UNKNOWN;
+
+	command++;
+
+	while (command[i] != '\0' && command[i] != ' ' && i < (int)(sizeof(name) - 1))
+	{
+		name[i] = command[i];
+		i++;
+	}
+	name[i] = '\0';
+
+	effect = zyk_weather_find_effect(name);
+
+	return effect ? effect->kind : ZYK_WFX_UNKNOWN;
+}
+
+static void zyk_weather_count_kinds( int *clouds, int *winds )
+{
+	int i = 0;
+
+	*clouds = 0;
+	*winds = 0;
+
+	if (level.zyk_weather_use_base == qtrue)
+	{
+		for (i = 0; i < level.zyk_weather_base_count; i++)
+		{
+			if (zyk_weather_command_kind(level.zyk_weather_base[i]) == ZYK_WFX_CLOUD)
+				(*clouds)++;
+			else if (zyk_weather_command_kind(level.zyk_weather_base[i]) == ZYK_WFX_WIND)
+				(*winds)++;
+		}
+	}
+
+	for (i = 0; i < level.zyk_weather_layer_count; i++)
+	{
+		if (zyk_weather_command_kind(level.zyk_weather_layers[i]) == ZYK_WFX_CLOUD)
+			(*clouds)++;
+		else if (zyk_weather_command_kind(level.zyk_weather_layers[i]) == ZYK_WFX_WIND)
+			(*winds)++;
+	}
+}
+
+static int zyk_weather_total_layers( void )
+{
+	int total = level.zyk_weather_layer_count;
+
+	if (level.zyk_weather_use_base == qtrue)
+		total += level.zyk_weather_base_count;
+
+	return total;
+}
+
+// zyk: writes the whole block. Called for every change, never for part of one
+static void zyk_weather_rebuild( void )
+{
+	int i = 0;
+	int slot = 0;
+
+	if (level.zyk_weather_slot == 0)
+		return;
+
+	level.zyk_weather_counter++;
+
+	// zyk: the teardown, repeated until the layers are reached. Repeating it is free -- clear is
+	// idempotent -- and it is what guarantees the layers below always start from a clean sky
+	for (slot = 0; slot < (ZYK_WEATHER_SLOTS - zyk_weather_total_layers()); slot++)
+	{
+		trap->SetConfigstring(CS_EFFECTS + level.zyk_weather_slot + slot,
+			va("*clear %d", level.zyk_weather_counter));
+	}
+
+	if (level.zyk_weather_use_base == qtrue)
+	{
+		for (i = 0; i < level.zyk_weather_base_count; i++, slot++)
+		{
+			trap->SetConfigstring(CS_EFFECTS + level.zyk_weather_slot + slot,
+				va("%s %d", level.zyk_weather_base[i], level.zyk_weather_counter));
+		}
+	}
+
+	// zyk: the counter goes on the end of every command. Every one of these the engine parses reads
+	// a fixed number of tokens and discards the rest, so a trailing number changes the string
+	// without changing what it does -- which is the point, because an unchanged configstring is
+	// never re-sent and would leave connected players out of step with anyone joining later.
+	for (i = 0; i < level.zyk_weather_layer_count; i++, slot++)
+	{
+		trap->SetConfigstring(CS_EFFECTS + level.zyk_weather_slot + slot,
+			va("%s %d", level.zyk_weather_layers[i], level.zyk_weather_counter));
+	}
+}
+
+static qboolean zyk_weather_claim_block( gentity_t *ent )
+{
+	char content[MAX_STRING_CHARS];
+	int i = 0;
+	int first_free = 0;
+	int base_index = 0;
+
+	if (level.zyk_weather_slot != 0)
+		return qtrue;
+
+	// zyk: G_EffectIndex drops the server when the table is full, so the room has to be confirmed
+	// before a single slot is taken
+	for (first_free = 1; first_free < MAX_FX; first_free++)
+	{
+		trap->GetConfigstring(CS_EFFECTS + first_free, content, sizeof(content));
+
+		if (!content[0])
+			break;
+	}
+
+	if ((first_free + ZYK_WEATHER_SLOTS) > MAX_FX)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^1This map has no room left for the weather system: %d effect slots free, %d needed.\n\"",
+			MAX_FX - first_free, ZYK_WEATHER_SLOTS) );
+		return qfalse;
+	}
+
+	// zyk: remember the weather the map set up for itself, so /admweather default can put it back.
+	// Only commands this file knows are kept: anything else would be re-run on every rebuild, and an
+	// effect string the engine does not recognise prints its whole help list to the player's console.
+	for (i = 1; i < first_free && level.zyk_weather_base_count < ZYK_WEATHER_MAX_BASE; i++)
+	{
+		trap->GetConfigstring(CS_EFFECTS + i, content, sizeof(content));
+
+		if (content[0] != '*' || zyk_weather_command_kind(content) == ZYK_WFX_UNKNOWN)
+			continue;
+
+		Q_strncpyz(level.zyk_weather_base[level.zyk_weather_base_count], content,
+			sizeof(level.zyk_weather_base[0]));
+
+		level.zyk_weather_base_count++;
+	}
+
+	// zyk: take the block. Each string has to be distinct or G_EffectIndex hands back the slot it
+	// already gave out, and every one of them is a valid teardown, so the block starts out clean
+	for (i = 0; i < ZYK_WEATHER_SLOTS; i++)
+	{
+		int index = G_EffectIndex(va("*clear %d", 900000 + i));
+
+		if (i == 0)
+			base_index = index;
+		else if (index != (base_index + i))
+		{ // zyk: nothing runs between these calls, so this should not be reachable -- but the whole
+		  // design rests on the block being contiguous, so do not assume it
+			trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve a contiguous block of effect slots for the weather system.\n\"" );
+			return qfalse;
+		}
+	}
+
+	if (base_index <= 0)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve effect slots for the weather system.\n\"" );
+		return qfalse;
+	}
+
+	level.zyk_weather_slot = base_index;
+	level.zyk_weather_use_base = qtrue;
+
+	return qtrue;
+}
+
+static void zyk_weather_status( gentity_t *ent )
+{
+	int i = 0;
+	int clouds = 0;
+	int winds = 0;
+
+	if (level.zyk_weather_slot == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"\n^3Weather: ^7this map is showing whatever weather it was built with.\n^7Use ^3/admweather <effect> ^7to change it or ^3/admweather list ^7to see the effects.\n\n\"" );
+		return;
+	}
+
+	zyk_weather_count_kinds(&clouds, &winds);
+
+	trap->SendServerCommand( ent-g_entities, va("print \"\n^3Weather ^7(%d of %d layers, %d of %d particle effects)\n\"",
+		zyk_weather_total_layers(), ZYK_WEATHER_MAX_LAYERS, clouds, ZYK_WEATHER_MAX_CLOUDS) );
+
+	if (zyk_weather_total_layers() == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^7  nothing\n\"" );
+	}
+
+	if (level.zyk_weather_use_base == qtrue)
+	{
+		for (i = 0; i < level.zyk_weather_base_count; i++)
+		{ // zyk: +1 on the stored string skips the '*' the engine needs but an admin never types
+			trap->SendServerCommand( ent-g_entities, va("print \"^2  map ^7- %s\n\"", level.zyk_weather_base[i] + 1) );
+		}
+	}
+
+	for (i = 0; i < level.zyk_weather_layer_count; i++)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^3  %d ^7- %s\n\"", i + 1, level.zyk_weather_layers[i] + 1) );
+	}
+
+	trap->SendServerCommand( ent-g_entities, "print \"\n\"" );
+}
+
+static void zyk_weather_list( gentity_t *ent )
+{
+	char message[1024];
+	int i = 0;
+
+	strcpy(message, "");
+
+	for (i = 0; i < ZYK_WEATHER_NUM_EFFECTS; i++)
+	{
+		const char *args = "";
+
+		if (zyk_weather_effects[i].args == 1)
+			args = " ^7<density>";
+		else if (zyk_weather_effects[i].args == 3)
+			args = " ^7<x> <y> <z>";
+
+		Q_strcat(message, sizeof(message), va("^3%s%s\n", zyk_weather_effects[i].name, args));
+
+		// GalaxyRP: [Weather] SV_SendServerCommand silently drops a formatted message over 1022
+		// characters, so flush well before that rather than losing the tail of the list
+		if ((int)strlen(message) > RP_LIST_FLUSH_AT)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"%s\"", message) );
+			strcpy(message, "");
+		}
+	}
+
+	trap->SendServerCommand( ent-g_entities, "print \"\n^3Weather effects\n\"" );
+
+	if (message[0])
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s\"", message) );
+	}
+
+	trap->SendServerCommand( ent-g_entities, va("print \"\n^7At most %d layers and %d particle effects at once. Wind values are %d to %d, density is %d to %d.\n\n\"",
+		ZYK_WEATHER_MAX_LAYERS, ZYK_WEATHER_MAX_CLOUDS, -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT,
+		ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX) );
+}
+
+// zyk: turns an effect name and the admin's numbers into the exact string the engine parses.
+// Nothing the admin typed is ever copied into it -- the name comes from the table above and the
+// numbers are re-printed from ints -- so no separator, quote or control character can reach a
+// configstring through this command.
+static qboolean zyk_weather_build_command( gentity_t *ent, const zyk_weather_effect_t *effect, int first_arg, char *out, int out_size )
+{
+	char arg[MAX_STRING_CHARS];
+	int values[3];
+	int i = 0;
+
+	if (effect->args == 0)
+	{
+		Com_sprintf(out, out_size, "*%s", effect->name);
+		return qtrue;
+	}
+
+	if (trap->Argc() < (first_arg + effect->args))
+	{
+		if (effect->args == 1)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"^3/admweather %s <density>^7: how thick the dust is, %d to %d.\n\"",
+				effect->name, ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX) );
+		}
+		else
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"^3/admweather %s <x> <y> <z>^7: the wind velocity, each value %d to %d.\n\"",
+				effect->name, -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT) );
+		}
+
+		return qfalse;
+	}
+
+	for (i = 0; i < effect->args; i++)
+	{
+		trap->Argv( first_arg + i, arg, sizeof( arg ) );
+
+		if (zyk_weather_is_number(arg) == qfalse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"^1'%s' is not a whole number.\n\"", arg) );
+			return qfalse;
+		}
+
+		values[i] = atoi(arg);
+	}
+
+	if (effect->args == 1)
+	{ // zyk: the renderer allocates this many particles with no bound of its own, and a negative
+	  // count reaches a new[] with an enormous size -- which takes down every connected client, and
+	  // every client that connects afterwards, because the string lives in a configstring
+		values[0] = Com_Clampi(ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX, values[0]);
+
+		Com_sprintf(out, out_size, "*%s %d", effect->name, values[0]);
+
+		return qtrue;
+	}
+
+	for (i = 0; i < 3; i++)
+		values[i] = Com_Clampi(-ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, values[i]);
+
+	// zyk: the engine's vector parser wants the parentheses as separate whitespace-delimited tokens
+	// -- "( 100 0 0 )" parses and "(100 0 0)" does not -- so build it here and let the admin type
+	// plain numbers
+	Com_sprintf(out, out_size, "*%s ( %d %d %d )", effect->name, values[0], values[1], values[2]);
+
+	return qtrue;
+}
+
+static qboolean zyk_weather_add_layer( gentity_t *ent, const char *command )
+{
+	zyk_weather_kind_t kind = zyk_weather_command_kind(command);
+	int clouds = 0;
+	int winds = 0;
+
+	if (zyk_weather_total_layers() >= ZYK_WEATHER_MAX_LAYERS)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^1The weather already has %d layers. Remove one with ^3/admweather remove <number> ^1first.\n\"",
+			ZYK_WEATHER_MAX_LAYERS) );
+		return qfalse;
+	}
+
+	zyk_weather_count_kinds(&clouds, &winds);
+
+	// zyk: the renderer keeps a fixed number of each and DROPS anything past it without a word, on
+	// the client, where nobody sees the failure. Refuse here instead, where the admin is listening.
+	if (kind == ZYK_WFX_CLOUD && clouds >= ZYK_WEATHER_MAX_CLOUDS)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^1The game draws at most %d particle effects at once, and the weather already has that many.\n\"",
+			ZYK_WEATHER_MAX_CLOUDS) );
+		return qfalse;
+	}
+
+	if (kind == ZYK_WFX_WIND && winds >= ZYK_WEATHER_MAX_WINDS)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^1The game holds at most %d winds at once, and the weather already has that many.\n\"",
+			ZYK_WEATHER_MAX_WINDS) );
+		return qfalse;
+	}
+
+	Q_strncpyz(level.zyk_weather_layers[level.zyk_weather_layer_count], command,
+		sizeof(level.zyk_weather_layers[0]));
+
+	level.zyk_weather_layer_count++;
+
+	return qtrue;
+}
+
+void Cmd_AdmWeather_f( gentity_t *ent )
+{
+	char arg1[MAX_STRING_CHARS];
+	char arg2[MAX_STRING_CHARS];
+	char command[ZYK_WEATHER_CMD_LENGTH];
+	const zyk_weather_effect_t *effect = NULL;
+	int first_arg = 2;
+
+	if (!check_admin_command(ent, ADM_WEATHER, qtrue))
+	{
+		return;
+	}
+
+	if (trap->Argc() == 1)
+	{
+		zyk_weather_status(ent);
+		return;
+	}
+
+	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	if (Q_stricmp(arg1, "list") == 0)
+	{
+		zyk_weather_list(ent);
+		return;
+	}
+
+	// zyk: everything past here changes the weather, and one change rewrites every slot in the
+	// block -- that is a configstring broadcast each, so do not let it be held down
+	if (level.zyk_weather_debounce_time > level.time)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^3Wait %d more second(s) before changing the weather again.\n\"",
+			((level.zyk_weather_debounce_time - level.time) / 1000) + 1) );
+		return;
+	}
+
+	if (zyk_weather_claim_block(ent) == qfalse)
+	{
+		return;
+	}
+
+	if (Q_stricmp(arg1, "default") == 0)
+	{ // zyk: back to the weather the map was built with
+		level.zyk_weather_use_base = qtrue;
+		level.zyk_weather_layer_count = 0;
+	}
+	else if (Q_stricmp(arg1, "clear") == 0)
+	{ // zyk: no weather at all, the map's own included
+		level.zyk_weather_use_base = qfalse;
+		level.zyk_weather_layer_count = 0;
+	}
+	else if (Q_stricmp(arg1, "remove") == 0)
+	{
+		int index = 0;
+		int i = 0;
+
+		if (trap->Argc() < 3)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/admweather remove <layer number>^7. Run ^3/admweather ^7to see the numbers.\n\"" );
+			return;
+		}
+
+		trap->Argv( 2, arg2, sizeof( arg2 ) );
+
+		if (StringIsInteger(arg2) == qfalse)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You must give the number of the layer to remove.\n\"" );
+			return;
+		}
+
+		index = atoi(arg2);
+
+		if (index < 1 || index > level.zyk_weather_layer_count)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"^1There is no layer %d. Run ^3/admweather ^1to see the numbers.\n\"", index) );
+			return;
+		}
+
+		for (i = index - 1; i < (level.zyk_weather_layer_count - 1); i++)
+		{
+			Q_strncpyz(level.zyk_weather_layers[i], level.zyk_weather_layers[i + 1],
+				sizeof(level.zyk_weather_layers[0]));
+		}
+
+		level.zyk_weather_layer_count--;
+	}
+	else
+	{
+		qboolean adding = qfalse;
+		int saved_count = level.zyk_weather_layer_count;
+
+		if (Q_stricmp(arg1, "add") == 0)
+		{
+			if (trap->Argc() < 3)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/admweather add <effect>^7. Run ^3/admweather list ^7to see the effects.\n\"" );
+				return;
+			}
+
+			adding = qtrue;
+			trap->Argv( 2, arg1, sizeof( arg1 ) );
+			first_arg = 3;
+		}
+
+		effect = zyk_weather_find_effect(arg1);
+
+		if (!effect)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"^1There is no weather effect called '%s'. Run ^3/admweather list ^1to see them.\n\"", arg1) );
+			return;
+		}
+
+		if (zyk_weather_build_command(ent, effect, first_arg, command, sizeof(command)) == qfalse)
+		{
+			return;
+		}
+
+		// zyk: without "add", the effect named replaces whatever the admin had set before -- the
+		// map's own weather is only touched by "default" and "clear"
+		if (adding == qfalse)
+			level.zyk_weather_layer_count = 0;
+
+		if (zyk_weather_add_layer(ent, command) == qfalse)
+		{ // zyk: put back what was there, so a refused layer does not clear the sky as a side effect
+			level.zyk_weather_layer_count = saved_count;
+			return;
+		}
+	}
+
+	zyk_weather_rebuild();
+
+	level.zyk_weather_debounce_time = level.time + ZYK_WEATHER_DEBOUNCE;
+
+	G_LogPrintf("admweather: %s set the weather to %d layer(s)%s\n", ent->client->pers.netname,
+		zyk_weather_total_layers(), (level.zyk_weather_use_base == qtrue) ? " (map weather included)" : "");
+
+	zyk_weather_status(ent);
 }
 
 /*
@@ -18346,6 +18960,7 @@ command_t commands[] = {
 	{ "adminlist",			Cmd_AdminList_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "adminup",			Cmd_AdminUp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "admmap",				Cmd_AdmMap_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "admweather",			Cmd_AdmWeather_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "anim",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "allyadd",			Cmd_AllyAdd_f,				CMD_NOINTERMISSION },
 	{ "allychat",			Cmd_AllyChat_f,				0 },					// GalaxyRP: [Chat] a say mode, so no flags -- see Cmd_AllyChat_f
