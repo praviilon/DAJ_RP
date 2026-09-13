@@ -984,6 +984,22 @@ void target_level_change_use(gentity_t *self, gentity_t *other, gentity_t *activ
 {
 	G_ActivateBehavior(self,BSET_USE);
 
+	// GalaxyRP fix: [security] the mapname below is spliced into a console command line. EXEC_APPEND
+	// is correct and must stay -- it is what stops the map change from unloading the game module
+	// underneath this very function, which is why TaystJK made the same change -- but it means the
+	// text reaches Cbuf_Execute, which splits on ';' and on a newline outside quotes and runs each
+	// piece as its own command at full server privilege. "mapname" is an ordinary spawn key, so a
+	// map's own entity string, an /entload preset or an /entadd can set it, and G_NewString turns a
+	// typed backslash-n into a real linefeed; the first ordinary player to trip the trigger would
+	// then run whatever followed the separator. Refuse those characters here, the same way
+	// Cmd_AdmMap_f and Cmd_CallVote_f already do for the map names they pass along.
+	if (!self->message || Q_strchrs(self->message, ";\r\n"))
+	{
+		G_LogPrintf("target_level_change at %s refused: mapname contains a command separator\n", vtos(self->s.origin));
+
+		return;
+	}
+
 	if (sv_cheats.integer)
 		trap->SendConsoleCommand(EXEC_APPEND, va("devmap %s\n", self->message));
 	else

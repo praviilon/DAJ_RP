@@ -13227,7 +13227,15 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 
 // GalaxyRP (Alex): Builds an npc spawner string based on an npc entity.
 char *create_npc_spawner_for_npc(gentity_t *ent) {
-	return va("classname;npc_spawner;npc_type;%s;origin;%f %f %f;angles;%f %f %f;\n", ent->NPC_type, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2], ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], ent->client->ps.viewangles[2]);
+	// GalaxyRP fix: [Entity System] this line is assembled by hand rather than through the loop in
+	// Cmd_EntSave_f, so it needs the same escaping -- an NPC type carrying a ';' would otherwise be
+	// read back as extra keys. In practice NPC_type always matches a name in the .npc catalogue, so
+	// this is a guard against the format rather than against a reachable value today.
+	static char escaped_type[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
+
+	zyk_entity_file_encode(ent->NPC_type, escaped_type, sizeof(escaped_type));
+
+	return va("classname;npc_spawner;npc_type;%s;origin;%f %f %f;angles;%f %f %f;\n", escaped_type, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2], ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], ent->client->ps.viewangles[2]);
 }
 
 /*
@@ -13243,6 +13251,10 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	char serverinfo[MAX_INFO_STRING] = {0};
 	char zyk_mapname[128] = {0};
 	FILE *this_file = NULL;
+	// zyk: worst case every character of a token is escaped, so twice the longest line the loader
+	// will read. static because the pair is far too large for this function's stack.
+	static char escaped_key[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
+	static char escaped_value[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -13290,11 +13302,21 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 
 		if (this_ent && this_ent->inuse)
 		{ // zyk: freed entities will not be saved
+			int line_length = 0;
+
 			j = 0;
 
 			while (j < level.zyk_spawn_strings_values_count[this_ent->s.number])
 			{
-				fprintf(this_file, "%s;%s;", level.zyk_spawn_strings[this_ent->s.number][j], level.zyk_spawn_strings[this_ent->s.number][j + 1]);
+				// GalaxyRP fix: [Entity System] the pair used to be written raw, so a value holding
+				// a ';' or a linefeed did not survive the round trip -- see zyk_entity_file_encode()
+				// in g_spawn.c for what each of those did to the entity on reload.
+				zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j], escaped_key, sizeof(escaped_key));
+				zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j + 1], escaped_value, sizeof(escaped_value));
+
+				fprintf(this_file, "%s;%s;", escaped_key, escaped_value);
+
+				line_length += strlen(escaped_key) + strlen(escaped_value) + 2;
 
 				j += 2;
 			}
@@ -13302,6 +13324,17 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			if (j > 0)
 			{ // zyk: break line only if the entity had keys and values to save
 				fprintf(this_file, "\n");
+			}
+
+			// GalaxyRP fix: [Entity System] the loader reads one entity per line into a buffer of
+			// ZYK_ENTITY_FILE_LINE_LENGTH, and drops any line longer than that with nothing but a
+			// line in the server log -- so an entity could be saved, look saved, and simply not come
+			// back. The line is still written, because the admin may want to edit it by hand, but
+			// they are told now rather than finding out at the next map load.
+			if (line_length >= (ZYK_ENTITY_FILE_LINE_LENGTH - 1))
+			{
+				trap->SendServerCommand( ent->s.number, va("print \"^3Warning: ^7entity %d (%s) needs %d characters and will not load back (limit %d). Shorten its keys or remove it.\n\"",
+					this_ent->s.number, this_ent->classname ? this_ent->classname : "no classname", line_length, ZYK_ENTITY_FILE_LINE_LENGTH - 1) );
 			}
 
 			// GalaxyRP (Alex): NPCs should be saved as NPC spawners instead. So do the conversion.

@@ -9345,7 +9345,7 @@ void G_RunFrame( int levelTime ) {
 
 	if (level.load_entities_timer != 0 && level.load_entities_timer < level.time)
 	{ // zyk: loading entities from the file specified in entload command, or the default file
-		char content[2048];
+		char content[ZYK_ENTITY_FILE_LINE_LENGTH];
 		// GalaxyRP fix: [Entity System] one bounded slot per possible key/value pair, each as wide
 		// as the line buffer so nothing a well-formed line can carry gets truncated. static rather
 		// than automatic because the pair of arrays is far too large to put on G_RunFrame's stack.
@@ -9410,8 +9410,6 @@ void G_RunFrame( int levelTime ) {
 				// zyk: parse the whole line into the scratch buffers before allocating anything
 				while (k < content_len && line_ok == qtrue)
 				{
-					int l = 0;
-
 					if (j + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS)
 					{ // zyk: more key/value pairs than one entity can hold
 						line_ok = qfalse;
@@ -9420,14 +9418,12 @@ void G_RunFrame( int levelTime ) {
 					}
 
 					// zyk: getting the key
-					while (k < content_len && content[k] != ';' && l < (int)(sizeof(zyk_keys[0]) - 1))
-					{
-						zyk_keys[j / 2][l] = content[k];
-
-						l++;
-						k++;
-					}
-					zyk_keys[j / 2][l] = '\0';
+					// GalaxyRP fix: [Entity System] the two copy loops that used to sit here stopped at the
+					// first ';' in the line, so a ';' inside a value silently became a new key. They now go
+					// through zyk_entity_file_decode(), which stops only at a ';' /entsave did not escape and
+					// turns an escaped semicolon, newline, carriage return and backslash back into the
+					// characters they stand for.
+					k = zyk_entity_file_decode(content, content_len, k, zyk_keys[j / 2], (int)sizeof(zyk_keys[0]));
 
 					if (k >= content_len || content[k] != ';')
 					{ // zyk: key was not terminated -- malformed line
@@ -9437,15 +9433,7 @@ void G_RunFrame( int levelTime ) {
 					k++;
 
 					// zyk: getting the value
-					l = 0;
-					while (k < content_len && content[k] != ';' && l < (int)(sizeof(zyk_values[0]) - 1))
-					{
-						zyk_values[j / 2][l] = content[k];
-
-						l++;
-						k++;
-					}
-					zyk_values[j / 2][l] = '\0';
+					k = zyk_entity_file_decode(content, content_len, k, zyk_values[j / 2], (int)sizeof(zyk_values[0]));
 
 					if (k >= content_len || content[k] != ';')
 					{ // zyk: value was not terminated -- malformed line
@@ -9482,8 +9470,12 @@ void G_RunFrame( int levelTime ) {
 					while (m < j)
 					{
 						// zyk: copying the key and value to the spawn string array
-						level.zyk_spawn_strings[new_ent->s.number][m] = G_NewString(zyk_keys[m / 2]);
-						level.zyk_spawn_strings[new_ent->s.number][m + 1] = G_NewString(zyk_values[m / 2]);
+						// GalaxyRP fix: [Entity System] G_NewString here would translate a backslash-n a
+						// second time. zyk_entity_file_decode() has already resolved every escape, so a
+						// backslash that reaches this point is one the value really contains and must be
+						// stored as-is -- hence the copy that does not translate.
+						level.zyk_spawn_strings[new_ent->s.number][m] = G_NewStringRaw(zyk_keys[m / 2]);
+						level.zyk_spawn_strings[new_ent->s.number][m + 1] = G_NewStringRaw(zyk_values[m / 2]);
 
 						m += 2;
 					}

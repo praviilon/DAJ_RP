@@ -826,6 +826,129 @@ char *G_NewString( const char *string )
 	return newb;
 }
 
+// GalaxyRP fix: [Entity System] G_NewString translates a backslash-n in its input into a real
+// linefeed. That is right for text a human typed, and wrong for a token the entity-file parser has
+// already decoded: a value legitimately containing a backslash would be re-read as an escape and
+// corrupted on every load. This is the same allocating copy with no translation.
+char *G_NewStringRaw( const char *string )
+{
+	char *newb = NULL;
+	int len = 0;
+
+	if (!string)
+		string = "";
+
+	len = strlen( string ) + 1;
+	newb = (char *)G_Alloc( len );
+
+	memcpy( newb, string, len );
+
+	return newb;
+}
+
+// GalaxyRP fix: [Entity System] /entsave wrote each pair as "key;value;" with no quoting and no
+// escaping, and the loader split on ';' and on the newline. So a value containing either character
+// did not survive the round trip: a ';' silently re-split one value into further KEYS (a message of
+// "a;origin;0 0 9999" came back as a message of "a" plus an origin key that was never set), an odd
+// token count threw the whole entity away, and a real linefeed -- which G_NewString produces from a
+// backslash-n typed into /entadd -- broke the record into two malformed halves and lost the entity.
+// Both characters are now escaped on the way out and decoded on the way back in, so a value means
+// the same thing before and after a save. Values already in existing files are unaffected: they
+// hold no "\;" or "\\", and a "\n" there already meant a linefeed, which is what it still decodes to.
+void zyk_entity_file_encode( const char *in, char *out, int out_size )
+{
+	int i = 0;
+	int l = 0;
+
+	if (!out || out_size < 1)
+		return;
+
+	if (!in)
+	{
+		out[0] = '\0';
+		return;
+	}
+
+	// zyk: every escape costs two characters, so stop while two still fit
+	for (i = 0; in[i] != '\0' && l < (out_size - 2); i++)
+	{
+		if (in[i] == '\\')
+		{
+			out[l++] = '\\';
+			out[l++] = '\\';
+		}
+		else if (in[i] == ';')
+		{
+			out[l++] = '\\';
+			out[l++] = ';';
+		}
+		else if (in[i] == '\n')
+		{
+			out[l++] = '\\';
+			out[l++] = 'n';
+		}
+		else if (in[i] == '\r')
+		{
+			out[l++] = '\\';
+			out[l++] = 'r';
+		}
+		else
+		{
+			out[l++] = in[i];
+		}
+	}
+
+	out[l] = '\0';
+}
+
+// zyk: decodes one token of an entity-file line into out, starting at k, and returns the index of
+// the character that ended it. The caller checks that character is a ';' -- a token that ran to the
+// end of the line, or that filled out, ends on something else and the caller treats the line as
+// malformed, exactly as it did before escaping existed.
+int zyk_entity_file_decode( const char *content, int content_len, int k, char *out, int out_size )
+{
+	int l = 0;
+
+	if (!content || !out || out_size < 1)
+		return k;
+
+	while (k < content_len && l < (out_size - 1))
+	{
+		if (content[k] == '\\' && (k + 1) < content_len)
+		{ // zyk: an escape sequence written by zyk_entity_file_encode
+			k++;
+
+			if (content[k] == 'n')
+				out[l++] = '\n';
+			else if (content[k] == 'r')
+				out[l++] = '\r';
+			else if (content[k] == ';')
+				out[l++] = ';';
+			else if (content[k] == '\\')
+				out[l++] = '\\';
+			else
+			{ // zyk: not a sequence we write. Keep the backslash and read this character normally,
+			  // which is what a hand-written file has always got from G_NewString
+				out[l++] = '\\';
+				continue;
+			}
+
+			k++;
+			continue;
+		}
+
+		if (content[k] == ';')
+			break;
+
+		out[l++] = content[k];
+		k++;
+	}
+
+	out[l] = '\0';
+
+	return k;
+}
+
 char *G_NewString_Safe( const char *string )
 {
 	char *newb=NULL, *new_p=NULL;

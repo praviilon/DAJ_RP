@@ -1870,6 +1870,14 @@ qboolean	G_SpawnBoolean( const char *key, const char *defaultString, qboolean *o
 void		G_SpawnEntitiesFromString( qboolean inSubBSP );
 char *G_NewString( const char *string );
 
+// GalaxyRP fix: [Entity System] the entity-file loader reads one entity per line into a buffer of
+// this size, so it is also the longest line /entsave can write and expect to load back again.
+#define ZYK_ENTITY_FILE_LINE_LENGTH 2048
+
+char *G_NewStringRaw( const char *string );
+void zyk_entity_file_encode( const char *in, char *out, int out_size );
+int zyk_entity_file_decode( const char *content, int content_len, int k, char *out, int out_size );
+
 //
 // g_cmds.c
 //
