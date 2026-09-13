@@ -1884,10 +1884,11 @@ void TryUse( gentity_t *ent )
 	// g_cmds.c. So on any server where people log in, the cvar advertised a feature that could never
 	// actually be used, and only two logged-OUT players could ever team up.
 	//
-	// With this gone, level.duel_allies[] stays -1 for every client for the whole map, so every
-	// remaining "does this duelist have an ally" branch in the tournament code (g_main.c) is inert.
-	// Those branches are left in place for now rather than unpicked from the match state machine in
-	// the same pass as several unrelated fixes; they are dead code, not live behaviour.
+	// The branches that read it have since been unpicked too: level.duel_allies[], the two
+	// duelist_N_ally_id slots and the three duel_leaderboard_ally_* fields are gone from
+	// level_locals_t, and with them the ally handling in the tournament state machine (g_main.c)
+	// and the " / ally" columns in /dueltable and /duelmatches (g_cmds.c). Removing them changed
+	// no behaviour: every one of those branches tested a value that was permanently -1.
 
 	if (ent->client->sess.amrpgmode == 2 && target && target->client && target->NPC && target->health > 0 && Q_stricmp( target->NPC_type, "jawa_seller" ) == 0)
 	{ // zyk: player talked to jawa_seller

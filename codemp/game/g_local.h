@@ -1672,8 +1672,6 @@ typedef struct level_locals_s {
 	vec3_t duel_tournament_origin; // zyk: origin of the duel tournament arena, which has the globe around it. Used to validate position of players. If a duelist leaves the arena, he loses
 	int duelist_1_id; // zyk: id of the first duelist
 	int duelist_2_id; // zyk: id of the second duelist
-	int duelist_1_ally_id; // zyk: ally of the first duelist
-	int duelist_2_ally_id; // zyk: ally of the second duelist
 
 	// zyk: the table with all the matches between the duelists, with their ids in first and second position
 	// zyk: third is the number of rounds won by first duelist
@@ -1690,15 +1688,11 @@ typedef struct level_locals_s {
 	int duel_leaderboard_score; // zyk: number of tournaments won by the current winner
 	char duel_leaderboard_acc[32]; // zyk: account of the current winner
 	char duel_leaderboard_name[36]; // zyk: current name of the current winner
-	char duel_leaderboard_ally_acc[32]; // zyk: account of the current winner ally
-	char duel_leaderboard_ally_name[36]; // zyk: current name of the current winner ally
-	qboolean duel_leaderboard_add_ally; // zyk: if qtrue, will also add the ally to the leaderboard
 	int duel_leaderboard_index; // zyk: index of the line in the leaderboard file in which the current winner must be inserted (winners are sorted by the number of tournament wins in the file)
 	// GalaxyRP fix: [Duel Tournament] was declared qboolean, which is `typedef enum { qfalse, qtrue }`
 	// -- a two-value enum holding client numbers 0..MAX_CLIENTS-1 plus a -1 sentinel. It worked only
 	// because the compiler happens to pick an int-sized underlying type; the values were always out
 	// of the enum's range. Now int, matching duel_players[] and the duelist_*_ally_id fields it feeds.
-	int duel_allies[MAX_CLIENTS]; // zyk: has the players who added another player as ally. Default -1
 
 	// zyk: Sniper Battle
 	int sniper_mode; // zyk: Default 0. Sets 1 when someone joins, and 2 after battle begins

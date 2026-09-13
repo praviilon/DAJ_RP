@@ -16396,11 +16396,8 @@ void duel_show_table(gentity_t *ent)
 	{ // zyk: adding players to sorted_players and calculating the array length
 		if (level.duel_players[i] != -1)
 		{
-			if (level.duel_allies[i] == -1 || i < level.duel_allies[i] || level.duel_allies[level.duel_allies[i]] != i)
-			{ // zyk: do not sort the allies. Use the lower id to sort the score of a team if both players add themselves as a team
-				sorted_players[array_length] = i;
-				array_length++;
-			}
+			sorted_players[array_length] = i;
+			array_length++;
 		}
 	}
 
@@ -16425,17 +16422,7 @@ void duel_show_table(gentity_t *ent)
 	for (i = 0; i < array_length; i++)
 	{
 		gentity_t *player_ent = &g_entities[sorted_players[i]];
-		char ally_name[36];
 		char entry[(MAX_NETNAME * 2) + 64];
-
-		if (level.duel_allies[sorted_players[i]] != -1 && level.duel_allies[level.duel_allies[sorted_players[i]]] == sorted_players[i])
-		{ // zyk: show ally if they both added each other as a team
-			strcpy(ally_name, va(" / %s", g_entities[level.duel_allies[sorted_players[i]]].client->pers.netname));
-		}
-		else
-		{
-			strcpy(ally_name, "");
-		}
 
 		// GalaxyRP fix: [overflow] this row was appended with strcpy(content, va("%s...", content,
 		// ...)). va() formats into a 32000-byte buffer and knows nothing about the destination, so
@@ -16445,7 +16432,7 @@ void duel_show_table(gentity_t *ent)
 		// are now formatted into their own bounded buffer and appended with Q_strcat, and the
 		// message is flushed and continued whenever the next row would not fit. Same text, same
 		// order, same recipient.
-		Com_sprintf(entry, sizeof(entry), "^7%s^7%s^7: ^3%d  ^1%d\n", player_ent->client->pers.netname, ally_name, level.duel_players[player_ent->s.number], level.duel_players_hp[player_ent->s.number]);
+		Com_sprintf(entry, sizeof(entry), "^7%s^7: ^3%d  ^1%d\n", player_ent->client->pers.netname, level.duel_players[player_ent->s.number], level.duel_players_hp[player_ent->s.number]);
 
 		if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
 		{
@@ -16500,32 +16487,18 @@ void Cmd_DuelTable_f(gentity_t *ent) {
 		{
 			gentity_t *first_duelist = &g_entities[level.duel_matches[i][0]];
 			gentity_t *second_duelist = &g_entities[level.duel_matches[i][1]];
-			char first_ally_name[36];
-			char second_ally_name[36];
 			char first_name[96];
 			char second_name[96];
 
-			strcpy(first_ally_name, "");
-			strcpy(second_ally_name, "");
 			strcpy(first_name, "^3Left Tournament");
 			strcpy(second_name, "^3Left Tournament");
-
-			if (first_duelist && level.duel_allies[first_duelist->s.number] != -1)
-			{
-				strcpy(first_ally_name, va("^7 / %s", g_entities[level.duel_allies[first_duelist->s.number]].client->pers.netname));
-			}
-
-			if (second_duelist && level.duel_allies[second_duelist->s.number] != -1)
-			{
-				strcpy(second_ally_name, va("^7 / %s", g_entities[level.duel_allies[second_duelist->s.number]].client->pers.netname));
-			}
 
 			if (first_duelist && first_duelist->client && 
 				first_duelist->client->pers.connected == CON_CONNECTED &&
 				first_duelist->client->sess.sessionTeam != TEAM_SPECTATOR &&
 				level.duel_players[first_duelist->s.number] != -1)
 			{ // zyk: first duelist still in Tournament
-				strcpy(first_name, va("^7%s%s", first_duelist->client->pers.netname, first_ally_name));
+				strcpy(first_name, va("^7%s", first_duelist->client->pers.netname));
 			}
 
 			if (second_duelist && second_duelist->client &&
@@ -16533,7 +16506,7 @@ void Cmd_DuelTable_f(gentity_t *ent) {
 				second_duelist->client->sess.sessionTeam != TEAM_SPECTATOR &&
 				level.duel_players[second_duelist->s.number] != -1)
 			{ // zyk: second duelist still in Tournament
-				strcpy(second_name, va("^7%s%s", second_duelist->client->pers.netname, second_ally_name));
+				strcpy(second_name, va("^7%s", second_duelist->client->pers.netname));
 			}
 
 			if (i < level.duel_matches_done)

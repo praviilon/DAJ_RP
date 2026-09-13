@@ -1164,8 +1164,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.duel_tournament_timer = 0;
 	level.duelist_1_id = -1;
 	level.duelist_2_id = -1;
-	level.duelist_1_ally_id = -1;
-	level.duelist_2_ally_id = -1;
 	level.duel_tournament_model_id = -1;
 	level.duel_arena_loaded = qfalse;
 	level.duel_leaderboard_step = 0;
@@ -1206,9 +1204,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			level.sniper_players[zyk_iterator] = -1;
 			level.melee_players[zyk_iterator] = -1;
 			level.rpg_lms_players[zyk_iterator] = -1;
-
-			// zyk: initializing ally table
-			level.duel_allies[zyk_iterator] = -1;
 		}
 
 		for (zyk_iterator = 0; zyk_iterator < MAX_DUEL_MATCHES; zyk_iterator++)
@@ -5284,7 +5279,7 @@ int zyk_number_of_allies(gentity_t *ent, qboolean in_rpg_mode)
 // zyk: tests if this player is one of the Duel Tournament duelists
 qboolean duel_tournament_is_duelist(gentity_t *ent)
 {
-	if ((ent->s.number == level.duelist_1_id || ent->s.number == level.duelist_2_id || ent->s.number == level.duelist_1_ally_id || ent->s.number == level.duelist_2_ally_id))
+	if (ent->s.number == level.duelist_1_id || ent->s.number == level.duelist_2_id)
 	{
 		return qtrue;
 	}
@@ -5423,12 +5418,6 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 
 		if (attacker->client->noclip == qtrue || target->client->noclip == qtrue)
 		{ // zyk: noclip does not allow hitting
-			return qfalse;
-		}
-
-		if (level.duel_tournament_mode > 0 && level.duel_players[attacker->s.number] != -1 && level.duel_players[target->s.number] != -1 && 
-			level.duel_allies[attacker->s.number] == target->s.number && level.duel_allies[target->s.number] == attacker->s.number)
-		{ // zyk: Duel Tournament allies. Cannot hit each other
 			return qfalse;
 		}
 	}
@@ -7580,7 +7569,6 @@ void duel_tournament_end()
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		level.duel_players[i] = -1;
-		level.duel_allies[i] = -1;
 	}
 
 	for (i = 0; i < MAX_DUEL_MATCHES; i++)
@@ -7604,8 +7592,6 @@ void duel_tournament_end()
 	level.duel_matches_done = 0;
 	level.duelist_1_id = -1;
 	level.duelist_2_id = -1;
-	level.duelist_1_ally_id = -1;
-	level.duelist_2_ally_id = -1;
 
 	// GalaxyRP fix: [Duel Tournament] the paused flag was the one piece of tournament state this
 	// function did not reset, and nothing else clears it except a map change. Because Cmd_DuelPause_f
@@ -7666,12 +7652,6 @@ void duel_tournament_prepare(gentity_t *ent)
 	ent->health = 100;
 	ent->client->ps.stats[STAT_ARMOR] = 100;
 
-	if ((level.duelist_1_id == ent->s.number && level.duelist_1_ally_id != -1) || (level.duelist_2_id == ent->s.number && level.duelist_2_ally_id != -1) || 
-		level.duelist_1_ally_id == ent->s.number || level.duelist_2_ally_id == ent->s.number)
-	{
-		ent->client->ps.stats[STAT_ARMOR] = 0;
-	}
-
 	player_backup_force(ent);
 
 	for (i = 0; i < NUM_FORCE_POWERS; i++)
@@ -7704,31 +7684,15 @@ void duel_tournament_prepare(gentity_t *ent)
 // zyk: generate the teams and validates them
 int duel_tournament_generate_teams()
 {
-	int i = 0;
-	int number_of_teams = level.duelists_quantity;
+	// GalaxyRP: [Duel Tournament] this used to validate the 2v2 pairings in level.duel_allies[] and
+	// then subtract one from the count for each pair, so a team of two entered as a single
+	// competitor. With 2v2 gone (see G_TryUse in g_utils.c) every entry was permanently -1, both
+	// loops were no-ops and the count always came back as the raw number of duelists. Kept as a
+	// function, rather than folded into its one caller, because duel_number_of_teams is what
+	// duel_tournament_generate_match_table() sizes its quota from.
+	level.duel_number_of_teams = level.duelists_quantity;
 
-	// zyk: validating the teams
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.duel_players[i] == -1 || (level.duel_allies[i] != -1 && (level.duel_allies[level.duel_allies[i]] != i || level.duel_players[level.duel_allies[i]] == -1)))
-		{ // zyk: this team is not valid. Remove the ally
-			level.duel_allies[i] = -1;
-		}
-	}
-
-	// zyk: counting the teams
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.duel_allies[i] != -1 && i < level.duel_allies[i] && level.duel_allies[level.duel_allies[i]] == i)
-		{ // zyk: both players added themselves as allies
-			// zyk: must count both as a single player (team)
-			number_of_teams--;
-		}
-	}
-
-	level.duel_number_of_teams = number_of_teams;
-
-	return number_of_teams;
+	return level.duel_number_of_teams;
 }
 
 // zyk: generates the table with all the tournament matches
@@ -7756,44 +7720,40 @@ void duel_tournament_generate_match_table()
 
 		if (level.duel_players[i] != -1)
 		{ // zyk: player joined the tournament
-			// zyk: calculates matches for alone players or for the teams by using the team leader, which is the lower id
-			if (level.duel_allies[i] == -1 || i < level.duel_allies[i])
+			last_opponent_id = -1;
+
+			// GalaxyRP fix: [Duel Tournament] number_of_filled_positions used to be reset ONLY by
+			// the break below, i.e. only when this player managed to fill its full quota of
+			// positions. With the maximum 32 duelists the array is exactly full (32 players x 31
+			// opponents = 992 = 2 x MAX_DUEL_MATCHES), so the last players run the j loop to
+			// completion without ever hitting that break -- the counter then carried over into the
+			// next player, which stopped early and left matches with a first duelist but no second.
+			// Those half-filled entries sat inside the counted range, so the tournament played
+			// matches whose second duelist id was -1: an out-of-bounds entity index and a match nobody
+			// could win. Resetting per player instead makes the counter's state independent of how
+			// the loop below terminates. Verified by simulation:
+			// with exactly 32 duelists this now produces the complete 496-match round robin with no
+			// holes and no repeated pairings, and every smaller tournament is unchanged.
+			number_of_filled_positions = 0;
+
+			for (j = 0; j < MAX_DUEL_MATCHES; j++)
 			{
-				last_opponent_id = -1;
-
-				// GalaxyRP fix: [Duel Tournament] number_of_filled_positions used to be reset ONLY by
-				// the break below, i.e. only when this player managed to fill its full quota of
-				// positions. With the maximum 32 duelists the array is exactly full (32 players x 31
-				// opponents = 992 = 2 x MAX_DUEL_MATCHES), so the last players run the j loop to
-				// completion without ever hitting that break -- the counter then carried over into the
-				// next player, which stopped early and left matches with a first duelist but no second.
-				// Those half-filled entries sat inside the counted range, so the tournament played
-				// matches whose second duelist id was -1: an out-of-bounds entity index, a -1 index into
-				// duel_allies[], and a match nobody could win. Resetting per player instead makes the
-				// counter's state independent of how the loop below terminates. Verified by simulation:
-				// with exactly 32 duelists this now produces the complete 496-match round robin with no
-				// holes and no repeated pairings, and every smaller tournament is unchanged.
-				number_of_filled_positions = 0;
-
-				for (j = 0; j < MAX_DUEL_MATCHES; j++)
+				if (number_of_filled_positions >= max_filled_positions)
 				{
-					if (number_of_filled_positions >= max_filled_positions)
-					{
-						break;
-					}
+					break;
+				}
 
-					if (temp_matches[j][0] == -1)
-					{
-						temp_matches[j][0] = i;
-						number_of_filled_positions++;
-					}
-					else if (temp_matches[j][1] == -1 && last_opponent_id != temp_matches[j][0] && level.duel_allies[i] != temp_matches[j][0])
-					{ // zyk: will not the same opponent again (last_opponent_id) and will not add ally as opponent
-						last_opponent_id = temp_matches[j][0];
-						temp_matches[j][1] = i;
-						number_of_filled_positions++;
-						level.duel_matches_quantity++;
-					}
+				if (temp_matches[j][0] == -1)
+				{
+					temp_matches[j][0] = i;
+					number_of_filled_positions++;
+				}
+				else if (temp_matches[j][1] == -1 && last_opponent_id != temp_matches[j][0])
+				{ // zyk: will not face the same opponent again (last_opponent_id)
+					last_opponent_id = temp_matches[j][0];
+					temp_matches[j][1] = i;
+					number_of_filled_positions++;
+					level.duel_matches_quantity++;
 				}
 			}
 		}
@@ -7855,7 +7815,6 @@ void duel_tournament_prize(gentity_t *ent)
 
 void duel_tournament_generate_leaderboard(char *filename, char *netname)
 {
-	level.duel_leaderboard_add_ally = qfalse;
 	level.duel_leaderboard_timer = level.time + 500;
 	strcpy(level.duel_leaderboard_acc, filename);
 	strcpy(level.duel_leaderboard_name, netname);
@@ -7888,13 +7847,7 @@ void duel_tournament_winner()
 
 	if (ent)
 	{ // zyk: found a winner
-		gentity_t *ally = NULL;
 		char winner_info[128];
-
-		if (level.duel_allies[ent->s.number] != -1)
-		{
-			ally = &g_entities[level.duel_allies[ent->s.number]];
-		}
 
 		duel_tournament_prize(ent);
 
@@ -7904,30 +7857,7 @@ void duel_tournament_winner()
 			duel_tournament_generate_leaderboard(G_NewString(ent->client->sess.filename), G_NewString(ent->client->pers.netname));
 		}
 
-		if (ally)
-		{
-			duel_tournament_prize(ally);
-
-			if (ally->client->sess.amrpgmode > 0)
-			{
-				if (ent->client->sess.amrpgmode > 0)
-				{
-					level.duel_leaderboard_add_ally = qtrue;
-					strcpy(level.duel_leaderboard_ally_acc, ally->client->sess.filename);
-					strcpy(level.duel_leaderboard_ally_name, ally->client->pers.netname);
-				}
-				else
-				{ // zyk: if only the ally is logged, generate only for the ally
-					duel_tournament_generate_leaderboard(G_NewString(ally->client->sess.filename), G_NewString(ally->client->pers.netname));
-				}
-			}
-
-			strcpy(winner_info, va("%s ^7/ %s", ent->client->pers.netname, ally->client->pers.netname));
-		}
-		else
-		{
-			strcpy(winner_info, ent->client->pers.netname);
-		}
+		strcpy(winner_info, ent->client->pers.netname);
 
 		trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Winner is: %s^7. Prize: force power-ups, some guns and items\"", winner_info));
 	}
@@ -7941,7 +7871,6 @@ void duel_tournament_winner()
 char *duel_tournament_remaining_health(gentity_t *ent)
 {
 	char health_info[128];
-	gentity_t *ally = NULL;
 
 	// GalaxyRP fix: [Duel Tournament] callers can now legitimately pass NULL for a match slot that
 	// holds no valid duelist (see duel_tournament_set_match_winner), and every line below reads
@@ -7949,11 +7878,6 @@ char *duel_tournament_remaining_health(gentity_t *ent)
 	if (!ent || !ent->client)
 	{
 		return "";
-	}
-
-	if (level.duel_allies[ent->s.number] != -1)
-	{
-		ally = &g_entities[level.duel_allies[ent->s.number]];
 	}
 
 	strcpy(health_info, "");
@@ -7965,10 +7889,6 @@ char *duel_tournament_remaining_health(gentity_t *ent)
 			strcpy(health_info, va(" ^1%d^7/^2%d^7 ", ent->health, ent->client->ps.stats[STAT_ARMOR]));
 		}
 
-		if (ally && !(ally->client->pers.player_statuses & (1 << 27)))
-		{ // zyk: show health if the ally did not die in duel
-			strcpy(health_info, va("%s ^1%d^7/^2%d^7", health_info, ally->health, ally->client->ps.stats[STAT_ARMOR]));
-		}
 	}
 
 	return G_NewString(health_info);
@@ -7977,8 +7897,6 @@ char *duel_tournament_remaining_health(gentity_t *ent)
 // zyk: sums the score and hp score to a single duelist or to a team
 void duel_tournament_give_score(gentity_t *ent, int score)
 {
-	gentity_t *ally = NULL;
-
 	// GalaxyRP fix: [Duel Tournament] this used to dereference ent unconditionally and then do
 	// "level.duel_players[ent->s.number] += score" with no check on the current value. Two problems.
 	// First, its callers can legitimately pass NULL now that a match slot holding -1 no longer
@@ -7994,27 +7912,10 @@ void duel_tournament_give_score(gentity_t *ent, int score)
 		return;
 	}
 
-	if (level.duel_allies[ent->s.number] != -1)
-	{
-		ally = &g_entities[level.duel_allies[ent->s.number]];
-	}
-
 	level.duel_players[ent->s.number] += score;
 	if (level.duel_tournament_mode == 4 && !(ent->client->pers.player_statuses & (1 << 27)))
 	{ // zyk: add hp score if he did not die in duel
 		level.duel_players_hp[ent->s.number] += (ent->health + ent->client->ps.stats[STAT_ARMOR]);
-	}
-
-	if (ally)
-	{ // zyk: both players must have the same score and the same hp score
-		level.duel_players[ally->s.number] = level.duel_players[ent->s.number];
-
-		if (level.duel_tournament_mode == 4 && !(ally->client->pers.player_statuses & (1 << 27)))
-		{ // zyk: add hp score if he did not die in duel
-			level.duel_players_hp[ent->s.number] += (ally->health + ally->client->ps.stats[STAT_ARMOR]);
-		}
-
-		level.duel_players_hp[ally->s.number] = level.duel_players_hp[ent->s.number];
 	}
 }
 
@@ -8023,12 +7924,6 @@ void duel_tournament_set_match_winner(gentity_t *winner)
 {
 	gentity_t *first_duelist = NULL;
 	gentity_t *second_duelist = NULL;
-	gentity_t *first_duelist_ally = NULL;
-	gentity_t *second_duelist_ally = NULL;
-
-	char ally_name[36];
-
-	strcpy(ally_name, "");
 
 	// GalaxyRP fix: [Duel Tournament] these two used to be initialised unconditionally as
 	// &g_entities[level.duelist_N_id]. Both ids legitimately hold -1 (they are reset to it between
@@ -8045,16 +7940,6 @@ void duel_tournament_set_match_winner(gentity_t *winner)
 	if (level.duelist_2_id != -1)
 	{
 		second_duelist = &g_entities[level.duelist_2_id];
-	}
-
-	if (level.duelist_1_ally_id != -1)
-	{
-		first_duelist_ally = &g_entities[level.duelist_1_ally_id];
-	}
-
-	if (level.duelist_2_ally_id != -1)
-	{
-		second_duelist_ally = &g_entities[level.duelist_2_ally_id];
 	}
 
 	// zyk: setting score
@@ -8079,23 +7964,7 @@ void duel_tournament_set_match_winner(gentity_t *winner)
 	// zyk: showing round win message
 	if (winner)
 	{
-		gentity_t *winner_ally = NULL;
-
-		if (first_duelist_ally && level.duelist_1_id == winner->s.number)
-		{
-			winner_ally = first_duelist_ally;
-		}
-		else if (second_duelist_ally && level.duelist_2_id == winner->s.number)
-		{
-			winner_ally = second_duelist_ally;
-		}
-
-		if (winner_ally)
-		{
-			strcpy(ally_name, va("^7 / %s", winner_ally->client->pers.netname));
-		}
-
-		trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7%s%s ^7wins! %s\"", winner->client->pers.netname, ally_name, duel_tournament_remaining_health(winner)));
+		trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7%s ^7wins! %s\"", winner->client->pers.netname, duel_tournament_remaining_health(winner)));
 	}
 	else
 	{
@@ -8106,25 +7975,13 @@ void duel_tournament_set_match_winner(gentity_t *winner)
 	level.duel_matches_done++;
 }
 
-void duel_tournament_protect_duelists(gentity_t *duelist_1, gentity_t *duelist_2, gentity_t *duelist_1_ally, gentity_t *duelist_2_ally)
+void duel_tournament_protect_duelists(gentity_t *duelist_1, gentity_t *duelist_2)
 {
 	duelist_1->client->ps.eFlags |= EF_INVULNERABLE;
 	duelist_1->client->invulnerableTimer = level.time + DUEL_TOURNAMENT_PROTECT_TIME;
 
 	duelist_2->client->ps.eFlags |= EF_INVULNERABLE;
 	duelist_2->client->invulnerableTimer = level.time + DUEL_TOURNAMENT_PROTECT_TIME;
-
-	if (duelist_1_ally)
-	{
-		duelist_1_ally->client->ps.eFlags |= EF_INVULNERABLE;
-		duelist_1_ally->client->invulnerableTimer = level.time + DUEL_TOURNAMENT_PROTECT_TIME;
-	}
-
-	if (duelist_2_ally)
-	{
-		duelist_2_ally->client->ps.eFlags |= EF_INVULNERABLE;
-		duelist_2_ally->client->invulnerableTimer = level.time + DUEL_TOURNAMENT_PROTECT_TIME;
-	}
 }
 
 qboolean duel_tournament_valid_duelist(gentity_t *ent)
@@ -8148,28 +8005,12 @@ qboolean duel_tournament_validate_duelists()
 	// pointer into out-of-bounds memory, which is non-NULL and passes its "ent && ent->client" test.
 	gentity_t *first_duelist = (level.duelist_1_id != -1) ? &g_entities[level.duelist_1_id] : NULL;
 	gentity_t *second_duelist = (level.duelist_2_id != -1) ? &g_entities[level.duelist_2_id] : NULL;
-	gentity_t *first_duelist_ally = NULL;
-	gentity_t *second_duelist_ally = NULL;
-
 	qboolean first_valid = qfalse;
-	qboolean first_valid_ally = qfalse;
 	qboolean second_valid = qfalse;
-	qboolean second_valid_ally = qfalse;
-
-	if (level.duelist_1_ally_id != -1)
-	{
-		first_duelist_ally = &g_entities[level.duelist_1_ally_id];
-	}
-
-	if (level.duelist_2_ally_id != -1)
-	{
-		second_duelist_ally = &g_entities[level.duelist_2_ally_id];
-	}
 
 	// zyk: removing duelists from private duels
-	// GalaxyRP fix: [Duel Tournament] NULL-guarded, matching the two ally branches immediately below
-	// which always were -- these two now hold NULL for an empty match slot instead of an
-	// out-of-bounds pointer, so they have to be checked the same way.
+	// GalaxyRP fix: [Duel Tournament] NULL-guarded -- these now hold NULL for an empty match slot
+	// instead of an out-of-bounds pointer, so they have to be checked before being dereferenced.
 	if (first_duelist && first_duelist->client->ps.duelInProgress == qtrue)
 	{
 		first_duelist->client->ps.stats[STAT_HEALTH] = first_duelist->health = -999;
@@ -8184,101 +8025,21 @@ qboolean duel_tournament_validate_duelists()
 		player_die(second_duelist, second_duelist, second_duelist, 100000, MOD_SUICIDE);
 	}
 
-	if (first_duelist_ally && first_duelist_ally->client->ps.duelInProgress == qtrue)
-	{
-		first_duelist_ally->client->ps.stats[STAT_HEALTH] = first_duelist_ally->health = -999;
-
-		player_die(first_duelist_ally, first_duelist_ally, first_duelist_ally, 100000, MOD_SUICIDE);
-	}
-
-	if (second_duelist_ally && second_duelist_ally->client->ps.duelInProgress == qtrue)
-	{
-		second_duelist_ally->client->ps.stats[STAT_HEALTH] = second_duelist_ally->health = -999;
-
-		player_die(second_duelist_ally, second_duelist_ally, second_duelist_ally, 100000, MOD_SUICIDE);
-	}
-
 	// zyk: testing if duelists are still valid
 	first_valid = duel_tournament_valid_duelist(first_duelist);
-	first_valid_ally = duel_tournament_valid_duelist(first_duelist_ally);
 	second_valid = duel_tournament_valid_duelist(second_duelist);
-	second_valid_ally = duel_tournament_valid_duelist(second_duelist_ally);
 
-	// zyk: if the main team members (the ones saved in level.duel_matches) of each team are no longer valid, make the ally a main member
-	if (first_valid == qfalse && first_valid_ally == qtrue)
-	{
-		level.duel_matches[level.duel_matches_done][0] = level.duelist_1_ally_id;
-
-		level.duel_allies[level.duelist_1_ally_id] = -1;
-
-		// GalaxyRP fix: [Duel Tournament] guarded -- duelist_1_id can hold the -1 "no duelist"
-		// sentinel here, and this is an out-of-bounds WRITE into whatever precedes duel_allies[]
-		// in the level struct, not just a bad read.
-		if (level.duelist_1_id != -1)
-		{
-			level.duel_allies[level.duelist_1_id] = -1;
-		}
-
-		level.duelist_1_id = level.duelist_1_ally_id;
-		level.duelist_1_ally_id = -1;
-
-		first_duelist = &g_entities[level.duelist_1_id];
-		first_duelist_ally = NULL;
-	}
-
-	if (second_valid == qfalse && second_valid_ally == qtrue)
-	{
-		level.duel_matches[level.duel_matches_done][1] = level.duelist_2_ally_id;
-
-		level.duel_allies[level.duelist_2_ally_id] = -1;
-
-		// GalaxyRP fix: [Duel Tournament] same out-of-bounds write guarded as for duelist 1 above.
-		if (level.duelist_2_id != -1)
-		{
-			level.duel_allies[level.duelist_2_id] = -1;
-		}
-
-		level.duelist_2_id = level.duelist_2_ally_id;
-		level.duelist_2_ally_id = -1;
-
-		second_duelist = &g_entities[level.duelist_2_id];
-		second_duelist_ally = NULL;
-	}
-
-	// zyk: in only main member is valid, removes ally (if he has one)
-	if (first_valid == qtrue && first_valid_ally == qfalse)
-	{
-		if (level.duelist_1_ally_id != -1)
-		{
-			level.duel_allies[level.duelist_1_ally_id] = -1;
-			level.duel_allies[level.duelist_1_id] = -1;
-		}
-
-		level.duelist_1_ally_id = -1;
-	}
-
-	if (second_valid == qtrue && second_valid_ally == qfalse)
-	{
-		if (level.duelist_2_ally_id != -1)
-		{
-			level.duel_allies[level.duelist_2_ally_id] = -1;
-			level.duel_allies[level.duelist_2_id] = -1;
-		}
-
-		level.duelist_2_ally_id = -1;
-	}
-
-	if ((first_valid == qtrue || first_valid_ally == qtrue) && (second_valid == qtrue || second_valid_ally == qtrue))
+	if (first_valid == qtrue && second_valid == qtrue)
 	{ // zyk: valid match
 		return qtrue;
 	}
-	
-	if ((first_valid == qtrue || first_valid_ally == qtrue) && second_valid == qfalse && second_valid_ally == qfalse)
-	{ // zyk: only first team valid. Gives score to it
+
+	if (first_valid == qtrue && second_valid == qfalse)
+	{ // zyk: only the first duelist is valid. Gives score to him
 		duel_tournament_set_match_winner(first_duelist);
 	}
-	else if ((second_valid == qtrue || second_valid_ally == qtrue) && first_valid == qfalse && first_valid_ally == qfalse)
-	{ // zyk: only second team valid. Gives score to it
+	else if (second_valid == qtrue && first_valid == qfalse)
+	{ // zyk: only the second duelist is valid. Gives score to him
 		duel_tournament_set_match_winner(second_duelist);
 	}
 	else
@@ -9114,30 +8875,18 @@ void G_RunFrame( int levelTime ) {
 		{
 			gentity_t *first_duelist = &g_entities[level.duelist_1_id];
 			gentity_t *second_duelist = &g_entities[level.duelist_2_id];
-			gentity_t *first_duelist_ally = NULL;
-			gentity_t *second_duelist_ally = NULL;
 
-			if (level.duelist_1_ally_id != -1)
-			{
-				first_duelist_ally = &g_entities[level.duelist_1_ally_id];
-			}
-
-			if (level.duelist_2_ally_id != -1)
-			{
-				second_duelist_ally = &g_entities[level.duelist_2_ally_id];
-			}
-
-			if ((!(first_duelist->client->pers.player_statuses & (1 << 27)) || (first_duelist_ally && !(first_duelist_ally->client->pers.player_statuses & (1 << 27)))) &&
-				 second_duelist->client->pers.player_statuses & (1 << 27) && (!second_duelist_ally || second_duelist_ally->client->pers.player_statuses & (1 << 27)))
-			{ // zyk: first team wins
+			if (!(first_duelist->client->pers.player_statuses & (1 << 27)) &&
+				second_duelist->client->pers.player_statuses & (1 << 27))
+			{ // zyk: first duelist wins
 				duel_tournament_set_match_winner(first_duelist);
 
 				level.duel_tournament_mode = 5;
 				level.duel_tournament_timer = level.time + 1500;
 			}
-			else if ((!(second_duelist->client->pers.player_statuses & (1 << 27)) || (second_duelist_ally && !(second_duelist_ally->client->pers.player_statuses & (1 << 27)))) &&
-				first_duelist->client->pers.player_statuses & (1 << 27) && (!first_duelist_ally || first_duelist_ally->client->pers.player_statuses & (1 << 27)))
-			{ // zyk: second team wins
+			else if (!(second_duelist->client->pers.player_statuses & (1 << 27)) &&
+				first_duelist->client->pers.player_statuses & (1 << 27))
+			{ // zyk: second duelist wins
 				duel_tournament_set_match_winner(second_duelist);
 
 				level.duel_tournament_mode = 5;
@@ -9145,35 +8894,25 @@ void G_RunFrame( int levelTime ) {
 			}
 			else if (level.duel_tournament_timer < level.time)
 			{ // zyk: duel timed out
-				int first_team_health = 0;
-				int second_team_health = 0;
+				int first_duelist_health = 0;
+				int second_duelist_health = 0;
 
 				if (!(first_duelist->client->pers.player_statuses & (1 << 27)))
 				{
-					first_team_health = first_duelist->health + first_duelist->client->ps.stats[STAT_ARMOR];
+					first_duelist_health = first_duelist->health + first_duelist->client->ps.stats[STAT_ARMOR];
 				}
 
 				if (!(second_duelist->client->pers.player_statuses & (1 << 27)))
 				{
-					second_team_health = second_duelist->health + second_duelist->client->ps.stats[STAT_ARMOR];
+					second_duelist_health = second_duelist->health + second_duelist->client->ps.stats[STAT_ARMOR];
 				}
 
-				if (first_duelist_ally && !(first_duelist_ally->client->pers.player_statuses & (1 << 27)))
-				{
-					first_team_health += (first_duelist_ally->health + first_duelist_ally->client->ps.stats[STAT_ARMOR]);
-				}
-
-				if (second_duelist_ally && !(second_duelist_ally->client->pers.player_statuses & (1 << 27)))
-				{
-					second_team_health += (second_duelist_ally->health + second_duelist_ally->client->ps.stats[STAT_ARMOR]);
-				}
-
-				if (first_team_health > second_team_health)
-				{ // zyk: first team wins
+				if (first_duelist_health > second_duelist_health)
+				{ // zyk: first duelist wins
 					duel_tournament_set_match_winner(first_duelist);
 				}
-				else if (first_team_health < second_team_health)
-				{ // zyk: second team wins
+				else if (first_duelist_health < second_duelist_health)
+				{ // zyk: second duelist wins
 					duel_tournament_set_match_winner(second_duelist);
 				}
 				else
@@ -9184,9 +8923,9 @@ void G_RunFrame( int levelTime ) {
 				level.duel_tournament_mode = 5;
 				level.duel_tournament_timer = level.time + 1500;
 			}
-			else if (first_duelist->client->pers.player_statuses & (1 << 27) && (!first_duelist_ally || first_duelist_ally->client->pers.player_statuses & (1 << 27)) &&
-				second_duelist->client->pers.player_statuses & (1 << 27) && (!second_duelist_ally || second_duelist_ally->client->pers.player_statuses & (1 << 27)))
-			{ // zyk: tie when everyone dies at the same frame
+			else if (first_duelist->client->pers.player_statuses & (1 << 27) &&
+				second_duelist->client->pers.player_statuses & (1 << 27))
+			{ // zyk: tie when both duelists die on the same frame
 				duel_tournament_set_match_winner(NULL);
 
 				level.duel_tournament_mode = 5;
@@ -9194,7 +8933,7 @@ void G_RunFrame( int levelTime ) {
 			}
 		}
 		else
-		{ // zyk: match ended because one of the teams is no longer valid
+		{ // zyk: match ended because one of the duelists is no longer valid
 			level.duel_tournament_mode = 5;
 			level.duel_tournament_timer = level.time + 1500;
 		}
@@ -9216,20 +8955,8 @@ void G_RunFrame( int levelTime ) {
 				player_restore_force(&g_entities[level.duelist_2_id]);
 			}
 
-			if (level.duelist_1_ally_id != -1)
-			{
-				player_restore_force(&g_entities[level.duelist_1_ally_id]);
-			}
-
-			if (level.duelist_2_ally_id != -1)
-			{
-				player_restore_force(&g_entities[level.duelist_2_ally_id]);
-			}
-
 			level.duelist_1_id = -1;
 			level.duelist_2_id = -1;
-			level.duelist_1_ally_id = -1;
-			level.duelist_2_ally_id = -1;
 
 			level.duel_tournament_timer = level.time + 1500;
 			level.duel_tournament_mode = 2;
@@ -9241,19 +8968,7 @@ void G_RunFrame( int levelTime ) {
 				vec3_t zyk_origin, zyk_angles;
 				gentity_t *duelist_1 = &g_entities[level.duelist_1_id];
 				gentity_t *duelist_2 = &g_entities[level.duelist_2_id];
-				gentity_t *duelist_1_ally = NULL;
-				gentity_t *duelist_2_ally = NULL;
 				qboolean zyk_has_respawned = qfalse;
-
-				if (level.duelist_1_ally_id != -1)
-				{
-					duelist_1_ally = &g_entities[level.duelist_1_ally_id];
-				}
-
-				if (level.duelist_2_ally_id != -1)
-				{
-					duelist_2_ally = &g_entities[level.duelist_2_ally_id];
-				}
 
 				// zyk: respawning duelists that are still dead
 				if (duelist_1->health < 1)
@@ -9268,19 +8983,7 @@ void G_RunFrame( int levelTime ) {
 					zyk_has_respawned = qtrue;
 				}
 
-				if (duelist_1_ally && duelist_1_ally->health < 1)
-				{
-					ClientRespawn(duelist_1_ally);
-					zyk_has_respawned = qtrue;
-				}
-
-				if (duelist_2_ally && duelist_2_ally->health < 1)
-				{
-					ClientRespawn(duelist_2_ally);
-					zyk_has_respawned = qtrue;
-				}
-
-				duel_tournament_protect_duelists(duelist_1, duelist_2, duelist_1_ally, duelist_2_ally);
+				duel_tournament_protect_duelists(duelist_1, duelist_2);
 
 				if (zyk_has_respawned == qfalse)
 				{
@@ -9291,48 +8994,14 @@ void G_RunFrame( int levelTime ) {
 					duel_tournament_prepare(duelist_1);
 					duel_tournament_prepare(duelist_2);
 
-					if (duelist_1_ally)
-					{
-						duel_tournament_prepare(duelist_1_ally);
-					}
-
-					if (duelist_2_ally)
-					{
-						duel_tournament_prepare(duelist_2_ally);
-					}
-
 					// zyk: put the duelists along the y axis
 					VectorSet(zyk_angles, 0, 90, 0);
-
-					if (duelist_1_ally)
-					{
-						VectorSet(zyk_origin, level.duel_tournament_origin[0] - 50, level.duel_tournament_origin[1] - 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_1, zyk_origin, zyk_angles);
-
-						VectorSet(zyk_origin, level.duel_tournament_origin[0] + 50, level.duel_tournament_origin[1] - 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_1_ally, zyk_origin, zyk_angles);
-					}
-					else
-					{
-						VectorSet(zyk_origin, level.duel_tournament_origin[0], level.duel_tournament_origin[1] - 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_1, zyk_origin, zyk_angles);
-					}
+					VectorSet(zyk_origin, level.duel_tournament_origin[0], level.duel_tournament_origin[1] - 125, level.duel_tournament_origin[2] + 1);
+					zyk_TeleportPlayer(duelist_1, zyk_origin, zyk_angles);
 
 					VectorSet(zyk_angles, 0, -90, 0);
-
-					if (duelist_2_ally)
-					{
-						VectorSet(zyk_origin, level.duel_tournament_origin[0] - 50, level.duel_tournament_origin[1] + 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_2, zyk_origin, zyk_angles);
-
-						VectorSet(zyk_origin, level.duel_tournament_origin[0] + 50, level.duel_tournament_origin[1] + 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_2_ally, zyk_origin, zyk_angles);
-					}
-					else
-					{
-						VectorSet(zyk_origin, level.duel_tournament_origin[0], level.duel_tournament_origin[1] + 125, level.duel_tournament_origin[2] + 1);
-						zyk_TeleportPlayer(duelist_2, zyk_origin, zyk_angles);
-					}
+					VectorSet(zyk_origin, level.duel_tournament_origin[0], level.duel_tournament_origin[1] + 125, level.duel_tournament_origin[2] + 1);
+					zyk_TeleportPlayer(duelist_2, zyk_origin, zyk_angles);
 
 					level.duel_tournament_mode = 4;
 				}
@@ -9369,17 +9038,6 @@ void G_RunFrame( int levelTime ) {
 				level.duelist_1_id = level.duel_matches[level.duel_matches_done][0];
 				level.duelist_2_id = level.duel_matches[level.duel_matches_done][1];
 
-				// zyk: getting the duelist allies
-				if (level.duel_allies[level.duelist_1_id] != -1)
-				{
-					level.duelist_1_ally_id = level.duel_allies[level.duelist_1_id];
-				}
-
-				if (level.duel_allies[level.duelist_2_id] != -1)
-				{
-					level.duelist_2_ally_id = level.duel_allies[level.duelist_2_id];
-				}
-
 				if (duel_tournament_validate_duelists() == qfalse)
 				{ // zyk: if not valid, show score table
 					level.duel_tournament_mode = 5;
@@ -9389,26 +9047,11 @@ void G_RunFrame( int levelTime ) {
 				{
 					gentity_t *duelist_1 = &g_entities[level.duelist_1_id];
 					gentity_t *duelist_2 = &g_entities[level.duelist_2_id];
-					char first_ally[36];
-					char second_ally[36];
-
-					strcpy(first_ally, "");
-					strcpy(second_ally, "");
-
-					if (level.duelist_1_ally_id != -1)
-					{
-						strcpy(first_ally, va("^7 / %s", g_entities[level.duelist_1_ally_id].client->pers.netname));
-					}
-
-					if (level.duelist_2_ally_id != -1)
-					{
-						strcpy(second_ally, va("^7 / %s", g_entities[level.duelist_2_ally_id].client->pers.netname));
-					}
 
 					level.duel_tournament_timer = level.time + 3000;
 					level.duel_tournament_mode = 3;
 
-					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7%s%s ^7x %s%s\"", duelist_1->client->pers.netname, first_ally, duelist_2->client->pers.netname, second_ally));
+					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7%s ^7x %s\"", duelist_1->client->pers.netname, duelist_2->client->pers.netname));
 				}
 			}
 
@@ -9538,11 +9181,6 @@ void G_RunFrame( int levelTime ) {
 			fclose(leaderboard_file);
 
 			level.duel_leaderboard_step = 0; // zyk: stop creating the leaderboard
-
-			if (level.duel_leaderboard_add_ally == qtrue)
-			{
-				duel_tournament_generate_leaderboard(G_NewString(level.duel_leaderboard_ally_acc), G_NewString(level.duel_leaderboard_ally_name));
-			}
 		}
 		else if (level.duel_leaderboard_step == 3)
 		{ // zyk: determines the line where this winner must be put in the file
@@ -9674,11 +9312,6 @@ void G_RunFrame( int levelTime ) {
 #endif
 
 			level.duel_leaderboard_step = 0; // zyk: stop creating the leaderboard
-
-			if (level.duel_leaderboard_add_ally == qtrue)
-			{
-				duel_tournament_generate_leaderboard(G_NewString(level.duel_leaderboard_ally_acc), G_NewString(level.duel_leaderboard_ally_name));
-			}
 		}
 	}
 
