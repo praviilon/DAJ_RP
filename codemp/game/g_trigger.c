@@ -2038,16 +2038,22 @@ void SP_trigger_asteroid_field(gentity_t *self)
 	trap->SetBrushModel( (sharedEntity_t *)self, self->model );
 	self->r.contents = 0;
 
-	// GalaxyRP fix: [Entity System] "self->health = 20" is not a typo of ours -- it is in OpenJK and
-	// TaystJK unchanged, and reads as a Raven slip for "self->count = 20": the test is on count, the
-	// QUAKED comment above documents count as "how many asteroids, max, to have at one time", and
-	// asteroid_field_think only ever spawns while numAsteroids < count. As written, a field with no
-	// count key spawns nothing at all and the health it sets is never read. Deliberately left alone:
-	// correcting it would make every shipped map with a count-less asteroid field start spawning 20
-	// entities it does not spawn today, which is exactly the budget being protected here.
+	// GalaxyRP fix: [Entity System] this read "self->health = 20", which is in OpenJK and TaystJK
+	// unchanged and reads as a Raven slip for "self->count = 20": the test is on count, the QUAKED
+	// comment above documents count as "how many asteroids, max, to have at one time", and
+	// asteroid_field_think only ever spawns while numAsteroids < count. As written the field was
+	// inert -- a map that did not set count spawned nothing at all, and the health it assigned was
+	// never read by anything.
+	//
+	// Corrected, but to 1 rather than Raven's 20. The default is the only part of this that can
+	// change a shipped map: a map that sets count explicitly is untouched either way, while a map
+	// that omits it goes from spawning nothing to spawning something. One asteroid is the smallest
+	// that revival can be -- and it is a live cycle, not a static entity, since each asteroid is
+	// lerped across the volume and then frees itself on arrival, so the field holds one drifting
+	// rock at a time rather than accumulating.
 	if ( !self->count )
 	{
-		self->health = 20;
+		self->count = 1;
 	}
 
 	// GalaxyRP fix: [Entity System] count is unbounded and comes from a spawn key, so /entadd could
