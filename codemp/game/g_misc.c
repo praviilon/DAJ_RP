@@ -414,9 +414,25 @@ void SP_misc_model_breakable( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] three buffer defects lived in the next few lines, all reachable
+	// from an /entadd, an /entload preset or a map's own entity string, because ent->model is an
+	// F_STRING parsed straight out of the spawn vars and is bounded only by MAX_STRING_CHARS.
+	//
+	//  1. len was strlen(ent->model) - 4 with no minimum. A model name of one to three characters
+	//     made len negative, so ent->model[len] read before the string and damageModel[len] = 0
+	//     wrote before a 64-byte stack array.
+	//  2. Nothing checked len against the buffer either. strncpy() fills MAX_QPATH bytes without
+	//     terminating, and damageModel[len] = 0 then wrote the terminator at an offset taken
+	//     straight from the model name -- a ~900 character name put it ~900 bytes past the end.
+	//  3. The three strcat()s below appended seven more characters onto buffers strncpy() may have
+	//     left unterminated, so even a legal 60-character name overflowed.
+	//
+	// The length is validated first, the copies are bounded and always terminated, and the
+	// extensions are appended with Q_strcat. Which models are accepted does not change: a name
+	// still has to end in a four-character ".md3" extension to get past here.
 	len = strlen(ent->model) - 4;
 
-	if (ent->model[len] != '.') //we're expecting ".md3"
+	if (len < 1 || len >= (int)sizeof(damageModel) || ent->model[len] != '.') //we're expecting ".md3"
 	{ // zyk: if model is not md3, do not spawn the entity
 		Com_Printf(S_COLOR_RED"ERROR: misc_model_breakable at %s has no md3 path specified\n", vtos(ent->s.origin));
 
@@ -428,26 +444,26 @@ void SP_misc_model_breakable( gentity_t *ent )
 
 	misc_model_breakable_init( ent );
 
-	strncpy( damageModel, ent->model, sizeof(damageModel) );
+	Q_strncpyz( damageModel, ent->model, sizeof(damageModel) );
 	damageModel[len] = 0;	//chop extension
-	strncpy( chunkModel, damageModel, sizeof(chunkModel));
-	strncpy( useModel, damageModel, sizeof(useModel));
+	Q_strncpyz( chunkModel, damageModel, sizeof(chunkModel));
+	Q_strncpyz( useModel, damageModel, sizeof(useModel));
 	
 	if (ent->takedamage) {
 		//Dead/damaged model
 		if( !(ent->spawnflags & 8) ) {	//no dmodel
-			strcat( damageModel, "_d1.md3" );
+			Q_strcat( damageModel, sizeof(damageModel), "_d1.md3" );
 			ent->s.modelindex2 = G_ModelIndex( damageModel );
 		}
 		
 		//Chunk model
-		strcat( chunkModel, "_c1.md3" );
+		Q_strcat( chunkModel, sizeof(chunkModel), "_c1.md3" );
 		ent->s.modelGhoul2 = G_ModelIndex( chunkModel );
 	}
 
 	//Use model
 	if( ent->spawnflags & 32 ) {	//has umodel
-		strcat( useModel, "_u1.md3" );
+		Q_strcat( useModel, sizeof(useModel), "_u1.md3" );
 		ent->sound1to2 = G_ModelIndex( useModel );
 	}
 
@@ -868,8 +884,17 @@ Basic exploding crate
 void SP_misc_exploding_crate( gentity_t *ent )
 {
 	G_SpawnInt( "health", "40", &ent->health );
-	G_SpawnInt( "splashRadius", "128", &ent->splashRadius );
-	G_SpawnInt( "splashDamage", "50", &ent->splashDamage );
+
+	// GalaxyRP fix: [Entity System] zyk added splashdamage/splashradius to the entity key table, so
+	// these are already parsed into the entity before the spawn function runs -- and an unguarded
+	// G_SpawnInt then overwrote whatever the map or /entadd had set with the default. fx_runner
+	// already guards its pair this way; the two SP-ported explosives did not, so the same two keys
+	// behaved in opposite ways in the same file. They agree now.
+	if (!ent->splashRadius)
+		G_SpawnInt( "splashRadius", "128", &ent->splashRadius );
+
+	if (!ent->splashDamage)
+		G_SpawnInt( "splashDamage", "50", &ent->splashDamage );
 
 	ent->s.modelindex = G_ModelIndex( "models/map_objects/nar_shaddar/crate_xplode.md3" );
 	G_SoundIndex("sound/weapons/explosions/cargoexplode.wav");
@@ -941,8 +966,14 @@ void GasBurst( gentity_t *self, gentity_t *attacker, int damage )
 void SP_misc_gas_tank( gentity_t *ent )
 {
 	G_SpawnInt( "health", "20", &ent->health );
-	G_SpawnInt( "splashRadius", "48", &ent->splashRadius );
-	G_SpawnInt( "splashDamage", "32", &ent->splashDamage );
+
+	// GalaxyRP fix: [Entity System] same as misc_exploding_crate above -- a map-set or /entadd-set
+	// splashdamage/splashradius was silently replaced by the default.
+	if (!ent->splashRadius)
+		G_SpawnInt( "splashRadius", "48", &ent->splashRadius );
+
+	if (!ent->splashDamage)
+		G_SpawnInt( "splashDamage", "32", &ent->splashDamage );
 
 	ent->s.modelindex = G_ModelIndex( "models/map_objects/imp_mine/tank.md3" );
 	G_SoundIndex("sound/weapons/explosions/cargoexplode.wav");
@@ -2795,8 +2826,21 @@ void fx_runner_think( gentity_t *ent )
 
 	ent->nextthink = level.time + ent->delay + Q_flrand(0.0f, 1.0f) * ent->random;
 
+	// GalaxyRP fix: [Entity System] an fx_runner with "delay" and "random" both unset re-thinks on
+	// the very next frame, so one carrying the damage spawnflag applied its full G_RadiusDamage
+	// every frame for as long as it lived. Because zyk also added splashdamage/splashradius to the
+	// entity key table, that made "/entadd fx_runner spawnflags 4 splashdamage 1000 splashradius
+	// 4000" a map-wide killing field, and it did the same for any preset or map shipping one.
+	//
+	// The damage tick is floored at RP_FX_RUNNER_MIN_DAMAGE_DELAY. NOTE this is a balance change as
+	// well as a safety one: the Duelist Vertical DFA (zyk_vertical_dfa_effect in g_main.c -- 130
+	// damage over a 600 radius, alive 600ms) and the quest magic effects all run with delay 0, so
+	// they now tick far fewer times than they did. That was chosen deliberately.
 	if ( ent->spawnflags & 4 ) // damage
 	{
+		if ((ent->nextthink - level.time) < RP_FX_RUNNER_MIN_DAMAGE_DELAY)
+			ent->nextthink = level.time + RP_FX_RUNNER_MIN_DAMAGE_DELAY;
+
 		G_RadiusDamage( ent->r.currentOrigin, ent, ent->splashDamage, ent->splashRadius, ent, ent, MOD_UNKNOWN );
 	}
 
@@ -3099,7 +3143,12 @@ void SP_fx_runner( gentity_t *ent )
 		Q_stricmp(ent->targetname, "zyk_quest_effect_poison") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_immunity") == 0 ||
 		Q_stricmp(ent->targetname, "zyk_quest_effect_flaming_area_hit") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_chaos") == 0)
 	{
-		ent->nextthink = level.time;
+		// GalaxyRP fix: [Entity System] these used to link on the very next frame. The newer Zyk mod
+		// gives its own equivalent list a 100ms delay instead of zero; adopted here. This only moves
+		// the link step -- fx_runner_link() resolves the orientation and then picks the real cadence
+		// per effect -- so an effect starts 100ms later and nothing about how often it runs changes.
+		// The 400ms below is vanilla's own delay for every other fx_runner and is left alone.
+		ent->nextthink = level.time + 100;
 	}
 	else
 	{
@@ -3267,6 +3316,23 @@ This world effect will spawn weather globally into the level.
 //----------------------------------------------------------
 void SP_CreateWeather( gentity_t *ent )
 {
+	// GalaxyRP fix: [Entity System] "message" is what names the weather effect, and nothing required
+	// it. Q_stricmp() tolerates NULL, so the two tests below were safe, but the fallback formatted
+	// ent->message through va("*%s") -- passing NULL to a %s conversion, undefined even where a
+	// libc happens to print "(null)" -- and then registered "*(null)" as an effect.
+	// G_FindConfigstringIndex() does de-duplicate, so repeating one name costs nothing; it is a
+	// series of DIFFERENT names that fills the effect table and reaches its "overflow" ERR_DROP.
+	// Requiring the key closes both: no weather type, no entity.
+	if (!VALIDSTRING(ent->message))
+	{
+		Com_Printf(S_COLOR_RED"ERROR: zyk_weather at %s has no message (weather type) specified\n", vtos(ent->s.origin));
+
+		ent->think = G_FreeEntity;
+		ent->nextthink = level.time + FRAMETIME;
+
+		return;
+	}
+
 	if (Q_stricmp(ent->message, "rain") == 0)
 		G_EffectIndex(va("*rain init 500"));
 	else if (Q_stricmp(ent->message, "spacedust") == 0)
@@ -3361,6 +3427,26 @@ void zyk_regen_unit_think(gentity_t *ent)
 
 void SP_ZykRegenUnit( gentity_t *ent)
 {
+	// GalaxyRP fix: [Entity System] "count" is documented as the amount to regen, but nothing
+	// stopped it being negative -- and zyk_regen_unit_think() adds it straight onto health and
+	// armour without going through G_Damage. A negative count therefore drained a player past zero
+	// with no death, no obituary and no respawn, leaving them lying there at negative health, and
+	// drove armour negative too. It is a regen unit; clamp it to one.
+	if (ent->count < 0)
+		ent->count = 0;
+
+	// GalaxyRP fix: [Entity System] "wait" was used unclamped, so the default of 0 made
+	// nextthink == level.time and the think ran every single frame, doing a full EntitiesInBox
+	// sweep each time. zyk_training_pole already clamps to 100 for exactly this reason; match it.
+	if (ent->wait < 100)
+		ent->wait = 100;
+
+	// GalaxyRP fix: [Entity System] unlike the training pole this never defaulted its bounding box,
+	// so an entity spawned without explicit mins/maxs got a zero-sized box at its own origin and
+	// silently regenerated nobody, with no error to say why. Same default the training pole uses.
+	G_SpawnVector("mins", va("-15 -15 %d", DEFAULT_MINS_2), ent->r.mins);
+	G_SpawnVector("maxs", va("15 15 %d", DEFAULT_MAXS_2), ent->r.maxs);
+
 	ent->think = zyk_regen_unit_think;
 	ent->nextthink = level.time + ent->wait;
 
@@ -3414,9 +3500,10 @@ void zyk_training_pole_damage(gentity_t *ent)
 
 void SP_ZykTrainingPole(gentity_t *ent)
 {
-	ent->think = zyk_regen_unit_think;
-	ent->nextthink = level.time + ent->wait;
-
+	// GalaxyRP fix: [Entity System] this used to open by setting think to zyk_regen_unit_think and
+	// arming nextthink off an unclamped wait. Both were overwritten at the bottom of the function
+	// with the correct zyk_training_pole_damage and the clamped wait, so neither did anything -- but
+	// it read as a copy-paste bug and would have become one the moment the function was reordered.
 	ent->s.eType = ET_GENERAL;
 
 	// Save our position and link us up!
@@ -3554,6 +3641,14 @@ void SP_ZykMiniGameJoiner(gentity_t *ent)
 	{ // zyk: if it is an useable entity, wait will be this value
 		ent->wait = 100;
 	}
+
+	// GalaxyRP fix: [Entity System] the clamp above only applied to the press-Use variant. Without
+	// spawnflag 64 the default wait of 0 made nextthink == level.time, so the think ran every frame
+	// and re-invoked Cmd_SniperMode_f / RaceMode / MeleeMode / DuelMode for every player standing in
+	// the box, every frame. Those commands guard themselves, but each answers with a server command,
+	// so a player in the box was flooded with refusals at server framerate. Same floor either way.
+	if (ent->wait < 100)
+		ent->wait = 100;
 
 	ent->nextthink = level.time + ent->wait;
 

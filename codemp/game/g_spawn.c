@@ -1153,6 +1153,73 @@ qboolean zyk_spawn_strings_full(gentity_t *ent)
 	return (level.zyk_spawn_strings_values_count[ent->s.number] + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS) ? qtrue : qfalse;
 }
 
+// GalaxyRP fix: [Entity System] one shared brush-model setter for the eleven mover classes that
+// zyk taught to carry an md3 model. Thirteen copies of the same block used to sit inline, and every
+// one of them handed an unvalidated "*N" straight to trap->SetBrushModel(). The engine resolves that
+// through CM_InlineModel(), which Com_Error(ERR_DROP)s on an index the map does not have -- so
+// "/entadd func_static model *9999" dropped the whole server. The game module has no trap that
+// reports how many inline models a map holds, but it does not need one: every entity the map itself
+// spawns necessarily names a valid index, so the highest index seen while level.spawning is set is
+// this map's own upper bound, and anything above it afterwards is refused.
+//
+// It also restores "#" sub-BSP names to the engine. The inline md3 blocks tested only for '*', so a
+// "#name" model fell into the md3 branch and was registered as a bogus md3 -- vanilla and TaystJK
+// both pass it to SetBrushModel, which loads it as a sub-BSP.
+qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
+{
+	int index = 0;
+
+	if (!name || name[0] != '*')
+		return qtrue;
+
+	index = atoi(name + 1);
+
+	if (level.spawning == qtrue)
+	{ // zyk: the map's own entities define what this map considers a valid index
+		if (index > level.zyk_max_inline_model)
+			level.zyk_max_inline_model = index;
+
+		return qtrue;
+	}
+
+	if (index < 0 || index > level.zyk_max_inline_model)
+	{
+		G_LogPrintf("brush model %s refused on entity %d: this map only has inline models up to *%d\n",
+			name, ent ? ent->s.number : -1, level.zyk_max_inline_model);
+
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+void zyk_set_brush_model( gentity_t *ent )
+{
+	if (!ent || !ent->model)
+		return;
+
+	if (ent->model[0] == '*' || ent->model[0] == '#')
+	{ // zyk: a brush model or a sub-BSP -- the engine resolves both of these
+		if (zyk_brush_model_allowed(ent, ent->model) == qfalse)
+			return;
+
+		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
+
+		return;
+	}
+
+	// zyk: md3 model
+	ent->s.modelindex = G_ModelIndex( ent->model );
+
+	// zyk: is a solid model
+	if (ent->spawnflags & 1024)
+		ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
+
+	// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
+	VectorCopy( ent->s.angles2, ent->r.currentAngles );
+	VectorCopy( ent->s.angles2, ent->s.apos.trBase );
+}
+
 // zyk: function to spawn entities used by entity system
 void zyk_main_spawn_entity(gentity_t *ent) {
 	int			i = 0;

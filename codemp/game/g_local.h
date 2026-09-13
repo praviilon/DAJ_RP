@@ -70,6 +70,11 @@ extern vec3_t gPainPoint;
 // g_forceRegenTime (200ms) whatever the pool size, and the forcePowerNeeded[] costs are fixed
 // absolute numbers, so a bigger pool buys burst capacity and a longer refill (250 points is 50
 // seconds from empty), not a higher sustained rate.
+// GalaxyRP fix: [Entity System] shortest interval an fx_runner carrying the damage spawnflag may
+// re-apply its G_RadiusDamage at. With "delay" and "random" unset the think re-armed for the very
+// next frame, so the damage landed at server framerate.
+#define RP_FX_RUNNER_MIN_DAMAGE_DELAY	100
+
 #define RP_MAX_FORCE_POWER		250
 
 // GalaxyRP: [Force] the pool a player who is not logged in gets, and the ceiling the three clamps
@@ -1778,6 +1783,10 @@ typedef struct level_locals_s {
 	gentity_t *last_spawned_entity;
 
 	// zyk: these variables test if an origin is set in the map to set the origin of a new entity spawned with /entadd command
+	// GalaxyRP fix: [Entity System] highest inline brush model index the map's own
+	// entities referenced, which is what bounds a "*N" typed into /entadd later.
+	int zyk_max_inline_model;
+
 	qboolean ent_origin_set;
 	vec3_t ent_origin;
 	vec3_t ent_angles;
@@ -1889,6 +1898,9 @@ void ItemUse_Binoculars(gentity_t *ent);
 void ItemUse_Shield(gentity_t *ent);
 void ItemUse_Sentry(gentity_t *ent);
 
+void zyk_training_pole_damage(gentity_t *ent);
+qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
+void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);
 void Jetpack_On(gentity_t *ent);
 void ItemUse_Jetpack(gentity_t *ent);

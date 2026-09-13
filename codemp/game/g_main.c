@@ -1185,6 +1185,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	level.last_spawned_entity = NULL;
 
+	// GalaxyRP fix: [Entity System] zeroed with the rest of level above, but set explicitly
+	// alongside the other Entity System state so it is obvious this is per-map -- it is filled
+	// in while the map's own entities spawn. See zyk_brush_model_allowed() in g_spawn.c.
+	level.zyk_max_inline_model = 0;
+
 	level.ent_origin_set = qfalse;
 
 	level.load_entities_timer = 0;

@@ -1450,20 +1450,7 @@ void SP_func_door (gentity_t *ent)
 	VectorCopy( ent->s.origin, ent->pos1 );
 
 	// calculate second position
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	// zyk: saving the angles value so we can recover it later
 	VectorCopy(ent->s.angles, old_angles);
@@ -1644,20 +1631,7 @@ void SP_func_plat (gentity_t *ent) {
 	ent->wait = 1000;
 
 	// create second position
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	if ( !G_SpawnFloat( "height", "0", &height ) ) {
 		height = (ent->r.maxs[2] - ent->r.mins[2]) - lip;
@@ -1748,20 +1722,7 @@ void SP_func_button( gentity_t *ent ) {
 	VectorCopy( ent->s.origin, ent->pos1 );
 
 	// calculate second position
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	G_SpawnFloat( "lip", "4", &lip );
 
@@ -2001,20 +1962,7 @@ void SP_func_train (gentity_t *self) {
 		return;
 	}
 
-	if (self->model && strncmp(self->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)self, self->model );
-	else if (self->model)
-	{ // zyk: md3 model
-		self->s.modelindex = G_ModelIndex( self->model );
-
-		// zyk: is a solid model
-		if (self->spawnflags & 1024)
-			self->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( self->s.angles2, self->r.currentAngles );
-		VectorCopy( self->s.angles2, self->s.apos.trBase );
-	}
+	zyk_set_brush_model( self );
 
 	InitMover( self );
 
@@ -2057,20 +2005,7 @@ void SP_func_static( gentity_t *ent )
 {
 	int		test;
 
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	VectorCopy( ent->s.origin, ent->pos1 );
 	VectorCopy( ent->s.origin, ent->pos2 );
@@ -2247,20 +2182,7 @@ void SP_func_rotating (gentity_t *ent) {
 	}
 	else
 	{
-		if (ent->model && strncmp(ent->model, "*", 1) == 0)
-			trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-		else if (ent->model)
-		{ // zyk: md3 model
-			ent->s.modelindex = G_ModelIndex( ent->model );
-
-			// zyk: is a solid model
-			if (ent->spawnflags & 1024)
-				ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-			// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-			VectorCopy( ent->s.angles2, ent->r.currentAngles );
-			VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-		}
+		zyk_set_brush_model( ent );
 
 		InitMover( ent );
 
@@ -2351,20 +2273,7 @@ void SP_func_bobbing (gentity_t *ent) {
 	G_SpawnInt( "dmg", "2", &ent->damage );
 	G_SpawnFloat( "phase", "0", &phase );
 
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	InitMover( ent );
 
@@ -2415,20 +2324,7 @@ void SP_func_pendulum(gentity_t *ent) {
 	G_SpawnInt( "dmg", "2", &ent->damage );
 	G_SpawnFloat( "phase", "0", &phase );
 
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	// find pendulum length
 	length = fabs( ent->r.mins[2] );
@@ -2747,20 +2643,7 @@ static void InitBBrush ( gentity_t *ent )
 
 	VectorCopy( ent->s.origin, ent->pos1 );
 
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	ent->die = funcBBrushDie;
 
@@ -3111,20 +2994,7 @@ Breakable glass
 "maxshards"	Max number of shards to spawn on glass break
 */
 void SP_func_glass( gentity_t *ent ) {
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	InitMover( ent );
 
@@ -3168,20 +3038,7 @@ void func_wait_return_solid( gentity_t *self )
 	self->clipmask = CONTENTS_BODY;
 	if ( !(self->spawnflags&16) || G_TestEntityPosition( self ) == NULL )
 	{
-		if (self->model && strncmp(self->model, "*", 1) == 0)
-			trap->SetBrushModel( (sharedEntity_t *)self, self->model );
-		else if (self->model)
-		{ // zyk: md3 model
-			self->s.modelindex = G_ModelIndex( self->model );
-
-			// zyk: is a solid model
-			if (self->spawnflags & 1024)
-				self->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-			// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-			VectorCopy( self->s.angles2, self->r.currentAngles );
-			VectorCopy( self->s.angles2, self->s.apos.trBase );
-		}
+		zyk_set_brush_model( self );
 
 		InitMover( self );
 		VectorCopy( self->s.origin, self->s.pos.trBase );
@@ -3323,20 +3180,7 @@ teamuser - if 1, team 2 can't use this. If 2, team 1 can't use this.
 
 void SP_func_usable( gentity_t *self )
 {
-	if (self->model && strncmp(self->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)self, self->model );
-	else if (self->model)
-	{ // zyk: md3 model
-		self->s.modelindex = G_ModelIndex( self->model );
-
-		// zyk: is a solid model
-		if (self->spawnflags & 1024)
-			self->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( self->s.angles2, self->r.currentAngles );
-		VectorCopy( self->s.angles2, self->s.apos.trBase );
-	}
+	zyk_set_brush_model( self );
 
 	InitMover( self );
 	VectorCopy( self->s.origin, self->s.pos.trBase );
@@ -3453,20 +3297,7 @@ START_OFF - the wall will not be there
 */
 void SP_func_wall( gentity_t *ent )
 {
-	if (ent->model && strncmp(ent->model, "*", 1) == 0)
-		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
-	else if (ent->model)
-	{ // zyk: md3 model
-		ent->s.modelindex = G_ModelIndex( ent->model );
-
-		// zyk: is a solid model
-		if (ent->spawnflags & 1024)
-			ent->r.contents = CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
-
-		// zyk: setting angles so if it is a md3 model (entity system) it will rotate it with these angles
-		VectorCopy( ent->s.angles2, ent->r.currentAngles );
-		VectorCopy( ent->s.angles2, ent->s.apos.trBase );
-	}
+	zyk_set_brush_model( ent );
 
 	VectorCopy( ent->s.origin, ent->pos1 );
 	VectorCopy( ent->s.origin, ent->pos2 );

@@ -6091,7 +6091,13 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		targ->health = targ->health - take;
 
 		// zyk: training pole. Adds the count and sets the wait to execute the think function
-		if (targ && (targ->spawnflags & 1) && Q_stricmp(targ->classname, "zyk_training_pole") == 0)
+		//
+		// GalaxyRP fix: [Entity System] this identified the pole with a case-insensitive string
+		// compare against its classname, on the path every single damage event in the game takes.
+		// spawnflag 1 filtered some of it out, but that flag is common. The pole is the only entity
+		// whose think is zyk_training_pole_damage, so compare the pointer instead -- same entities
+		// match, at the cost of one comparison rather than a string walk.
+		if (targ && (targ->spawnflags & 1) && targ->think == zyk_training_pole_damage)
 		{
 			targ->count += take;
 			

@@ -31,7 +31,12 @@ void InitTrigger( gentity_t *self ) {
 		G_SetMovedir (self->s.angles, self->movedir);
 
 	if (self->model) // zyk: added this condition
-		trap->SetBrushModel( (sharedEntity_t *)self, self->model );
+	{
+		// GalaxyRP fix: [Entity System] an unvalidated "*N" here reaches CM_InlineModel() and
+		// Com_Error(ERR_DROP)s the server -- see zyk_brush_model_allowed() in g_spawn.c.
+		if (zyk_brush_model_allowed(self, self->model) == qtrue)
+			trap->SetBrushModel( (sharedEntity_t *)self, self->model );
+	}
 	else // zyk: if no model is set, show message in server console
 		Com_Printf( S_COLOR_RED"ERROR: trigger %s at %s has no brush model specified\n", self->targetname, vtos(self->s.origin) );
 
@@ -906,7 +911,13 @@ void SP_trigger_always (gentity_t *ent) {
 	// we must have some delay to make sure our use targets are present
 
 	// zyk: added a wait time so it will be possible to save it in entity file (before it gets removed)
-	if (ent->spawnflags & 1024)
+	// GalaxyRP fix: [Entity System] the 300ms below is not cosmetic -- the comment above says why it
+	// exists, and trigger_always_think() fires G_UseTargets and then frees itself, so a trigger that
+	// goes off before the rest of the map has spawned finds no targets and is gone. spawnflag 1024
+	// takes the delay from "count" instead, to hold the trigger alive long enough for /entsave to
+	// capture it, but nothing stopped count being 0 or negative, which fired it a frame after spawn
+	// -- sooner than vanilla, not later. Treat 300 as the floor it already was.
+	if (ent->spawnflags & 1024 && ent->count > 300)
 		ent->nextthink = level.time + ent->count;
 	else
 		ent->nextthink = level.time + 300;
@@ -1999,6 +2010,21 @@ target - target this at func_rotating asteroids
 */
 void SP_trigger_asteroid_field(gentity_t *self)
 {
+	// GalaxyRP fix: [Entity System] this was the one SetBrushModel call with no model test at all,
+	// so "/entadd trigger_asteroid_field" with no model reached SV_SetBrushModel's own
+	// Com_Error(ERR_DROP, "SV_SetBrushModel: NULL") and dropped the server. It now refuses the same
+	// two ways every other site does -- see zyk_brush_model_allowed() in g_spawn.c.
+	if (!self->model || zyk_brush_model_allowed(self, self->model) == qfalse)
+	{
+		if (!self->model)
+			Com_Printf( S_COLOR_RED"ERROR: trigger_asteroid_field at %s has no brush model specified\n", vtos(self->s.origin) );
+
+		self->think = G_FreeEntity;
+		self->nextthink = level.time + FRAMETIME;
+
+		return;
+	}
+
 	trap->SetBrushModel( (sharedEntity_t *)self, self->model );
 	self->r.contents = 0;
 
