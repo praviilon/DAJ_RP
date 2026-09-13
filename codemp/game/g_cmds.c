@@ -2987,6 +2987,55 @@ void zyk_apply_character_loadout( gentity_t *ent )
 	}
 }
 
+// GalaxyRP: [Account] does this account command still have to kill the player to take effect?
+//
+// /login, /new, /char new, /char use and /logout have always applied the new state synchronously and
+// then forced a respawn, the respawn being belt-and-braces rather than load-bearing: the account
+// paths restore the character's saved ammo inline, and zyk_apply_character_loadout() above finishes
+// the jetpack and the held weapon, so nothing is left for ClientSpawn() to do that has not already
+// been done. What the respawn really buys is the anti-exploit half -- it stops a player rerolling
+// their character mid-fight and walking away from it unscathed.
+//
+// rp_seamlesslogin lets a server keep that guarantee only where it matters. At 0 (the default) every
+// one of those commands forces the respawn exactly as before. At 1 they apply in place, and the
+// respawn is forced only while the player is duelling, using the same two tests saber_switch_allowed()
+// and force_switch_allowed() already apply to /updatesaber and /updateforce: a private duel, or a live
+// Duel Tournament match.
+//
+// Spectators are excluded either way -- G_Kill() on a spectator does nothing useful, and the existing
+// call sites already gated on it.
+extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+qboolean zyk_relog_kill_required( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return qfalse;
+
+	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR)
+		return qfalse;
+
+	// anything but a positive value means "always respawn", so a mistyped cvar fails safe
+	if (rp_seamlesslogin.integer <= 0)
+		return qtrue;
+
+	if (ent->client->ps.duelInProgress == qtrue)
+		return qtrue;
+
+	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
+		return qtrue;
+
+	return qfalse;
+}
+
+// GalaxyRP: [Account] schedule the respawn zyk_relog_kill_required() asks for. Deferred rather than
+// immediate because G_Kill() in the same frame as a model change races the client's asynchronous
+// Ghoul2 reload and renders as a T-pose -- see pending_relog_kill_time's declaration in g_local.h.
+// ClientThink_real() in g_active.c fires the actual kill once the buffer elapses.
+void zyk_schedule_relog_kill( gentity_t *ent )
+{
+	if (zyk_relog_kill_required(ent) == qtrue)
+		ent->client->pers.pending_relog_kill_time = level.time + 300;
+}
+
 // GalaxyRP (Alex): [Database] UPDATE This method updated a weapons table row with information contained within the entity with which it's called.
 void update_weapons_table_row_with_current_values(gentity_t* ent) {
 
@@ -3717,13 +3766,12 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
 	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
 		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", ent->team));
-
-		// GalaxyRP fix: [Model] don't call G_Kill() in the same frame as the set_model() call above --
-		// see pending_relog_kill_time's declaration in g_local.h for why (T-pose race with the client's
-		// asynchronous model/animation reload). ClientThink_real() in g_active.c fires the actual kill
-		// once this buffer elapses.
-		ent->client->pers.pending_relog_kill_time = level.time + 300;
 	}
+
+	// GalaxyRP: [Account] whether this still forces a respawn now depends on rp_seamlesslogin --
+	// see zyk_relog_kill_required(). The spectator test the print above keeps is part of that check
+	// too, so a spectator is never scheduled either way.
+	zyk_schedule_relog_kill(ent);
 
 	// GalaxyRP (Alex): [Database] Assign the player the info from Accounts table.
 	update_accounts_table_row_with_default_char(ent, character_name, db, zErrMsg, rc, stmt);
@@ -4863,13 +4911,9 @@ void Cmd_Login_F(gentity_t * ent)
 	// /new and /char -- see zyk_apply_character_loadout().
 	zyk_apply_character_loadout(ent);
 
-	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
-		// GalaxyRP fix: [Model] don't call G_Kill() in the same frame as the model change performed by
-		// select_account_and_default_character_data() above -- see pending_relog_kill_time's declaration
-		// in g_local.h for why (T-pose race with the client's asynchronous model/animation reload).
-		// ClientThink_real() in g_active.c fires the actual kill once this buffer elapses.
-		ent->client->pers.pending_relog_kill_time = level.time + 300;
-	}
+	// GalaxyRP: [Account] same as select_player_character() above -- rp_seamlesslogin decides whether
+	// this still forces a respawn. See zyk_relog_kill_required().
+	zyk_schedule_relog_kill(ent);
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2You have sucessfully logged in.\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2You have sucessfully logged in.\n\"");
@@ -10242,6 +10286,13 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2You have sucessfully logged out.\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2You have sucessfully logged out.\n\"");
+
+	// GalaxyRP: [Account] /logout was the one command in this family that never forced a respawn, so a
+	// player could shed an RPG character's stats mid-fight with no cost at all -- the exact exploit the
+	// respawn exists to close everywhere else. It is scheduled on the same terms as the others now:
+	// always at rp_seamlesslogin 0, and only while duelling at 1. Everything above has already put the
+	// player back to the logged-out baseline synchronously, so the respawn changes nothing on its own.
+	zyk_schedule_relog_kill(ent);
 }
 
 // GalaxyRP fix: [Dead Code] zyk_get_settings_values() removed -- it built a "-"-delimited status

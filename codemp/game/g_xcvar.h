@@ -400,6 +400,12 @@ XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CV
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_pluginRequired,					"1",	RP_CVU_pluginRequired,	CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( rp_loginRequired,					"0",	NULL,					CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
+// GalaxyRP: [Account] 0 (default) -- /login, /new, /char new, /char use and /logout always force a
+// respawn, the behaviour this mod has always had. 1 -- they apply in place and only force the
+// respawn when the player is in a private duel or a live Duel Tournament match, which is the same
+// restriction /updatesaber and /updateforce already use. Any value above 0 counts as on; a
+// negative value behaves like 0, so no validator is needed.
+XCVAR_DEF( rp_seamlesslogin,					"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_downedTimer/RP_CVU_downedInvulnerabilityTimer (g_cvar.c) clamp
 // a negative value back to 0 -- see RP_ClampNonNegativeCvar's comment there for why.
 XCVAR_DEF( rp_downed_timer,						"30",	RP_CVU_downedTimer,	CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
