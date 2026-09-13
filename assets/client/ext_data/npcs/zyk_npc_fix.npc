@@ -81,7 +81,6 @@ Ragnos
 {
         playerModel     old_marka_ragnos
         rank		captain
-	weapon	WP_SCEPTER
         weapon  WP_SABER
         saber		sith_sword
         saberStyle      6
