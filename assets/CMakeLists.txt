@@ -20,28 +20,29 @@ endforeach()
 set(RPVersion "${RPVersionMajor}.${RPVersionMinor}.${RPVersionBugfix}")
 message(STATUS "GalaxyRP version is ${RPVersion}")
 
-# GalaxyRP fix: [packaging] assets/server carries a play/host launcher pair for every OS this mod
-# supports (galaxyrp_play/host.bat for Windows, .sh for Linux, .command for macOS), committed
-# side-by-side so they're easy to find and maintain together -- but a given build should only ever
-# ship the 2 scripts for its OWN target platform, not all 6. CMAKE_SYSTEM_NAME already reflects the
-# right platform for every build that matters here (native on each CI runner; explicitly set by
-# both Linux cross-toolchain files under cmake/Toolchains/) with no extra flag needed. Both places
-# below that copy assets/server content (the POST_BUILD dev-build copy and the install() for
-# packaging/CI) drop the other platforms' scripts using this same list.
+# GalaxyRP fix: [packaging] assets/server carries a play/host launcher set for every OS this mod
+# supports (galaxyrp_play/host/host_autorestart.bat for Windows, .sh for Linux, .command for
+# macOS), committed side-by-side so they're easy to find and maintain together -- but a given
+# build should only ever ship the 3 scripts for its OWN target platform, not all 9.
+# CMAKE_SYSTEM_NAME already reflects the right platform for every build that matters here (native
+# on each CI runner; explicitly set by both Linux cross-toolchain files under cmake/Toolchains/)
+# with no extra flag needed. Both places below that copy assets/server content (the POST_BUILD
+# dev-build copy and the install() for packaging/CI) drop the other platforms' scripts using this
+# same list.
 set(GalaxyRPAllLauncherFiles
-	galaxyrp_play.bat galaxyrp_host.bat
-	galaxyrp_play.sh galaxyrp_host.sh
-	galaxyrp_play.command galaxyrp_host.command)
+	galaxyrp_play.bat galaxyrp_host.bat galaxyrp_host_autorestart.bat
+	galaxyrp_play.sh galaxyrp_host.sh galaxyrp_host_autorestart.sh
+	galaxyrp_play.command galaxyrp_host.command galaxyrp_host_autorestart.command)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-	set(GalaxyRPLauncherFiles galaxyrp_play.bat galaxyrp_host.bat)
+	set(GalaxyRPLauncherFiles galaxyrp_play.bat galaxyrp_host.bat galaxyrp_host_autorestart.bat)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	set(GalaxyRPLauncherFiles galaxyrp_play.command galaxyrp_host.command)
+	set(GalaxyRPLauncherFiles galaxyrp_play.command galaxyrp_host.command galaxyrp_host_autorestart.command)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	set(GalaxyRPLauncherFiles galaxyrp_play.sh galaxyrp_host.sh)
+	set(GalaxyRPLauncherFiles galaxyrp_play.sh galaxyrp_host.sh galaxyrp_host_autorestart.sh)
 else()
 	message(WARNING "GalaxyRP: unrecognized CMAKE_SYSTEM_NAME '${CMAKE_SYSTEM_NAME}' -- shipping "
 		"every platform's launcher script since it's unclear which one applies. Set "
-		"GalaxyRPLauncherFiles explicitly (e.g. -DGalaxyRPLauncherFiles=galaxyrp_play.sh;galaxyrp_host.sh) "
+		"GalaxyRPLauncherFiles explicitly (e.g. -DGalaxyRPLauncherFiles=galaxyrp_play.sh;galaxyrp_host.sh;galaxyrp_host_autorestart.sh) "
 		"to fix this.")
 	set(GalaxyRPLauncherFiles ${GalaxyRPAllLauncherFiles})
 endif()
