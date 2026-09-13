@@ -1083,6 +1083,15 @@ void zyk_spawn_entity(gentity_t *ent) {
 }
 
 // zyk: function to set an entity field used by Entity System
+//
+// GalaxyRP fix: [Entity System] this had no bounds check of any kind. level.zyk_spawn_strings rows are
+// [ZYK_MAX_SPAWN_STRING_SLOTS] pointers, two per key, and every unrecognised key appended another pair
+// -- so the 65th distinct key on one entity wrote past the end of that entity's row and into the next
+// entity's, silently corrupting a different entity's spawn vars. It is reachable one key at a time
+// through /entedit, which needs no long command line to get there. The same count then drives
+// zyk_main_spawn_entity()'s copy into level.spawnVars[MAX_SPAWN_VARS], so the overrun continued there.
+// The row holds exactly MAX_SPAWN_VARS pairs, so one bound covers both: a key that would not fit is
+// refused rather than written, and zyk_spawn_strings_full() lets the commands say so.
 void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 {
 	int i = 0;
@@ -1122,11 +1131,26 @@ void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 	}
 
 	// zyk: a new key. Add it
+	if (i + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS)
+	{ // GalaxyRP fix: [Entity System] no room for another pair -- drop it instead of overrunning the row
+		return;
+	}
+
 	level.zyk_spawn_strings[ent->s.number][i] = G_NewString(key);
 	level.zyk_spawn_strings[ent->s.number][i + 1] = G_NewString(value);
 
 	// zyk: increases the counter
 	level.zyk_spawn_strings_values_count[ent->s.number] += 2;
+}
+
+// GalaxyRP fix: [Entity System] true when this entity cannot take another key/value pair, so /entadd
+// and /entedit can report it rather than appearing to succeed while the pair is dropped.
+qboolean zyk_spawn_strings_full(gentity_t *ent)
+{
+	if (!ent)
+		return qtrue;
+
+	return (level.zyk_spawn_strings_values_count[ent->s.number] + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS) ? qtrue : qfalse;
 }
 
 // zyk: function to spawn entities used by entity system
@@ -1136,7 +1160,11 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	char		*s, *value, *gametypeName;
 	static char *gametypeNames[] = { "ffa", "holocron", "jedimaster", "duel", "powerduel", "single", "team", "siege", "ctf", "cty" };
 
-	while (j < level.zyk_spawn_strings_values_count[ent->s.number]) 
+	// GalaxyRP fix: [Entity System] i was bounded only by the key count, which nothing bounded, so a
+	// row that had been overrun carried straight on into level.spawnVars[MAX_SPAWN_VARS]. The row can
+	// no longer exceed MAX_SPAWN_VARS pairs (see zyk_main_set_entity_field), and this stops at that
+	// same limit regardless, so neither array can be written past its end even if the count is stale.
+	while (j < level.zyk_spawn_strings_values_count[ent->s.number] && i < MAX_SPAWN_VARS)
 	{
 		G_ParseField(level.zyk_spawn_strings[ent->s.number][j], level.zyk_spawn_strings[ent->s.number][j + 1], ent);
 		level.spawnVars[i][0] = G_NewString(level.zyk_spawn_strings[ent->s.number][j]);
@@ -1146,7 +1174,7 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 		j += 2;
 	}
 
-	level.numSpawnVars = level.zyk_spawn_strings_values_count[ent->s.number] / 2;
+	level.numSpawnVars = i;
 
 	// check for "notsingle" flag
 	if (level.gametype == GT_SINGLE_PLAYER) {

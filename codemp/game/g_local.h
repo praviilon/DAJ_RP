@@ -1783,7 +1783,13 @@ typedef struct level_locals_s {
 	vec3_t ent_angles;
 
 	// zyk: used by Entity System to save and load spawnstring of entities
-	char *zyk_spawn_strings[ENTITYNUM_MAX_NORMAL][128];
+	// GalaxyRP fix: [Entity System] the row length was the bare literal 128 here and was never
+	// checked anywhere that writes to it. Named so the bound can be asserted at every write, and
+	// defined as MAX_SPAWN_VARS pairs because that is what it has to be: zyk_main_spawn_entity()
+	// copies one pair per slot into level.spawnVars[MAX_SPAWN_VARS], so the two limits are the same
+	// limit and must move together.
+#define ZYK_MAX_SPAWN_STRING_SLOTS (MAX_SPAWN_VARS * 2)
+	char *zyk_spawn_strings[ENTITYNUM_MAX_NORMAL][ZYK_MAX_SPAWN_STRING_SLOTS];
 
 	// zyk: amount of keys and values stored in this entity
 	int zyk_spawn_strings_values_count[ENTITYNUM_MAX_NORMAL];

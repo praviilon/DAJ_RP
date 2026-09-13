@@ -10047,6 +10047,7 @@ extern void zyk_set_entity_field(gentity_t *ent, char *key, char *value);
 extern void zyk_spawn_entity(gentity_t *ent);
 extern void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value);
 extern void zyk_main_spawn_entity(gentity_t *ent);
+extern qboolean zyk_spawn_strings_full(gentity_t *ent);
 
 // GalaxyRP fix: [Quests] got_all_amulets, zyk_number_of_completed_quests, choose_new_player, and
 // quest_get_new_player used to live here. quest_get_new_player is the sole setter of
@@ -12710,6 +12711,16 @@ void Cmd_RemapDeleteFile_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP fix: [security] arg1 is spliced straight into the GalaxyRP/remaps/<map>/<arg1>.txt
+	// path below with no validation at all, so a value containing "../" escaped the folder. The
+	// matching /entsave, /entload and /entdeletefile paths were fixed this way already and the
+	// remap trio was simply missed; the newer Zyk mod validates all six. Same helper, same rule.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -12757,6 +12768,16 @@ void Cmd_RemapSave_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP fix: [security] arg1 is spliced straight into the GalaxyRP/remaps/<map>/<arg1>.txt
+	// path below with no validation at all, so a value containing "../" escaped the folder. The
+	// matching /entsave, /entload and /entdeletefile paths were fixed this way already and the
+	// remap trio was simply missed; the newer Zyk mod validates all six. Same helper, same rule.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -12765,6 +12786,14 @@ void Cmd_RemapSave_f( gentity_t *ent ) {
 
 	// zyk: saving remaps in the file
 	remap_file = fopen(va("GalaxyRP/remaps/%s/%s.txt",zyk_mapname,arg1),"w");
+
+	// GalaxyRP fix: [stability] the handle was used without being checked, the same gap /entsave had
+	if (!remap_file)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Could not open file %s for writing.\n\"", arg1) );
+		return;
+	}
+
 	for (i = 0; i < zyk_get_remap_count(); i++)
 	{
 		fprintf(remap_file,"%s\n%s\n%f\n",remappedShaders[i].oldShader,remappedShaders[i].newShader,remappedShaders[i].timeOffset);
@@ -12802,6 +12831,16 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP fix: [security] arg1 is spliced straight into the GalaxyRP/remaps/<map>/<arg1>.txt
+	// path below with no validation at all, so a value containing "../" escaped the folder. The
+	// matching /entsave, /entload and /entdeletefile paths were fixed this way already and the
+	// remap trio was simply missed; the newer Zyk mod validates all six. Same helper, same rule.
+	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
 	strcpy(old_shader,"");
 	strcpy(new_shader,"");
 	strcpy(time_offset,"");
@@ -12816,10 +12855,19 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 	remap_file = fopen(va("GalaxyRP/remaps/%s/%s.txt",zyk_mapname,arg1),"r");
 	if (remap_file)
 	{
-		while(fscanf(remap_file,"%s",old_shader) != EOF)
+		// GalaxyRP fix: [security] these were bare "%s" conversions into char[128] buffers, with no
+		// field width -- any token in the file longer than 127 characters overran the buffer, and
+		// nothing bounds a shader name on the way in either, since /remap does not check its
+		// arguments. The width now matches the buffers. The two follow-up reads were also unchecked,
+		// so a file ending mid-record re-used whatever the previous iteration had left in the
+		// buffers and registered a remap built from it; a short record now ends the read instead.
+		while (fscanf(remap_file, "%127s", old_shader) == 1)
 		{
-			fscanf(remap_file,"%s",new_shader);
-			fscanf(remap_file,"%s",time_offset);
+			if (fscanf(remap_file, "%127s", new_shader) != 1)
+				break;
+
+			if (fscanf(remap_file, "%127s", time_offset) != 1)
+				break;
 
 			AddRemap(G_NewString(old_shader), G_NewString(new_shader), atof(time_offset));
 		}
@@ -12892,7 +12940,11 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 	gentity_t *new_ent = NULL;
 	int number_of_args = trap->Argc();
 	int i = 0;
-	char key[64];
+	// GalaxyRP fix: [Entity System] this was char key[64] and was filled with an unbounded
+	// strcpy() from an argument buffer eight times its size, so any key longer than 63 characters
+	// overran it. Widened to the argument width and copied with Q_strncpyz below, so no key a
+	// player can type can overflow it and no legitimate key is truncated.
+	char key[MAX_STRING_CHARS];
 	char arg1[MAX_STRING_CHARS];
 	char arg2[MAX_STRING_CHARS];
 	qboolean has_origin_set = qfalse; // zyk: if player do not pass an origin key, use the one set with /entorigin
@@ -12916,6 +12968,16 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] an entity can hold ZYK_MAX_SPAWN_STRING_SLOTS / 2 key/value pairs
+	// and zyk_main_set_entity_field() now refuses anything past that rather than running off the end
+	// of the row. Refusing here too means a request that cannot fit is reported instead of being
+	// applied in part and reported as a success. The classname set below occupies one of the pairs.
+	if ((1 + ((number_of_args - 2) / 2)) > (ZYK_MAX_SPAWN_STRING_SLOTS / 2))
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"An entity can hold at most %d key/value pairs, classname included.\n\"", ZYK_MAX_SPAWN_STRING_SLOTS / 2) );
+		return;
+	}
+
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
 	// zyk: spawns the new entity
@@ -12933,7 +12995,7 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 			if (i % 2 == 0)
 			{ // zyk: key
 				trap->Argv( i, arg2, sizeof( arg2 ) );
-				strcpy(key, G_NewString(arg2));
+				Q_strncpyz(key, arg2, sizeof(key));
 
 				if (Q_stricmp(key, "origin") == 0)
 				{ // zyk: if origin was passed
@@ -13016,7 +13078,11 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	int number_of_args = trap->Argc();
 	int entity_id = -1;
 	int i = 0;
-	char key[64];
+	// GalaxyRP fix: [Entity System] this was char key[64] and was filled with an unbounded
+	// strcpy() from an argument buffer eight times its size, so any key longer than 63 characters
+	// overran it. Widened to the argument width and copied with Q_strncpyz below, so no key a
+	// player can type can overflow it and no legitimate key is truncated.
+	char key[MAX_STRING_CHARS];
 	char arg1[MAX_STRING_CHARS];
 	char arg2[MAX_STRING_CHARS];
 
@@ -13102,9 +13168,37 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	}
 	else
 	{
+		// GalaxyRP fix: [Entity System] the display branch above has always refused to treat a
+		// reserved slot as a normal entity, but this editing branch had no such guard, so
+		// "/entedit 3 health 100" wrote straight into a connected player's gentity_t through
+		// G_ParseField and then ran zyk_main_spawn_entity() on it. That ends in
+		// "if (!G_CallSpawn(ent)) G_FreeEntity(ent);", and classname "player" has neither an item
+		// nor a spawn function, so G_CallSpawn returned qfalse and the live player's entity was
+		// memset -- taking ent->client with it, which the next ClientThink_real() then dereferenced.
+		// Player entities are not neverFree; only the body queue is. /entremove already refuses
+		// player slots for the same reason, so this refuses the whole reserved range both commands
+		// share, which is the same boundary the display branch above uses.
+		if (entity_id < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity ID %d is a reserved player or body slot and cannot be edited.\n\"", entity_id) );
+			return;
+		}
+
 		if ( number_of_args % 2 != 0)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments, because they are key/value pairs.\n\"") );
+			return;
+		}
+
+		// GalaxyRP fix: [Entity System] see zyk_main_set_entity_field(): a row that is already full
+		// silently dropped the pair rather than reporting it. Every key given here is worst case a
+		// new one, so refuse if they could not all fit. Keys that turn out to already exist are
+		// edited in place and take no extra room, so this only ever refuses early, never wrongly
+		// applies.
+		if (zyk_spawn_strings_full(this_ent) == qtrue ||
+			(level.zyk_spawn_strings_values_count[entity_id] + (number_of_args - 2)) > ZYK_MAX_SPAWN_STRING_SLOTS)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot hold that many key/value pairs (maximum %d).\n\"", entity_id, ZYK_MAX_SPAWN_STRING_SLOTS / 2) );
 			return;
 		}
 
@@ -13115,7 +13209,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			if (i % 2 == 0)
 			{ // zyk: key
 				trap->Argv(i, arg2, sizeof(arg2));
-				strcpy(key, G_NewString(arg2));
+				Q_strncpyz(key, arg2, sizeof(key));
 			}
 			else
 			{ // zyk: value
@@ -13181,6 +13275,15 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	// zyk: saving the entities into the file
 	this_file = fopen(va("GalaxyRP/entities/%s/%s.txt",zyk_mapname,arg1),"w");
 
+	// GalaxyRP fix: [Entity System] the result was never checked, and every line below writes
+	// through it -- a path that cannot be opened (the folder could not be created, the disk is
+	// full or read-only, or the name is simply too long for the filesystem) meant fprintf(NULL).
+	if (!this_file)
+	{
+		trap->SendServerCommand( ent->s.number, va("print \"Could not open file %s for writing.\n\"", arg1) );
+		return;
+	}
+
 	for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
 	{
 		gentity_t *this_ent = &g_entities[i];
@@ -13200,10 +13303,21 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			{ // zyk: break line only if the entity had keys and values to save
 				fprintf(this_file, "\n");
 			}
-		}
-		// GalaxyRP (Alex): NPCs should be saved as NPC spawners instead. So do the conversion.
-		if (strcmp(this_ent->classname, "NPC") == 0) {
-			fprintf(this_file, create_npc_spawner_for_npc(this_ent));
+
+			// GalaxyRP (Alex): NPCs should be saved as NPC spawners instead. So do the conversion.
+			//
+			// GalaxyRP fix: [Entity System] this used to sit outside the inuse test above, so it
+			// also ran for freed and never-used slots -- harmless only because G_FreeEntity leaves
+			// classname as "freed", which is not something to rely on. It is the one block in this
+			// loop that reads the entity, so it belongs inside the guard with the rest.
+			//
+			// GalaxyRP fix: [security] it also passed the built string to fprintf as the FORMAT
+			// argument. That string interpolates ent->NPC_type, so any percent sequence in an NPC
+			// type name was interpreted as a conversion against arguments that were never pushed.
+			// Pass it as data.
+			if (this_ent->client && this_ent->classname && strcmp(this_ent->classname, "NPC") == 0) {
+				fprintf(this_file, "%s", create_npc_spawner_for_npc(this_ent));
+			}
 		}
 	}
 
@@ -13265,7 +13379,12 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 		{
 			gentity_t *target_ent = &g_entities[i];
 
-			if (target_ent)
+			// GalaxyRP fix: [Entity System] the test was "if (target_ent)", which is the address of
+			// a fixed array element and so can never be NULL -- every slot in the range was freed
+			// unconditionally, already-free ones included, each of which ran the whole of
+			// G_FreeEntity() (unlink, ICARUS free, Ghoul2 teardown, the "kls" broadcast) again on a
+			// zeroed entity. Test what was actually meant instead.
+			if (target_ent->inuse)
 				G_FreeEntity( target_ent );
 		}
 
@@ -13334,6 +13453,21 @@ void Cmd_EntDeleteFile_f( gentity_t *ent ) {
 	}
 }
 
+// GalaxyRP fix: [Entity System] both of /entnear's listing loops appended with
+// strcpy(message, va("%s...", message, ...)). va() formats into its own 32000-byte scratch buffer and
+// knows nothing about message[], and the length test came *after* the copy, so by the time the check
+// ran the overrun had already happened. classname was printed with no NULL check as well. One
+// bounded append serves both loops.
+static void zyk_entnear_append(char *message, int message_size, gentity_t *this_ent)
+{
+	char row[RP_LIST_FLUSH_AT];
+
+	Com_sprintf(row, sizeof(row), "\n%d - %s", this_ent->s.number,
+		this_ent->classname ? this_ent->classname : "<none>");
+
+	Q_strcat(message, message_size, row);
+}
+
 /*
 ==================
 Cmd_EntNear_f
@@ -13379,10 +13513,15 @@ void Cmd_EntNear_f( gentity_t *ent ) {
 
 		if (this_ent && ent != this_ent && this_ent->s.number >= (MAX_CLIENTS + BODY_QUEUE_SIZE) && this_ent->inuse == qtrue)
 		{
-			strcpy(message,va("%s\n%d - %s",message, this_ent->s.number,this_ent->classname));
+			zyk_entnear_append(message, sizeof(message), this_ent);
 		}
 
-		if (strlen(message) > (MAX_STRING_CHARS - 11))
+		// GalaxyRP fix: [Entity System] the cut-off was MAX_STRING_CHARS - 11, i.e. 1013 characters,
+		// and the finished listing is then wrapped in print "...\n" -- about 1023 characters, just
+		// over the 1022 SV_SendServerCommand will carry, so the message this check exists to protect
+		// could still be dropped whole. Cut off at the threshold the other listings in this file use,
+		// which leaves room for the wrapper.
+		if ((int)strlen(message) > RP_LIST_FLUSH_AT)
 		{
 			trap->SendServerCommand(ent->s.number, "print \"Too much info. Decrease the distance argument\n\"");
 			return;
@@ -13408,10 +13547,15 @@ void Cmd_EntNear_f( gentity_t *ent ) {
 
 		if (this_ent && ent != this_ent && already_found == qfalse && this_ent->inuse == qtrue && (int)Distance(ent->client->ps.origin, this_ent->r.currentOrigin) < distance && this_ent->s.eType != ET_MOVER)
 		{ // zyk: do not list mover entities in this old method, they are listed with EntitiesInBox
-			strcpy(message, va("%s\n%d - %s", message, this_ent->s.number, this_ent->classname));
+			zyk_entnear_append(message, sizeof(message), this_ent);
 		}
 
-		if (strlen(message) > (MAX_STRING_CHARS - 11))
+		// GalaxyRP fix: [Entity System] the cut-off was MAX_STRING_CHARS - 11, i.e. 1013 characters,
+		// and the finished listing is then wrapped in print "...\n" -- about 1023 characters, just
+		// over the 1022 SV_SendServerCommand will carry, so the message this check exists to protect
+		// could still be dropped whole. Cut off at the threshold the other listings in this file use,
+		// which leaves room for the wrapper.
+		if ((int)strlen(message) > RP_LIST_FLUSH_AT)
 		{
 			trap->SendServerCommand(ent->s.number, "print \"Too much info. Decrease the distance argument\n\"");
 			return;
@@ -13425,6 +13569,36 @@ void Cmd_EntNear_f( gentity_t *ent ) {
 	}
 
 	trap->SendServerCommand( ent->s.number, va("print \"%s\n\"", message) );
+}
+
+// GalaxyRP fix: [Entity System] /entlist built its listing with sprintf() into a fixed char[1024]
+// and never looked at how much room was left, so a page of entities carrying long
+// classname/targetname/target strings wrote off the end of that stack buffer. (An earlier fix here
+// addressed only the separate problem of message being both destination and source.) It also passed
+// targetname and target to %s with no NULL check -- both are NULL on most entities -- and even when
+// it did stay inside the buffer the finished message could exceed the 1022 characters
+// SV_SendServerCommand will carry, which drops the whole listing silently rather than truncating it.
+//
+// This appends one bounded row at a time, prints a placeholder for a field that is not set, and
+// flushes what it has whenever the next row would not fit.
+static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, int *len, int id, gentity_t *target_ent)
+{
+	char row[RP_LIST_FLUSH_AT];
+
+	Com_sprintf(row, sizeof(row), "\n%d - %s - %s - %s", id,
+		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
+		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
+		(target_ent && target_ent->target) ? target_ent->target : "<none>");
+
+	if ((*len + (int)strlen(row)) > RP_LIST_FLUSH_AT)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^7%s\n\"", message) );
+		message[0] = '\0';
+		*len = 0;
+	}
+
+	Q_strcat(message, message_size, row);
+	*len = (int)strlen(message);
 }
 
 /*
@@ -13463,11 +13637,7 @@ void Cmd_EntList_f( gentity_t *ent ) {
 			if (i >= ((page_number - 1) * 10) && i < (page_number * 10))
 			{ // zyk: this command lists 10 entities per page
 				target_ent = &g_entities[i];
-				// GalaxyRP fix: [Sprintf Overlap] was sprintf(message, "%s\n...", message, ...) --
-				// message was both destination and a %s source argument, which is undefined behavior
-				// (see the matching fix in Cmd_Settings_f above for the full explanation). Fixed the
-				// same way: write to message+len and track the appended length in len.
-				len += sprintf(message + len, "\n%d - %s - %s - %s", i, target_ent->classname, target_ent->targetname, target_ent->target);
+				zyk_entlist_append(ent, message, sizeof(message), &len, i, target_ent);
 			}
 		}
 	}
@@ -13484,8 +13654,7 @@ void Cmd_EntList_f( gentity_t *ent ) {
 				 (target_ent->targetname && strstr(target_ent->targetname, G_NewString(arg1))) ||
 				 (target_ent->target && strstr(target_ent->target, G_NewString(arg1)))))
 			{
-				// GalaxyRP fix: [Sprintf Overlap] same message-overlaps-itself issue as above, same fix.
-				len += sprintf(message + len, "\n%d - %s - %s - %s", i, target_ent->classname, target_ent->targetname, target_ent->target);
+				zyk_entlist_append(ent, message, sizeof(message), &len, i, target_ent);
 				found_entities++;
 			}
 
@@ -13527,9 +13696,13 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		trap->Argv( 1, arg1, sizeof( arg1 ) );
 		entity_id = atoi(arg1);
 
-		if (entity_id >= 0 && entity_id < MAX_CLIENTS)
+		// GalaxyRP fix: [Entity System] this guarded the 32 player slots but not the 8 body-queue
+		// slots above them. Those are neverFree, so G_FreeEntity() bailed out without freeing them --
+		// after having already unlinked the corpse from the world, which is the only thing the
+		// command actually did to them. Refuse the whole reserved range instead, matching /entedit.
+		if (entity_id >= 0 && entity_id < (MAX_CLIENTS + BODY_QUEUE_SIZE))
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Entity ID %d is a player slot and cannot be removed.\n\"",entity_id) );
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity ID %d is a reserved player or body slot and cannot be removed.\n\"",entity_id) );
 			return;
 		}
 
@@ -13551,18 +13724,31 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		trap->Argv( 1, arg1, sizeof( arg1 ) );
 		entity_id = atoi(arg1);
 
-		if (entity_id >= 0 && entity_id < MAX_CLIENTS)
+		// GalaxyRP fix: [Entity System] same reserved-range widening as the single-id path above --
+		// this one mattered more, because a range simply spanning the reserved slots reached them
+		// without either bound naming one.
+		if (entity_id >= 0 && entity_id < (MAX_CLIENTS + BODY_QUEUE_SIZE))
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Entity 1 ID %d is a player slot and cannot be removed.\n\"",entity_id) );
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity 1 ID %d is a reserved player or body slot and cannot be removed.\n\"",entity_id) );
 			return;
 		}
 
 		trap->Argv( 2, arg2, sizeof( arg2 ) );
 		entity_id2 = atoi(arg2);
 
-		if (entity_id2 >= 0 && entity_id2 < MAX_CLIENTS)
+		// GalaxyRP fix: [Entity System] this message printed entity_id, the FIRST argument, so a
+		// rejected second argument was reported with the wrong number.
+		if (entity_id2 >= 0 && entity_id2 < (MAX_CLIENTS + BODY_QUEUE_SIZE))
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Entity 2 ID %d is a player slot and cannot be removed.\n\"",entity_id) );
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity 2 ID %d is a reserved player or body slot and cannot be removed.\n\"",entity_id2) );
+			return;
+		}
+
+		// GalaxyRP fix: [Entity System] nothing checked that the range ran forwards, so a reversed
+		// range matched no entity and still reported "Entities removed".
+		if (entity_id2 < entity_id)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity 2 ID %d must not be lower than Entity 1 ID %d.\n\"",entity_id2,entity_id) );
 			return;
 		}
 
@@ -13615,9 +13801,12 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 {
 	gentity_t* new_ent = NULL;
 
-	if (!(ent->client->pers.bitvalue & (1 << ADM_ENTITYSYSTEM)))
-	{ // zyk: admin command
-		trap->SendServerCommand(ent - g_entities, "print \"You don't have this admin command.\n\"");
+	// GalaxyRP fix: [Entity System] this was the one Entity System command still testing the admin
+	// bit by hand instead of going through check_admin_command(). The two are equivalent in what
+	// they allow -- only the refusal message differs -- so this changes no permission, it just makes
+	// the refusal name the admin command needed, the way the other thirteen do.
+	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
 		return;
 	}
 
@@ -13640,27 +13829,37 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 
 }
 
+// GalaxyRP fix: [Entity System] this dereferenced ent->classname three times with no NULL check
+// and no inuse check, and its caller walked the entity array from index 0 -- straight through the
+// 32 client slots. G_InitGame memsets g_entities, and a client slot only gets a classname when
+// somebody connects to it, so every unconnected slot holds a NULL classname and the first strstr()
+// read it. That made /removepickups crash the server on any server that was not completely full,
+// which is to say on essentially every server.
+//
+// The match also went from strstr() to a prefix test. These are classname families -- weapon_*,
+// ammo_*, item_* -- and a substring match also caught anything that merely contained one of them
+// (func_item_crate and the like), which is not what the command claims to remove.
+static qboolean zyk_classname_has_prefix(const char *classname, const char *prefix) {
+	return (Q_strncmp(classname, prefix, strlen(prefix)) == 0) ? qtrue : qfalse;
+}
+
 qboolean is_entity_a_pickup(gentity_t* ent) {
-	char* output = NULL;
+	if (!ent || !ent->inuse || !ent->classname) {
+		return qfalse;
+	}
 
 	// GalaxyRP (Alex): [Entity System] Remove all weapon pickups
-	output = strstr(ent->classname, "weapon_");
-
-	if (output) {
+	if (zyk_classname_has_prefix(ent->classname, "weapon_") == qtrue) {
 		return qtrue;
 	}
 
 	// GalaxyRP (Alex): [Entity System] Remove all ammo pickups
-	output = strstr(ent->classname, "ammo_");
-
-	if (output) {
+	if (zyk_classname_has_prefix(ent->classname, "ammo_") == qtrue) {
 		return qtrue;
 	}
 
 	// GalaxyRP (Alex): [Entity System] Remove all item pickups
-	output = strstr(ent->classname, "item_");
-
-	if (output) {
+	if (zyk_classname_has_prefix(ent->classname, "item_") == qtrue) {
 		return qtrue;
 	}
 
@@ -13675,16 +13874,22 @@ void Cmd_RemovePickups_f(gentity_t* ent) {
 	}
 
 	gentity_t* target_ent;
+	int removed = 0;
 
-	for (int i = 0; i < level.num_entities; i++)
+	// GalaxyRP fix: [Entity System] this started at 0, so it walked the player and body-queue slots
+	// before reaching any real entity. Start where every other Entity System loop in this file
+	// starts. is_entity_a_pickup() is NULL- and inuse-safe now as well, so neither guard stands
+	// alone.
+	for (int i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
 	{
 		target_ent = &g_entities[i];
 
 		if (is_entity_a_pickup(target_ent) == qtrue) {
 			G_FreeEntity(target_ent);
+			removed++;
 		}
 	}
-	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed.\n\""));
+	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed (%d).\n\"", removed));
 	
 	return;
 }
@@ -15172,7 +15377,6 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/remapload <file name>: ^7Loads remaps from preset file.\n\
 ^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons).\n\
-^3/shaderlist: ^7Lists all map shaders.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" " );
 }

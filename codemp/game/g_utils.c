@@ -1084,8 +1084,6 @@ void G_FreeEntity( gentity_t *ed ) {
 		level.chaos_portal_id = -1;
 	}
 
-	level.zyk_spawn_strings_values_count[ed->s.number] = 0;
-
 	trap->UnlinkEntity ((sharedEntity_t *)ed);		// unlink from world
 
 	trap->ICARUS_FreeEnt( (sharedEntity_t *)ed );	//ICARUS information must be added after this point
@@ -1093,6 +1091,15 @@ void G_FreeEntity( gentity_t *ed ) {
 	if ( ed->neverFree ) {
 		return;
 	}
+
+	// GalaxyRP fix: [Entity System] this reset used to sit above the neverFree bail, so an entity that
+	// is never actually freed -- the body queue is the only one in practice -- lost its Entity System
+	// key/value record anyway. /entremove on such an entity left it alive on the map but stripped of
+	// its record, after which /entedit showed nothing for it and /entsave silently wrote it out empty,
+	// with no error either way. Everything above this point is upstream OpenJK and keeps its order;
+	// only this line, which is the mod's own addition, moves below the bail so the record survives
+	// exactly as long as the entity does.
+	level.zyk_spawn_strings_values_count[ed->s.number] = 0;
 
 	//rww - this may seem a bit hackish, but unfortunately we have no access
 	//to anything ghoul2-related on the server and thus must send a message

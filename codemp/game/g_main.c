@@ -9341,6 +9341,11 @@ void G_RunFrame( int levelTime ) {
 	if (level.load_entities_timer != 0 && level.load_entities_timer < level.time)
 	{ // zyk: loading entities from the file specified in entload command, or the default file
 		char content[2048];
+		// GalaxyRP fix: [Entity System] one bounded slot per possible key/value pair, each as wide
+		// as the line buffer so nothing a well-formed line can carry gets truncated. static rather
+		// than automatic because the pair of arrays is far too large to put on G_RunFrame's stack.
+		static char zyk_keys[ZYK_MAX_SPAWN_STRING_SLOTS / 2][sizeof(content)];
+		static char zyk_values[ZYK_MAX_SPAWN_STRING_SLOTS / 2][sizeof(content)];
 		FILE *this_file = NULL;
 
 		strcpy(content,"");
@@ -9350,52 +9355,132 @@ void G_RunFrame( int levelTime ) {
 
 		if (this_file != NULL)
 		{
+			// GalaxyRP fix: [Entity System] this parser trusted the file completely. The two inner loops
+			// copied into char[256] buffers with no bound on the write index and no bound on the read index
+			// either, so a key or value longer than the buffer smashed the stack, and a line containing no
+			// ';' at all ran straight off the end of content[] and kept writing until it happened to find a
+			// ';' somewhere in unrelated stack memory. Both are reachable from an ordinary preset: keys and
+			// values come from /entadd and /entedit arguments, which run to MAX_STRING_CHARS, and any file
+			// can be hand-edited or truncated. It also called G_Spawn() once per line before looking at the
+			// line, so a file of blank lines consumed the entity pool until G_Spawn's "no free entities"
+			// dropped the server.
+			//
+			// The line is now parsed into bounded buffers first and an entity is taken only once the line is
+			// known to be well formed. The buffers are as wide as content[] so nothing a valid preset can
+			// hold is truncated -- a token can never be longer than the line it came from -- and a line that
+			// is malformed, over-long or over-full is logged and skipped instead of being half-applied.
 			while (fgets(content,sizeof(content),this_file) != NULL)
 			{
-				gentity_t *new_ent = G_Spawn();
+				int j = 0; // zyk: the current key/value being used
+				int k = 0; // zyk: current spawn string position
+				int content_len = 0;
+				qboolean line_ok = qtrue;
+				qboolean line_full = qfalse;
+				gentity_t *new_ent = NULL;
 
-				if (content[strlen(content) - 1] == '\n')
-					content[strlen(content) - 1] = '\0';
+				content_len = strlen(content);
+
+				if (content_len > 0 && content[content_len - 1] == '\n')
+				{
+					content[content_len - 1] = '\0';
+					content_len--;
+				}
+				else if (content_len == (int)(sizeof(content) - 1))
+				{ // zyk: no newline and the buffer is full, so fgets split this line -- it is not usable
+					G_LogPrintf("entity file %s: line longer than %d characters, skipped\n", level.load_entities_file, (int)sizeof(content) - 1);
+
+					// zyk: swallow the rest of the split line so its tail is not read as a line of its own
+					while (fgets(content, sizeof(content), this_file) != NULL && strchr(content, '\n') == NULL)
+					{
+					}
+
+					continue;
+				}
+
+				if (content_len == 0)
+				{ // zyk: blank line, nothing to spawn
+					continue;
+				}
+
+				// zyk: parse the whole line into the scratch buffers before allocating anything
+				while (k < content_len && line_ok == qtrue)
+				{
+					int l = 0;
+
+					if (j + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS)
+					{ // zyk: more key/value pairs than one entity can hold
+						line_ok = qfalse;
+						line_full = qtrue;
+						break;
+					}
+
+					// zyk: getting the key
+					while (k < content_len && content[k] != ';' && l < (int)(sizeof(zyk_keys[0]) - 1))
+					{
+						zyk_keys[j / 2][l] = content[k];
+
+						l++;
+						k++;
+					}
+					zyk_keys[j / 2][l] = '\0';
+
+					if (k >= content_len || content[k] != ';')
+					{ // zyk: key was not terminated -- malformed line
+						line_ok = qfalse;
+						break;
+					}
+					k++;
+
+					// zyk: getting the value
+					l = 0;
+					while (k < content_len && content[k] != ';' && l < (int)(sizeof(zyk_values[0]) - 1))
+					{
+						zyk_values[j / 2][l] = content[k];
+
+						l++;
+						k++;
+					}
+					zyk_values[j / 2][l] = '\0';
+
+					if (k >= content_len || content[k] != ';')
+					{ // zyk: value was not terminated -- malformed line
+						line_ok = qfalse;
+						break;
+					}
+					k++;
+
+					j += 2;
+				}
+
+				if (line_ok == qfalse)
+				{
+					if (line_full == qtrue)
+						G_LogPrintf("entity file %s: more than %d key/value pairs on one line, skipped\n", level.load_entities_file, ZYK_MAX_SPAWN_STRING_SLOTS / 2);
+					else
+						G_LogPrintf("entity file %s: malformed line, skipped\n", level.load_entities_file);
+
+					continue;
+				}
+
+				if (j == 0)
+				{ // zyk: nothing on this line to spawn
+					continue;
+				}
+
+				// zyk: the line is good, so now take an entity for it
+				new_ent = G_Spawn();
 
 				if (new_ent)
 				{
-					int j = 0; // zyk: the current key/value being used
-					int k = 0; // zyk: current spawn string position
+					int m = 0;
 
-					while (content[k] != '\0')
+					while (m < j)
 					{
-						int l = 0;
-						char zyk_key[256];
-						char zyk_value[256];
-
-						// zyk: getting the key
-						while (content[k] != ';')
-						{ 
-							zyk_key[l] = content[k];
-
-							l++;
-							k++;
-						}
-						zyk_key[l] = '\0';
-						k++;
-
-						// zyk: getting the value
-						l = 0;
-						while (content[k] != ';')
-						{
-							zyk_value[l] = content[k];
-
-							l++;
-							k++;
-						}
-						zyk_value[l] = '\0';
-						k++;
-
 						// zyk: copying the key and value to the spawn string array
-						level.zyk_spawn_strings[new_ent->s.number][j] = G_NewString(zyk_key);
-						level.zyk_spawn_strings[new_ent->s.number][j + 1] = G_NewString(zyk_value);
+						level.zyk_spawn_strings[new_ent->s.number][m] = G_NewString(zyk_keys[m / 2]);
+						level.zyk_spawn_strings[new_ent->s.number][m + 1] = G_NewString(zyk_values[m / 2]);
 
-						j += 2;
+						m += 2;
 					}
 
 					level.zyk_spawn_strings_values_count[new_ent->s.number] = j;
