@@ -9319,7 +9319,24 @@ Cmd_Roll_f
 ==================
 */
 
-static void zyk_roll(gentity_t *ent, int distance)
+// GalaxyRP fix: [Dice] the usage text is built from the command the player actually ran. Both
+// /roll and /rollall (and /flipcoin and /flipcoinall) are thin wrappers around one shared helper
+// that differ only in broadcast distance, and the helper used to print a hardcoded "/roll" or
+// "/flipcoin" -- so getting the arguments wrong on /rollall answered with usage for a different
+// command. cmdName is passed in by the wrapper rather than read from Argv(0) so the message always
+// shows the canonical lowercase spelling, whatever casing the player typed.
+//
+// Hoisted out of zyk_roll() because it had the same 130-character string written out twice, once
+// for the argument-count check and once for the parse failure; keeping one copy is what stops the
+// two from drifting apart, which is the same class of mistake being fixed here.
+static void zyk_dice_usage(gentity_t *ent, const char *cmdName)
+{
+	trap->SendServerCommand(ent - g_entities,
+		va("print \"^1Command Usage: ^2/%s ^3<faces> ^1or ^2/%s ^3<dice>d<faces>^1.\n^1Examples: ^2/%s ^320^1, ^2/%s ^32d6\n\"",
+			cmdName, cmdName, cmdName, cmdName));
+}
+
+static void zyk_roll(gentity_t *ent, int distance, const char *cmdName)
 {
 	char arg1[MAX_STRING_CHARS] = { 0 };
 	char results[MAX_STRING_CHARS] = { 0 };
@@ -9340,7 +9357,7 @@ static void zyk_roll(gentity_t *ent, int distance)
 
 	if (trap->Argc() != 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<faces> ^1or ^2/roll ^3<dice>d<faces>^1.\n^1Examples: ^2/roll ^320^1, ^2/roll ^32d6\n\"");
+		zyk_dice_usage(ent, cmdName);
 		return;
 	}
 
@@ -9348,7 +9365,7 @@ static void zyk_roll(gentity_t *ent, int distance)
 
 	if (zyk_parse_dice_arg(arg1, &number_of_dice, &max_value) == qfalse)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/roll ^3<faces> ^1or ^2/roll ^3<dice>d<faces>^1.\n^1Examples: ^2/roll ^320^1, ^2/roll ^32d6\n\"");
+		zyk_dice_usage(ent, cmdName);
 		return;
 	}
 
@@ -9395,11 +9412,11 @@ static void zyk_roll(gentity_t *ent, int distance)
 }
 
 void Cmd_Roll_f(gentity_t *ent) {
-	zyk_roll(ent, ACTION_DISTANCE);
+	zyk_roll(ent, ACTION_DISTANCE, "roll");
 }
 
 void Cmd_RollAll_f(gentity_t *ent) {
-	zyk_roll(ent, BROADCAST_DISTANCE);
+	zyk_roll(ent, BROADCAST_DISTANCE, "rollall");
 }
 
 /*
@@ -9408,7 +9425,7 @@ Cmd_FlipCoin_f
 ==================
 */
 
-static void zyk_flip_coin(gentity_t *ent, int distance)
+static void zyk_flip_coin(gentity_t *ent, int distance, const char *cmdName)
 {
 	char message[MAX_STRING_CHARS] = { 0 };
 
@@ -9422,7 +9439,7 @@ static void zyk_flip_coin(gentity_t *ent, int distance)
 
 	if (trap->Argc() != 1)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^1Command Usage: ^2/flipcoin\n\"");
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Command Usage: ^2/%s\n\"", cmdName));
 		return;
 	}
 
@@ -9438,11 +9455,11 @@ static void zyk_flip_coin(gentity_t *ent, int distance)
 }
 
 void Cmd_FlipCoin_f(gentity_t *ent) {
-	zyk_flip_coin(ent, ACTION_DISTANCE);
+	zyk_flip_coin(ent, ACTION_DISTANCE, "flipcoin");
 }
 
 void Cmd_FlipCoinAll_f(gentity_t *ent) {
-	zyk_flip_coin(ent, BROADCAST_DISTANCE);
+	zyk_flip_coin(ent, BROADCAST_DISTANCE, "flipcoinall");
 }
 
 // GalaxyRP fix: [Classes] validate_rpg_class() used to live here (already a stub returning qtrue,
@@ -10340,9 +10357,34 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/allychat <text>: ^7Sends message to your allies. Any distance, every gametype.\n\
 ^3/allyremove <player name>: ^7Removes player from allies.\n\
 ^3/allylist: ^7Lists your allies.\n\n\" ");
+				// GalaxyRP: [NPC System] the /npc subcommands were documented only in /adminlist 0, so a
+				// player browsing /list commands had no way to discover them at all. Listed here one per row
+				// (adminlist pairs them two to a line to stay inside its own budget), with /order moved out of
+				// Misc to sit beside them -- it is the other half of the same system. Wording is kept in step
+				// with the ADM_NPC text in Cmd_AdminList_f so a grep finds the two together.
+				//
+				// Its own SendServerCommand call rather than an addition to the Ally block above: that block
+				// has 753 bytes of headroom and this section is about 700, which would leave the pair with
+				// almost none -- and going over SV_SendServerCommand's hard 1022 does not truncate, it
+				// silently drops the whole message.
+				//
+				// The one note under the header carries the access rule for all eight: Cmd_NPC_f is gated on
+				// ADM_NPC, while /order is not gated at all. Stating it once beats repeating an (Admin only)
+				// tag on every row.
+				trap->SendServerCommand(ent - g_entities, "print \"^3--------NPC System--------\n\
+^7The ^3/npc ^7commands require the ^3NPC ^7admin command. See ^3/adminlist^7.\n\
+^3/npc spawn <type> <targetname (optional)>: ^7Spawns an npc.\n\
+^3/npc spawn vehicle <type> <targetname (optional)>: ^7Spawns a vehicle.\n\
+^3/npc kill <targetname or type>: ^7Kills npcs with that targetname or type.\n\
+^3/npc kill all: ^7Kills every npc.\n\
+^3/npc kill team <player/enemy/neutral/free or nonally>: ^7Kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
+^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc you are looking at.\n\
+^3/npc showbounds: ^7Toggles npc bounding boxes.\n\
+^3/npc score <targetname (optional)>: ^7Prints npc scores to the server console.\n\
+^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/roll <faces> ^7or ^3/roll <dice>d<faces>: ^7Rolls 1-10 dice of 2-100 faces. Seen by players near you.\n\
-^3/rollall: ^7Same roll, seen by the whole server. Usable while dead or spectating.\n\
+^3/rollall <faces> ^7or ^3/rollall <dice>d<faces>: ^7Same roll, seen by the whole server. Usable while dead or spectating.\n\
 ^3/flipcoin: ^7Flips a coin. Seen by players near you.\n\
 ^3/flipcoinall: ^7Same flip, seen by the whole server. Usable while dead or spectating.\n\"");
 				// GalaxyRP fix: [Dice] the Misc section is split here for the same reason /use_cloak
@@ -10354,8 +10396,6 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
 ^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
-^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight.\n\
-^7Press ^3Use ^7on a friendly NPC to make it follow you, and again to dismiss it.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\
@@ -10460,7 +10500,13 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 	}
 	else
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"\n^1Account System\n^7Create a new account with ^3/new <login> <password>\n^7where login and password are of your choice.\n\n\"" );
+		// GalaxyRP fix: [Account System] a logged-out player was only told how to create an account,
+		// never how to get back into one they already had -- /login went unmentioned here, which is the
+		// one screen a returning player is most likely to hit first. Both are spelled out now, and the
+		// placeholder is "account name" rather than "login" so it does not read as a second command.
+		trap->SendServerCommand( ent-g_entities, "print \"\n^1Account System\n\
+^7Create a new account with ^3/new <account name> <password> ^7where account name and password are of your choice.\n\
+^7Use ^3/login <account name> <password> ^7if you already have an account.\n\n\"" );
 	}
 }
 
