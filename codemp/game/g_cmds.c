@@ -10080,6 +10080,19 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// trustworthy as "this connection's currently logged-in account's settings, or 0".
 	ent->client->pers.player_settings = 0;
 
+	// GalaxyRP fix: [Account] pers.player_statuses was never cleared here, though /login, /new and
+	// /char all do "player_statuses = 0" as part of loading a character. Nothing live leaked through
+	// it today -- every bit either has an sess.amrpgmode-gated reader or expires on its own -- but
+	// the unique-ability bits (21/22/23) are only ever cleared inside an amrpgmode == 2 branch in
+	// ClientThink_real(), so logging out mid-ability stranded them set for the rest of the map. Clear
+	// the lot, so this connection's status flags mean the same thing on both sides of a logout.
+	//
+	// Nothing is lost by this. Bit 4 (scaled) is cleared by do_scale(ent, 100) just below anyway.
+	// Bit 6 (downed) cannot be set -- this function refuses while downed. Bits 12/13 (admin /give
+	// grants) cannot be set either: Cmd_Give_f refuses logged-in targets. The NPC order bits 18/19
+	// live on the NPCs themselves, not on their leader, so releasing them is not this field's job.
+	ent->client->pers.player_statuses = 0;
+
 	// zyk: initializing mind control attributes used in RPG mode
 	ent->client->pers.being_mind_controlled = -1;
 	ent->client->pers.mind_controlled1_id = -1;
@@ -10095,6 +10108,26 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// the character's actually-saved ModelScale is untouched and gets restored correctly on the next
 	// /login via select_account_and_default_character_data().
 	do_scale(ent, 100);
+
+	// GalaxyRP fix: [Stat Regen/exploit] the three pers fields the health and shield clamp below
+	// depends on. Clamping the live values while leaving these set meant the clamp did not hold: the
+	// GalaxyRP stat-regen block in ClientThink_real() reads pers.max_rpg_health and
+	// pers.max_rpg_shield as its ceilings and 1 + pers.skill_levels[58]/[59] as its rate, so a
+	// logged-out ex-RPG player regenerated back up to their character's caps within seconds. That
+	// block is now gated on sess.loggedin too, but reset the state as well rather than relying on a
+	// single guard -- these fields are read in a dozen places and only this command ends the login
+	// they belong to.
+	//
+	// Safe to zero the skills: save_account() ran at the top of this function, before any of these
+	// resets, and it is a no-op unless sess.amrpgmode == 2 -- which is already 0 by the time we get
+	// here -- so no later save can write these zeroes back over the character's row. /login reloads
+	// them from the database in select_account_and_default_character_data().
+	//
+	// pers.maxHealth deliberately isn't touched: ClientSpawn recomputes it from the handicap on every
+	// spawn before publishing it to STAT_MAX_HEALTH, so it cannot carry an RPG value across.
+	ent->client->pers.max_rpg_health = 100;
+	ent->client->pers.max_rpg_shield = 0;
+	memset(ent->client->pers.skill_levels, 0, sizeof(ent->client->pers.skill_levels));
 
 	// zyk: resetting max hp and shield to 100
 	ent->client->ps.stats[STAT_MAX_HEALTH] = 100;

@@ -1183,8 +1183,22 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		int health_regen_amount = 1 + ent->client->pers.skill_levels[59];
 		int shield_regen_amount = 1 + ent->client->pers.skill_levels[58];
 
+		// GalaxyRP fix: [Stat Regen/exploit] gated on being logged in. Everything this block reads is
+		// RPG state -- the two regen skills set the rate, pers.max_rpg_health and pers.max_rpg_shield
+		// set the ceilings -- but it was the one RPG feature in the tree checking neither
+		// sess.amrpgmode nor sess.loggedin, so it ran for logged-out players too. /logout clamps
+		// health and shield to 100 and sets STAT_MAX_HEALTH to 100; this block then walked both
+		// straight back up to the character's RPG caps at up to 6 a second (12 while meditating,
+		// which ignores rp_allow_passive_regen), leaving a logged-out player at up to 300/300 with
+		// STAT_MAX_HEALTH still reading 100. Respawning did not help: ClientSpawn refreshes
+		// STAT_MAX_HEALTH and health correctly but never touches the two pers caps.
+		//
+		// Gated the same way as RegenerateAmmo() a few lines above, which is the sibling feature and
+		// already used sess.loggedin -- /logout clears it, so the two now agree. The pers fields this
+		// reads are reset on logout as well (Cmd_LogoutAccount_f), so this is belt and braces: either
+		// change alone closes the hole.
 		//GalaxyRP (Alex): [Stat Regen] Never regen while downed or dead.
-		if (ent->health > 0 && !(ent->client->pers.player_statuses & (1 << 6))) {
+		if (ent->client->sess.loggedin == qtrue && ent->health > 0 && !(ent->client->pers.player_statuses & (1 << 6))) {
 			// GalaxyRP fix: [Stat Regen] top up to the maximum, instead of refusing any tick that
 			// would not fit a whole step.
 			//
