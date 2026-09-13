@@ -51,22 +51,39 @@ extern vec3_t gPainPoint;
 
 #define BODY_QUEUE_SIZE		8
 
-// GalaxyRP fix: [Force] this replaces the zyk_max_force_power server cvar, which is gone. It was
-// never safely configurable: fd.forcePower is an 8-bit netfield (see PSF(fd.forcePower) in
-// qcommon/msg.cpp), so any pool above 255 wraps modulo 256 on the client and desyncs prediction
-// from the server -- and because a maxed RPG character's pool is derived from this number, the
-// real ceiling on the cvar was lower still. It also silently set the cost of Force Heal and
-// Shield Heal, and the cgame force HUD hardcodes a full bar at 100 regardless (cg_draw.c), so no
-// value other than the shipped one displayed correctly anyway. Fixed at the value the config has
-// always shipped, so behaviour is unchanged for every server that never touched it.
-#define RP_MAX_FORCE_POWER		200
+// GalaxyRP fix: [Force] these two replace the zyk_max_force_power server cvar, which is gone. It
+// was never safely configurable: fd.forcePower is an 8-bit netfield (see PSF(fd.forcePower) in
+// qcommon/msg.cpp -- it appears in all three playerState tables at that width), so any pool above
+// 255 wraps modulo 256 on the client. It also silently set the cost of Force Heal and Shield Heal,
+// and the cgame force HUD hardcodes a full bar at 100 regardless (cg_draw.c), so no value other
+// than the shipped one displayed correctly anyway.
+//
+// RP_MAX_FORCE_POWER is the ceiling a logged-in character reaches at Force Power skill 5. 250 is
+// the practical maximum and should not be raised further: the netfield tops out at 255, leaving
+// only five units of slack. That slack is never actually used -- every path that adds force
+// (WP_ForcePowerRegenerate, the Absorb and Team Energize grants in w_force.c, Drain, the Healing
+// Crystal tick in g_active.c, the force pickup in g_misc.c) clamps in the same statement or the
+// very next line, inside the same frame, so the value can never be above the maximum at the point
+// a snapshot is built -- but there is no room left for a future path that does not clamp.
+//
+// Note that raising this does not make anyone cast faster. Force regenerates at a flat 1 point per
+// g_forceRegenTime (200ms) whatever the pool size, and the forcePowerNeeded[] costs are fixed
+// absolute numbers, so a bigger pool buys burst capacity and a longer refill (250 points is 50
+// seconds from empty), not a higher sustained rate.
+#define RP_MAX_FORCE_POWER		250
+
+// GalaxyRP: [Force] the pool a player who is not logged in gets, and the ceiling the three clamps
+// in w_force.c hold them to. Logged-out players only ever reach Force level 3, where the dearest
+// thing in forcePowerNeeded[] is Heal and Team Heal at 70, so nothing is priced out of reach at
+// this number -- it costs them burst capacity against a logged-in character, not access.
+#define RP_MAX_FORCE_POWER_LOGGED_OUT	100
 
 // GalaxyRP fix: [Force] a logged-in character's force pool is this fraction of RP_MAX_FORCE_POWER
 // per level of the Force Power skill (skill index 54). It used to divide by 4 while that skill's
 // max level is 5 (see skills[] in g_cmds.c), so a maxed character ended up with 125% of the
-// supposed maximum -- 250 against a documented cap of 200. Dividing by the skill's actual max
-// level makes level 5 land exactly on RP_MAX_FORCE_POWER, matching how set_max_shield() already
-// divides by the Max Shield skill's own max level of 5.
+// supposed maximum. Dividing by the skill's actual max level makes level 5 land exactly on
+// RP_MAX_FORCE_POWER, matching how set_max_shield() already divides by the Max Shield skill's own
+// max level of 5. 250 divides by 5 exactly, so the five steps are round: 50/100/150/200/250.
 #define RP_FORCE_POWER_SKILL_MAX_LEVEL	5
 
 #ifndef INFINITE

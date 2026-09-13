@@ -453,7 +453,7 @@ void WP_SpawnInitForcePowers( gentity_t *ent )
 
 	// zyk: set max force power for non-rpg mode users
 	if (ent->client->sess.amrpgmode < 2)
-		ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER;
+		ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER_LOGGED_OUT;
 
 	ent->client->ps.fd.forcePowerRegenDebounceTime = level.time;
 	ent->client->ps.fd.forceGripEntityNum = ENTITYNUM_NONE;
@@ -677,8 +677,8 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 // was 40 and neither heal could EVER be cast, and at level 2 it was affordable only from a
 // completely full bar. Costing half of the caster's OWN maximum instead means every character gets
 // exactly two heals from a full pool, at every skill level, and nothing is unreachable. Logged-out
-// players are unaffected: their maximum is RP_MAX_FORCE_POWER, so this still comes out at the same
-// 100 it always was.
+// players are unaffected in kind: their cost is likewise half of their own maximum, which is
+// RP_MAX_FORCE_POWER_LOGGED_OUT, so they too get exactly two heals from a full pool.
 //
 // The floor of 1 matters: forcePowerMax is legitimately 0 for a character with no levels in Force
 // Power, and for anyone inside a Sniper Battle (see sniper_battle_prepare in g_main.c). A cost of 0
@@ -696,7 +696,7 @@ static int RP_ForceHealCost( gentity_t *self )
 // instead read it as a DURATION ("if (overrideAmt) duration = overrideAmt;"). Drain and Lightning
 // were given an escape hatch in WP_ForcePowerAvailable() so their duration is never mistaken for a
 // price, but Speed never was -- so Jedi_DodgeEvasion()'s ForceSpeed(self, 500) asked the gate for
-// 500 force. The pool tops out at RP_MAX_FORCE_POWER (200), so that check could never pass and the
+// 500 force. The pool tops out at RP_MAX_FORCE_POWER, so that check could never pass and the
 // force-dodge under g_forceDodge 2 never actually granted Speed, while still arming the shared
 // deactivate lock and starting the looping speed sound.
 //
@@ -983,8 +983,8 @@ int WP_AbsorbConversion(gentity_t *attacked, int atdAbsLevel, gentity_t *attacke
 
 	if (attacked->client->sess.amrpgmode == 2 && attacked->client->ps.fd.forcePower > attacked->client->pers.max_force_power)
 		attacked->client->ps.fd.forcePower = attacked->client->pers.max_force_power;
-	else if (attacked->client->sess.amrpgmode < 2 && attacked->client->ps.fd.forcePower > RP_MAX_FORCE_POWER)
-		attacked->client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
+	else if (attacked->client->sess.amrpgmode < 2 && attacked->client->ps.fd.forcePower > RP_MAX_FORCE_POWER_LOGGED_OUT)
+		attacked->client->ps.fd.forcePower = RP_MAX_FORCE_POWER_LOGGED_OUT;
 
 	//play sound indicating that attack was absorbed
 	if (attacked->client->forcePowerSoundDebounce < level.time)
@@ -1708,8 +1708,8 @@ void ForceTeamForceReplenish( gentity_t *self )
 
 		if (g_entities[pl[i]].client->sess.amrpgmode == 2 && g_entities[pl[i]].client->ps.fd.forcePower > g_entities[pl[i]].client->pers.max_force_power)
 			g_entities[pl[i]].client->ps.fd.forcePower = g_entities[pl[i]].client->pers.max_force_power;
-		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > RP_MAX_FORCE_POWER) // zyk: this is the max force for a logged-out player (RP_MAX_FORCE_POWER, g_local.h)
-			g_entities[pl[i]].client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
+		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > RP_MAX_FORCE_POWER_LOGGED_OUT) // zyk: this is the max force for a logged-out player (RP_MAX_FORCE_POWER_LOGGED_OUT, g_local.h)
+			g_entities[pl[i]].client->ps.fd.forcePower = RP_MAX_FORCE_POWER_LOGGED_OUT;
 
 		//At this point we know we got one, so add him into the collective event client bitflag
 		if (!te)
@@ -2056,8 +2056,8 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 				// zyk: changed the code below so we can use the cvar zyk_FORCE_POWER_MAX instead of hardcoded 100 force power max
 				if (traceEnt->client->sess.amrpgmode == 2 && traceEnt->client->ps.fd.forcePower > traceEnt->client->pers.max_force_power)
 					traceEnt->client->ps.fd.forcePower = traceEnt->client->pers.max_force_power;
-				else if (traceEnt->client->sess.amrpgmode < 2 && traceEnt->client->ps.fd.forcePower > RP_MAX_FORCE_POWER)
-					traceEnt->client->ps.fd.forcePower = RP_MAX_FORCE_POWER;
+				else if (traceEnt->client->sess.amrpgmode < 2 && traceEnt->client->ps.fd.forcePower > RP_MAX_FORCE_POWER_LOGGED_OUT)
+					traceEnt->client->ps.fd.forcePower = RP_MAX_FORCE_POWER_LOGGED_OUT;
 
 				return;
 			}

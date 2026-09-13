@@ -10084,8 +10084,8 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	ent->client->pers.being_mind_controlled = -1;
 	ent->client->pers.mind_controlled1_id = -1;
 
-	// zyk: resetting the forcePowerMax to the logged-out maximum (RP_MAX_FORCE_POWER, g_local.h)
-	ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER;
+	// zyk: resetting the forcePowerMax to the logged-out maximum (RP_MAX_FORCE_POWER_LOGGED_OUT, g_local.h)
+	ent->client->ps.fd.forcePowerMax = RP_MAX_FORCE_POWER_LOGGED_OUT;
 
 	// GalaxyRP fix: [Scale] every other logged-in-only effect here (bitvalue, player_settings, force
 	// powers, health/armor caps, RPG weapons via zyk_remove_guns() below) gets reset to its baseline on
