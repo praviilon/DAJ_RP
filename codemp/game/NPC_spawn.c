@@ -4514,7 +4514,6 @@ void NPC_Spawn_f( gentity_t *ent )
 {
 	char	npc_type[1024];
 	char	targetname[1024];
-	int i = 0;
 	qboolean	isVehicle = qfalse;
 
 	trap->Argv(2, npc_type, 1024);
@@ -4529,100 +4528,20 @@ void NPC_Spawn_f( gentity_t *ent )
 		trap->Argv(3, targetname, 1024);
 	}
 
-	// zyk: guardian npcs cant be spawned by players, quest npcs also cant be spawned
-
-	for (i = 0; i < NUM_OF_GUARDIANS; i++)
-	{
-		if (Q_stricmp(va("guardian_boss_%d", (i+1)), npc_type) == 0)
-			return;
-	}
-
-	if (Q_stricmp("guardian_of_darkness", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("guardian_of_eternity", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_reborn", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_reborn_blue", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_reborn_red", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_reborn_boss", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_super_soldier", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_jawa", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_citizen_warrior", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_sand_raider_green", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_sand_raider_brown", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_sand_raider_blue", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_sand_raider_red", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_protocol_imp", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("sage_of_light", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("sage_of_darkness", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("sage_of_eternity", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("sage_of_universe", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("quest_ragnos", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("master_of_evil", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("guardian_of_universe", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("guardian_of_time", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("guardian_of_time_boss", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("guardian_of_chaos", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("soul_of_sorrow", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("thor_boss", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("ymir_boss", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("jawa_seller", npc_type) == 0)
-		return;
-
-	if (Q_stricmp("map_guardian", npc_type) == 0)
-		return;
+	// GalaxyRP fix: [NPC] a blocklist used to sit here: a guardian_boss_1..10 loop and 29 named
+	// types -- every guardian, sage and quest NPC, plus jawa_seller -- each silently refused with
+	// a bare return, no message to the admin and no log line. That is zyk's addition; NPC_Spawn_f
+	// in OpenJK has no such list. It was there to stop an admin wrecking the Light/Universe quest,
+	// and that quest no longer exists: level.guardian_quest, guardian_mode, spawn_boss() and every
+	// reward path keyed on these NPCs were removed as dead code in earlier work, so 24 of the 29
+	// names had no reference anywhere else in the codebase at all. The list was never a real
+	// boundary either -- SP_NPC_spawner has no such check, so "/entadd npc_spawner npc_type
+	// guardian_of_chaos" always sidestepped it, and quest_mage was missing from this list while
+	// being present in the kill one. Removed; these are now ordinary NPCs, and /npc kill removes
+	// them like any other. Note that TaystJK has its own, unrelated blocklist here (ragnos,
+	// saber_droid, saber_droid_training) for client crashes rather than for quests; we carry
+	// zyk's data-level fix for the two saber_droid types in zyk_npc_fix.npc, but nothing for
+	// ragnos.
 
 	NPC_SpawnType( ent, npc_type, targetname, isVehicle );
 }

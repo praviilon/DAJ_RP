@@ -1,3 +1,4 @@
+// altering some NPCs to prevent server issues
 
 player
 {
@@ -74,6 +75,56 @@ old_assassin_droid
 	yawspeed	70
 	walkSpeed	55
 	runSpeed	200
+}
+
+Ragnos
+{
+        playerModel     old_marka_ragnos
+        rank		captain
+	weapon	WP_SCEPTER
+        weapon  WP_SABER
+        saber		sith_sword
+        saberStyle      6
+	health		5000
+	FP_HEAL			2
+	FP_LEVITATION	3
+	FP_SPEED		3
+	FP_PUSH			3
+	FP_PULL			3
+	FP_TELEPATHY	3
+	FP_GRIP			3
+	FP_LIGHTNING	3
+	FP_RAGE			3
+	FP_PROTECT		3
+	FP_ABSORB		1
+	FP_DRAIN		3
+	FP_SEE			2
+	FP_SABERTHROW	3
+	FP_SABER_DEFENSE 3
+	FP_SABER_OFFENSE 3
+	reactions	5
+	aim			5
+	move		5
+	aggression	5
+	evasion		5
+	intelligence	5
+	hfov		160
+	vfov		160
+	playerTeam	TEAM_ENEMY
+	enemyTeam	TEAM_PLAYER
+	class		CLASS_DESANN
+	sex		male
+	snd	        ragnos
+	sndcombat	ragnos
+	sndjedi		ragnos
+	yawSpeed	120
+	walkSpeed	55
+	runSpeed	200
+	dismemberProbHead	0
+	dismemberProbArms	0
+	dismemberProbLegs	0
+	dismemberProbHands	0
+	dismemberProbWaist	0
 }
 
 hazardtrooper

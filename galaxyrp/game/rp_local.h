@@ -30,7 +30,9 @@ typedef struct sqlite3 sqlite3;
 #define RP_DB_BUSY_TIMEOUT_MS			5000
 int RP_DB_Open(sqlite3 **db);
 
-#define NUM_OF_GUARDIANS				10 // zyk: number of Light Quest guardians to be defeated 
+// GalaxyRP fix: [NPC] removed NUM_OF_GUARDIANS here. Its last user was the guardian_boss_1..10
+// loop in the /npc spawn blocklist, which has been removed along with the rest of that list;
+// the Light Quest it counted for was itself deleted as dead code in earlier work.
 #define NUM_OF_OBJECTIVES				10 // zyk: number of Dark Quest objectives
 // GalaxyRP fix: [Quests] removed NUM_OF_ETERNITY_QUEST_OBJ here — unused anywhere in the codebase
 #define NUM_OF_UNIVERSE_QUEST_OBJ		22 // zyk: number of Universe Quest objectives

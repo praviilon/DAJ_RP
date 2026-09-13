@@ -957,7 +957,7 @@ typedef struct clientPersistant_s {
 	int skill_counter;
 
 	// zyk: number of guardians the player already defeated
-	// the value will be NUM_OF_GUARDIANS after completing the quest
+	// the value would have been 10 (once NUM_OF_GUARDIANS, now removed) after completing the quest
 	// before that, has bitvalue of each defeated guardian. Possible bitvalues are:
 	// 4 - Guardian of Water
 	// 5 - Guardian of Earth
