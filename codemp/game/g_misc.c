@@ -5052,6 +5052,19 @@ void SP_misc_weapon_shooter( gentity_t *self )
 	{
 		self->wait = 500;
 	}
+
+	// GalaxyRP fix: [Entity System] the repeat flag reschedules this shooter every self->wait
+	// milliseconds and every shot is a missile, which is an entity. wait came straight off a spawn
+	// key with only a zero test in front of it, so "/entadd misc_weapon_shooter ... spawnflags 3
+	// wait 1" fired once per server frame and filled the entity table with live missiles. Floored
+	// at the same 100ms the mod's other timed entities use (zyk_regen_unit, zyk_training_pole,
+	// zyk_mini_game_joiner all do exactly this), which is still faster than any hand-held weapon.
+	if ( self->wait < 100 )
+	{
+		Com_Printf( S_COLOR_YELLOW"WARNING: misc_weapon_shooter at %s asked for a %dms interval, floored to 100ms\n",
+			vtos(self->s.origin), self->wait );
+		self->wait = 100;
+	}
 }
 
 /*QUAKED misc_weather_zone (0 .5 .8) ?

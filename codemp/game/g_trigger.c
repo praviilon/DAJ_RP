@@ -1910,6 +1910,16 @@ void asteroid_field_think(gentity_t *self)
 
 	self->nextthink = level.time + 500;
 
+	// GalaxyRP fix: [Entity System] an asteroid field spawns one asteroid every think until it has
+	// self->count of them, and count comes straight off a spawn key -- "/entadd
+	// trigger_asteroid_field ... count 900" used to be a slow, patient way to walk the entity table
+	// off its end and drop the server. SP_trigger_asteroid_field now clamps count, and this refuses
+	// the individual spawn as well, because the field is not the only thing competing for slots.
+	if ( numAsteroids < self->count && G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		return;
+	}
+
 	if ( numAsteroids < self->count )
 	{
 		//need to spawn a new asteroid
@@ -2028,9 +2038,27 @@ void SP_trigger_asteroid_field(gentity_t *self)
 	trap->SetBrushModel( (sharedEntity_t *)self, self->model );
 	self->r.contents = 0;
 
+	// GalaxyRP fix: [Entity System] "self->health = 20" is not a typo of ours -- it is in OpenJK and
+	// TaystJK unchanged, and reads as a Raven slip for "self->count = 20": the test is on count, the
+	// QUAKED comment above documents count as "how many asteroids, max, to have at one time", and
+	// asteroid_field_think only ever spawns while numAsteroids < count. As written, a field with no
+	// count key spawns nothing at all and the health it sets is never read. Deliberately left alone:
+	// correcting it would make every shipped map with a count-less asteroid field start spawning 20
+	// entities it does not spawn today, which is exactly the budget being protected here.
 	if ( !self->count )
 	{
 		self->health = 20;
+	}
+
+	// GalaxyRP fix: [Entity System] count is unbounded and comes from a spawn key, so /entadd could
+	// ask for thousands of asteroids -- one per think, forever, until G_Spawn() ERR_DROPs the
+	// server. Clamped to something no real map needs to exceed; the field still refuses individual
+	// spawns when the table is tight (see asteroid_field_think).
+	if ( self->count > ZYK_MAX_ASTEROIDS )
+	{
+		Com_Printf( S_COLOR_YELLOW"WARNING: trigger_asteroid_field at %s asked for %d asteroids, clamped to %d\n",
+			vtos(self->s.origin), self->count, ZYK_MAX_ASTEROIDS );
+		self->count = ZYK_MAX_ASTEROIDS;
 	}
 
 	if ( !self->speed )

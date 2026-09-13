@@ -1409,6 +1409,20 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		}
 	}
 
+	// GalaxyRP fix: [Entity System] this is the common path for every NPC the mod creates -- the
+	// /npc spawn command, an npc_spawner placed by a map, one added with /entadd, one fired by a
+	// trigger. The two G_Spawn() calls below (this entity and its tempGoal) are checked here
+	// together, because failing between them would leave a half-built NPC. As above, the NULL
+	// checks that follow can never fire; G_Spawn() ERR_DROPs rather than returning NULL.
+	if ( G_EntitySlotsAvailable( 2 ) == qfalse )
+	{
+		Com_Printf( S_COLOR_RED "ERROR: NPC spawn refused, only %d entity slots free\n",
+			G_FreeEntityCount() );
+		G_LogPrintf( "npc_spawner at %s refused: %d entity slots free\n",
+			vtos(ent->s.origin), G_FreeEntityCount() );
+		return NULL;
+	}
+
 	newent = G_Spawn();
 
 	if ( newent == NULL )
@@ -4364,15 +4378,33 @@ NPC_Spawn_f
 
 gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle )
 {
-	gentity_t		*NPCspawner = G_Spawn();
+	gentity_t		*NPCspawner;
 	vec3_t			forward, end;
 	trace_t			trace;
 
-	if(!NPCspawner)
+	// GalaxyRP fix: [Entity System] refuse before allocating, not after. One NPC costs three slots
+	// -- this spawner, the NPC itself and its NPC->tempGoal -- and G_Spawn() does not report
+	// failure, it calls trap->Error(ERR_DROP) and takes the server down with everyone on it. That
+	// is the crash an admin gets from overspawning NPCs, and it is why the "if (!NPCspawner)"
+	// check that used to be here could never fire: G_Spawn() never returns NULL.
+	if ( G_EntitySlotsAvailable( 3 ) == qfalse )
 	{
-		Com_Printf( S_COLOR_RED"NPC_Spawn Error: Out of entities!\n" );
+		Com_Printf( S_COLOR_RED"NPC_Spawn Error: too few entity slots left (%d free, %d held in reserve)\n",
+			G_FreeEntityCount(), ZYK_ENTITY_RESERVE );
+
+		if ( ent && ent->client )
+		{
+			trap->SendServerCommand( ent-g_entities,
+				va("print \"Cannot spawn an NPC: the server is near its entity limit. %d slots free. Try ^3/npc kill all^7.\n\"",
+					G_FreeEntityCount()) );
+		}
+
+		G_LogPrintf( "NPC spawn of '%s' refused: %d entity slots free\n",
+			npc_type ? npc_type : "?", G_FreeEntityCount() );
 		return NULL;
 	}
+
+	NPCspawner = G_Spawn();
 
 	NPCspawner->think = G_FreeEntity;
 	NPCspawner->nextthink = level.time + FRAMETIME;

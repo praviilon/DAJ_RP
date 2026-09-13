@@ -90,6 +90,37 @@ extern vec3_t gPainPoint;
 // shorter recipe simply grows the padding and the surplus "*clear"s always land before the layers.
 // The padding must never be an EMPTY configstring: the client's replay loop stops at the first
 // empty slot, so a blank would silently hide every slot above it from everyone who joins later.
+// GalaxyRP fix: [Configstrings] the gamestate's own ceiling, which no part of the server enforces
+// -- see the long comment on G_FindConfigstringIndex in g_utils.c. The headroom is for configstrings
+// this budget cannot see coming: a player connecting writes their userinfo into CS_PLAYERS after we
+// have already decided we had room. It does not make the limit airtight, because nothing in the game
+// module can refuse a connecting player's configstring, but it keeps a full-to-the-brim gamestate
+// from being tipped over by the next join.
+#define ZYK_GAMESTATE_HEADROOM		1024
+#define ZYK_GAMESTATE_BUDGET		(MAX_GAMESTATE_CHARS - ZYK_GAMESTATE_HEADROOM)
+// Bytes assumed for everything in the gamestate that G_FindConfigstringIndex does not write and
+// cannot see: serverinfo, systeminfo, and one CS_PLAYERS entry per connected client. While our own
+// registrations stay under the cheap limit, the true total provably cannot have reached the budget,
+// so no count is needed; past it, every new name is checked against a real one.
+#define ZYK_GAMESTATE_FOREIGN_ALLOWANCE	10240
+#define ZYK_GAMESTATE_CHEAP_LIMIT	(ZYK_GAMESTATE_BUDGET - ZYK_GAMESTATE_FOREIGN_ALLOWANCE)
+
+// GalaxyRP fix: [Configstrings] one "already reported" flag per indexed table, so a table filling up
+// is logged once instead of once per refused name. See zyk_cs_table_slot() in g_utils.c.
+#define ZYK_CS_TABLES				8
+
+// GalaxyRP fix: [Entity System] slots held back from every spawn a player or admin can drive, so the
+// transient allocations ordinary play depends on -- G_TempEntity for every effect and sound event,
+// missiles, gibs -- always have somewhere to go. G_Spawn() cannot fail gracefully: it has ~70 call
+// sites, G_TempEntity among them dereferences the result immediately, and when it runs out it calls
+// trap->Error(ERR_DROP), which drops the server and disconnects everyone at once. Refusing the
+// controllable spawns early is what keeps it from ever getting there.
+#define ZYK_ENTITY_RESERVE			64
+
+// GalaxyRP fix: [Entity System] most asteroids one trigger_asteroid_field may keep alive. count is a
+// spawn key, so without a ceiling /entadd could ask for thousands. See SP_trigger_asteroid_field.
+#define ZYK_MAX_ASTEROIDS			64
+
 #define ZYK_WEATHER_MAX_LAYERS		8	// most weather layers one recipe may hold
 #define ZYK_WEATHER_SLOTS			(ZYK_WEATHER_MAX_LAYERS + 1)	// layers plus one teardown slot
 #define ZYK_WEATHER_MAX_BASE		4	// most of the map's own weather commands we remember
@@ -1835,6 +1866,17 @@ typedef struct level_locals_s {
 	// the effects the entity preset registers a second into the map, and those would then replay
 	// AFTER the teardown for anyone joining later. Claimed on demand, the block is always the
 	// highest weather slots in use, so it always has the last word.
+	// GalaxyRP fix: [Configstrings] running estimate of the gamestate's byte total, kept by
+	// G_FindConfigstringIndex and recounted from scratch whenever it says the budget is close.
+	// An estimate on its own would drift -- player userinfo lands in CS_PLAYERS without passing
+	// through that function -- so it is only ever used to decide whether a true recount is worth
+	// paying for, never to refuse on its own.
+	int zyk_gamestate_bytes;
+	int zyk_gamestate_own_bytes;					// bytes this function itself registered, known exactly
+	qboolean zyk_gamestate_full;					// so the refusal is logged once, not per name
+	qboolean zyk_configstring_table_full[ZYK_CS_TABLES];	// same, per indexed table
+	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
+
 	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
 	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts
 	int zyk_weather_debounce_time;
@@ -1913,6 +1955,7 @@ char *G_NewString( const char *string );
 
 // GalaxyRP fix: [Entity System] the entity-file loader reads one entity per line into a buffer of
 // this size, so it is also the longest line /entsave can write and expect to load back again.
+
 #define ZYK_ENTITY_FILE_LINE_LENGTH 2048
 
 char *G_NewStringRaw( const char *string );
@@ -2047,6 +2090,16 @@ int		G_SoundIndex( const char *name );
 // caller (like /playsound) should use this instead of G_SoundIndex() so a full sound table degrades to
 // a friendly message instead of crashing the server via G_FindConfigstringIndex's ERR_DROP.
 int		G_SoundIndexSafe( const char *name );
+// GalaxyRP fix: [Configstrings] recount the gamestate byte total from scratch. G_InitGame calls this
+// once the map's own content is registered, so the running estimate starts from the truth.
+void	G_ResetGamestateEstimate( void );
+// GalaxyRP fix: [Entity System] how many entity slots G_Spawn() could still hand out, and whether a
+// caller that can be driven by a player or admin should be allowed to take "needed" of them. See
+// ZYK_ENTITY_RESERVE above and the comment on the definitions in g_utils.c.
+// (named G_FreeEntityCount rather than G_EntitiesFree -- that name is already taken further down
+// by an older "is there at least one free slot" predicate, which this does not replace.)
+int		G_FreeEntityCount( void );
+qboolean G_EntitySlotsAvailable( int needed );
 int		G_SoundSetIndex(const char *name);
 int		G_EffectIndex( const char *name );
 int		G_BSPIndex( const char *name );

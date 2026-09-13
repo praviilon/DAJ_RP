@@ -2345,6 +2345,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	//alex: create tables required for storing stuff, and also create admin account. ONLY if those do not already exist.
 	InitializeGalaxyRpTables(qtrue);
+
+	// GalaxyRP fix: [Configstrings] every configstring the map and the mod register has now been
+	// written, so count the gamestate once and start the running estimate from the truth. Without
+	// this the estimate would begin at zero and the budget check in G_FindConfigstringIndex would
+	// not look at the real total until it believed it had added 14976 bytes by itself -- by which
+	// point the gamestate would be long past the 16000 every client enforces.
+	G_ResetGamestateEstimate();
+	G_LogPrintf( "gamestate after map load: %d of %d bytes used\n",
+		level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET );
 }
 
 /*

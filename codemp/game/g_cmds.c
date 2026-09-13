@@ -12985,6 +12985,21 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP fix: [Entity System] /entadd is the other way an admin can walk the entity table off
+	// its end. G_Spawn() does not fail politely -- it calls trap->Error(ERR_DROP) and every player
+	// on the server is disconnected -- so refuse here while there is still room, and say why.
+	// Some classes allocate more than the one entity asked for (a mover builds its own trigger, an
+	// npc_spawner with no targetname spawns its NPC immediately), hence the margin.
+	if ( G_EntitySlotsAvailable( 4 ) == qfalse )
+	{
+		trap->SendServerCommand( ent-g_entities,
+			va("print \"Cannot add an entity: the server is near its entity limit. %d slots free, %d held in reserve.\n\"",
+				G_FreeEntityCount(), ZYK_ENTITY_RESERVE) );
+		G_LogPrintf( "/entadd '%s' by %s refused: %d entity slots free\n",
+			arg1, ent->client->pers.netname, G_FreeEntityCount() );
+		return;
+	}
+
 	// zyk: spawns the new entity
 	new_ent = G_Spawn();
 

@@ -158,6 +158,56 @@ void RPMod_StringEscape(char *in, char *out, int outSize)
 	return;
 }
 
+// GalaxyRP fix: [Configstrings] total bytes the gamestate currently holds, counted exactly the way
+// a client counts them when it parses one: strlen + 1 for every configstring that is not empty (see
+// CL_ParseGamestate in cl_parse.cpp and CL_ConfigstringModified in cl_cgame.cpp -- both of them
+// Com_Error(ERR_DROP, "MAX_GAMESTATE_CHARS exceeded") the moment the running total passes 16000).
+//
+// This is the limit nobody guards. SV_SetConfigstring only range-checks the index; there is no
+// aggregate check anywhere on the server, so the game module can keep registering names until the
+// total passes 16000 -- at which point every connected client drops and no new client can ever
+// finish connecting. The per-table limits are not what you hit first: MAX_MODELS alone is 512
+// slots of up to MAX_QPATH each, which is twice the entire byte budget.
+//
+// The scan is a syscall per configstring, so it is not something to do casually; the caller below
+// only reaches it when its running estimate says the budget is close.
+static int zyk_gamestate_bytes_used( void ) {
+	int		i, total = 0;
+	char	s[MAX_STRING_CHARS];
+
+	for ( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
+		trap->GetConfigstring( i, s, sizeof( s ) );
+		if ( s[0] ) {
+			total += (int)strlen( s ) + 1;
+		}
+	}
+
+	return total;
+}
+
+// GalaxyRP fix: [Configstrings] which "this table is full" flag a given table start owns, so the
+// refusal below is logged once per table rather than once per refused name -- a map that trips this
+// would otherwise write the same line thousands of times. Anything unrecognised shares the last
+// slot; being coarse there only means two odd tables would share one log line.
+static int zyk_cs_table_slot( int start ) {
+	switch ( start ) {
+	case CS_MODELS:			return 0;
+	case CS_SOUNDS:			return 1;
+	case CS_ICONS:			return 2;
+	case CS_EFFECTS:		return 3;
+	case CS_BSP_MODELS:		return 4;
+	case CS_AMBIENT_SET:	return 5;
+	case CS_G2BONES:		return 6;
+	default:				return ZYK_CS_TABLES - 1;
+	}
+}
+
+// GalaxyRP fix: [Configstrings] recount from scratch. Called once at the end of G_InitGame, so the
+// running estimate starts from the truth rather than from zero on a map that loads a lot of content.
+void G_ResetGamestateEstimate( void ) {
+	level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
+}
+
 /*
 ================
 G_FindConfigstringIndex
@@ -165,7 +215,7 @@ G_FindConfigstringIndex
 ================
 */
 static int G_FindConfigstringIndex( const char *name, int start, int max, qboolean create ) {
-	int		i;
+	int		i, len;
 	char	s[MAX_STRING_CHARS];
 
 	if ( !VALIDSTRING( name ) ) {
@@ -186,11 +236,66 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 		return 0;
 	}
 
+	// GalaxyRP fix: [Configstrings] this was trap->Error(ERR_DROP, "G_FindConfigstringIndex:
+	// overflow") -- the whole server dropped, every player disconnected at once, the instant a
+	// table filled up and was asked for one more name it had not seen.
+	//
+	// That is a fine assertion for the game code's own developer-authored references, which are a
+	// fixed set. It is not fine for anything a player or admin can drive, and plenty can: every
+	// SP_* function that does G_ModelIndex(ent->model) takes its name straight from a spawn key,
+	// and "model" is a key /entadd will set to whatever it is given. 512 /entadd calls with
+	// distinct model names used to be a one-line way for an admin to drop the server.
+	//
+	// Refusing instead returns 0, which is the index of the empty configstring: the client draws
+	// no model, plays no sound, shows no effect for that entity. Degraded, but alive, and every
+	// caller already copes with it -- G_SoundIndexSafe() has returned 0 on a full sound table
+	// since the /playsound fix, and index 0 is what an entity with no model carries anyway.
 	if ( i == max ) {
-		trap->Error( ERR_DROP, "G_FindConfigstringIndex: overflow" );
+		int slot = zyk_cs_table_slot( start );
+
+		if ( !level.zyk_configstring_table_full[slot] ) {
+			level.zyk_configstring_table_full[slot] = qtrue;
+			G_LogPrintf( "configstring table at %d is full (%d slots); refusing \"%s\" and any "
+				"further new names for it. Entities asking for one will render without it.\n",
+				start, max, name );
+		}
+		return 0;
+	}
+
+	// GalaxyRP fix: [Configstrings] ...and the table filling up is not even the first wall. The
+	// gamestate has a 16000-byte ceiling that every client enforces and no part of the server
+	// does, so a map plus a few hundred long /entadd model paths can push past it while every
+	// table still has free slots.
+	//
+	// The true total is what matters, and counting it means a syscall per configstring, so this
+	// only pays for the count once it could possibly matter. What it tracks cheaply is the bytes
+	// THIS function has registered -- a number it knows exactly. Everything else in the gamestate
+	// is written elsewhere and never seen here: serverinfo, systeminfo, and a CS_PLAYERS entry per
+	// connected client. ZYK_GAMESTATE_FOREIGN_ALLOWANCE is the ceiling assumed for all of that, so
+	// while our own bytes stay under the cheap limit the true total provably cannot have reached
+	// the budget and no count is needed. Past it, every new name is checked against a real count.
+	//
+	// Tracking only our own bytes is what makes that reasoning sound. An estimate of the whole
+	// gamestate would drift the moment a player connected, and drift downward -- it would think
+	// there was room that had already been taken.
+	len = (int)strlen( name ) + 1;
+	if ( (level.zyk_gamestate_own_bytes + len) > ZYK_GAMESTATE_CHEAP_LIMIT ) {
+		level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
+
+		if ( (level.zyk_gamestate_bytes + len) > ZYK_GAMESTATE_BUDGET ) {
+			if ( !level.zyk_gamestate_full ) {
+				level.zyk_gamestate_full = qtrue;
+				G_LogPrintf( "gamestate is at %d of %d bytes; refusing \"%s\" and any further new "
+					"configstring names. Registering it would drop every connected client.\n",
+					level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET, name );
+			}
+			return 0;
+		}
 	}
 
 	trap->SetConfigstring( start + i, name );
+	level.zyk_gamestate_own_bytes += len;
+	level.zyk_gamestate_bytes += len;
 
 	return i;
 }
@@ -926,6 +1031,44 @@ instead of being removed and recreated, which can cause interpolated
 angles and bad trails.
 =================
 */
+// GalaxyRP fix: [Entity System] how many slots G_Spawn() below could still hand out: the unused
+// ones under level.num_entities, plus everything above it that has never been opened. The freetime
+// rule G_Spawn() applies on its first pass is deliberately ignored here -- its second pass ignores
+// it too, so a recently-freed slot really is available, just not preferred.
+int G_FreeEntityCount( void ) {
+	int			i, count = 0;
+	gentity_t	*e;
+
+	e = &g_entities[MAX_CLIENTS];
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++, e++ ) {
+		if ( !e->inuse ) {
+			count++;
+		}
+	}
+
+	if ( level.num_entities < ENTITYNUM_MAX_NORMAL ) {
+		count += ENTITYNUM_MAX_NORMAL - level.num_entities;
+	}
+
+	return count;
+}
+
+// GalaxyRP fix: [Entity System] the gate every player- or admin-driven spawn goes through. G_Spawn()
+// itself cannot be made to fail politely -- it never returns NULL, ~70 call sites rely on that, and
+// G_TempEntity() dereferences the result on the next line -- so when it runs out it calls
+// trap->Error(ERR_DROP) and the whole server goes down with everyone on it. The fix is not to make
+// G_Spawn() fail better but to stop it ever being the one that runs out: keep ZYK_ENTITY_RESERVE
+// slots that only the uncontrollable allocations can reach, and refuse the controllable ones first.
+//
+// "needed" is what the caller is about to allocate in one go -- an NPC costs more than one slot.
+qboolean G_EntitySlotsAvailable( int needed ) {
+	if ( needed < 1 ) {
+		needed = 1;
+	}
+
+	return (G_FreeEntityCount() >= (needed + ZYK_ENTITY_RESERVE)) ? qtrue : qfalse;
+}
+
 gentity_t *G_Spawn( void ) {
 	int			i, force;
 	gentity_t	*e;
@@ -964,6 +1107,21 @@ gentity_t *G_Spawn( void ) {
 		*/
 		G_SpewEntList();
 		trap->Error( ERR_DROP, "G_Spawn: no free entities" );
+	}
+
+	// GalaxyRP fix: [Entity System] one-time early warning. The guards on the player-driven spawn
+	// paths keep ZYK_ENTITY_RESERVE slots back for allocations nothing can refuse -- temp entities,
+	// missiles, gibs -- but sustained pressure from those can still eat the reserve, and when it is
+	// gone this function calls trap->Error(ERR_DROP) and the server goes down with everyone on it.
+	// Say so once while there is still room to act, rather than leaving the log silent until the
+	// drop. Deliberately not a refusal: this path has ~70 callers that cannot handle one.
+	if ( !level.zyk_entity_reserve_warned
+		&& (ENTITYNUM_MAX_NORMAL - level.num_entities) < ZYK_ENTITY_RESERVE )
+	{
+		level.zyk_entity_reserve_warned = qtrue;
+		G_LogPrintf( "entity table is into its reserve: %d of %d slots used. Player-driven spawns "
+			"are being refused; if this keeps climbing the server will drop.\n",
+			level.num_entities, ENTITYNUM_MAX_NORMAL );
 	}
 
 	// open up a new slot
