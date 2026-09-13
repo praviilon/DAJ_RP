@@ -22,6 +22,11 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - `/roll <dice>d<faces>` dice notation (up to 10 dice, 2-100 faces), plus `/rollall` and `/flipcoinall` to send a roll or flip to the whole server.
 - `rp_dice_roll_cooldown` cvar (default 3000 ms): shared cooldown for `/roll`, `/rollall`, `/flipcoin` and `/flipcoinall`.
 - Use hint: the hand icon now appears whenever the Use key would actually do something — both for directly usable entities (consoles, power converters, emplaced guns, use-flagged movers) and for the USE_BUTTON triggers that operate most map doors and lifts. Toggle with `/settings 4`.
+- `/ooc` command: out-of-character chat that works in every gametype. Previously OOC was only reachable through `/say_team` in a non-team gametype and with no allies, so most players had no route to it at all.
+- `/unparalyze` admin command, split out of `/paralyze` (which used to toggle).
+- `/list chat`: the first documentation the 34 RP chat modifiers have ever had. `/list commands` also gains an NPC System section.
+- `rp_seamlesslogin` cvar (default 0): at 1, `/login`, `/new`, `/char new`, `/char use` and `/logout` take effect in place instead of killing and respawning the player — except during a private duel or a live Duel Tournament match, where the respawn is still forced.
+- `/npc kill <name>` now kills a single NPC by the name it was spawned with; `/npc kill <type>` still clears every NPC of that type. `/npc team` and `/npc kill team` also accept either spelling of a team name.
 
 ### Changed
 - `/roll` and `/flipcoin` are now distance-scoped like `/me` instead of being broadcast to the whole server, and require being alive; spectators and dead players use `/rollall` and `/flipcoinall`.
@@ -40,6 +45,19 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - Redesigned parts of the UI/UX streamlining the user flow.
 - Cloak system is redesigned: /use_cloak and /vehicle_cloak commands are used to trigger self-cloak and vehicle-cloak respectively.
 - The in-game saber menu's Apply button now instantly applies a hilt/type change.
+- **Force pool**: the ceiling for a logged-in character is hardcoded to 250. Logged-out players are capped at 100 separately.
+- **Force power rebalance at levels 4 and 5**, which several powers never actually reached: Saber Defense 4/5 could not autoblock at all, Push and Pull lost their knockdown and disarm, Mind Trick did nothing to NPCs, and Absorb 5, Protect 5 and Rage 4/5 were downgrades from the level below. Team Heal and Team Energize paid out their level-1 amount with fewer than three allies. Force Drain gained a level-2 cooldown (the curve is now 3000/2000/1500/1000/0 ms), and Absorb now mitigates Drain 4 and 5. Force Jump 4 and 5 no longer mispredict on the client.
+- Logged-out players also no longer regenerate up to an RPG character's health and shield caps.
+- DEMP2's alternate fire now requires DEMP2 skill level 2, like every other ranged weapon's alt fire and like its own description always claimed.
+- Melee is now the same for everyone: logged-out players get the full kick and grapple set instead of a stripped-down version, and `g_debugMelee` is pinned on. The Melee skill's description now says what the skill actually does (more damage per level) rather than describing the moves.
+- `/ignore` now also covers the RP chat modifiers (`/me`, `/do`, `/my`, `/shout`, the languages, and the rest), `/roll` and `/flipcoin`.
+- Spectators now hear ordinary chat at any range, matching every other chat type.
+- **Downed system**: a downed player can no longer use force powers or holdable items, cannot be Force Gripped back to their feet, and stays downed across a respawn or a turn in spectator. `/paralyze` now has a real duration instead of a countdown stuck at zero.
+- `/god`, `/killother` and `/notarget` now require being logged in, and `/notarget` is behind the God Mode admin command instead of having no gate at all.
+- Removed three more unused cvars: `zyk_allow_adm_in_other_gametypes` (never fired at its own default), `zyk_enable_magic_sense` and `zyk_magic_sense_mp_cost`.
+- `/order` no longer accepts NPC classes whose AI ignores orders (Wampa, Remote, vehicles), where an order changed nothing but quietly turned the NPC on its own side.
+- The ranged weapon and Stun Baton Upgrade skill descriptions were rewritten for accuracy.
+- `/allychat` and `/ooc` work during intermission, like the other say modes.
 
 ### Fixed
 - **Dice rolls**: `/roll` could produce a non-uniform result and, on a Windows build, silently capped any roll above 32767; `/roll 2147483647` was undefined behavior. Rolls are now drawn with a bias-free rejection sample and bounded to 100 faces.
