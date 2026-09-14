@@ -8276,6 +8276,42 @@ void sniper_battle_winner()
 // Their only callers were the RPG LMS block in G_RunFrame below, which is gone; see the note where
 // Cmd_RpgLmsMode_f used to live in g_cmds.c.
 
+// zyk: restoring default guns and force powers to a player leaving the Melee Battle
+//
+// GalaxyRP fix: [Melee Battle] this used to be written inline in melee_battle_end()'s loop below,
+// which meant it ran only for players who were still signed up when the battle ended. A player who
+// walked out under their own steam with a second /meleemode never reached it: that branch (g_cmds.c)
+// clears level.melee_players[] for them first, so melee_battle_end()'s loop skips them even when
+// their departure is what ends the battle. They kept melee_battle_prepare()'s loadout -- WP_MELEE
+// only, binoculars only, fourteen force powers cleared from forcePowersKnown -- until their next
+// death or a map change. Lifted into its own function so the leave path and the end path restore
+// through the same code and cannot drift apart.
+void melee_battle_restore(gentity_t *ent)
+{
+	WP_InitForcePowers(ent);
+
+	if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
+		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
+
+	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
+
+	// GalaxyRP fix: [Melee Battle] WP_InitForcePowers() above rebuilds force powers from the
+	// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
+	// That is the correct restore for a logged-out player, but an RPG character's powers come
+	// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
+	// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
+	// build) instead of their own skills, and kept it until their next respawn. Both minigames
+	// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_MeleeMode_f (g_cmds.c)
+	// was commented out later -- which is why this half was never added.
+	//
+	// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
+	// players and needs no check of its own. It MUST stay last in this block: it clears weapons
+	// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
+	// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
+	// ClientSpawn().
+	initialize_rpg_skills(ent);
+}
+
 // zyk: finishes the melee battle
 void melee_battle_end()
 {
@@ -8288,30 +8324,7 @@ void melee_battle_end()
 	{
 		if (level.melee_players[i] != -1)
 		{ // zyk: restoring default guns and force powers to this player
-			gentity_t *ent = &g_entities[i];
-
-			WP_InitForcePowers(ent);
-
-			if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
-				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
-
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
-
-			// GalaxyRP fix: [Melee Battle] WP_InitForcePowers() above rebuilds force powers from the
-			// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
-			// That is the correct restore for a logged-out player, but an RPG character's powers come
-			// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
-			// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
-			// build) instead of their own skills, and kept it until their next respawn. Both minigames
-			// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_MeleeMode_f (g_cmds.c)
-			// was commented out later -- which is why this half was never added.
-			//
-			// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
-			// players and needs no check of its own. It MUST stay last in this block: it clears weapons
-			// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
-			// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
-			// ClientSpawn().
-			initialize_rpg_skills(ent);
+			melee_battle_restore(&g_entities[i]);
 		}
 
 		level.melee_players[i] = -1;

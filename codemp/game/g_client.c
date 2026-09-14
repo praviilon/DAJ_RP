@@ -2730,6 +2730,8 @@ extern qboolean g_dontPenalizeTeam; //g_cmds.c
 // char[MAX_STRING_CHARS].
 extern void select_account_and_default_character_data(gentity_t* ent, char username[32], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
 extern void initialize_rpg_skills(gentity_t *ent);
+extern void duel_tournament_end();
+extern void melee_battle_end();
 void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin);
 void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	gentity_t	*ent;
@@ -2815,6 +2817,25 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		level.duelists_quantity--;
 	}
 
+	// GalaxyRP fix: [Duel Tournament] end the tournament when this was the last duelist, exactly as
+	// Cmd_DuelMode_f's leave branch already does. Dropping the count without ending it left
+	// duel_tournament_mode at 1 and level.duel_tournament_model_id still naming the globe, and the
+	// join branch spawns a fresh globe whenever duelists_quantity is 0 -- so the next player to sign
+	// up inside the remaining signup window overwrote that id and orphaned the old entity, which
+	// nothing then frees. Repeatable at will (sign up, spectate, rejoin, sign up), one leaked entity
+	// slot and a few never-freed G_Alloc strings per lap, ending at G_Spawn()'s trap->Error(ERR_DROP)
+	// -- a process exit on a dedicated build.
+	//
+	// Scoped to signup because that is the only mode the leak exists in: the join branch refuses at
+	// duel_tournament_mode > 1, so no second globe can be spawned once the tournament starts, and the
+	// mode-2 block in G_RunFrame() (g_main.c) already ends an emptied tournament there with its own
+	// announcement. Ending early here would silence that message for no gain.
+	if (level.duel_tournament_mode == 1 && level.duelists_quantity <= 0)
+	{
+		duel_tournament_end();
+		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
+	}
+
 	// zyk: sniper battle player went to spec
 	if (level.sniper_players[ent->s.number] > -1)
 	{
@@ -2827,6 +2848,21 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	{
 		level.melee_players[ent->s.number] = -1;
 		level.melee_mode_quantity--;
+	}
+
+	// GalaxyRP fix: [Melee Battle] end the battle when this was the last player, exactly as
+	// Cmd_MeleeMode_f's leave branch already does. Same defect and same shape as the Duel Tournament
+	// one above: melee_mode stayed at 1 with level.melee_model_id still naming the catwalk, and the
+	// join branch spawns a fresh catwalk whenever melee_mode_quantity is 0, so the next sign-up
+	// inside the 12-second window orphaned it. The G_FreeEntity() hook that clears melee_model_id
+	// (g_utils.c) does not help here -- nothing ever frees the old entity for it to fire on.
+	//
+	// Scoped to signup for the same reason: joining is refused at melee_mode > 1, and the mode-2
+	// block in G_RunFrame() (g_main.c) already ends an emptied battle with "No players left!".
+	if (level.melee_mode == 1 && level.melee_mode_quantity <= 0)
+	{
+		melee_battle_end();
+		trap->SendServerCommand(-1, "chat \"^3Melee Battle: ^7No players left! Melee Battle is over!\"");
 	}
 
 	// zyk: sending events to client game
@@ -4552,6 +4588,25 @@ void ClientDisconnect( int clientNum ) {
 		level.duelists_quantity--;
 	}
 
+	// GalaxyRP fix: [Duel Tournament] end the tournament when this was the last duelist, exactly as
+	// Cmd_DuelMode_f's leave branch already does. Dropping the count without ending it left
+	// duel_tournament_mode at 1 and level.duel_tournament_model_id still naming the globe, and the
+	// join branch spawns a fresh globe whenever duelists_quantity is 0 -- so the next player to sign
+	// up inside the remaining signup window overwrote that id and orphaned the old entity, which
+	// nothing then frees. Repeatable at will (sign up, spectate, rejoin, sign up), one leaked entity
+	// slot and a few never-freed G_Alloc strings per lap, ending at G_Spawn()'s trap->Error(ERR_DROP)
+	// -- a process exit on a dedicated build.
+	//
+	// Scoped to signup because that is the only mode the leak exists in: the join branch refuses at
+	// duel_tournament_mode > 1, so no second globe can be spawned once the tournament starts, and the
+	// mode-2 block in G_RunFrame() (g_main.c) already ends an emptied tournament there with its own
+	// announcement. Ending early here would silence that message for no gain.
+	if (level.duel_tournament_mode == 1 && level.duelists_quantity <= 0)
+	{
+		duel_tournament_end();
+		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
+	}
+
 	// zyk: sniper battle player disconnected
 	if (level.sniper_players[ent->s.number] > -1)
 	{
@@ -4564,6 +4619,21 @@ void ClientDisconnect( int clientNum ) {
 	{
 		level.melee_players[ent->s.number] = -1;
 		level.melee_mode_quantity--;
+	}
+
+	// GalaxyRP fix: [Melee Battle] end the battle when this was the last player, exactly as
+	// Cmd_MeleeMode_f's leave branch already does. Same defect and same shape as the Duel Tournament
+	// one above: melee_mode stayed at 1 with level.melee_model_id still naming the catwalk, and the
+	// join branch spawns a fresh catwalk whenever melee_mode_quantity is 0, so the next sign-up
+	// inside the 12-second window orphaned it. The G_FreeEntity() hook that clears melee_model_id
+	// (g_utils.c) does not help here -- nothing ever frees the old entity for it to fire on.
+	//
+	// Scoped to signup for the same reason: joining is refused at melee_mode > 1, and the mode-2
+	// block in G_RunFrame() (g_main.c) already ends an emptied battle with "No players left!".
+	if (level.melee_mode == 1 && level.melee_mode_quantity <= 0)
+	{
+		melee_battle_end();
+		trap->SendServerCommand(-1, "chat \"^3Melee Battle: ^7No players left! Melee Battle is over!\"");
 	}
 
 	// zyk: cleaning ally ids of other players who have this player as ally

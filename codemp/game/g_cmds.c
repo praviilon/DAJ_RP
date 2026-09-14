@@ -10249,6 +10249,22 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Melee Battle] the third minigame was missing from this list. /logout does not
+	// kill or respawn the player -- it calls zyk_remove_guns(), which calls WP_InitForcePowers(),
+	// rebuilding force powers from the client's vanilla JKA Profile allocation -- so a combatant
+	// who typed it stayed standing on the catwalk with Push, Pull, Grip, Lightning and the rest
+	// restored while everyone else in the battle was punch-only. One Force Push then won the round
+	// outright: melee_battle_prepare() strips those powers precisely so it cannot, and the
+	// out-of-bounds check in G_RunFrame() (g_main.c) kills whoever leaves the platform. /login and
+	// /char reach the same restore through initialize_rpg_skills(), but both queue a kill that
+	// removes the player from the battle a few frames later; /logout queues nothing, which is what
+	// made this one exploitable. zyk guards all three minigames together in Cmd_PlayerMode_f.
+	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Cannot logout while in a Melee Battle\n\"");
+		return;
+	}
+
 	// GalaxyRP fix: [Guardian] the guardian_mode>0 clean_guardians() call used to be here. guardian_mode
 	// is permanently 0 now (its sole setter, spawn_boss(), has zero callers and is being removed in
 	// g_main.c), so this was unreachable; clean_guardians() itself has also been deleted.
@@ -18122,6 +18138,7 @@ Cmd_MeleeMode_f
 ==================
 */
 extern void melee_battle_end();
+extern void melee_battle_restore(gentity_t *ent);
 void Cmd_MeleeMode_f(gentity_t *ent) {
 	if (zyk_allow_melee_battle.integer != 1)
 	{
@@ -18172,7 +18189,21 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	{ // zyk: join the melee battle
 		if (level.melee_mode_quantity == 0)
 		{ // zyk: first player joined. Put the model in the melee arena and set its origin point
-			gentity_t *new_ent = G_Spawn();
+			gentity_t *new_ent = NULL;
+
+			// GalaxyRP fix: [Entity System] ask for the slot before taking it. G_Spawn() calls
+			// trap->Error(ERR_DROP) when the entity table is full, and Com_Error promotes
+			// ERR_DROP to ERR_FATAL under com_dedicated -- i.e. the server process exits. Every
+			// other command that spawns (/spawnplatform, /spawndummy, the NPC spawners, /entload,
+			// /duelmode) was given this guard already; this one was missed, so any player typing
+			// /meleemode on a full map could drop the whole server.
+			if (G_EntitySlotsAvailable(1) == qfalse)
+			{
+				trap->SendServerCommand(ent->s.number, "print \"^3Melee Battle: ^7no free entity slots to build the arena right now\n\"");
+				return;
+			}
+
+			new_ent = G_Spawn();
 
 			zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
 			zyk_set_entity_field(new_ent, "spawnflags", "65537");
@@ -18197,6 +18228,27 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	}
 	else
 	{
+		// GalaxyRP fix: [Melee Battle] give this player their weapons and force powers back before
+		// dropping them from the roster. Every other way out of a battle already restores: death
+		// runs WP_InitForcePowers() in player_die() (g_combat.c), and going to spectator or
+		// disconnecting comes back through ClientSpawn(). Only this one -- typing /meleemode a
+		// second time while the fight is running -- restored nothing at all, because the three
+		// statements below clear level.melee_players[] first and melee_battle_end()'s loop then
+		// skips the very player who triggered it. They walked away with melee_battle_prepare()'s
+		// loadout (WP_MELEE only, binoculars only, fourteen force powers cleared) and kept it until
+		// they next died or the map changed.
+		//
+		// Gated on melee_mode > 1 because that is exactly the "has been prepared" test:
+		// melee_battle_prepare() runs once, at the 1 -> 2 transition, over everyone signed up at
+		// that moment, and nobody can join afterwards (the melee_mode > 1 refusal above). Leaving
+		// during signup takes nothing away, so it must put nothing back -- restoring there would
+		// mean a player who merely changed their mind had initialize_rpg_skills() re-applied to
+		// them, stripping anything an admin had given them for the price of a toggle.
+		if (level.melee_mode > 1)
+		{
+			melee_battle_restore(ent);
+		}
+
 		level.melee_players[ent->s.number] = -1;
 		level.melee_mode_quantity--;
 
