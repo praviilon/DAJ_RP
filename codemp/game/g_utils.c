@@ -1385,6 +1385,26 @@ void G_FreeEntity( gentity_t *ed ) {
 		level.chaos_portal_id = -1;
 	}
 
+	// GalaxyRP fix: [Entity System] the same cleanup the chaos portal above has always had, now
+	// applied to the other two level fields that hold a bare entity number. Both store the id of a
+	// model spawned for a mini-game arena -- the Duel Tournament globe and the Melee Battle catwalk
+	// -- and both were only ever cleared by their own *_end() function. Anything else that freed the
+	// entity left the id dangling: /entremove accepts it (it only refuses the reserved client and
+	// body-queue slots), and G_Spawn() recycles a freed slot after about a second, so by the time
+	// duel_tournament_end() or melee_battle_end() ran its G_FreeEntity(&g_entities[id]) that slot
+	// could belong to something else entirely -- which then got freed instead. Clearing the id here
+	// means whoever frees the entity, by whatever route, the "!= -1" guards downstream see the
+	// truth and simply skip the free.
+	if (level.duel_tournament_model_id != -1 && level.duel_tournament_model_id == ed->s.number)
+	{
+		level.duel_tournament_model_id = -1;
+	}
+
+	if (level.melee_model_id != -1 && level.melee_model_id == ed->s.number)
+	{
+		level.melee_model_id = -1;
+	}
+
 	trap->UnlinkEntity ((sharedEntity_t *)ed);		// unlink from world
 
 	trap->ICARUS_FreeEnt( (sharedEntity_t *)ed );	//ICARUS information must be added after this point

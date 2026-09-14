@@ -7831,6 +7831,24 @@ void duel_tournament_prize(gentity_t *ent)
 	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
 }
 
+// GalaxyRP fix: [Duel Tournament] replace one file with another, atomically where the platform
+// allows it. Factored out because the leaderboard machine now does this in two places (the
+// all-or-nothing append in step 2 and the rebuild in step 5) and the Win32 caveat is easy to get
+// wrong: POSIX rename() replaces the destination in one step, Win32 rename() refuses if the
+// destination exists, so it has to be removed first. Returns qtrue only if the replacement landed.
+static qboolean RP_ReplaceFile(const char *from, const char *to)
+{
+#if defined(_WIN32)
+	remove(to);
+#endif
+	if (rename(from, to) != 0)
+	{
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
 void duel_tournament_generate_leaderboard(char *filename, char *netname)
 {
 	level.duel_leaderboard_timer = level.time + 500;
@@ -9096,6 +9114,7 @@ void G_RunFrame( int levelTime ) {
 			{ 
 				char content[64];
 				qboolean found_acc = qfalse;
+				qboolean record_truncated = qfalse;
 				int j = 0;
 
 				strcpy(content, "");
@@ -9116,18 +9135,23 @@ void G_RunFrame( int levelTime ) {
 						// first was ever checked. On a truncated file the 2nd/3rd fgets() failed,
 						// content kept whatever the previous line held, and the score was parsed
 						// out of it -- so a half-written record could award an arbitrary win count.
+						//
+						// The first version of this fix substituted an empty string, which made
+						// atoi() return 0 and the new score 1. That is deterministic but still
+						// destructive: steps 3 and 4 would then rewrite the file with the winner
+						// reset to a single win, throwing away however many they really had. It is
+						// also inconsistent with step 4, which discards its work rather than
+						// publish something it is not sure of. Do the same here -- if the winner's
+						// own record cannot be read in full, there is no trustworthy score to
+						// build on, so stop and leave leaderboard.txt exactly as it is.
 						// zyk: reads player name
-						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
-						{
-							content[0] = '\0';
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL ||
+							fgets(content, sizeof(content), leaderboard_file) == NULL)
+						{ // zyk: reads player name, then score -- either missing means a short record
+							record_truncated = qtrue;
+							break;
 						}
-						RP_StripTrailingNewline(content);
 
-						// zyk: reads score
-						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
-						{
-							content[0] = '\0';
-						}
 						RP_StripTrailingNewline(content);
 
 						level.duel_leaderboard_score = atoi(content) + 1; // zyk: sets the new number of tourmanemt victories of this winner
@@ -9155,7 +9179,12 @@ void G_RunFrame( int levelTime ) {
 
 				fclose(leaderboard_file);
 
-				if (found_acc == qfalse)
+				if (record_truncated == qtrue)
+				{ // zyk: the winner's record was short -- leave the file alone rather than guess
+					G_LogPrintf("duel tournament: the winner's record in GalaxyRP/leaderboard.txt is incomplete; the leaderboard is left unchanged\n");
+					level.duel_leaderboard_step = 0;
+				}
+				else if (found_acc == qfalse)
 				{ // zyk: did not find the player, saves him at the end of the file
 					level.duel_leaderboard_step = 2;
 					level.duel_leaderboard_timer = level.time + 500;
@@ -9169,18 +9198,74 @@ void G_RunFrame( int levelTime ) {
 		}
 		else if (level.duel_leaderboard_step == 2)
 		{ // zyk: add the player to the end of the file with 1 tournament win
-			FILE *leaderboard_file = fopen("GalaxyRP/leaderboard.txt", "a");
+			// GalaxyRP fix: [Duel Tournament] this appended the new record straight into
+			// leaderboard.txt with an unchecked fopen() and an unchecked fprintf(). The NULL handle
+			// was a crash in G_RunFrame; the unchecked write was worse in a quieter way -- a record
+			// is three lines, so a write that failed half way through (a full disk, an I/O error)
+			// left the file with a partial tail and broke the 3-line structure that every reader
+			// here relies on, permanently and with no way back.
+			//
+			// Built as a complete replacement instead: copy the existing file, append the record,
+			// and only swap it in once the whole thing is known to be on disk. The original is
+			// untouched unless the new one is complete. Same output, same position at the end of
+			// the file -- only the failure behaviour changes.
+			FILE *old_file = fopen("GalaxyRP/leaderboard.txt", "r"); // zyk: may not exist yet
+			FILE *new_file = fopen("GalaxyRP/new_leaderboard.txt", "w");
 
-			// GalaxyRP fix: [Duel Tournament] fprintf() straight into an unchecked fopen() result.
-			// A read-only or missing GalaxyRP directory made this a NULL dereference in G_RunFrame.
-			if (leaderboard_file != NULL)
+			if (new_file == NULL)
 			{
-				fprintf(leaderboard_file, "%s\n%s\n1\n", level.duel_leaderboard_acc, level.duel_leaderboard_name);
-				fclose(leaderboard_file);
+				if (old_file != NULL)
+				{
+					fclose(old_file);
+				}
+
+				G_LogPrintf("duel tournament: could not open GalaxyRP/new_leaderboard.txt; leaderboard not updated\n");
 			}
 			else
 			{
-				G_LogPrintf("duel tournament: could not open GalaxyRP/leaderboard.txt for append; leaderboard not updated\n");
+				qboolean append_ok = qtrue;
+
+				if (old_file != NULL)
+				{ // zyk: carry the existing records across unchanged
+					char copy_buffer[1024];
+					size_t copied = 0;
+
+					while ((copied = fread(copy_buffer, 1, sizeof(copy_buffer), old_file)) > 0)
+					{
+						if (fwrite(copy_buffer, 1, copied, new_file) != copied)
+						{
+							append_ok = qfalse;
+							break;
+						}
+					}
+
+					if (ferror(old_file) != 0)
+					{ // zyk: the source could not be read in full -- do not publish a short copy
+						append_ok = qfalse;
+					}
+
+					fclose(old_file);
+				}
+
+				fprintf(new_file, "%s\n%s\n1\n", level.duel_leaderboard_acc, level.duel_leaderboard_name);
+
+				if (ferror(new_file) != 0)
+				{
+					append_ok = qfalse;
+				}
+
+				// zyk: fclose can fail in its own right -- the final flush is where a full disk
+				// usually shows up, and ferror above cannot have seen it yet
+				if (fclose(new_file) != 0)
+				{
+					append_ok = qfalse;
+				}
+
+				if (append_ok == qfalse || RP_ReplaceFile("GalaxyRP/new_leaderboard.txt", "GalaxyRP/leaderboard.txt") == qfalse)
+				{
+					remove("GalaxyRP/new_leaderboard.txt");
+					G_LogPrintf("duel tournament: could not add the winner to the leaderboard; it is left unchanged\n");
+				}
 			}
 
 			level.duel_leaderboard_step = 0; // zyk: stop creating the leaderboard
@@ -9276,40 +9361,14 @@ void G_RunFrame( int levelTime ) {
 			}
 			else
 			{
-			qboolean rewrite_ok = qtrue;
+				qboolean rewrite_ok = qtrue;
 
-			// zyk: saving players before the winner
-			for (j = 0; j < level.duel_leaderboard_index; j++)
-			{
-				// zyk: saving acc name
-				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
-				RP_StripTrailingNewline(content);
-				fprintf(new_leaderboard_file, "%s\n", content);
-
-				// zyk: saving player name
-				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
-				RP_StripTrailingNewline(content);
-				fprintf(new_leaderboard_file, "%s\n", content);
-
-				// zyk: saving score
-				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
-				RP_StripTrailingNewline(content);
-				fprintf(new_leaderboard_file, "%s\n", content);
-			}
-
-			// zyk: saving the winner
-			if (rewrite_ok == qtrue)
-			{
-				fprintf(new_leaderboard_file, "%s\n%s\n%d\n", level.duel_leaderboard_acc, level.duel_leaderboard_name, level.duel_leaderboard_score);
-			}
-
-			// zyk: saving the other players, except the old line of the winner
-			while (rewrite_ok == qtrue && fgets(content, sizeof(content), leaderboard_file) != NULL)
-			{
-				RP_StripTrailingNewline(content);
-
-				if (Q_stricmp(content, level.duel_leaderboard_acc) != 0)
+				// zyk: saving players before the winner
+				for (j = 0; j < level.duel_leaderboard_index; j++)
 				{
+					// zyk: saving acc name
+					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+					RP_StripTrailingNewline(content);
 					fprintf(new_leaderboard_file, "%s\n", content);
 
 					// zyk: saving player name
@@ -9322,37 +9381,70 @@ void G_RunFrame( int levelTime ) {
 					RP_StripTrailingNewline(content);
 					fprintf(new_leaderboard_file, "%s\n", content);
 				}
+
+				// zyk: saving the winner
+				if (rewrite_ok == qtrue)
+				{
+					fprintf(new_leaderboard_file, "%s\n%s\n%d\n", level.duel_leaderboard_acc, level.duel_leaderboard_name, level.duel_leaderboard_score);
+				}
+
+				// zyk: saving the other players, except the old line of the winner
+				while (rewrite_ok == qtrue && fgets(content, sizeof(content), leaderboard_file) != NULL)
+				{
+					RP_StripTrailingNewline(content);
+
+					if (Q_stricmp(content, level.duel_leaderboard_acc) != 0)
+					{
+						fprintf(new_leaderboard_file, "%s\n", content);
+
+						// zyk: saving player name
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+						RP_StripTrailingNewline(content);
+						fprintf(new_leaderboard_file, "%s\n", content);
+
+						// zyk: saving score
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+						RP_StripTrailingNewline(content);
+						fprintf(new_leaderboard_file, "%s\n", content);
+					}
+					else
+					{
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+						RP_StripTrailingNewline(content);
+
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+						RP_StripTrailingNewline(content);
+					}
+				}
+
+				fclose(leaderboard_file);
+
+				if (ferror(new_leaderboard_file) != 0)
+				{ // zyk: a write failed (out of disk, for one) -- do not publish a partial file
+					rewrite_ok = qfalse;
+				}
+
+				// GalaxyRP fix: [Duel Tournament] ferror() alone was checked, and only before the
+				// close. The final flush happens inside fclose(), which is exactly where a full disk
+				// tends to surface, and ferror() cannot have seen that yet -- so a write that failed
+				// at the last moment slipped through and the partial file was published.
+				if (fclose(new_leaderboard_file) != 0)
+				{
+					rewrite_ok = qfalse;
+				}
+
+				if (rewrite_ok == qfalse)
+				{
+					remove("GalaxyRP/new_leaderboard.txt");
+					G_LogPrintf("duel tournament: leaderboard.txt ended mid-record or could not be written; it is left unchanged\n");
+
+					level.duel_leaderboard_step = 0;
+				}
 				else
 				{
-					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
-					RP_StripTrailingNewline(content);
-
-					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
-					RP_StripTrailingNewline(content);
+					level.duel_leaderboard_step = 5;
+					level.duel_leaderboard_timer = level.time + 500;
 				}
-			}
-
-			fclose(leaderboard_file);
-
-			if (ferror(new_leaderboard_file) != 0)
-			{ // zyk: a write failed (out of disk, for one) -- do not publish a partial file
-				rewrite_ok = qfalse;
-			}
-
-			fclose(new_leaderboard_file);
-
-			if (rewrite_ok == qfalse)
-			{
-				remove("GalaxyRP/new_leaderboard.txt");
-				G_LogPrintf("duel tournament: leaderboard.txt ended mid-record or could not be written; it is left unchanged\n");
-
-				level.duel_leaderboard_step = 0;
-			}
-			else
-			{
-			level.duel_leaderboard_step = 5;
-			level.duel_leaderboard_timer = level.time + 500;
-			}
 			}
 		}
 		else if (level.duel_leaderboard_step == 5)
@@ -9364,13 +9456,9 @@ void G_RunFrame( int levelTime ) {
 			// exist, so the leaderboard was NEVER updated there: /duelboard kept showing the old
 			// standings and GalaxyRP/new_leaderboard.txt piled up unread.
 			//
-			// rename() does the job on both platforms with no shell, no quoting and no PATH.
-			// POSIX rename() replaces the destination atomically; Win32 rename() fails if the
-			// destination exists, so remove it there first.
-#if defined(_WIN32)
-			remove("GalaxyRP/leaderboard.txt");
-#endif
-			if (rename("GalaxyRP/new_leaderboard.txt", "GalaxyRP/leaderboard.txt") != 0)
+			// rename() does the job on every platform with no shell, no quoting and no PATH; see
+			// RP_ReplaceFile() above for the Win32 caveat it handles.
+			if (RP_ReplaceFile("GalaxyRP/new_leaderboard.txt", "GalaxyRP/leaderboard.txt") == qfalse)
 			{
 				G_LogPrintf("duel tournament: could not replace GalaxyRP/leaderboard.txt with the rebuilt file\n");
 			}
