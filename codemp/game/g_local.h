@@ -1869,6 +1869,7 @@ typedef struct level_locals_s {
 	qboolean zyk_gamestate_full;					// so the refusal is logged once, not per name
 	qboolean zyk_configstring_table_full[ZYK_CS_TABLES];	// same, per indexed table
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
+	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot
 
 	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
 	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts

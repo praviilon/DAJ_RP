@@ -1031,37 +1031,26 @@ instead of being removed and recreated, which can cause interpolated
 angles and bad trails.
 =================
 */
-// GalaxyRP fix: [Entity System] how many slots G_Spawn() below would actually hand out right now:
-// the free ones under level.num_entities that pass its freetime rule, plus everything above it that
-// has never been opened.
+// GalaxyRP fix: [Entity System] how many slots G_Spawn() below can still hand out: every unused one
+// under level.num_entities, plus everything above it that has never been opened.
 //
-// The freetime rule has to be repeated here, not ignored. G_Spawn() loops "force" 0 then 1 and only
-// skips a recently-freed slot while force is 0, which reads as if the second pass will take one
-// anyway -- but the second pass is unreachable. The inner loop ends with i == level.num_entities,
-// the "break" test is "i != MAX_GENTITIES" (1024), and level.num_entities can never exceed
-// ENTITYNUM_MAX_NORMAL (1022) because the check just below drops the server at that point. So the
-// break always fires after the first pass and a slot freed less than a second ago is simply not
-// available. Counting those slots made this function over-report and let G_EntitySlotsAvailable()
-// wave a spawn through into an ERR_DROP -- which is the one outcome the whole guard exists to stop.
-//
-// If that dead second pass is ever revived, this predicate must be revisited; until then the worst
-// it can do is under-report during a burst of frees, which only refuses a spawn a moment early.
+// The freetime rule G_Spawn() applies on its first pass is deliberately not repeated here, and that
+// is only correct because its second pass really does ignore it. It did not always: the break that
+// ends the search used to test "i != MAX_GENTITIES", which is always true, so the second pass never
+// ran and a slot freed moments ago was not available at all. This counter was made to match that,
+// and then the break was fixed to Raven's own "i != ENTITYNUM_MAX_NORMAL", which is what makes a
+// recently-freed slot reusable again -- so the extra test came back out. The two have to move
+// together: if the second pass is ever disabled again, this must skip those slots again, or it will
+// report room G_Spawn cannot give and wave a guarded caller into the ERR_DROP below.
 int G_FreeEntityCount( void ) {
 	int			i, count = 0;
 	gentity_t	*e;
 
 	e = &g_entities[MAX_CLIENTS];
 	for ( i = MAX_CLIENTS; i < level.num_entities; i++, e++ ) {
-		if ( e->inuse ) {
-			continue;
+		if ( !e->inuse ) {
+			count++;
 		}
-
-		// same test G_Spawn() applies on the only pass it ever runs
-		if ( e->freetime > level.startTime + 2000 && (level.time - e->freetime) < 1000 ) {
-			continue;
-		}
-
-		count++;
 	}
 
 	if ( level.num_entities < ENTITYNUM_MAX_NORMAL ) {
@@ -1109,11 +1098,41 @@ gentity_t *G_Spawn( void ) {
 				continue;
 			}
 
+			// GalaxyRP fix: [Entity System] the second pass has just rescued a spawn that would
+			// otherwise have dropped the server: the table is completely full and this slot was
+			// freed less than a second ago, so a client may briefly see the old entity morph
+			// rather than disappear. Worth exactly one line in the log, and no more.
+			if ( force && !level.zyk_entity_force_reuse_warned ) {
+				level.zyk_entity_force_reuse_warned = qtrue;
+				G_LogPrintf( "entity table is completely full (%d slots); reusing slot %d, freed %dms "
+					"ago, rather than dropping. Expect brief visual glitches until pressure eases.\n",
+					level.num_entities, i, level.time - e->freetime );
+			}
+
 			// reuse this slot
 			G_InitGentity( e );
 			return e;
 		}
-		if ( i != MAX_GENTITIES ) {
+		// GalaxyRP fix: [Entity System] this was "i != MAX_GENTITIES", and that is a typo with a
+		// 25-year head start -- Raven's own singleplayer code (code/game/g_utils.cpp and
+		// codeJK2/game/g_utils.cpp) writes ENTITYNUM_MAX_NORMAL here; only the multiplayer copy
+		// says MAX_GENTITIES, and every JKA fork inherited it.
+		//
+		// The inner loop above always ends with i == level.num_entities, and level.num_entities can
+		// never exceed ENTITYNUM_MAX_NORMAL (1022) because the check just below drops the server at
+		// that point -- it can never be MAX_GENTITIES (1024). So the test was always true, the break
+		// always fired after the first pass, and the whole "force" pass was unreachable code. The
+		// comment at the top of this loop describes something that had never once run.
+		//
+		// What that cost: with the table full and nothing free except slots released in the last
+		// second, the server dropped every player on it rather than reusing one. Temp entities are
+		// the easy way to get there -- each is freed a frame after it is created, so a busy moment
+		// puts hundreds of slots inside that window at once.
+		//
+		// Reading it correctly: break out only when there is still room to open a new slot. When
+		// there is not, fall through to force == 1 and take a recently-freed one, which costs at
+		// worst a brief interpolation glitch on one entity.
+		if ( i != ENTITYNUM_MAX_NORMAL ) {
 			break;
 		}
 	}
@@ -1130,7 +1149,8 @@ gentity_t *G_Spawn( void ) {
 	// GalaxyRP fix: [Entity System] one-time early warning. The guards on the player-driven spawn
 	// paths keep ZYK_ENTITY_RESERVE slots back for allocations nothing can refuse -- temp entities,
 	// missiles, gibs -- but sustained pressure from those can still eat the reserve, and when it is
-	// gone this function calls trap->Error(ERR_DROP) and the server goes down with everyone on it.
+	// gone, all that stands between this function and trap->Error(ERR_DROP) -- which takes the
+	// server down with everyone on it -- is the force pass recycling a slot freed moments ago.
 	// Say so once while there is still room to act, rather than leaving the log silent until the
 	// drop. Deliberately not a refusal: this path has ~70 callers that cannot handle one.
 	if ( !level.zyk_entity_reserve_warned
