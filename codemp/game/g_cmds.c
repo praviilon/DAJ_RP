@@ -18200,87 +18200,15 @@ void Cmd_MeleeArena_f(gentity_t *ent) {
 	}
 }
 
-/*
-==================
-Cmd_RpgLmsMode_f
-==================
-*/
-void Cmd_RpgLmsMode_f(gentity_t *ent) {
-	if (zyk_allow_rpg_lms.integer != 1)
-	{
-		trap->SendServerCommand(ent->s.number, va("chat \"^3RPG LMS: ^7this mode is not allowed in this server\n\""));
-		return;
-	}
-
-	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking /rpglms during boss battles used to be
-	// here. guardian_mode is permanently 0 now, so it was unreachable.
-
-	if (level.rpg_lms_players[ent->s.number] == -1 && level.rpg_lms_mode > 1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join the RPG LMS now\n\"");
-		return;
-	}
-	else if (level.rpg_lms_players[ent->s.number] == -1)
-	{ // zyk: join the rpg lms battle
-		level.rpg_lms_players[ent->s.number] = 0;
-		level.rpg_lms_mode = 1;
-		level.rpg_lms_timer = level.time + 15000;
-		level.rpg_lms_quantity++;
-
-		trap->SendServerCommand(-1, va("chat \"^3RPG LMS: ^7%s ^7joined the battle!\n\"", ent->client->pers.netname));
-	}
-	else
-	{
-		level.rpg_lms_players[ent->s.number] = -1;
-		level.rpg_lms_quantity--;
-		trap->SendServerCommand(-1, va("chat \"^3RPG LMS: ^7%s ^7left the battle!\n\"", ent->client->pers.netname));
-	}
-}
-
-/*
-==================
-Cmd_RpgLmsTable_f
-==================
-*/
-void Cmd_RpgLmsTable_f(gentity_t *ent) {
-	int i = 0;
-	char content[1024];
-
-	strcpy(content, "\nRPG LMS Players\n\n");
-
-	if (level.rpg_lms_mode == 0)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"There is no RPG LMS now\n\"");
-		return;
-	}
-
-	// GalaxyRP fix: [overflow] this list was built with strcpy(buf, va("%s...", buf, ...)). va()
-	// formats into a 32000-byte buffer and knows nothing about the destination, so once the text
-	// passed the buffer's size that strcpy wrote off the end of a stack array -- 18 bytes of header plus 32 rows of 45 is 1459 into char content[1024]. Rows are now
-	// formatted into their own bounded buffer and appended with Q_strcat, and the message is
-	// flushed and continued whenever the next row would not fit. Same text, same order.
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.rpg_lms_players[i] != -1)
-		{ // zyk: a player in RPG LMS Battle
-			gentity_t *player_ent = &g_entities[i];
-			char entry[MAX_NETNAME + 64];
-
-			Com_sprintf(entry, sizeof(entry), "^7%s   ^3%d\n", player_ent->client->pers.netname, level.rpg_lms_players[i]);
-
-			if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
-			{
-				trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
-				strcpy(content, "");
-			}
-
-			Q_strcat(content, sizeof(content), entry);
-		}
-	}
-
-	Q_strcat(content, sizeof(content), "\n");
-	trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
-}
+// GalaxyRP: [RPG LMS] Cmd_RpgLmsMode_f() and Cmd_RpgLmsTable_f() -- the "/rpglmsmode" and
+// "/rpglmstable" commands -- used to sit here, and their rows in commands[] below went with them.
+// They were the only way into the RPG LMS: joining set level.rpg_lms_players[client] to 0 and
+// level.rpg_lms_mode to 1, which is what every other RPG LMS branch in the mod tested for. With the
+// zyk_allow_rpg_lms cvar gone and the whole feature removed, nothing can raise that state any more,
+// so all of it -- rpg_lms_end/prepare/winner and the G_RunFrame block that drove them (g_main.c),
+// the hit restriction in zyk_can_hit_target() (g_main.c), the death handling in player_die()
+// (g_combat.c), the spectator/disconnect resets (g_client.c) and the level_locals_t fields
+// themselves (g_local.h) -- has been removed with it.
 
 /*
 ==================
@@ -18540,8 +18468,9 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 // 2017 and never modified since), which toggled player_statuses bit 26 to make a player unable to
 // damage other players and, more importantly, unable to be damaged BY them. It has been removed
 // entirely, along with every check that read that bit: the two in zyk_can_hit_target() (g_main.c),
-// the sentry-gun one in G_Damage() (g_combat.c), and the five "cannot join X while being in nofight
-// mode" guards on /race, /duelmode, /sniper, /melee and /rpglms above.
+// the sentry-gun one in G_Damage() (g_combat.c), and the "cannot join X while being in nofight
+// mode" guards on /race, /duelmode, /sniper and /melee above. There was a fifth, on /rpglms, which
+// went with the RPG LMS removal.
 //
 // It could only be toggled while spectating, so a player who enabled it and then joined had no way
 // to turn it back off, and nothing in the game told them it was on -- the only documentation was an
@@ -19359,8 +19288,6 @@ command_t commands[] = {
 	{ "removepickups",		Cmd_RemovePickups_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "roll",				Cmd_Roll_f,				CMD_NOINTERMISSION|CMD_ALIVE },
 	{ "rollall",			Cmd_RollAll_f,			CMD_NOINTERMISSION },
-	{ "rpglmsmode",			Cmd_RpgLmsMode_f,			CMD_RPG | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "rpglmstable",		Cmd_RpgLmsTable_f,			CMD_NOINTERMISSION },
 	{ "scale",				Cmd_Scale_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "silence",			Cmd_Silence_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "skilldown",			Cmd_RpModeDown_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },

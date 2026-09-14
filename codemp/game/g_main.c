@@ -1195,10 +1195,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.melee_mode_quantity = 0;
 	level.melee_arena_loaded = qfalse;
 
-	// zyk: initializing RPG LMS variables
-	level.rpg_lms_mode = 0;
-	level.rpg_lms_quantity = 0;
-
 	level.last_spawned_entity = NULL;
 
 	level.ent_origin_set = qfalse;
@@ -1219,7 +1215,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			level.duel_players[zyk_iterator] = -1;
 			level.sniper_players[zyk_iterator] = -1;
 			level.melee_players[zyk_iterator] = -1;
-			level.rpg_lms_players[zyk_iterator] = -1;
 		}
 
 		for (zyk_iterator = 0; zyk_iterator < MAX_DUEL_MATCHES; zyk_iterator++)
@@ -5431,12 +5426,6 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 			return qfalse;
 		}
 
-		if (level.rpg_lms_mode > 1 && ((level.rpg_lms_players[attacker->s.number] != -1 && level.rpg_lms_players[target->s.number] == -1) ||
-			(level.rpg_lms_players[attacker->s.number] == -1 && level.rpg_lms_players[target->s.number] != -1)))
-		{ // zyk: players outside rpg lms cannot hit ones in it and vice-versa
-			return qfalse;
-		}
-
 		// GalaxyRP: [nofight] the two player_statuses bit 26 checks that used to sit here -- "used
 		// nofight command, cannot hit anyone" and "cannot be hit by anyone" -- are gone along with
 		// the /nofight command itself; see the note where Cmd_NoFight_f used to live in g_cmds.c.
@@ -8124,7 +8113,7 @@ void sniper_battle_end()
 			// players and needs no check of its own. It MUST stay ahead of the loadout call below: it
 			// clears weapons the character has no skill for, and the unconditional WP_BRYAR_PISTOL line
 			// above would otherwise put back a pistol an RPG character has not unlocked. Same pattern as
-			// rpg_lms_prepare() and ClientSpawn().
+			// ClientSpawn().
 			initialize_rpg_skills(ent);
 
 			// GalaxyRP fix: [Sniper Battle] sniper_battle_prepare() above hands every participant a
@@ -8237,74 +8226,9 @@ void sniper_battle_winner()
 	}
 }
 
-// zyk: finishes the RPG LMS
-void rpg_lms_end()
-{
-	int i = 0;
-
-	level.rpg_lms_mode = 0;
-	level.rpg_lms_quantity = 0;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		level.rpg_lms_players[i] = -1;
-	}
-}
-
-// zyk: prepares the rpg players for the battle
-void rpg_lms_prepare()
-{
-	int i = 0;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		gentity_t *ent = &g_entities[i];
-
-		if (level.rpg_lms_players[i] != -1)
-		{ // zyk: a player in the RPG LMS
-			if (ent->health < 1)
-			{ // zyk: respawn him if he is dead
-				ClientRespawn(ent);
-			}
-			else
-			{
-				initialize_rpg_skills(ent);
-			}
-		}
-	}
-}
-
-// zyk: shows the winner of the RPG LMS
-void rpg_lms_winner()
-{
-	int i = 0;
-	int credits = 1000;
-	gentity_t *ent = NULL;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.rpg_lms_players[i] != -1)
-		{
-			ent = &g_entities[i];
-			break;
-		}
-	}
-
-	if (ent)
-	{
-		add_credits(ent, credits);
-
-		save_account(ent, qtrue);
-
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-
-		trap->SendServerCommand(-1, va("chat \"^3RPG LMS: ^7%s ^7is the winner! prize: %d credits! Kills: %d\"", ent->client->pers.netname, credits, level.rpg_lms_players[ent->s.number]));
-	}
-	else
-	{
-		trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7No one is the winner!\"");
-	}
-}
+// GalaxyRP: [RPG LMS] rpg_lms_end(), rpg_lms_prepare() and rpg_lms_winner() used to sit here.
+// Their only callers were the RPG LMS block in G_RunFrame below, which is gone; see the note where
+// Cmd_RpgLmsMode_f used to live in g_cmds.c.
 
 // zyk: finishes the melee battle
 void melee_battle_end()
@@ -8340,7 +8264,7 @@ void melee_battle_end()
 			// players and needs no check of its own. It MUST stay last in this block: it clears weapons
 			// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
 			// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
-			// rpg_lms_prepare() and ClientSpawn().
+			// ClientSpawn().
 			initialize_rpg_skills(ent);
 		}
 
@@ -8884,44 +8808,6 @@ void G_RunFrame( int levelTime ) {
 		{ // zyk: finish the battle
 			sniper_battle_end();
 			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7Not enough players. Sniper Battle is over!\"");
-		}
-	}
-
-	// zyk: RPG LMS
-	if (level.rpg_lms_mode == 2)
-	{
-		if (level.rpg_lms_timer < level.time)
-		{
-			rpg_lms_end();
-			trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7Time is up! No winner!\"");
-		}
-		else if (level.rpg_lms_quantity == 1)
-		{
-			rpg_lms_winner();
-			rpg_lms_end();
-		}
-		// GalaxyRP fix: [RPG LMS] see the matching comment in the Melee Battle block above -- a count
-		// that reaches 0 rather than 1 never satisfied the "== 1" test, leaving the mode unjoinable
-		// until its full timeout.
-		else if (level.rpg_lms_quantity <= 0)
-		{
-			rpg_lms_end();
-			trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7No players left! RPG LMS is over!\"");
-		}
-	}
-	else if (level.rpg_lms_mode == 1 && level.rpg_lms_timer < level.time)
-	{
-		if (level.rpg_lms_quantity > 1)
-		{ // zyk: if at least 2 players joined in it, start the battle
-			rpg_lms_prepare();
-			level.rpg_lms_mode = 2;
-			level.rpg_lms_timer = level.time + 600000;
-			trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7the battle has begun! The battle will have a max of 10 minutes!\"");
-		}
-		else
-		{ // zyk: finish the battle
-			rpg_lms_end();
-			trap->SendServerCommand(-1, "chat \"^3RPG LMS: ^7Not enough players. RPG LMS is over!\"");
 		}
 	}
 

@@ -5952,8 +5952,9 @@
 // GalaxyRP: [Profile UI] the Games panel (the gamesControls group: rpgLmsButton, racemodeButton,
 // duelTournamentButton, sniperBattleButton, meleeBattleButton) and its "Games" sidebar button were
 // removed here, along with every "hide gamesControls" line the other sidebar buttons carried.
-// The mini-game modes themselves are untouched -- rpglmsmode, racemode, duelmode, snipermode and
-// meleemode stay registered in commands[] (g_cmds.c) and are still reachable from the console.
+// The remaining mini-game modes are untouched -- racemode, duelmode, snipermode and meleemode
+// stay registered in commands[] (g_cmds.c) and are still reachable from the console. RPG LMS is
+// the exception: the whole feature, rpglmsmode and rpglmstable included, was removed afterwards.
 // The panel bound no cvars and ran no uiScripts, so nothing in codemp/ui or codemp/cgame fed it and
 // no ui_* cvar was retired with it.
 //----------------------------------------------------------------------------------------------

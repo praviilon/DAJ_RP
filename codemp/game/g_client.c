@@ -2822,13 +2822,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		level.sniper_mode_quantity--;
 	}
 
-	// zyk: rpg lms player went to spec
-	if (level.rpg_lms_players[ent->s.number] > -1)
-	{
-		level.rpg_lms_players[ent->s.number] = -1;
-		level.rpg_lms_quantity--;
-	}
-
 	// zyk: melee battle player went to spec
 	if (level.melee_players[ent->s.number] > -1)
 	{
@@ -4564,13 +4557,6 @@ void ClientDisconnect( int clientNum ) {
 	{
 		level.sniper_players[ent->s.number] = -1;
 		level.sniper_mode_quantity--;
-	}
-
-	// zyk: rpg lms player disconnected
-	if (level.rpg_lms_players[ent->s.number] > -1)
-	{
-		level.rpg_lms_players[ent->s.number] = -1;
-		level.rpg_lms_quantity--;
 	}
 
 	// zyk: melee battle player disconnected

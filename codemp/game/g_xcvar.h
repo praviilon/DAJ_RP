@@ -248,7 +248,9 @@ XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NOR
 // GalaxyRP fix: [Quests] zyk_allow_guardian_quest and zyk_allow_bounty_quest used to be defined here.
 // Their only consumers, Cmd_GuardianQuest_f and Cmd_BountyQuest_f, were deleted as unreachable dead
 // code (see the GalaxyRP fix comment in g_cmds.c), leaving these cvars orphaned. Removed outright.
-XCVAR_DEF( zyk_allow_rpg_lms,	"1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [RPG LMS] zyk_allow_rpg_lms used to be defined here. Its only consumer was the join
+// guard in Cmd_RpgLmsMode_f, and the whole RPG LMS feature has been removed; see the note where
+// that command used to live in g_cmds.c. Also dropped from assets/server/galaxyrp_server.cfg.
 XCVAR_DEF( zyk_allow_race_mode, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_sniper_battle, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
