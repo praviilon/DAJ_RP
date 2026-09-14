@@ -663,13 +663,64 @@ typedef struct clientSession_s {
 } clientSession_t;
 
 // playerstate mGameFlags
-#define	PSG_VOTED				(1<<0)		// already cast a vote
-#define PSG_TEAMVOTED			(1<<1)		// already cast a team vote
+#define	PSG_VOTED				(1 << PLAYER_STATUS_SILENCED)		// already cast a vote
+#define PSG_TEAMVOTED			(1 << PLAYER_STATUS_EMOTE)		// already cast a team vote
 
 //
 #define MAX_NETNAME			36
 #define	MAX_VOTE_COUNT		3
 
+
+// GalaxyRP: [cleanup] names for the player_statuses bitfield below, adopted from the New Zyk Mod's
+// PLAYER_STATUS_* idea but numbered to OUR layout, not his. That distinction matters: his enum has
+// 16 entries and puts DUEL_TOURNAMENT_LOSS at bit 11, where ours has always been bit 27. Taking his
+// enum verbatim would have silently remapped every bit in the mod. Every value below is the bit
+// index this mod already used, so the generated code is unchanged -- only the spelling is.
+//
+// Use as (1 << PLAYER_STATUS_X). Bits marked "unreachable" are still read somewhere but nothing
+// sets them any more: the features that did (the quest crystals, the unique abilities, the ice
+// bomb, the RPG tutorial, the custom-quest NPCs) were removed in earlier cleanups. They are named
+// rather than deleted so the numbering stays stable and a future cleanup can find the dead readers.
+typedef enum {
+	PLAYER_STATUS_SILENCED = 0,              // silenced by an admin
+	PLAYER_STATUS_EMOTE,                     // using an emote
+	PLAYER_STATUS_SENT_RADAR_EVENT,          // client-side received the Bounty Hunter Upgrade event
+	PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT,  // client-side received the Jetpack Upgrade event
+	PLAYER_STATUS_SCALED,                    // /scale set a model scale other than 100
+	PLAYER_STATUS_CHAT_PROTECTION,           // chat protection is active for this player
+	// Downed: lying incapacitated and unable to act. Set both by the Death System (a lethal hit that
+	// downs instead of killing) and by the admin /paralyze command. PLAYER_STATUS_ADMIN_PARALYSIS
+	// says which -- this bit alone is a combat knockdown, this bit plus that one is an admin
+	// paralysis. Read it through G_PlayerIsDowned().
+	PLAYER_STATUS_DOWNED,
+	PLAYER_STATUS_SENT_FORCE_USER_EVENT,     // told client-side whether to render the Force Shield effect
+	PLAYER_STATUS_SABER_ARMOR,               // unreachable: nothing sets it
+	PLAYER_STATUS_GUN_ARMOR,                 // unreachable: nothing sets it
+	PLAYER_STATUS_HEALING_CRYSTAL,           // unreachable: nothing sets it
+	PLAYER_STATUS_ENERGY_CRYSTAL,            // unreachable: nothing sets it
+	PLAYER_STATUS_ADM_GIVE_FORCE,            // /admgive force handed this player force powers
+	PLAYER_STATUS_ADM_GIVE_GUNS,             // /admgive guns handed this player weapons
+	PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT, // magic power bar event queued for client-side
+	PLAYER_STATUS_SENDING_IMMUNITY_EVENT,    // unreachable: nothing sets it
+	PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT,   // unreachable: nothing sets it
+	PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT, // unreachable: nothing sets it
+	PLAYER_STATUS_NPC_ORDER_GUARD,           // NPC has the guard order
+	PLAYER_STATUS_NPC_ORDER_COVER,           // NPC has the cover order
+	PLAYER_STATUS_POISON_DART_HIT,           // taking poison dart damage over time
+	PLAYER_STATUS_UNIQUE_ABILITY_1,          // unreachable: nothing sets it
+	PLAYER_STATUS_UNIQUE_ABILITY_2,          // unreachable: nothing sets it
+	PLAYER_STATUS_UNIQUE_ABILITY_3,          // unreachable: nothing sets it
+	PLAYER_STATUS_ICE_BOMB_HIT,              // unreachable: nothing sets it
+	PLAYER_STATUS_RPG_TUTORIAL,              // unreachable: nothing sets it
+	// Paralyzed by an admin, as opposed to downed in combat. Always set together with
+	// PLAYER_STATUS_DOWNED, never on its own, so /getup and /helpup can revive a combat knockdown
+	// while refusing an admin punishment. Reused from the removed /nofight command; safe because
+	// nothing read the old bit any more, and both ClientConnect and ClientDisconnect zero the whole
+	// field, so no stale bit survives a rejoin. Read it through G_PlayerIsAdminParalyzed().
+	PLAYER_STATUS_ADMIN_PARALYSIS,
+	PLAYER_STATUS_DUEL_TOURNAMENT_LOSS,      // has just lost his duel in the Duel Tournament
+	PLAYER_STATUS_CUSTOM_QUEST_NPC           // unreachable: nothing sets it
+} playerStatus_t;
 
 // client data that stays across multiple respawns, but is cleared
 // on each level change or team change at ClientBegin()
@@ -712,42 +763,7 @@ typedef struct clientPersistant_s {
 
 	// zyk: account system attributes
 
-	// zyk: Possible bit values are:
-	// 0 - Silenced by an admin
-	// 1 - using an emote
-	// 2 - Received Radar event - set after client-side receives the Bounty Hunter Upgrade event
-	// 3 - Received Jetpack Flame event - set after client-side receives the Jetpack Upgrade event
-	// 4 - Scaled player
-	// 5 - Chat protection activated for this player
-	// 6 - Downed: lying incapacitated and unable to act. Set both by the Death System (a lethal hit
-	//     that downs instead of killing) and by the admin /paralyze command. Bit 26 says which --
-	//     bit 6 alone is a combat knockdown, bit 6 + bit 26 is an admin paralysis.
-	// 7 - send event so client-side mod knows if this is a Force User or not, to render the Force Shield effect
-	// 8 - using Saber Armor
-	// 9 - using Gun Armor
-	// 10 - using Healing Crystal
-	// 11 - using Energy Crystal
-	// 12 - Give Command - Force
-	// 13 - Give Command - Guns
-	// 14 - Sending current Magic Power event
-	// 15 - Sending Immunity Power event
-	// 16 - Sending Ultra Strength event
-	// 17 - Sending Ultra Resistance event
-	// 18 - NPC has the guard order
-	// 19 - NPC has the cover order
-	// 20 - hit by poison dart
-	// 21 - Unique Ability 1
-	// 22 - Unique Ability 2
-	// 23 - Unique Ability 3
-	// 24 - hit by Ice Bomb
-	// 25 - RPG Mode tutorial
-	// 26 - Paralyzed by an admin, as opposed to downed in combat. Always set together with bit 6, never
-	//      on its own. Distinguishes the two states so /getup and /helpup can revive a combat knockdown
-	//      (which is the whole point of the Death System) while refusing an admin punishment. Reused
-	//      from the removed /nofight command; safe because nothing read the old bit any more, and both
-	//      ClientConnect and ClientDisconnect zero the whole field, so no stale bit survives a rejoin.
-	// 27 - Has just lost his duel in Duel Tournament
-	// 28 - Custom Quest npc
+	// zyk: a bitfield of playerStatus_t values -- see the enum above this struct.
 	int player_statuses;
 
 	// zyk: used to backup player force powers before some event that does not allow them. They will be restored after event ends
@@ -2636,6 +2652,7 @@ void Svcmd_ToggleAllowVote_f( void );
 #define XCVAR_PROTO
 	#include "g_xcvar.h"
 #undef XCVAR_PROTO
+void RP_StripTrailingNewline( char *s );
 void G_RegisterCvars( void );
 void G_UpdateCvars( void );
 

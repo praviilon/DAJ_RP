@@ -2232,8 +2232,8 @@ void TryUse( gentity_t *ent )
 	{
 		if (!target->client->leader)
 		{ // zyk: setting the npc leader so he follows the player
-			target->client->pers.player_statuses &= ~(1 << 18);
-			target->client->pers.player_statuses &= ~(1 << 19);
+			target->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
+			target->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
 			target->client->leader = ent;
 			target->NPC->tempBehavior = BS_FOLLOW_LEADER;
 		}
@@ -3087,7 +3087,7 @@ qboolean G_PlayerIsDowned( gentity_t *ent )
 		return qfalse;
 	}
 
-	return (ent->client->pers.player_statuses & (1 << 6)) ? qtrue : qfalse;
+	return (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) ? qtrue : qfalse;
 }
 
 // GalaxyRP fix: [Death System] bit 6 alone cannot tell a combat knockdown from an admin paralysis --
@@ -3102,5 +3102,5 @@ qboolean G_PlayerIsAdminParalyzed( gentity_t *ent )
 		return qfalse;
 	}
 
-	return (ent->client->pers.player_statuses & (1 << 26)) ? qtrue : qfalse;
+	return (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADMIN_PARALYSIS)) ? qtrue : qfalse;
 }

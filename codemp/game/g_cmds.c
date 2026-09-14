@@ -858,7 +858,7 @@ void Cmd_Emote_f( gentity_t *ent )
 		{
 			play_animation(ent, animations[i].animation_code, 1000);
 
-			ent->client->pers.player_statuses |= (1 << 1);
+			ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_EMOTE);
 
 			return;
 		}
@@ -901,7 +901,7 @@ void Cmd_Emote_f( gentity_t *ent )
 		{
 			play_animation(ent, (int)anim_id_int, 1000);
 
-			ent->client->pers.player_statuses |= (1 << 1);
+			ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_EMOTE);
 
 			return;
 		}
@@ -1117,11 +1117,11 @@ void Cmd_Give_f( gentity_t *ent )
 
 	if (Q_stricmp(arg2, "force") == 0)
 	{
-		if (g_entities[client_id].client->pers.player_statuses & (1 << 12))
+		if (g_entities[client_id].client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_FORCE))
 		{ // zyk: remove force powers
 			zyk_remove_force_powers(&g_entities[client_id]);
 
-			g_entities[client_id].client->pers.player_statuses &= ~(1 << 12);
+			g_entities[client_id].client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADM_GIVE_FORCE);
 			trap->SendServerCommand( -1, va("print \"Removed force powers from %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		}
 		else
@@ -1129,18 +1129,18 @@ void Cmd_Give_f( gentity_t *ent )
 			zyk_remove_guns(&g_entities[client_id]);
 			zyk_add_force_powers(&g_entities[client_id]);
 
-			g_entities[client_id].client->pers.player_statuses &= ~(1 << 13);
-			g_entities[client_id].client->pers.player_statuses |= (1 << 12);
+			g_entities[client_id].client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADM_GIVE_GUNS);
+			g_entities[client_id].client->pers.player_statuses |= (1 << PLAYER_STATUS_ADM_GIVE_FORCE);
 			trap->SendServerCommand( -1, va("print \"Added force powers to %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		}
 	}
 	else if (Q_stricmp(arg2, "guns") == 0)
 	{
-		if (g_entities[client_id].client->pers.player_statuses & (1 << 13))
+		if (g_entities[client_id].client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_GUNS))
 		{ // zyk: remove guns
 			zyk_remove_guns(&g_entities[client_id]);
 
-			g_entities[client_id].client->pers.player_statuses &= ~(1 << 13);
+			g_entities[client_id].client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADM_GIVE_GUNS);
 			trap->SendServerCommand( -1, va("print \"Removed guns from %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		}
 		else
@@ -1148,8 +1148,8 @@ void Cmd_Give_f( gentity_t *ent )
 			zyk_remove_force_powers(&g_entities[client_id]);
 			zyk_add_guns(&g_entities[client_id]);
 
-			g_entities[client_id].client->pers.player_statuses &= ~(1 << 12);
-			g_entities[client_id].client->pers.player_statuses |= (1 << 13);
+			g_entities[client_id].client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADM_GIVE_FORCE);
+			g_entities[client_id].client->pers.player_statuses |= (1 << PLAYER_STATUS_ADM_GIVE_GUNS);
 			trap->SendServerCommand( -1, va("print \"Added guns to %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		}
 	}
@@ -1173,9 +1173,9 @@ void do_scale(gentity_t *ent, int new_size)
 	ent->client->pers.player_scale = new_size;
 
 	if (new_size == 100) // zyk: default size
-		ent->client->pers.player_statuses &= ~(1 << 4);
+		ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SCALED);
 	else
-		ent->client->pers.player_statuses |= (1 << 4);
+		ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_SCALED);
 }
 
 void display_scale_help(gentity_t *ent) {
@@ -1410,7 +1410,7 @@ void Cmd_Noclip_f( gentity_t *ent ) {
 	// command outside FFA when the cvar was 0. The cvar defaulted to 1 and was never set in any
 	// shipped config, so the gate never fired; it has been removed along with the cvar itself.
 
-	if (ent->client->pers.player_statuses & (1 << 6)) {
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot noClip while downed!\n\"");
 		trap->SendServerCommand(ent - g_entities, "cp \"^1You cannot noClip while downed!\n\"");
 
@@ -1510,7 +1510,7 @@ void G_Kill( gentity_t *ent ) {
 	}
 
 	// zyk: target has been paralyzed by an admin
-	if (ent && ent->client && !ent->NPC && ent->client->pers.player_statuses & (1 << 6))
+	if (ent && ent->client && !ent->NPC && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))
 		return;
 
 	ent->flags &= ~FL_GODMODE;
@@ -1578,7 +1578,7 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 	// other downed player. Setting it after the decloak keeps both behaviours.
 	ent->flags |= FL_NOTARGET;
 
-	ent->client->pers.player_statuses |= (1 << 6);
+	ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_DOWNED);
 
 	// GalaxyRP fix: [Death System] bit 26 marks this as an admin punishment rather than a combat
 	// knockdown. Everything that only asks "can this player act?" keeps reading bit 6 and is
@@ -1586,11 +1586,11 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 	// other. Always set alongside bit 6, never on its own.
 	if ( adminParalysis )
 	{
-		ent->client->pers.player_statuses |= (1 << 26);
+		ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_ADMIN_PARALYSIS);
 	}
 	else
 	{
-		ent->client->pers.player_statuses &= ~(1 << 26);
+		ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADMIN_PARALYSIS);
 	}
 
 	ent->client->pers.downedTime = downedSeconds;
@@ -1650,8 +1650,8 @@ void RP_ClearDownedState( gentity_t *ent )
 		ent->flags &= ~FL_NOTARGET;
 	}
 
-	ent->client->pers.player_statuses &= ~(1 << 6);
-	ent->client->pers.player_statuses &= ~(1 << 26);
+	ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_DOWNED);
+	ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ADMIN_PARALYSIS);
 	ent->client->pers.downedTime = 0;
 }
 
@@ -6865,7 +6865,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 	default:
 	case SAY_ALL:
 		// zyk: if player is silenced by an admin, he cannot say anything
-		if (ent->client->pers.player_statuses & (1 << 0))
+		if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 			return;
 
 		//ooc chat case
@@ -7001,7 +7001,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 		break;
 	case SAY_TEAM:
 		// zyk: if player is silenced by an admin, he cannot say anything
-		if (ent->client->pers.player_statuses & (1 << 0))
+		if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 			return;
 
 		//This should be visible at all times
@@ -7041,7 +7041,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 		break;
 	case SAY_ALLY: // zyk: say to allies
 		// zyk: if player is silenced by an admin, he cannot say anything
-		if (ent->client->pers.player_statuses & (1 << 0))
+		if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 			return;
 
 		G_LogPrintf( "sayally: %s: %s\n", ent->client->pers.netname, text );
@@ -9180,8 +9180,8 @@ void send_rpg_events(int send_event_timer)
 		{
 			player_ent->client->pers.send_event_timer = level.time + send_event_timer;
 			player_ent->client->pers.send_event_interval = level.time + 100;
-			player_ent->client->pers.player_statuses &= ~(1 << 2);
-			player_ent->client->pers.player_statuses &= ~(1 << 3);
+			player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_RADAR_EVENT);
+			player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
 		}
 	}
 }
@@ -9565,7 +9565,7 @@ static void zyk_roll(gentity_t *ent, int distance, const char *cmdName)
 	// could keep rolling dice at everyone. Refused silently, the way every other silenced chat path
 	// returns without comment, and before the cooldown is consumed so being silenced does not
 	// also cost the player their next roll.
-	if (ent->client->pers.player_statuses & (1 << 0))
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 		return;
 
 	if (trap->Argc() != 2)
@@ -9647,7 +9647,7 @@ static void zyk_flip_coin(gentity_t *ent, int distance, const char *cmdName)
 	// could keep flipping coins at everyone. Refused silently, the way every other silenced chat path
 	// returns without comment, and before the cooldown is consumed so being silenced does not
 	// also cost the player their next roll.
-	if (ent->client->pers.player_statuses & (1 << 0))
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 		return;
 
 	if (trap->Argc() != 1)
@@ -12201,6 +12201,15 @@ void Cmd_RaceMode_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] same guard /snipermode, /meleemode and /duelmode carry -- a
+	// downed player keeps 50 health, so without this they could sign up and be put on a swoop
+	// while incapacitated.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	if (ent->client->pers.race_position == 0)
 	{
 		int j = 0, swoop_number = -1;
@@ -12596,7 +12605,7 @@ void Cmd_Jetpack_f( gentity_t *ent ) {
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_JETPACK)) && jetpack_command_allowed(ent) &&
 		(ent->client->sess.amrpgmode < 2 || ent->client->pers.skill_levels[34] > 0) &&
 		level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER &&
-		!(ent->client->pers.player_statuses & (1 << 12)))
+		!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_FORCE)))
 	{ // zyk: gets jetpack if player does not have it. RPG players need jetpack skill to get it
 		// zyk: Jedi Master gametype will not allow jetpack
 		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
@@ -12675,10 +12684,10 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 				veh->client->cloakToggleTime < level.time &&
 				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 				ent->client->ps.pm_type != PM_DEAD &&
-				!(ent->client->pers.player_statuses & (1 << 6)) &&
+				!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) &&
 				// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
 				// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
-				(ent->client->pers.skill_levels[38] & (1 << 0)) &&
+				(ent->client->pers.skill_levels[38] & (1 << PLAYER_STATUS_SILENCED)) &&
 				(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 			{//safeguard: vehicle cloaked but rider isn't -- resync by cloaking the rider too
 				Jedi_Cloak( ent );
@@ -12689,10 +12698,10 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 			veh->client && veh->client->cloakToggleTime < level.time &&
 			ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 			ent->client->ps.pm_type != PM_DEAD &&
-			!(ent->client->pers.player_statuses & (1 << 6)) &&
+			!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) &&
 			// GalaxyRP fix: [Shop] Holdable Items Upgrade check moved from player_settings
 			// (account-wide) to skill_levels[38] (per-character) -- see g_local.h.
-			(ent->client->pers.skill_levels[38] & (1 << 0)) &&
+			(ent->client->pers.skill_levels[38] & (1 << PLAYER_STATUS_SILENCED)) &&
 			(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 		{//vehicle not cloaked -- cloak vehicle + rider together
 			Jedi_Cloak( veh );
@@ -14237,14 +14246,14 @@ void Cmd_Silence_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (g_entities[client_id].client->pers.player_statuses & (1 << 0))
+	if (g_entities[client_id].client->pers.player_statuses & (1 << PLAYER_STATUS_SILENCED))
 	{
-		g_entities[client_id].client->pers.player_statuses &= ~(1 << 0);
+		g_entities[client_id].client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SILENCED);
 		trap->SendServerCommand( -1, va("chat \"^3Admin System: ^7player %s^7 is no longer silenced!\n\"", g_entities[client_id].client->pers.netname) );
 	}
 	else
 	{
-		g_entities[client_id].client->pers.player_statuses |= (1 << 0);
+		g_entities[client_id].client->pers.player_statuses |= (1 << PLAYER_STATUS_SILENCED);
 		trap->SendServerCommand( -1, va("chat \"^3Admin System: ^7player %s^7 is silenced!\n\"", g_entities[client_id].client->pers.netname) );
 	}
 }
@@ -16528,8 +16537,8 @@ void Cmd_Order_f( gentity_t *ent ) {
 
 				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
-					this_ent->client->pers.player_statuses &= ~(1 << 18);
-					this_ent->client->pers.player_statuses &= ~(1 << 19);
+					this_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
+					this_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
 					this_ent->NPC->tempBehavior = BS_FOLLOW_LEADER;
 				}
 			}
@@ -16544,8 +16553,8 @@ void Cmd_Order_f( gentity_t *ent ) {
 				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
 					this_ent->NPC->tempBehavior = BS_STAND_GUARD;
-					this_ent->client->pers.player_statuses &= ~(1 << 19);
-					this_ent->client->pers.player_statuses |= (1 << 18);
+					this_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
+					this_ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_NPC_ORDER_GUARD);
 				}
 			}
 			trap->SendServerCommand( ent-g_entities, "print \"Order given.\n\"" );
@@ -16559,8 +16568,8 @@ void Cmd_Order_f( gentity_t *ent ) {
 				if (zyk_npc_can_take_orders(this_ent, ent))
 				{
 					this_ent->NPC->tempBehavior = BS_FOLLOW_LEADER;
-					this_ent->client->pers.player_statuses &= ~(1 << 18);
-					this_ent->client->pers.player_statuses |= (1 << 19);
+					this_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
+					this_ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_NPC_ORDER_COVER);
 				}
 			}
 			trap->SendServerCommand( ent-g_entities, "print \"Order given.\n\"" );
@@ -17614,6 +17623,15 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stopped
+	// them signing up while incapacitated -- they would just be teleported into the arena and left
+	// lying there. Same explicit test /snipermode and /meleemode already carry.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	if (level.duel_arena_loaded == qfalse)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"There is no duel arena in this map\n\"");
@@ -17648,22 +17666,48 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		{
 			if (level.duelists_quantity == 0)
 			{ // zyk: first duelist joined. Put the globe model in the duel arena and set its origin point
-				gentity_t *new_ent = G_Spawn();
+				gentity_t *new_ent = NULL;
+
+				// GalaxyRP fix: [Entity System] ask for the slot before taking it. G_Spawn() calls
+				// trap->Error(ERR_DROP) when the entity table is full, and Com_Error promotes
+				// ERR_DROP to ERR_FATAL under com_dedicated -- i.e. the server process exits. Every
+				// other command that spawns (/spawnplatform, /spawndummy, the NPC spawners,
+				// /entload) was given this guard already; this one was missed, so any player typing
+				// /duelmode on a full map could drop the whole server.
+				if (G_EntitySlotsAvailable(1) == qfalse)
+				{
+					trap->SendServerCommand(ent->s.number, "print \"^3Duel Tournament: ^7no free entity slots to build the arena right now\n\"");
+					return;
+				}
+
+				new_ent = G_Spawn();
 
 				zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
 				zyk_set_entity_field(new_ent, "spawnflags", "0");
 				zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)level.duel_tournament_origin[0], (int)level.duel_tournament_origin[1], (int)level.duel_tournament_origin[2]));
 				zyk_set_entity_field(new_ent, "model", "models/map_objects/vjun/globe.md3");
 				zyk_set_entity_field(new_ent, "targetname", "zyk_duel_globe");
-				zyk_set_entity_field(new_ent, "zykmodelscale", G_NewString(zyk_duel_tournament_arena_scale.string));
+				// GalaxyRP fix: [Leak] dropped a G_NewString() wrapper here. "zykmodelscale" is an
+				// F_INT field, so zyk_set_entity_field() runs atoi() on the string and never keeps
+				// the pointer -- the copy was pure waste out of the never-freed G_Alloc pool.
+				zyk_set_entity_field(new_ent, "zykmodelscale", zyk_duel_tournament_arena_scale.string);
 
 				zyk_spawn_entity(new_ent);
 
 				level.duel_tournament_model_id = new_ent->s.number;
 			}
 
+			// GalaxyRP fix: [Duel Tournament] start the signup countdown once, when signups open,
+			// instead of restarting it on every join. Resetting it per join let a single player
+			// hold the tournament in signup indefinitely by toggling /duelmode on and off faster
+			// than the countdown (12 seconds by default), and each toggle also broadcast a chat
+			// line to every client. Late joiners still get in -- they just do not push the start back.
+			if (level.duel_tournament_mode != 1)
+			{
+				level.duel_tournament_timer = level.time + zyk_duel_tournament_time_to_start.integer;
+			}
+
 			level.duel_tournament_mode = 1;
-			level.duel_tournament_timer = level.time + zyk_duel_tournament_time_to_start.integer;
 			level.duel_players[ent->s.number] = 0;
 			level.duel_players_hp[ent->s.number] = 0;
 			
@@ -17934,6 +17978,22 @@ void Cmd_DuelPause_f(gentity_t *ent) {
 	if (level.duel_tournament_mode == 0)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^3Duel Tournament: ^7There is no duel tournament now\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Duel Tournament] refuse while a duel is actually being fought (mode 4).
+	// Pausing there never worked: the mode-4 block in G_RunFrame decides the outcome inside
+	// "if (validate() == qtrue && paused == qfalse)", and its else arm is the "this match is
+	// over" path. Setting paused made that guard false while both duelists were still perfectly
+	// valid, so the duel was abandoned -- and because the else arm does not advance
+	// duel_matches_done, mode 5 sent the SAME pairing round again from mode 2, with both
+	// duelists restored to full health and everyone's "died in duel" bit cleared. In other
+	// words /duelpause silently restarted the duel, and holding it down meant the match could
+	// never finish. Every other mode is paused by the "paused == qfalse" wrapper further down
+	// in G_RunFrame, which is where pausing does work.
+	if (level.duel_tournament_mode == 4)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^3Duel Tournament: ^7cannot pause while a duel is being fought. Wait for the match to end\n\"");
 		return;
 	}
 
@@ -18694,7 +18754,11 @@ void save_quest_file(int quest_number)
 // leaderboard.txt, or an fgets() call that used to go unchecked -- see the fgets() NULL checks added
 // in Cmd_DuelBoard_f below), content could be empty ("") and strlen(content) - 1 underflows to
 // (size_t)-1, indexing out of bounds. Guard the empty case here once instead of at every call site.
-static void RP_StripTrailingNewline(char *s)
+// GalaxyRP fix: [cleanup] was static. The Duel Tournament leaderboard writer in g_main.c needs
+// the same "strip a trailing newline, and do nothing to an empty string" behaviour -- it was open
+// coding "if (content[strlen(content) - 1] == '\n')" roughly twenty times, which indexes
+// content[SIZE_MAX] whenever the buffer is empty. Shared rather than duplicated.
+void RP_StripTrailingNewline(char *s)
 {
 	size_t len = strlen(s);
 	if (len > 0 && s[len - 1] == '\n')

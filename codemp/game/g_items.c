@@ -1486,7 +1486,7 @@ void ItemUse_UseCloak( gentity_t *ent )
 	// downed player keeps 50 health, so nothing above stops them re-cloaking after being downed and
 	// lying there invisible. Gates only the cloak direction; the decloak below stays reachable.
 	if ( !ent->client->ps.powerups[PW_CLOAKED] &&
-		(ent->client->pers.player_statuses & (1 << 6)) )
+		(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) )
 	{
 		return;
 	}
@@ -2753,7 +2753,7 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 		// so pickup restriction never applies for any class -- falls through to normal
 		// pickup logic below unconditionally.
 	}
-	else if (other->client->pers.player_statuses & (1 << 12) && (ent->item->giType == IT_WEAPON || ent->item->giType == IT_AMMO ||
+	else if (other->client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_FORCE) && (ent->item->giType == IT_WEAPON || ent->item->giType == IT_AMMO ||
 			ent->item->giType == IT_HOLDABLE))
 	{ // zyk: players with all force powers given by admin cannot pickup some things
 		return;

@@ -4161,12 +4161,12 @@ void ClientSpawn(gentity_t *ent) {
 		// GalaxyRP fix: [Quests] quest_get_new_player was removed as unreachable dead code (see the
 		// GalaxyRP fix comment on its old location in g_cmds.c).
 	}
-	else if (ent->client->pers.player_statuses & (1 << 12))
+	else if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_FORCE))
 	{ // zyk: player received force powers from admin
 		zyk_remove_guns(ent);
 		zyk_add_force_powers(ent);
 	}
-	else if (ent->client->pers.player_statuses & (1 << 13))
+	else if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_GUNS))
 	{ // zyk: player received guns from admin
 		zyk_remove_force_powers(ent);
 		zyk_add_guns(ent);
@@ -4177,7 +4177,7 @@ void ClientSpawn(gentity_t *ent) {
 	// always set it to 2, and for that == 2 case zyk_load_common_settings() is already called via
 	// initialize_rpg_skills() a few lines above, so nothing here was actually missing.
 
-	if (ent->client->pers.player_statuses & (1 << 4))
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_SCALED))
 	{ // zyk: player is scaled, set the scale factor
 		do_scale(ent, ent->client->pers.player_scale);
 	}
@@ -4188,7 +4188,7 @@ void ClientSpawn(gentity_t *ent) {
 	// ClientThink_real() could never fire for them again, so they stayed permanently invulnerable
 	// while fully able to fight. See the matching comment on that block in g_active.c.
 	ent->client->pers.chat_protection_timer = 0;
-	ent->client->pers.player_statuses &= ~(1 << 5);
+	ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_CHAT_PROTECTION);
 
 	// the respawned flag will be cleared after the attack and jump keys come up
 	client->ps.pm_flags |= PMF_RESPAWNED;
@@ -4246,7 +4246,7 @@ void ClientSpawn(gentity_t *ent) {
 			trap->LinkEntity ((sharedEntity_t *)ent);
 
 			// zyk: if player is paralyzed by an admin, keeps him that way
-			if (ent->client->pers.player_statuses & (1 << 6))
+			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))
 			{
 				// GalaxyRP fix: [Death System] and keeps him untargetable with it. The downed state
 				// itself survives a respawn -- player_statuses bits 6 and 26 and pers.downedTime all

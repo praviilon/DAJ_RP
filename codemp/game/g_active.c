@@ -1060,23 +1060,23 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 	if (client->sess.amrpgmode == 2 && client->pers.unique_skill_duration < level.time)
 	{ // zyk: Unique Ability run out. Remove the flags
-		if (client->pers.player_statuses & (1 << 21))
+		if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_1))
 		{
-			client->pers.player_statuses &= ~(1 << 21);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_1);
 		}
-		else if (client->pers.player_statuses & (1 << 22))
+		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_2))
 		{
-			client->pers.player_statuses &= ~(1 << 22);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_2);
 		}
-		else if (client->pers.player_statuses & (1 << 23))
+		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_3))
 		{
-			client->pers.player_statuses &= ~(1 << 23);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_3);
 		}
 	}
 	
-	if (client->pers.player_statuses & (1 << 24) && client->pers.stun_baton_less_speed_timer < level.time)
+	if (client->pers.player_statuses & (1 << PLAYER_STATUS_ICE_BOMB_HIT) && client->pers.stun_baton_less_speed_timer < level.time)
 	{ // zyk: remove the Ice Bomb hit flag
-		client->pers.player_statuses &= ~(1 << 24);
+		client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ICE_BOMB_HIT);
 	}
 
 	while ( client->timeResidual >= 1000 )
@@ -1110,17 +1110,17 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			}
 			else if (ent->client->ps.eFlags & EF_TALK && client->pers.chat_protection_timer < level.time)
 			{
-				client->pers.player_statuses |= (1 << 5);
+				client->pers.player_statuses |= (1 << PLAYER_STATUS_CHAT_PROTECTION);
 			}
 			else if (!(client->ps.eFlags & EF_TALK))
 			{
-				client->pers.player_statuses &= ~(1 << 5);
+				client->pers.player_statuses &= ~(1 << PLAYER_STATUS_CHAT_PROTECTION);
 				client->pers.chat_protection_timer = 0;
 			}
 		}
-		else if ((client->pers.player_statuses & (1 << 5)) || client->pers.chat_protection_timer != 0)
+		else if ((client->pers.player_statuses & (1 << PLAYER_STATUS_CHAT_PROTECTION)) || client->pers.chat_protection_timer != 0)
 		{ // zyk: feature disabled -- don't leave anyone holding the protection it granted
-			client->pers.player_statuses &= ~(1 << 5);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_CHAT_PROTECTION);
 			client->pers.chat_protection_timer = 0;
 		}
 
@@ -1155,7 +1155,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 				send_rpg_events(1000);
 			}
 
-			if (client->pers.player_statuses & (1 << 10))
+			if (client->pers.player_statuses & (1 << PLAYER_STATUS_HEALING_CRYSTAL))
 			{ // zyk: Healing Crystal
 				if (ent->health < client->pers.max_rpg_health)
 					ent->health += 1;
@@ -1169,7 +1169,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 				send_rpg_events(1000);
 			}
 
-			if (client->pers.player_statuses & (1 << 11))
+			if (client->pers.player_statuses & (1 << PLAYER_STATUS_ENERGY_CRYSTAL))
 			{ // zyk: Energy Crystal
 				if (client->ps.stats[STAT_ARMOR] < client->pers.max_rpg_shield)
 					client->ps.stats[STAT_ARMOR] += 1;
@@ -1198,7 +1198,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		// reads are reset on logout as well (Cmd_LogoutAccount_f), so this is belt and braces: either
 		// change alone closes the hole.
 		//GalaxyRP (Alex): [Stat Regen] Never regen while downed or dead.
-		if (ent->client->sess.loggedin == qtrue && ent->health > 0 && !(ent->client->pers.player_statuses & (1 << 6))) {
+		if (ent->client->sess.loggedin == qtrue && ent->health > 0 && !(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))) {
 			// GalaxyRP fix: [Stat Regen] top up to the maximum, instead of refusing any tick that
 			// would not fit a whole step.
 			//
@@ -1273,42 +1273,42 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 	{
 		client->pers.send_event_interval = level.time + 100;
 
-		if (client->pers.player_statuses & (1 << 15))
+		if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_IMMUNITY_EVENT))
 		{ // zyk: Immunity Power
 			G_AddEvent(ent, EV_USE_ITEM13, 101);
 
-			client->pers.player_statuses &= ~(1 << 15);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_IMMUNITY_EVENT);
 		}
-		else if (client->pers.player_statuses & (1 << 16))
+		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT))
 		{ // zyk: Ultra Strength
 			G_AddEvent(ent, EV_USE_ITEM13, 102);
 
-			client->pers.player_statuses &= ~(1 << 16);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT);
 		}
-		else if (client->pers.player_statuses & (1 << 17))
+		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT))
 		{ // zyk: Ultra Resistance
 			G_AddEvent(ent, EV_USE_ITEM13, 103);
 
-			client->pers.player_statuses &= ~(1 << 17);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << 14)))
+		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT)))
 		{
 			int scaled_magic_power = ((float)client->pers.magic_power/zyk_max_magic_power(ent)) * 100.0;
 
 			G_AddEvent(ent, EV_USE_ITEM13, scaled_magic_power);
 
-			client->pers.player_statuses |= (1 << 14);
+			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << 2)))
+		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_RADAR_EVENT)))
 		{ // zyk: send this event after some seconds in map and if the player did not received this event yet
 			// must wait some seconds because after a map change, sometimes the event is not received by the client-side game right away
 			// GalaxyRP fix: [Dead Code] collapsed to the unconditional else-branch; the
 			// rpg_class==2 guard was tautologically false (pers.rpg_class is always 0).
 			G_AddEvent(ent, EV_ITEMUSEFAIL, 6);
 
-			client->pers.player_statuses |= (1 << 2);
+			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_RADAR_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << 3)))
+		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT)))
 		{
 			// zyk: event to set the blue jetpack flame
 			if (client->sess.amrpgmode == 2 && client->pers.skill_levels[34] == 3)
@@ -1316,9 +1316,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			else
 				G_AddEvent(ent, EV_ITEMUSEFAIL, 8);
 
-			client->pers.player_statuses |= (1 << 3);
+			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << 7)))
+		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT)))
 		{ // zyk: tells the RPG class to the client-side mod to render the Force Shield effect and the resistance shield
 			// GalaxyRP fix: [Dead Code] dropped "+ client->pers.rpg_class"; pers.rpg_class is
 			// always 0 server-side, so the sent value was tautologically always 104.
@@ -1327,7 +1327,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			else
 				G_AddEvent(ent, EV_USE_ITEM13, 114);
 
-			client->pers.player_statuses |= (1 << 7);
+			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
 		}
 		else
 		{
@@ -1336,10 +1336,10 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			// rpg_class==5 guard was tautologically false (pers.rpg_class is always 0).
 			G_AddEvent(ent, EV_ITEMUSEFAIL, 10);
 
-			client->pers.player_statuses &= ~(1 << 2);
-			client->pers.player_statuses &= ~(1 << 3);
-			client->pers.player_statuses &= ~(1 << 7);
-			client->pers.player_statuses &= ~(1 << 14);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_RADAR_EVENT);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
+			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
 		}
 	}
 }
@@ -1840,7 +1840,7 @@ void G_CheckClientIdle( gentity_t *ent, usercmd_t *ucmd )
 	qboolean actionPressed;
 	int buttons;
 
-	if ( !ent || !ent->client || ent->health <= 0 || (ent->client->ps.stats[STAT_HEALTH] <= 0 && !(ent->client->pers.player_statuses & (1 << 6))) ||
+	if ( !ent || !ent->client || ent->health <= 0 || (ent->client->ps.stats[STAT_HEALTH] <= 0 && !(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))) ||
 		ent->client->sess.sessionTeam == TEAM_SPECTATOR || (ent->client->ps.pm_flags & PMF_FOLLOW))
 	{
 		return;
@@ -1855,7 +1855,7 @@ void G_CheckClientIdle( gentity_t *ent, usercmd_t *ucmd )
 	actionPressed = G_ActionButtonPressed(buttons);
 
 	// zyk: if the player is using an emote, keeps the emote
-	if (!ent->NPC && ent->client->pers.player_statuses & (1 << 1))
+	if (!ent->NPC && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE))
 	{
 		ent->client->ps.forceHandExtendTime = level.time + 1000;
 	}
@@ -1882,9 +1882,9 @@ void G_CheckClientIdle( gentity_t *ent, usercmd_t *ucmd )
 		qboolean brokeOut = qfalse;
 
 		// zyk: if the player is using an emote, removes it
-		if (!ent->NPC && ent->client->pers.player_statuses & (1 << 1) && actionPressed == qtrue)
+		if (!ent->NPC && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE) && actionPressed == qtrue)
 		{
-			ent->client->pers.player_statuses &= ~(1 << 1);
+			ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_EMOTE);
 			ent->client->ps.forceHandExtendTime = level.time;
 		}
 
@@ -2858,7 +2858,7 @@ void ClientThink_real( gentity_t *ent ) {
 	// Running above the chain means this also applies while gripped, so the knockdown pose now wins
 	// over the choke pose. The real guarantee is the gate in WP_ForcePowersUpdate(); this is the
 	// repair that keeps the presentation honest and stops any single missed frame mattering.
-	if (client->pers.player_statuses & (1 << 6))
+	if (client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))
 	{
 		client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 		client->ps.forceDodgeAnim = 0;
@@ -2869,7 +2869,7 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.pm_type = PM_NOCLIP;
 	} else if ( client->ps.eFlags & EF_DISINTEGRATION ) {
 		client->ps.pm_type = PM_NOCLIP;
-	} else if ( client->ps.stats[STAT_HEALTH] <= 0 && !(ent->client->pers.player_statuses & (1 << 6))) {
+	} else if ( client->ps.stats[STAT_HEALTH] <= 0 && !(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))) {
 		client->ps.pm_type = PM_DEAD;
 	} else {
 		if (client->ps.forceGripChangeMovetype)
@@ -3352,7 +3352,7 @@ void ClientThink_real( gentity_t *ent ) {
 			ent->client->ps.duelInProgress = 0;
 			G_AddEvent(ent, EV_PRIVATE_DUEL, 0);
 		}
-		else if (duelAgainst->health < 1 || duelAgainst->client->ps.stats[STAT_HEALTH] < 1 || duelAgainst->client->pers.player_statuses & (1 << 6))
+		else if (duelAgainst->health < 1 || duelAgainst->client->ps.stats[STAT_HEALTH] < 1 || duelAgainst->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))
 		{
 			int old_health = ent->health;
 			int old_shield = ent->client->ps.stats[STAT_ARMOR];
@@ -3388,7 +3388,7 @@ void ClientThink_real( gentity_t *ent ) {
 			*/
 			//Private duel announcements are now made globally because we only want one duel at a time.
 			// zyk: now announce in console
-			if (ent->health > 0 && ent->client->ps.stats[STAT_HEALTH] > 0 && !(client->pers.player_statuses & (1 << 6)))
+			if (ent->health > 0 && ent->client->ps.stats[STAT_HEALTH] > 0 && !(client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)))
 			{
 				trap->SendServerCommand( -1, va("print \"%s ^7%s %s^7, ending with ^1%d^7/^2%d^7!\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELWINNER"), duelAgainst->client->pers.netname, old_health, old_shield) );
 			}
@@ -4270,7 +4270,7 @@ void ClientThink_real( gentity_t *ent ) {
 				ent->client->ps.stats[STAT_HEALTH] > 0 && !(ent->client->ps.eFlags & EF_DEAD) &&
 				ent->client->ps.pm_type != PM_DEAD &&
 				(ent->client->ps.powerups[PW_CLOAKED] ||
-					!(ent->client->pers.player_statuses & (1 << 6))) &&
+					!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))) &&
 				(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) )
 			{
 				if ( ent->client->ps.powerups[PW_CLOAKED] )
@@ -4448,7 +4448,7 @@ void ClientThink_real( gentity_t *ent ) {
 	// check for respawning
 	if ( client->ps.stats[STAT_HEALTH] <= 0
 		&& !(client->ps.eFlags2&EF2_HELD_BY_MONSTER)//can't respawn while being eaten
-		&& ent->s.eType != ET_NPC && level.load_entities_timer == 0 && !(ent->client->pers.player_statuses & (1 << 6))) { // zyk: cannot respawn while entities are being loaded
+		&& ent->s.eType != ET_NPC && level.load_entities_timer == 0 && !(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))) { // zyk: cannot respawn while entities are being loaded
 		// wait for the attack button to be pressed
 		if ( level.time > client->respawnTime && !gDoSlowMoDuel ) {
 			// forcerespawn is to prevent users from waiting out powerups

@@ -11151,13 +11151,13 @@ void PmoveSingle (pmove_t *pmove) {
 	// ever be 0 when amrpgmode == 2, or -1 otherwise, since pers.rpg_class is server-side-only
 	// and permanently 0) to test the live amrpgmode condition it actually stood in for
 	if (player_ent->client->sess.amrpgmode == 2 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << 22))
+		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_2))
 	{ // zyk: Free Warrior Super Beam ability does not allow him to move
 		stiffenedUp = qtrue;
 	}
 	// GalaxyRP fix: [RPG classes] removed dead rpg_class == 1 / 4 / 9 branches (Force User,
 	// Monk, Force Guardian) - the local rpg_class mirror could never hold those values
-	else if (player_ent->client->pers.player_statuses & (1 << 24))
+	else if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ICE_BOMB_HIT))
 	{ // zyk: hit by Ice Bomb
 		stiffenedUp = qtrue;
 	}

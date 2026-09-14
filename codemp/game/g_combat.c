@@ -2170,13 +2170,13 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	// zyk: remove any quest_power status from this player
 	self->client->pers.quest_power_status = 0;
-	self->client->pers.player_statuses &= ~(1 << 20);
+	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_POISON_DART_HIT);
 	self->client->pers.unique_skill_duration = 0;
 
 	// zyk: stoping Unique Abilities when player dies
-	self->client->pers.player_statuses &= ~(1 << 21);
-	self->client->pers.player_statuses &= ~(1 << 22);
-	self->client->pers.player_statuses &= ~(1 << 23);
+	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_1);
+	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_2);
+	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_3);
 
 	// GalaxyRP fix: [Dead Code] removed boss-battle-music-reset guardian logic (guardian_invoked_by_id/guardian_mode always dead)
 
@@ -2213,7 +2213,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		player_restore_force(self);
 
 		// zyk: lost the duel
-		self->client->pers.player_statuses |= (1 << 27);
+		self->client->pers.player_statuses |= (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS);
 	}
 
 	// zyk: player died in Melee Battle
@@ -2251,8 +2251,8 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		// GalaxyRP fix: [Dead Code] removed guardian_mode>0 reset (guardian_mode always 0)
 
 		// zyk: removing the crystals from the player
-		self->client->pers.player_statuses &= ~(1 << 10);
-		self->client->pers.player_statuses &= ~(1 << 11);
+		self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_HEALING_CRYSTAL);
+		self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ENERGY_CRYSTAL);
 
 		// GalaxyRP fix: [Challenge Mode] removed Resurrection Power grant (universe_quest_progress could never
 		// reach NUM_OF_UNIVERSE_QUEST_OBJ, and it was Challenge-Mode-only via universe_quest_counter bit 29)
@@ -4703,7 +4703,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	// damage another player's sentry exactly as they could before ever using /nofight.
 
 	// zyk: target has chat protection
-	if (targ && targ->client && !targ->NPC && targ->client->pers.player_statuses & (1 << 5))
+	if (targ && targ->client && !targ->NPC && targ->client->pers.player_statuses & (1 << PLAYER_STATUS_CHAT_PROTECTION))
 		return;
 
 	// zyk: players with noclip cannot damage
@@ -4976,7 +4976,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		targ->client->pers.poison_dart_hit_counter = 40;
 		targ->client->pers.poison_dart_user_id = attacker->s.number;
 		targ->client->pers.poison_dart_hit_timer = level.time + 200;
-		targ->client->pers.player_statuses |= (1 << 20);
+		targ->client->pers.player_statuses |= (1 << PLAYER_STATUS_POISON_DART_HIT);
 	}
 
 	if (level.gametype == GT_SIEGE &&
@@ -6231,7 +6231,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// direct hit that bypassed the walker/fighter mounted-damage protection.
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
-				if (targ->client->pers.player_statuses & (1 << 6)) {
+				if (targ->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used
 					// to zero that one bit and leave pers.downedTime and bit 26 to player_die() --
 					// which returns early, above its own cleanup, on an intermission or a NULL

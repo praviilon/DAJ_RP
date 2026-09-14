@@ -1210,7 +1210,7 @@ qboolean NPC_ValidEnemy( gentity_t *ent )
 	if ( NPCS.NPC->client && ent->client->playerTeam == NPCS.NPC->client->playerTeam )
 	{
 		// zyk: npc received order to guard or cover, attack anyone besides the player or his allies
-		if (NPCS.NPC->client->pers.player_statuses & (1 << 18) || NPCS.NPC->client->pers.player_statuses & (1 << 19))
+		if (NPCS.NPC->client->pers.player_statuses & (1 << PLAYER_STATUS_NPC_ORDER_GUARD) || NPCS.NPC->client->pers.player_statuses & (1 << PLAYER_STATUS_NPC_ORDER_COVER))
 		{
 			if ((ent->NPC && ent->client->leader != NPCS.NPC->client->leader) || (!ent->NPC && NPCS.NPC->client->leader != ent && zyk_is_ally(NPCS.NPC->client->leader,ent) == qfalse))
 				return qtrue;
@@ -1742,8 +1742,8 @@ void NPC_CheckCharmed( void )
 		// no for everyone -- so the NPC reverted to its original team and treated every one of its
 		// own side as a valid enemy. TryUse() and Cmd_Order_f() always move these two bits together
 		// with the leader; this is the one place that did not.
-		NPCS.NPC->client->pers.player_statuses &= ~(1 << 18);
-		NPCS.NPC->client->pers.player_statuses &= ~(1 << 19);
+		NPCS.NPC->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
+		NPCS.NPC->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
 		NPCS.NPC->client->leader = NULL;
 		if ( NPCS.NPCInfo->tempBehavior == BS_FOLLOW_LEADER )
 		{

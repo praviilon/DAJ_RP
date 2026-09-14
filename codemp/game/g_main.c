@@ -5064,8 +5064,8 @@ void zyk_clear_npc_order_bits(gentity_t *npc_ent)
 	if (!npc_ent || !npc_ent->client)
 		return;
 
-	npc_ent->client->pers.player_statuses &= ~(1 << 18);
-	npc_ent->client->pers.player_statuses &= ~(1 << 19);
+	npc_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
+	npc_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
 }
 
 /*
@@ -5210,7 +5210,7 @@ void zyk_hold_guarding_npc(gentity_t *npc_ent)
 	if (!npc_ent->client->leader)
 		return;
 
-	if (!(npc_ent->client->pers.player_statuses & (1 << 18)))
+	if (!(npc_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_NPC_ORDER_GUARD)))
 		return;
 
 	if (npc_ent->NPC->goalEntity == npc_ent->client->leader)
@@ -5705,9 +5705,9 @@ void chaos_power(gentity_t *ent, int distance, int duration)
 			player_ent->client->pers.quest_target1_timer = level.time + 200;
 
 			// zyk: removing emotes to prevent exploits
-			if (player_ent->client->pers.player_statuses & (1 << 1))
+			if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE))
 			{
-				player_ent->client->pers.player_statuses &= ~(1 << 1);
+				player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_EMOTE);
 				player_ent->client->ps.forceHandExtendTime = level.time;
 			}
 
@@ -6215,9 +6215,9 @@ void sleeping_flowers(gentity_t *ent, int stun_time, int distance)
 		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
 		{
 			// zyk: removing emotes to prevent exploits
-			if (player_ent->client->pers.player_statuses & (1 << 1))
+			if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE))
 			{
-				player_ent->client->pers.player_statuses &= ~(1 << 1);
+				player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_EMOTE);
 				player_ent->client->ps.forceHandExtendTime = level.time;
 			}
 
@@ -7475,7 +7475,7 @@ void quest_power_events(gentity_t *ent)
 // zyk: damages target player with poison hits
 void poison_dart_hits(gentity_t *ent)
 {
-	if (ent && ent->client && ent->health > 0 && ent->client->pers.player_statuses & (1 << 20) && ent->client->pers.poison_dart_hit_counter > 0 && 
+	if (ent && ent->client && ent->health > 0 && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_POISON_DART_HIT) && ent->client->pers.poison_dart_hit_counter > 0 && 
 		ent->client->pers.poison_dart_hit_timer < level.time)
 	{
 		gentity_t *poison_user = &g_entities[ent->client->pers.poison_dart_user_id];
@@ -7487,7 +7487,7 @@ void poison_dart_hits(gentity_t *ent)
 
 		// zyk: no more do poison damage if counter is 0
 		if (ent->client->pers.poison_dart_hit_counter == 0)
-			ent->client->pers.player_statuses &= ~(1 << 20);
+			ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_POISON_DART_HIT);
 	}
 }
 
@@ -7564,7 +7564,7 @@ void player_restore_force(gentity_t *ent)
 {
 	int i = 0;
 
-	if (ent->client->pers.player_statuses & (1 << 27))
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
 	{ // zyk: do not restore force to players that died in a Duel Tournament duel, because the force was already restored
 		return;
 	}
@@ -7693,7 +7693,7 @@ void duel_tournament_prepare(gentity_t *ent)
 	ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = 0;
 
 	// zyk: removing flag that is used to test if player died in a duel
-	ent->client->pers.player_statuses &= ~(1 << 27);
+	ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS);
 
 	// zyk: stop any movement
 	VectorSet(ent->client->ps.velocity, 0, 0, 0);
@@ -7841,6 +7841,9 @@ void duel_tournament_generate_leaderboard(char *filename, char *netname)
 
 // zyk: determines who is the tournament winner
 extern void add_credits(gentity_t *ent, int credits);
+// GalaxyRP fix: [Duel Tournament] forward declaration -- duel_tournament_valid_duelist() is
+// defined further down this file and duel_tournament_winner() now asks it who is still eligible.
+extern qboolean duel_tournament_valid_duelist(gentity_t *ent);
 void duel_tournament_winner()
 {
 	gentity_t *ent = NULL;
@@ -7849,7 +7852,16 @@ void duel_tournament_winner()
 
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
-		if (level.duel_players[i] != -1)
+		// GalaxyRP fix: [Duel Tournament] this used to test only "is a member" (duel_players[i]
+		// != -1) and then dereference g_entities[i].client unguarded, while every other consumer
+		// in the feature asks duel_tournament_valid_duelist() -- connected, not spectating, still
+		// a member. The gap mattered: SetTeam() only clears membership through ClientBegin(), and
+		// it skips that call while entities are being placed (level.load_entities_timer != 0), so
+		// a player who went to spectator during an /entload stayed a member. They could then be
+		// declared winner, have duel_tournament_prize() call ClientRespawn() on them mid-spectate,
+		// and have sess.amrpgmode read through a client pointer nothing had checked. Asking the
+		// feature's own validity test makes the winner agree with every match that was played.
+		if (duel_tournament_valid_duelist(&g_entities[i]) == qtrue)
 		{
 			if (level.duel_players[i] > max_score)
 			{ // zyk: player is in tournament and his score is higher than max_score, so for now he is the max score
@@ -7872,7 +7884,10 @@ void duel_tournament_winner()
 		// zyk: calculating the new leaderboard if this winner is logged in his account
 		if (ent->client->sess.amrpgmode > 0)
 		{
-			duel_tournament_generate_leaderboard(G_NewString(ent->client->sess.filename), G_NewString(ent->client->pers.netname));
+			// GalaxyRP fix: [Leak] the two G_NewString() wrappers here were pure waste --
+			// duel_tournament_generate_leaderboard() strcpy's both arguments into fixed buffers
+			// immediately, so the pool copies were dead the moment they were made.
+			duel_tournament_generate_leaderboard(ent->client->sess.filename, ent->client->pers.netname);
 		}
 
 		strcpy(winner_info, ent->client->pers.netname);
@@ -7888,7 +7903,20 @@ void duel_tournament_winner()
 // zyk: returns the amount of hp and shield in a string, it is the total hp and shield of a team or single duelist in Duel Tournament
 char *duel_tournament_remaining_health(gentity_t *ent)
 {
-	char health_info[128];
+	// GalaxyRP fix: [Leak] this used to end in G_NewString(health_info). G_Alloc's 4 MB pool is
+	// never freed, and this runs once or twice per match end -- a 32-duelist tournament is 496
+	// matches, so roughly 16-32 KB per tournament, and exhausting the pool calls
+	// trap->Error(ERR_DROP), which is a process exit on a dedicated server.
+	//
+	// The buffer rotates, and it has to: the tie branch below calls this function TWICE inside a
+	// single va() argument list. A single static buffer would hand both arguments the same
+	// pointer, so both duelists would print the second one's health. Four slots is the same
+	// trick va() itself uses, and leaves headroom for any future caller.
+	static char health_buffers[4][128];
+	static int  health_index = 0;
+	char *health_info = health_buffers[health_index];
+
+	health_index = (health_index + 1) % 4;
 
 	// GalaxyRP fix: [Duel Tournament] callers can now legitimately pass NULL for a match slot that
 	// holds no valid duelist (see duel_tournament_set_match_winner), and every line below reads
@@ -7898,18 +7926,18 @@ char *duel_tournament_remaining_health(gentity_t *ent)
 		return "";
 	}
 
-	strcpy(health_info, "");
+	health_info[0] = '\0';
 
 	if (level.duel_tournament_mode == 4)
 	{
-		if (!(ent->client->pers.player_statuses & (1 << 27)))
+		if (!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)))
 		{ // zyk: show health if the player did not die in duel
-			strcpy(health_info, va(" ^1%d^7/^2%d^7 ", ent->health, ent->client->ps.stats[STAT_ARMOR]));
+			Com_sprintf(health_info, sizeof(health_buffers[0]), " ^1%d^7/^2%d^7 ", ent->health, ent->client->ps.stats[STAT_ARMOR]);
 		}
 
 	}
 
-	return G_NewString(health_info);
+	return health_info;
 }
 
 // zyk: sums the score and hp score to a single duelist or to a team
@@ -7931,7 +7959,7 @@ void duel_tournament_give_score(gentity_t *ent, int score)
 	}
 
 	level.duel_players[ent->s.number] += score;
-	if (level.duel_tournament_mode == 4 && !(ent->client->pers.player_statuses & (1 << 27)))
+	if (level.duel_tournament_mode == 4 && !(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)))
 	{ // zyk: add hp score if he did not die in duel
 		level.duel_players_hp[ent->s.number] += (ent->health + ent->client->ps.stats[STAT_ARMOR]);
 	}
@@ -8814,39 +8842,30 @@ void G_RunFrame( int levelTime ) {
 	// zyk: Duel Tournament
 	if (level.duel_tournament_mode == 4)
 	{ // zyk: validations during a duel
-		// GalaxyRP fix: [Duel Tournament] /duelpause did not actually pause a duel that was already
-		// under way. This whole mode-4 block sits outside the "duel_tournament_paused == qfalse"
-		// guard further down -- deliberately, because it used to contain only the leaver validation
-		// call below, which does need to keep running while paused (that is what the original
-		// "validation when it is paused" fix was for). The duel OUTCOME logic was later merged into
-		// the same block without being re-guarded, so while "paused" the match kept resolving: deaths
-		// still decided a winner and the duel clock still ran out and scored the match on health.
-		// Validation still runs while paused; only the outcome now waits for the unpause.
-		//
-		// The duel clock also has to be held, not merely ignored: duel_tournament_timer is an
-		// absolute level.time stamp, so a pause longer than the remaining duel time would otherwise
-		// expire during the pause and time the match out the instant it resumed. Pushing it forward
-		// by each paused frame keeps the remaining duel time exactly where it was.
-		if (level.duel_tournament_paused == qtrue)
-		{
-			level.duel_tournament_timer += (level.time - level.previousTime);
-		}
-
-		if (duel_tournament_validate_duelists() == qtrue && level.duel_tournament_paused == qfalse)
+		// GalaxyRP fix: [Duel Tournament] this block deliberately sits OUTSIDE the
+		// "duel_tournament_paused == qfalse" wrapper further down, because leaver validation has to
+		// keep running regardless. An earlier attempt to make /duelpause hold a duel that was
+		// already under way added "&& level.duel_tournament_paused == qfalse" to the guard below,
+		// which was wrong twice over: the else arm is the "this match is over" path, so pausing
+		// abandoned the duel, and because that arm does not advance duel_matches_done the same
+		// pairing was then replayed from scratch. Cmd_DuelPause_f now refuses in mode 4 instead
+		// (see the note there), so a paused tournament can never be sitting in this state and the
+		// guard is back to asking only what it can actually answer: are both duelists still valid.
+		if (duel_tournament_validate_duelists() == qtrue)
 		{
 			gentity_t *first_duelist = &g_entities[level.duelist_1_id];
 			gentity_t *second_duelist = &g_entities[level.duelist_2_id];
 
-			if (!(first_duelist->client->pers.player_statuses & (1 << 27)) &&
-				second_duelist->client->pers.player_statuses & (1 << 27))
+			if (!(first_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)) &&
+				second_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
 			{ // zyk: first duelist wins
 				duel_tournament_set_match_winner(first_duelist);
 
 				level.duel_tournament_mode = 5;
 				level.duel_tournament_timer = level.time + 1500;
 			}
-			else if (!(second_duelist->client->pers.player_statuses & (1 << 27)) &&
-				first_duelist->client->pers.player_statuses & (1 << 27))
+			else if (!(second_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)) &&
+				first_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
 			{ // zyk: second duelist wins
 				duel_tournament_set_match_winner(second_duelist);
 
@@ -8858,12 +8877,12 @@ void G_RunFrame( int levelTime ) {
 				int first_duelist_health = 0;
 				int second_duelist_health = 0;
 
-				if (!(first_duelist->client->pers.player_statuses & (1 << 27)))
+				if (!(first_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)))
 				{
 					first_duelist_health = first_duelist->health + first_duelist->client->ps.stats[STAT_ARMOR];
 				}
 
-				if (!(second_duelist->client->pers.player_statuses & (1 << 27)))
+				if (!(second_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)))
 				{
 					second_duelist_health = second_duelist->health + second_duelist->client->ps.stats[STAT_ARMOR];
 				}
@@ -8884,8 +8903,8 @@ void G_RunFrame( int levelTime ) {
 				level.duel_tournament_mode = 5;
 				level.duel_tournament_timer = level.time + 1500;
 			}
-			else if (first_duelist->client->pers.player_statuses & (1 << 27) &&
-				second_duelist->client->pers.player_statuses & (1 << 27))
+			else if (first_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS) &&
+				second_duelist->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
 			{ // zyk: tie when both duelists die on the same frame
 				duel_tournament_set_match_winner(NULL);
 
@@ -8991,7 +9010,7 @@ void G_RunFrame( int levelTime ) {
 
 				// zyk: cleaning flag from player
 				if (this_ent && this_ent->client)
-					this_ent->client->pers.player_statuses &= ~(1 << 27);
+					this_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS);
 			}
 
 			if (level.duel_matches_done < level.duel_matches_quantity)
@@ -9083,22 +9102,33 @@ void G_RunFrame( int levelTime ) {
 
 				while (found_acc == qfalse && fgets(content, sizeof(content), leaderboard_file) != NULL)
 				{
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					RP_StripTrailingNewline(content);
 
-					if (Q_stricmp(G_NewString(content), G_NewString(level.duel_leaderboard_acc)) == 0)
+					// GalaxyRP fix: [Leak] this compared two G_NewString() copies. Q_stricmp takes
+					// const char*, both operands were already NUL-terminated strings, and the two
+					// pool allocations happened for EVERY line of leaderboard.txt scanned, on every
+					// tournament win. Compare the strings themselves.
+					if (Q_stricmp(content, level.duel_leaderboard_acc) == 0)
 					{
 						found_acc = qtrue;
 
+						// GalaxyRP fix: [Duel Tournament] a record is three lines and only the
+						// first was ever checked. On a truncated file the 2nd/3rd fgets() failed,
+						// content kept whatever the previous line held, and the score was parsed
+						// out of it -- so a half-written record could award an arbitrary win count.
 						// zyk: reads player name
-						fgets(content, sizeof(content), leaderboard_file);
-						if (content[strlen(content) - 1] == '\n')
-							content[strlen(content) - 1] = '\0';
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
+						{
+							content[0] = '\0';
+						}
+						RP_StripTrailingNewline(content);
 
 						// zyk: reads score
-						fgets(content, sizeof(content), leaderboard_file);
-						if (content[strlen(content) - 1] == '\n')
-							content[strlen(content) - 1] = '\0';
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
+						{
+							content[0] = '\0';
+						}
+						RP_StripTrailingNewline(content);
 
 						level.duel_leaderboard_score = atoi(content) + 1; // zyk: sets the new number of tourmanemt victories of this winner
 						level.duel_leaderboard_step = 3;
@@ -9107,15 +9137,17 @@ void G_RunFrame( int levelTime ) {
 					}
 					else
 					{
-						// zyk: reads player name
-						fgets(content, sizeof(content), leaderboard_file);
-						if (content[strlen(content) - 1] == '\n')
-							content[strlen(content) - 1] = '\0';
+						// zyk: skip this record's remaining two lines. A failed read means the file
+						// ended mid-record, so stop rather than re-examining the same stale buffer.
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
+						{
+							break;
+						}
 
-						// zyk: reads score
-						fgets(content, sizeof(content), leaderboard_file);
-						if (content[strlen(content) - 1] == '\n')
-							content[strlen(content) - 1] = '\0';
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL)
+						{
+							break;
+						}
 					}
 
 					j++;
@@ -9138,8 +9170,18 @@ void G_RunFrame( int levelTime ) {
 		else if (level.duel_leaderboard_step == 2)
 		{ // zyk: add the player to the end of the file with 1 tournament win
 			FILE *leaderboard_file = fopen("GalaxyRP/leaderboard.txt", "a");
-			fprintf(leaderboard_file, "%s\n%s\n1\n", level.duel_leaderboard_acc, level.duel_leaderboard_name);
-			fclose(leaderboard_file);
+
+			// GalaxyRP fix: [Duel Tournament] fprintf() straight into an unchecked fopen() result.
+			// A read-only or missing GalaxyRP directory made this a NULL dereference in G_RunFrame.
+			if (leaderboard_file != NULL)
+			{
+				fprintf(leaderboard_file, "%s\n%s\n1\n", level.duel_leaderboard_acc, level.duel_leaderboard_name);
+				fclose(leaderboard_file);
+			}
+			else
+			{
+				G_LogPrintf("duel tournament: could not open GalaxyRP/leaderboard.txt for append; leaderboard not updated\n");
+			}
 
 			level.duel_leaderboard_step = 0; // zyk: stop creating the leaderboard
 		}
@@ -9159,32 +9201,41 @@ void G_RunFrame( int levelTime ) {
 
 				strcpy(content, "");
 
-				for (j = 0; j < level.duel_leaderboard_index; j++)
+				// GalaxyRP fix: [Duel Tournament] the handle was used unchecked. Step 1 proved the
+				// file existed, but that was up to 500 ms earlier and nothing holds it open in
+				// between, so a file removed or replaced in that window reached fgets() as NULL.
+				if (leaderboard_file != NULL)
 				{
-					// zyk: reads acc name
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					for (j = 0; j < level.duel_leaderboard_index; j++)
+					{
+						// zyk: a record is three lines; a short read means the file ended early,
+						// so keep the index we already have rather than scoring a stale buffer.
+						// zyk: reads acc name
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+						RP_StripTrailingNewline(content);
 
-					// zyk: reads player name
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+						// zyk: reads player name
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+						RP_StripTrailingNewline(content);
 
-					// zyk: reads score
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+						// zyk: reads score
+						if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
+						RP_StripTrailingNewline(content);
 
-					this_score = atoi(content);
-					if (level.duel_leaderboard_score > this_score)
-					{ // zyk: winner score is greater than this one, this will be the new index
-						level.duel_leaderboard_index = j;
-						break;
+						this_score = atoi(content);
+						if (level.duel_leaderboard_score > this_score)
+						{ // zyk: winner score is greater than this one, this will be the new index
+							level.duel_leaderboard_index = j;
+							break;
+						}
 					}
-				}
 
-				fclose(leaderboard_file);
+					fclose(leaderboard_file);
+				}
+				else
+				{
+					G_LogPrintf("duel tournament: could not reopen GalaxyRP/leaderboard.txt; keeping the winner's existing leaderboard position\n");
+				}
 
 				level.duel_leaderboard_step = 4;
 				level.duel_leaderboard_timer = level.time + 500;
@@ -9199,78 +9250,130 @@ void G_RunFrame( int levelTime ) {
 
 			strcpy(content, "");
 
+			// GalaxyRP fix: [Duel Tournament] neither handle was checked and neither were any of
+			// the reads, in the one step that REPLACES the leaderboard. A NULL new_leaderboard_file
+			// was an immediate fprintf() crash; worse, a read that failed part way through left a
+			// truncated new_leaderboard.txt that step 5 then moved over the real file, destroying
+			// every record after the break. The rewrite is now all-or-nothing: if either file
+			// cannot be opened, or the source ends mid-record, the partial output is discarded and
+			// the existing leaderboard is left exactly as it was.
+			if (leaderboard_file == NULL || new_leaderboard_file == NULL)
+			{
+				if (leaderboard_file != NULL)
+				{
+					fclose(leaderboard_file);
+				}
+
+				if (new_leaderboard_file != NULL)
+				{
+					fclose(new_leaderboard_file);
+					remove("GalaxyRP/new_leaderboard.txt");
+				}
+
+				G_LogPrintf("duel tournament: could not rewrite the leaderboard; it is left unchanged\n");
+
+				level.duel_leaderboard_step = 0;
+			}
+			else
+			{
+			qboolean rewrite_ok = qtrue;
+
 			// zyk: saving players before the winner
 			for (j = 0; j < level.duel_leaderboard_index; j++)
 			{
 				// zyk: saving acc name
-				fgets(content, sizeof(content), leaderboard_file);
-				if (content[strlen(content) - 1] == '\n')
-					content[strlen(content) - 1] = '\0';
+				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+				RP_StripTrailingNewline(content);
 				fprintf(new_leaderboard_file, "%s\n", content);
 
 				// zyk: saving player name
-				fgets(content, sizeof(content), leaderboard_file);
-				if (content[strlen(content) - 1] == '\n')
-					content[strlen(content) - 1] = '\0';
+				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+				RP_StripTrailingNewline(content);
 				fprintf(new_leaderboard_file, "%s\n", content);
 
 				// zyk: saving score
-				fgets(content, sizeof(content), leaderboard_file);
-				if (content[strlen(content) - 1] == '\n')
-					content[strlen(content) - 1] = '\0';
+				if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+				RP_StripTrailingNewline(content);
 				fprintf(new_leaderboard_file, "%s\n", content);
 			}
 
 			// zyk: saving the winner
-			fprintf(new_leaderboard_file, "%s\n%s\n%d\n", level.duel_leaderboard_acc, level.duel_leaderboard_name, level.duel_leaderboard_score);
+			if (rewrite_ok == qtrue)
+			{
+				fprintf(new_leaderboard_file, "%s\n%s\n%d\n", level.duel_leaderboard_acc, level.duel_leaderboard_name, level.duel_leaderboard_score);
+			}
 
 			// zyk: saving the other players, except the old line of the winner
-			while (fgets(content, sizeof(content), leaderboard_file) != NULL)
+			while (rewrite_ok == qtrue && fgets(content, sizeof(content), leaderboard_file) != NULL)
 			{
-				if (content[strlen(content) - 1] == '\n')
-					content[strlen(content) - 1] = '\0';
+				RP_StripTrailingNewline(content);
 
 				if (Q_stricmp(content, level.duel_leaderboard_acc) != 0)
 				{
 					fprintf(new_leaderboard_file, "%s\n", content);
 
 					// zyk: saving player name
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+					RP_StripTrailingNewline(content);
 					fprintf(new_leaderboard_file, "%s\n", content);
 
 					// zyk: saving score
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+					RP_StripTrailingNewline(content);
 					fprintf(new_leaderboard_file, "%s\n", content);
 				}
 				else
 				{
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+					RP_StripTrailingNewline(content);
 
-					fgets(content, sizeof(content), leaderboard_file);
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
+					if (fgets(content, sizeof(content), leaderboard_file) == NULL) { rewrite_ok = qfalse; break; }
+					RP_StripTrailingNewline(content);
 				}
 			}
 
 			fclose(leaderboard_file);
+
+			if (ferror(new_leaderboard_file) != 0)
+			{ // zyk: a write failed (out of disk, for one) -- do not publish a partial file
+				rewrite_ok = qfalse;
+			}
+
 			fclose(new_leaderboard_file);
 
+			if (rewrite_ok == qfalse)
+			{
+				remove("GalaxyRP/new_leaderboard.txt");
+				G_LogPrintf("duel tournament: leaderboard.txt ended mid-record or could not be written; it is left unchanged\n");
+
+				level.duel_leaderboard_step = 0;
+			}
+			else
+			{
 			level.duel_leaderboard_step = 5;
 			level.duel_leaderboard_timer = level.time + 500;
+			}
+			}
 		}
 		else if (level.duel_leaderboard_step == 5)
 		{ // zyk: renaming new file to leaderboard.txt
-#if defined(__linux__)
-			system("mv -f GalaxyRP/new_leaderboard.txt GalaxyRP/leaderboard.txt");
-#else
-			system("MOVE /Y \"zykmod\\new_leaderboard.txt\" \"zykmod\\leaderboard.txt\"");
+			// GalaxyRP fix: [Duel Tournament] this used to shell out with system(), and the two
+			// branches did not agree: the Linux one moved GalaxyRP/new_leaderboard.txt while the
+			// Windows one still moved zykmod\new_leaderboard.txt -- the old folder name, which the
+			// mod stopped using. On Windows the move therefore operated on files that do not
+			// exist, so the leaderboard was NEVER updated there: /duelboard kept showing the old
+			// standings and GalaxyRP/new_leaderboard.txt piled up unread.
+			//
+			// rename() does the job on both platforms with no shell, no quoting and no PATH.
+			// POSIX rename() replaces the destination atomically; Win32 rename() fails if the
+			// destination exists, so remove it there first.
+#if defined(_WIN32)
+			remove("GalaxyRP/leaderboard.txt");
 #endif
+			if (rename("GalaxyRP/new_leaderboard.txt", "GalaxyRP/leaderboard.txt") != 0)
+			{
+				G_LogPrintf("duel tournament: could not replace GalaxyRP/leaderboard.txt with the rebuilt file\n");
+			}
 
 			level.duel_leaderboard_step = 0; // zyk: stop creating the leaderboard
 		}
@@ -9687,7 +9790,7 @@ void G_RunFrame( int levelTime ) {
 			if (level.duel_tournament_mode == 4)
 			{
 				if (duel_tournament_is_duelist(ent) == qtrue && 
-					!(ent->client->pers.player_statuses & (1 << 27)) && // zyk: did not die in his duel yet
+					!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)) && // zyk: did not die in his duel yet
 					Distance(ent->client->ps.origin, level.duel_tournament_origin) > (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0) &&
 					ent->health > 0)
 				{ // zyk: duelists cannot leave the arena after duel begins
@@ -9696,7 +9799,7 @@ void G_RunFrame( int levelTime ) {
 					player_die(ent, ent, ent, 100000, MOD_SUICIDE);
 				}
 				else if ((duel_tournament_is_duelist(ent) == qfalse || 
-					(level.duel_players[ent->s.number] != -1 && ent->client->pers.player_statuses & (1 << 27))) && // zyk: not a duelist or died in his duel
+					(level.duel_players[ent->s.number] != -1 && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))) && // zyk: not a duelist or died in his duel
 					ent->client->sess.sessionTeam != TEAM_SPECTATOR && 
 					Distance(ent->client->ps.origin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0) &&
 					ent->health > 0)
@@ -9848,11 +9951,11 @@ void G_RunFrame( int levelTime ) {
 			poison_dart_hits(ent);
 
 			// zyk: tutorial, which teaches the player the RPG Mode features
-			if (ent->client->pers.player_statuses & (1 << 25) && ent->client->pers.tutorial_timer < level.time)
+			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_RPG_TUTORIAL) && ent->client->pers.tutorial_timer < level.time)
 			{
 				if (ent->client->pers.tutorial_step > 1)
 				{ // zyk: after last message, tutorial ends
-					ent->client->pers.player_statuses &= ~(1 << 25);
+					ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_RPG_TUTORIAL);
 				}
 				else
 				{
@@ -9954,7 +10057,7 @@ void G_RunFrame( int levelTime ) {
 			}
 
 			// zyk: abilities of custom quest npcs
-			if (ent->client->pers.player_statuses & (1 << 28) && ent->health > 0)
+			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_CUSTOM_QUEST_NPC) && ent->health > 0)
 			{
 				// zyk: magic powers
 				if (ent->client->pers.light_quest_timer < level.time)
