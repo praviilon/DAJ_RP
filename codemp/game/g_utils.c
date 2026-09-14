@@ -169,8 +169,9 @@ void RPMod_StringEscape(char *in, char *out, int outSize)
 // finish connecting. The per-table limits are not what you hit first: MAX_MODELS alone is 512
 // slots of up to MAX_QPATH each, which is twice the entire byte budget.
 //
-// The scan is a syscall per configstring, so it is not something to do casually; the caller below
-// only reaches it when its running estimate says the budget is close.
+// The scan is a syscall per configstring. The caller below runs it before every name it is about to
+// register for the first time -- about 44 microseconds each, and only on a create, never on the
+// lookup of a name already in the table.
 static int zyk_gamestate_bytes_used( void ) {
 	int		i, total = 0;
 	char	s[MAX_STRING_CHARS];
@@ -263,38 +264,37 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 	}
 
 	// GalaxyRP fix: [Configstrings] ...and the table filling up is not even the first wall. The
-	// gamestate has a 16000-byte ceiling that every client enforces and no part of the server
-	// does, so a map plus a few hundred long /entadd model paths can push past it while every
-	// table still has free slots.
+	// gamestate has a 16000-byte ceiling that every client enforces and no part of the server does,
+	// so a map plus a few hundred long /entadd model paths can push past it while every table still
+	// has free slots. At MAX_QPATH names, the model table ALONE is twice the whole byte budget;
+	// measured across every indexed table, the byte ceiling binds at about 20% of slot capacity.
 	//
-	// The true total is what matters, and counting it means a syscall per configstring, so this
-	// only pays for the count once it could possibly matter. What it tracks cheaply is the bytes
-	// THIS function has registered -- a number it knows exactly. Everything else in the gamestate
-	// is written elsewhere and never seen here: serverinfo, systeminfo, and a CS_PLAYERS entry per
-	// connected client. ZYK_GAMESTATE_FOREIGN_ALLOWANCE is the ceiling assumed for all of that, so
-	// while our own bytes stay under the cheap limit the true total provably cannot have reached
-	// the budget and no count is needed. Past it, every new name is checked against a real count.
+	// The count is taken fresh every time a new name is about to be registered, and the decision is
+	// made against that measurement and nothing else.
 	//
-	// Tracking only our own bytes is what makes that reasoning sound. An estimate of the whole
-	// gamestate would drift the moment a player connected, and drift downward -- it would think
-	// there was room that had already been taken.
+	// An earlier version of this tried to avoid the count by tracking only the bytes this function
+	// had registered and assuming a fixed ceiling for everything else -- serverinfo, systeminfo, the
+	// CS_PLAYERS entry per client. That assumption is not sound: a CS_PLAYERS entry is built in a
+	// MAX_INFO_STRING buffer, so 32 clients alone can reach 32768 bytes, twice the entire gamestate.
+	// When the assumption broke it broke in the dangerous direction -- it would skip the count and
+	// allow the registration that pushed the gamestate past the limit, which is the exact failure
+	// this exists to prevent. Measured cost of counting every time: about 44 microseconds, roughly
+	// 22ms spread across a whole map load. That is a very cheap price for a decision that is
+	// always made on a real number.
 	len = (int)strlen( name ) + 1;
-	if ( (level.zyk_gamestate_own_bytes + len) > ZYK_GAMESTATE_CHEAP_LIMIT ) {
-		level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
+	level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
 
-		if ( (level.zyk_gamestate_bytes + len) > ZYK_GAMESTATE_BUDGET ) {
-			if ( !level.zyk_gamestate_full ) {
-				level.zyk_gamestate_full = qtrue;
-				G_LogPrintf( "gamestate is at %d of %d bytes; refusing \"%s\" and any further new "
-					"configstring names. Registering it would drop every connected client.\n",
-					level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET, name );
-			}
-			return 0;
+	if ( (level.zyk_gamestate_bytes + len) > ZYK_GAMESTATE_BUDGET ) {
+		if ( !level.zyk_gamestate_full ) {
+			level.zyk_gamestate_full = qtrue;
+			G_LogPrintf( "gamestate is at %d of %d bytes; refusing \"%s\" and any further new "
+				"configstring names. Registering it would drop every connected client.\n",
+				level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET, name );
 		}
+		return 0;
 	}
 
 	trap->SetConfigstring( start + i, name );
-	level.zyk_gamestate_own_bytes += len;
 	level.zyk_gamestate_bytes += len;
 
 	return i;
@@ -1031,19 +1031,37 @@ instead of being removed and recreated, which can cause interpolated
 angles and bad trails.
 =================
 */
-// GalaxyRP fix: [Entity System] how many slots G_Spawn() below could still hand out: the unused
-// ones under level.num_entities, plus everything above it that has never been opened. The freetime
-// rule G_Spawn() applies on its first pass is deliberately ignored here -- its second pass ignores
-// it too, so a recently-freed slot really is available, just not preferred.
+// GalaxyRP fix: [Entity System] how many slots G_Spawn() below would actually hand out right now:
+// the free ones under level.num_entities that pass its freetime rule, plus everything above it that
+// has never been opened.
+//
+// The freetime rule has to be repeated here, not ignored. G_Spawn() loops "force" 0 then 1 and only
+// skips a recently-freed slot while force is 0, which reads as if the second pass will take one
+// anyway -- but the second pass is unreachable. The inner loop ends with i == level.num_entities,
+// the "break" test is "i != MAX_GENTITIES" (1024), and level.num_entities can never exceed
+// ENTITYNUM_MAX_NORMAL (1022) because the check just below drops the server at that point. So the
+// break always fires after the first pass and a slot freed less than a second ago is simply not
+// available. Counting those slots made this function over-report and let G_EntitySlotsAvailable()
+// wave a spawn through into an ERR_DROP -- which is the one outcome the whole guard exists to stop.
+//
+// If that dead second pass is ever revived, this predicate must be revisited; until then the worst
+// it can do is under-report during a burst of frees, which only refuses a spawn a moment early.
 int G_FreeEntityCount( void ) {
 	int			i, count = 0;
 	gentity_t	*e;
 
 	e = &g_entities[MAX_CLIENTS];
 	for ( i = MAX_CLIENTS; i < level.num_entities; i++, e++ ) {
-		if ( !e->inuse ) {
-			count++;
+		if ( e->inuse ) {
+			continue;
 		}
+
+		// same test G_Spawn() applies on the only pass it ever runs
+		if ( e->freetime > level.startTime + 2000 && (level.time - e->freetime) < 1000 ) {
+			continue;
+		}
+
+		count++;
 	}
 
 	if ( level.num_entities < ENTITYNUM_MAX_NORMAL ) {

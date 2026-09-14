@@ -162,6 +162,27 @@ const int mindTrickTime[NUM_FORCE_POWER_LEVELS] =
 	25000
 };
 
+// GalaxyRP fix: [Force] claim the six force loop sounds at map load instead of waiting for the
+// first player to connect. Upstream registers them lazily inside WP_InitForcePowers(), which is
+// fine until the sound table or the gamestate byte budget is under pressure: G_SoundIndex() answers
+// 0 when a registration is refused, and 0 is also what these variables hold when nothing has been
+// registered, so a refusal is indistinguishable from "not tried yet". Every later call then walks
+// the whole table again looking for a name that will never be in it, and meanwhile Speed, Rage,
+// Protect, Absorb, See and Ysalamiri all play their loop silently. Registering here, before a
+// single map entity has asked for a sound, means these six are in the table whenever the table
+// has room for them at all.
+//
+// Safe to do unconditionally: the game module is unloaded and reloaded on every map change, so
+// these variables start at 0 again each map and never carry a stale index across.
+void WP_RegisterForceLoopSounds( void ) {
+	speedLoopSound		= G_SoundIndex( "sound/weapons/force/speedloop.wav" );
+	rageLoopSound		= G_SoundIndex( "sound/weapons/force/rageloop.wav" );
+	absorbLoopSound		= G_SoundIndex( "sound/weapons/force/absorbloop.wav" );
+	protectLoopSound	= G_SoundIndex( "sound/weapons/force/protectloop.wav" );
+	seeLoopSound		= G_SoundIndex( "sound/weapons/force/seeloop.wav" );
+	ysalamiriLoopSound	= G_SoundIndex( "sound/player/nullifyloop.wav" );
+}
+
 void WP_InitForcePowers( gentity_t *ent ) {
 	int i, i_r, lastFPKnown = -1;
 	qboolean warnClient = qfalse, warnClientLimit = qfalse, didEvent = qfalse;
@@ -187,6 +208,9 @@ void WP_InitForcePowers( gentity_t *ent ) {
 		ent->client->ps.fd.saberAnimLevel = FORCE_LEVEL_1;
 
 	// so that the client configstring is already modified with this when we need it
+	// GalaxyRP fix: [Force] these six are registered up front by WP_RegisterForceLoopSounds() from
+	// G_InitGame() now, so by the time anyone reaches this they are already set and nothing below
+	// runs. Kept as a fallback rather than deleted: it costs nothing, and it is what upstream does.
 	if ( !speedLoopSound )
 		speedLoopSound = G_SoundIndex( "sound/weapons/force/speedloop.wav" );
 	if ( !rageLoopSound )

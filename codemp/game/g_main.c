@@ -851,6 +851,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.snd_medHealed = G_SoundIndex("sound/player/supp_healed.wav");
 	level.snd_medSupplied = G_SoundIndex("sound/player/supp_supplied.wav");
 
+	WP_RegisterForceLoopSounds();
+
 	//trap->SP_RegisterServer("mp_svgame");
 
 	if ( g_log.string[0] )

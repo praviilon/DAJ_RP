@@ -98,12 +98,6 @@ extern vec3_t gPainPoint;
 // from being tipped over by the next join.
 #define ZYK_GAMESTATE_HEADROOM		1024
 #define ZYK_GAMESTATE_BUDGET		(MAX_GAMESTATE_CHARS - ZYK_GAMESTATE_HEADROOM)
-// Bytes assumed for everything in the gamestate that G_FindConfigstringIndex does not write and
-// cannot see: serverinfo, systeminfo, and one CS_PLAYERS entry per connected client. While our own
-// registrations stay under the cheap limit, the true total provably cannot have reached the budget,
-// so no count is needed; past it, every new name is checked against a real one.
-#define ZYK_GAMESTATE_FOREIGN_ALLOWANCE	10240
-#define ZYK_GAMESTATE_CHEAP_LIMIT	(ZYK_GAMESTATE_BUDGET - ZYK_GAMESTATE_FOREIGN_ALLOWANCE)
 
 // GalaxyRP fix: [Configstrings] one "already reported" flag per indexed table, so a table filling up
 // is logged once instead of once per refused name. See zyk_cs_table_slot() in g_utils.c.
@@ -1866,13 +1860,12 @@ typedef struct level_locals_s {
 	// the effects the entity preset registers a second into the map, and those would then replay
 	// AFTER the teardown for anyone joining later. Claimed on demand, the block is always the
 	// highest weather slots in use, so it always has the last word.
-	// GalaxyRP fix: [Configstrings] running estimate of the gamestate's byte total, kept by
-	// G_FindConfigstringIndex and recounted from scratch whenever it says the budget is close.
-	// An estimate on its own would drift -- player userinfo lands in CS_PLAYERS without passing
-	// through that function -- so it is only ever used to decide whether a true recount is worth
-	// paying for, never to refuse on its own.
+	// GalaxyRP fix: [Configstrings] the gamestate's byte total as of the last time it was counted:
+	// once at the end of G_InitGame, and again inside G_FindConfigstringIndex before every name it
+	// registers for the first time. It is a measurement, never an estimate carried forward -- bytes
+	// land in the gamestate without passing through that function (player userinfo in CS_PLAYERS,
+	// serverinfo, systeminfo), so anything carried forward would be wrong in the unsafe direction.
 	int zyk_gamestate_bytes;
-	int zyk_gamestate_own_bytes;					// bytes this function itself registered, known exactly
 	qboolean zyk_gamestate_full;					// so the refusal is logged once, not per name
 	qboolean zyk_configstring_table_full[ZYK_CS_TABLES];	// same, per indexed table
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
@@ -2482,6 +2475,7 @@ void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd );
 int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr);
 void WP_SaberInitBladeData( gentity_t *ent );
 void WP_InitForcePowers( gentity_t *ent );
+void WP_RegisterForceLoopSounds( void );
 void WP_SpawnInitForcePowers( gentity_t *ent );
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd );
 int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forcePower);
