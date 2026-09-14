@@ -1984,8 +1984,23 @@ char *G_NewString( const char *string );
 
 #define ZYK_ENTITY_FILE_LINE_LENGTH 2048
 
+// GalaxyRP fix: [Entity System] the buffer one encoded token needs, in one place. Every character
+// of a token can escape to two, plus the terminator, so a token as long as a whole line needs
+// 2 * (ZYK_ENTITY_FILE_LINE_LENGTH - 1) + 1 bytes -- which this covers with one byte spare.
+//
+// It exists as a name because the coupling is the whole safety argument and it used to be spelled
+// out separately at each of the three buffers. zyk_entity_file_encode() cannot write more than it
+// is given, so a buffer sized on its own would not overflow -- it would TRUNCATE, and a truncated
+// key is not a malformed record, it is a different record: "targetname" cut to "targetnam" loads
+// as an entity that quietly lost its targetname and gained a junk key. One name means the 2x
+// cannot drift away from the line length it is derived from, and test_round57.py pins every
+// declaration to it.
+#define ZYK_ENTITY_FILE_ENCODED_LENGTH (ZYK_ENTITY_FILE_LINE_LENGTH * 2)
+
 char *G_NewStringRaw( const char *string );
-void zyk_entity_file_encode( const char *in, char *out, int out_size );
+// GalaxyRP fix: [Entity System] returns whether the WHOLE input fitted. It used to return void,
+// so a caller whose buffer was too small got a silently shortened token and no way to know.
+qboolean zyk_entity_file_encode( const char *in, char *out, int out_size );
 int zyk_entity_file_decode( const char *content, int content_len, int k, char *out, int out_size );
 
 //

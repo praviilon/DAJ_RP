@@ -855,18 +855,27 @@ char *G_NewStringRaw( const char *string )
 // Both characters are now escaped on the way out and decoded on the way back in, so a value means
 // the same thing before and after a save. Values already in existing files are unaffected: they
 // hold no "\;" or "\\", and a "\n" there already meant a linefeed, which is what it still decodes to.
-void zyk_entity_file_encode( const char *in, char *out, int out_size )
+// GalaxyRP fix: [Entity System] this returned void, so running out of room was invisible to the
+// caller. It cannot overrun -- it stops while two characters still fit -- but stopping is not a
+// harmless outcome: the result is a cleanly terminated token that is SHORTER than the one asked
+// for, and /entsave would write it as if nothing had happened. A truncated value is a changed
+// value, and a truncated KEY is a different key, so the record would load back as an entity that
+// is not the one that was saved. Report it instead, and let the caller refuse.
+//
+// qtrue means the whole of "in" is in "out". qfalse means it did not fit, and whatever is in "out"
+// must not be written anywhere.
+qboolean zyk_entity_file_encode( const char *in, char *out, int out_size )
 {
 	int i = 0;
 	int l = 0;
 
 	if (!out || out_size < 1)
-		return;
+		return qfalse;
 
 	if (!in)
 	{
 		out[0] = '\0';
-		return;
+		return qtrue;		// zyk: nothing to encode is not a failure to encode it
 	}
 
 	// zyk: every escape costs two characters, so stop while two still fit
@@ -899,6 +908,10 @@ void zyk_entity_file_encode( const char *in, char *out, int out_size )
 	}
 
 	out[l] = '\0';
+
+	// zyk: the loop above ends either at the end of the input or because there was no longer room
+	// for another escape. Only the first of those is success
+	return (in[i] == '\0') ? qtrue : qfalse;
 }
 
 // zyk: decodes one token of an entity-file line into out, starting at k, and returns the index of

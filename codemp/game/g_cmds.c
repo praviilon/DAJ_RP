@@ -13369,9 +13369,18 @@ char *create_npc_spawner_for_npc(gentity_t *ent) {
 	// Cmd_EntSave_f, so it needs the same escaping -- an NPC type carrying a ';' would otherwise be
 	// read back as extra keys. In practice NPC_type always matches a name in the .npc catalogue, so
 	// this is a guard against the format rather than against a reachable value today.
-	static char escaped_type[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
+	static char escaped_type[ZYK_ENTITY_FILE_ENCODED_LENGTH];
 
-	zyk_entity_file_encode(ent->NPC_type, escaped_type, sizeof(escaped_type));
+	// GalaxyRP fix: [Entity System] a type that did not fit would go out as a SHORTER type name,
+	// and the line would look perfectly well formed while naming a different NPC. Say so and write
+	// nothing, which is what returning NULL means to the one caller.
+	if (zyk_entity_file_encode(ent->NPC_type, escaped_type, sizeof(escaped_type)) == qfalse)
+	{
+		G_LogPrintf("entsave: NPC %d (%s) not saved: its type does not fit in %d characters once escaped\n",
+			ent->s.number, ent->NPC_type ? ent->NPC_type : "no type", (int)sizeof(escaped_type) - 1);
+
+		return NULL;
+	}
 
 	return va("classname;npc_spawner;npc_type;%s;origin;%f %f %f;angles;%f %f %f;\n", escaped_type, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2], ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], ent->client->ps.viewangles[2]);
 }
@@ -13391,8 +13400,12 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	FILE *this_file = NULL;
 	// zyk: worst case every character of a token is escaped, so twice the longest line the loader
 	// will read. static because the pair is far too large for this function's stack.
-	static char escaped_key[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
-	static char escaped_value[ZYK_ENTITY_FILE_LINE_LENGTH * 2];
+	static char escaped_key[ZYK_ENTITY_FILE_ENCODED_LENGTH];
+	static char escaped_value[ZYK_ENTITY_FILE_ENCODED_LENGTH];
+	// GalaxyRP fix: [Entity System] counted so the admin gets one line at the end instead of one
+	// server command per offending entity -- see the log calls in the loop below
+	int over_long = 0;
+	int not_encodable = 0;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -13441,6 +13454,7 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 		if (this_ent && this_ent->inuse)
 		{ // zyk: freed entities will not be saved
 			int line_length = 0;
+			qboolean encoded_all = qtrue;
 
 			j = 0;
 
@@ -13449,8 +13463,17 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 				// GalaxyRP fix: [Entity System] the pair used to be written raw, so a value holding
 				// a ';' or a linefeed did not survive the round trip -- see zyk_entity_file_encode()
 				// in g_spawn.c for what each of those did to the entity on reload.
-				zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j], escaped_key, sizeof(escaped_key));
-				zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j + 1], escaped_value, sizeof(escaped_value));
+				//
+				// GalaxyRP fix: [Entity System] and both encodes are now checked BEFORE anything is
+				// written. A token that did not fit comes back cleanly terminated and shorter, which
+				// is not a malformed record -- it is a different one, and it would load without a
+				// word of complaint. Nothing that did not encode in full reaches the file.
+				if (zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j], escaped_key, sizeof(escaped_key)) == qfalse ||
+					zyk_entity_file_encode(level.zyk_spawn_strings[this_ent->s.number][j + 1], escaped_value, sizeof(escaped_value)) == qfalse)
+				{
+					encoded_all = qfalse;
+					break;
+				}
 
 				fprintf(this_file, "%s;%s;", escaped_key, escaped_value);
 
@@ -13459,7 +13482,26 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 				j += 2;
 			}
 
-			if (j > 0)
+			if (encoded_all == qfalse)
+			{ // zyk: one extra character after the last complete pair, to make the loader refuse
+			  // this line. What refuses it is the odd token: whatever follows the final ';' has no
+			  // ';' of its own, so the loader's "key was not terminated" test fires (and if that
+			  // character is itself a ';', the empty key it terminates leaves the VALUE
+			  // unterminated instead -- either way the line is refused and logged).
+			  //
+			  // A backslash is the character used because it is the one zyk_entity_file_decode()
+			  // is documented to keep as a literal, so the marker cannot be read as the start of
+			  // something else on the way to being rejected. Better an entity that is absent on
+			  // reload, and says so at both ends, than one that comes back quietly different
+				fprintf(this_file, "\\");
+
+				not_encodable++;
+				G_LogPrintf("entsave: entity %d (%s) not saved: a key or value does not fit in %d characters once escaped\n",
+					this_ent->s.number, this_ent->classname ? this_ent->classname : "no classname",
+					(int)sizeof(escaped_key) - 1);
+			}
+
+			if (j > 0 || encoded_all == qfalse)
 			{ // zyk: break line only if the entity had keys and values to save
 				fprintf(this_file, "\n");
 			}
@@ -13469,10 +13511,20 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			// line in the server log -- so an entity could be saved, look saved, and simply not come
 			// back. The line is still written, because the admin may want to edit it by hand, but
 			// they are told now rather than finding out at the next map load.
+			//
+			// GalaxyRP fix: [Entity System] told in the LOG, and counted for one summary at the end.
+			// This was a trap->SendServerCommand per offending entity, in a loop bounded only by the
+			// number of entities on the map, and /entsave runs inside a single frame so none of them
+			// can be acknowledged in between. MAX_RELIABLE_COMMANDS is 128 and SV_AddServerCommand
+			// drops the client on the 129th unacknowledged one -- so an admin saving a map with that
+			// many over-long entities was kicked with "Server command overflow" by the very command
+			// he ran. Every message on the loading side is log-only for exactly this reason.
 			if (line_length >= (ZYK_ENTITY_FILE_LINE_LENGTH - 1))
 			{
-				trap->SendServerCommand( ent->s.number, va("print \"^3Warning: ^7entity %d (%s) needs %d characters and will not load back (limit %d). Shorten its keys or remove it.\n\"",
-					this_ent->s.number, this_ent->classname ? this_ent->classname : "no classname", line_length, ZYK_ENTITY_FILE_LINE_LENGTH - 1) );
+				over_long++;
+				G_LogPrintf("entsave: entity %d (%s) needs %d characters and will not load back (limit %d)\n",
+					this_ent->s.number, this_ent->classname ? this_ent->classname : "no classname",
+					line_length, ZYK_ENTITY_FILE_LINE_LENGTH - 1);
 			}
 
 			// GalaxyRP (Alex): NPCs should be saved as NPC spawners instead. So do the conversion.
@@ -13487,14 +13539,31 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			// type name was interpreted as a conversion against arguments that were never pushed.
 			// Pass it as data.
 			if (this_ent->client && this_ent->classname && strcmp(this_ent->classname, "NPC") == 0) {
-				fprintf(this_file, "%s", create_npc_spawner_for_npc(this_ent));
+				const char *npc_line = create_npc_spawner_for_npc(this_ent);
+
+				// zyk: NULL means the type did not encode in full, and it has already logged why
+				if (npc_line)
+					fprintf(this_file, "%s", npc_line);
+				else
+					not_encodable++;
 			}
 		}
 	}
 
 	fclose(this_file);
 
-	trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file\n\"", arg1) );
+	// GalaxyRP fix: [Entity System] the counts ride on the message /entsave already sends, so the
+	// admin still learns something went wrong without the loop sending him anything at all. The
+	// detail -- which entity, and why -- is in the log, where it cannot flood a connection.
+	if (over_long > 0 || not_encodable > 0)
+	{
+		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file. ^3%d entity(s) will not load back and %d could not be written; see the server log.\n\"",
+			arg1, over_long, not_encodable) );
+	}
+	else
+	{
+		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file\n\"", arg1) );
+	}
 }
 
 /*
