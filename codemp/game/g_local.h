@@ -117,7 +117,13 @@ extern vec3_t gPainPoint;
 
 #define ZYK_WEATHER_MAX_LAYERS		8	// most weather layers one recipe may hold
 #define ZYK_WEATHER_SLOTS			(ZYK_WEATHER_MAX_LAYERS + 1)	// layers plus one teardown slot
-#define ZYK_WEATHER_MAX_BASE		4	// most of the map's own weather commands we remember
+// GalaxyRP fix: [Weather] was 4, which an ordinary map overruns without trying: SP_CreateSnow
+// registers three commands on its own (*snow, *fog, *constantwind) and SP_CreateWind up to
+// five, so anything past the cap was dropped and /admweather default could not put it back.
+// This shares the ZYK_WEATHER_MAX_LAYERS budget with the admin's own layers, so it cannot go
+// all the way to 8 without leaving a heavily-weathered map no room to add anything; 6 covers
+// the maps that exist and still leaves two layers. A map past even this is told, not ignored.
+#define ZYK_WEATHER_MAX_BASE		6	// most of the map's own weather commands we remember
 #define ZYK_WEATHER_CMD_LENGTH		96	// longest command we build, "*constantwind ( x y z )"
 #define ZYK_WEATHER_MAX_CLOUDS		5	// MAX_PARTICLE_CLOUDS in the renderer's tr_WorldEffects.cpp
 #define ZYK_WEATHER_MAX_WINDS		10	// MAX_WIND_ZONES there
@@ -1870,12 +1876,14 @@ typedef struct level_locals_s {
 	qboolean zyk_configstring_table_full[ZYK_CS_TABLES];	// same, per indexed table
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
 	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot
+	qboolean zyk_weather_late_effect_warned;		// a weather effect was refused for arriving after the block
 
 	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
 	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts
 	int zyk_weather_debounce_time;
 	qboolean zyk_weather_use_base;	// whether the map's own weather is part of the current recipe
 	int zyk_weather_base_count;
+	qboolean zyk_weather_base_truncated;	// the map had more weather than ZYK_WEATHER_MAX_BASE
 	char zyk_weather_base[ZYK_WEATHER_MAX_BASE][ZYK_WEATHER_CMD_LENGTH];
 	int zyk_weather_layer_count;
 	char zyk_weather_layers[ZYK_WEATHER_MAX_LAYERS][ZYK_WEATHER_CMD_LENGTH];
@@ -2094,6 +2102,10 @@ void	G_ResetGamestateEstimate( void );
 // by an older "is there at least one free slot" predicate, which this does not replace.)
 int		G_FreeEntityCount( void );
 qboolean G_EntitySlotsAvailable( int needed );
+// GalaxyRP fix: [Configstrings] whether the gamestate can still take "needed" more bytes of
+// configstring, for a caller that is about to claim several at once and wants to find out before
+// it has claimed any of them.
+qboolean G_ConfigstringBytesAvailable( int needed );
 int		G_SoundSetIndex(const char *name);
 int		G_EffectIndex( const char *name );
 int		G_BSPIndex( const char *name );

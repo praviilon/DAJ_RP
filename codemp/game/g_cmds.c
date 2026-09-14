@@ -10498,6 +10498,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// any formatted message over 1022 characters WHOLE and without a word, and adding the
 				// /admweather line to the block above took it to 1093.
 				trap->SendServerCommand(ent - g_entities, "print \"^3/admweather <effect (optional)>: ^7Sets the weather for everyone on the server. Run with no arguments to see the current weather, or ^3/admweather list ^7for the effects.\n\
+^3/admweather add <effect>: ^7Layers another effect on top of the current weather. ^3/admweather remove <number> ^7drops one, ^3/admweather default ^7restores the map's own and ^3/admweather clear ^7switches it all off.\n\
 ^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
 ^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
@@ -15844,15 +15845,37 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 		return qfalse;
 	}
 
+	// GalaxyRP fix: [Weather] the slot count above is not the only way this can run out. Registering
+	// a name also spends gamestate bytes, and that budget is checked one name at a time -- fine for
+	// a caller that wants one configstring, useless for one that needs ZYK_WEATHER_SLOTS and cannot
+	// use a partial block. Without this the claim could take some of its slots, be refused partway,
+	// and have no way to give back the ones it holds. ZYK_WEATHER_CMD_LENGTH bounds every string
+	// zyk_weather_rebuild() can write into the block, so this is a real upper bound on the whole
+	// block for the rest of the map, not just on the reservation strings.
+	if (G_ConfigstringBytesAvailable(ZYK_WEATHER_SLOTS * ZYK_WEATHER_CMD_LENGTH) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1There is not enough room left in this map's gamestate for the weather system.\n\"" );
+		return qfalse;
+	}
+
 	// zyk: remember the weather the map set up for itself, so /admweather default can put it back.
 	// Only commands this file knows are kept: anything else would be re-run on every rebuild, and an
 	// effect string the engine does not recognise prints its whole help list to the player's console.
-	for (i = 1; i < first_free && level.zyk_weather_base_count < ZYK_WEATHER_MAX_BASE; i++)
+	// GalaxyRP fix: [Weather] the scan no longer stops at the cap -- it keeps counting so a map with
+	// more weather than the block can hold is REPORTED rather than quietly losing the excess on the
+	// first /admweather default.
+	for (i = 1; i < first_free; i++)
 	{
 		trap->GetConfigstring(CS_EFFECTS + i, content, sizeof(content));
 
 		if (content[0] != '*' || zyk_weather_command_kind(content) == ZYK_WFX_UNKNOWN)
 			continue;
+
+		if (level.zyk_weather_base_count >= ZYK_WEATHER_MAX_BASE)
+		{
+			level.zyk_weather_base_truncated = qtrue;
+			continue;
+		}
 
 		Q_strncpyz(level.zyk_weather_base[level.zyk_weather_base_count], content,
 			sizeof(level.zyk_weather_base[0]));
@@ -15871,6 +15894,17 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 		else if (index != (base_index + i))
 		{ // zyk: nothing runs between these calls, so this should not be reachable -- but the whole
 		  // design rests on the block being contiguous, so do not assume it
+		  // GalaxyRP fix: [Weather] give back what was taken. These are the highest occupied slots
+		  // in the table -- nothing else can have registered between the calls -- so blanking them
+		  // restores it exactly and leaves no hole for the client's replay loop to stop at.
+			int undo = 0;
+
+			for (undo = 0; undo <= i; undo++)
+				trap->SetConfigstring(CS_EFFECTS + base_index + undo, "");
+
+			level.zyk_weather_base_count = 0;
+			level.zyk_weather_base_truncated = qfalse;
+
 			trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve a contiguous block of effect slots for the weather system.\n\"" );
 			return qfalse;
 		}
@@ -15878,12 +15912,32 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 
 	if (base_index <= 0)
 	{
+		level.zyk_weather_base_count = 0;
+		level.zyk_weather_base_truncated = qfalse;
+
 		trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve effect slots for the weather system.\n\"" );
 		return qfalse;
 	}
 
 	level.zyk_weather_slot = base_index;
 	level.zyk_weather_use_base = qtrue;
+
+	// GalaxyRP fix: [Weather] write the block out before returning. The slots were reserved by
+	// registering "*clear" strings, and those are live the moment they are written -- so the claim
+	// alone switches the map's weather off for everyone. That was invisible while the caller always
+	// went on to rebuild, but the caller claims BEFORE it has validated its arguments, so a typo,
+	// an out-of-range /admweather remove or a missing wind value left the sky wiped and told the
+	// admin only that the effect name was wrong. Rebuilding here means the block starts out
+	// reproducing the map's own weather, and a command that goes on to fail changes nothing.
+	zyk_weather_rebuild();
+
+	if (level.zyk_weather_base_truncated == qtrue)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^3This map sets up more weather than the system can hold, so only the first %d command(s) are kept. ^3/admweather default ^7will restore those.\n\"",
+			ZYK_WEATHER_MAX_BASE) );
+		G_LogPrintf("admweather: map weather truncated to %d command(s) at ZYK_WEATHER_MAX_BASE\n",
+			ZYK_WEATHER_MAX_BASE);
+	}
 
 	return qtrue;
 }
@@ -15896,7 +15950,11 @@ static void zyk_weather_status( gentity_t *ent )
 
 	if (level.zyk_weather_slot == 0)
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"\n^3Weather: ^7this map is showing whatever weather it was built with.\n^7Use ^3/admweather <effect> ^7to change it or ^3/admweather list ^7to see the effects.\n\n\"" );
+		// GalaxyRP fix: [Weather] name "add" here. This screen and /admweather list are where an
+		// admin looks, and neither of them used to mention the one verb that builds a recipe of
+		// more than one layer -- it appeared only in /adminlist's per-command help, which nobody
+		// reaches by accident.
+		trap->SendServerCommand( ent-g_entities, "print \"\n^3Weather: ^7this map is showing whatever weather it was built with.\n^7Use ^3/admweather <effect> ^7to change it, ^3/admweather add <effect> ^7to layer a second one on top, or ^3/admweather list ^7to see the effects.\n\n\"" );
 		return;
 	}
 
@@ -15921,6 +15979,17 @@ static void zyk_weather_status( gentity_t *ent )
 	for (i = 0; i < level.zyk_weather_layer_count; i++)
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"^3  %d ^7- %s\n\"", i + 1, level.zyk_weather_layers[i] + 1) );
+	}
+
+	// GalaxyRP fix: [Weather] the layers are numbered above, which implies a command that takes one
+	// of those numbers, but nothing here ever said what it was -- and "add" was unmentioned too, so
+	// the only way to find out this command can do more than one layer was to read the source.
+	trap->SendServerCommand( ent-g_entities, "print \"^7Use ^3/admweather add <effect> ^7to layer another on top, ^3/admweather remove <number> ^7to drop one, ^3/admweather default ^7for the map's own weather or ^3/admweather clear ^7for none.\n\"" );
+
+	if (level.zyk_weather_base_truncated == qtrue)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^3Note: ^7this map sets up more weather than the system can hold; only the first %d command(s) of its own are kept.\n\"",
+			ZYK_WEATHER_MAX_BASE) );
 	}
 
 	trap->SendServerCommand( ent-g_entities, "print \"\n\"" );
@@ -15960,7 +16029,10 @@ static void zyk_weather_list( gentity_t *ent )
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\"", message) );
 	}
 
-	trap->SendServerCommand( ent-g_entities, va("print \"\n^7At most %d layers and %d particle effects at once. Wind values are %d to %d, density is %d to %d.\n\n\"",
+	// GalaxyRP fix: [Weather] this footer advertised a limit of N layers without ever naming the
+	// command that makes one. Say how to build a recipe, here, where someone choosing an effect is
+	// already looking.
+	trap->SendServerCommand( ent-g_entities, va("print \"\n^7At most %d layers and %d particle effects at once. Wind values are %d to %d, density is %d to %d.\n^3/admweather <effect> ^7sets the weather and ^3/admweather add <effect> ^7layers another on top of it.\n\n\"",
 		ZYK_WEATHER_MAX_LAYERS, ZYK_WEATHER_MAX_CLOUDS, -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT,
 		ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX) );
 }

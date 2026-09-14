@@ -209,6 +209,18 @@ void G_ResetGamestateEstimate( void ) {
 	level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
 }
 
+// GalaxyRP fix: [Configstrings] for a caller that needs SEVERAL configstrings and cannot use half of
+// them. G_FindConfigstringIndex() refuses one name at a time, which is right for the callers that
+// want one; a caller claiming a block has to know before it starts, or it ends up holding slots it
+// cannot use and has no way to give back. /admweather is the one that needs this.
+qboolean G_ConfigstringBytesAvailable( int needed ) {
+	if ( needed < 0 ) {
+		needed = 0;
+	}
+
+	return ((zyk_gamestate_bytes_used() + needed) <= ZYK_GAMESTATE_BUDGET) ? qtrue : qfalse;
+}
+
 /*
 ================
 G_FindConfigstringIndex
@@ -391,6 +403,41 @@ int G_SoundSetIndex(const char *name)
 
 int G_EffectIndex( const char *name )
 {
+	// GalaxyRP fix: [Weather] a "*"-prefixed effect is not an effect at all -- it is a command for
+	// the renderer's world-effect parser, which is a command stream shared by everyone on the
+	// server. /admweather owns that stream once it has reserved its block, and the whole design
+	// rests on the block being the HIGHEST weather slots in use: a client joining later replays the
+	// table in slot order, so anything registered above the block is read AFTER the block's
+	// teardown and survives it, while a client already connected only re-runs slots that changed
+	// and loses it on the next rebuild. One new weather command after the claim is therefore enough
+	// to leave the two halves of the server looking at permanently different skies.
+	//
+	// So refuse it. The callers are the misc weather entities (SP_CreateWind, SP_CreateSnow,
+	// SP_CreateRain, SP_CreateSpaceDust, SP_CreateWeather), none of which reads this return value,
+	// and at map load they all run long before any claim -- their weather is captured as the map's
+	// own. This only bites an entity spawned afterwards, by /entadd or a script, which today is not
+	// "weather that works" but "weather that splits the server". /admweather add does the same job
+	// and keeps everyone on one sky.
+	//
+	// The block's own reservation is not caught by this: it runs while zyk_weather_slot is still 0.
+	//
+	// This refuses even a command already in the table, rather than handing back the index it would
+	// have found. That is deliberate and costs nothing: a command registered before the claim was
+	// captured as the map's own weather and is already part of every rebuild, so the entity asking
+	// for it again is asking for something it already has -- and no caller here reads the index.
+	if ( VALIDSTRING( name ) && name[0] == '*' && level.zyk_weather_slot != 0 )
+	{
+		if ( !level.zyk_weather_late_effect_warned )
+		{
+			level.zyk_weather_late_effect_warned = qtrue;
+			G_LogPrintf( "refused the weather command \"%s\": /admweather is managing the weather "
+				"on this map, and an effect registered after its block would show a different sky "
+				"to players who join later. Use /admweather add instead.\n", name );
+		}
+
+		return 0;
+	}
+
 	return G_FindConfigstringIndex (name, CS_EFFECTS, MAX_FX, qtrue);
 }
 
