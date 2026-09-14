@@ -2489,6 +2489,9 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 void WP_SaberInitBladeData( gentity_t *ent );
 void WP_InitForcePowers( gentity_t *ent );
 void WP_RegisterForceLoopSounds( void );
+// GalaxyRP fix: [Force] stop every force power a player currently has running. The account
+// commands need this: nothing on their path reaches any of the four places that normally do it.
+void zyk_stop_active_force_powers( gentity_t *ent );
 void WP_SpawnInitForcePowers( gentity_t *ent );
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd );
 int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forcePower);

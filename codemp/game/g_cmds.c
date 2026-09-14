@@ -2932,6 +2932,95 @@ void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zEr
 	sqlite3_finalize(stmt);
 }
 
+// GalaxyRP fix: [Force] stop every force power this player currently has running.
+//
+// Switching account or character has never done this. The four places that do it -- ClientBegin(),
+// ClientDisconnect(), WP_SpawnInitForcePowers() (reached only from ClientSpawn) and the health<=0
+// branch of WP_ForcePowersUpdate() -- are all respawn or disconnect paths, and the account commands
+// reach none of them without a kill. What they call instead is WP_InitForcePowers(), which rebuilds
+// which powers are KNOWN and at what LEVEL and contains no reference to forcePowersActive at all.
+//
+// Nothing downstream catches it either: WP_ForcePowersUpdate() does sweep for powers that should
+// stop, but the test is BG_CanUseFPNow(), which asks about ysalamiri, forceRestricted, trueNonJedi
+// and saber locks -- never forcePowersKnown or forcePowerLevel. So a power the incoming character
+// has never learned keeps running, drawing on that character's force pool.
+//
+// What was left behind, from WP_ForcePowerStop()'s own cases: Speed, Rage, Protect, Absorb and
+// Seeing kept both their effect and their looping sound (the G_MuteSound calls live in there), Rage
+// never applied its forceRageRecoveryTime penalty so the post-rage weakness was skipped outright,
+// and a Grip already on a victim was never released.
+//
+// Call this BEFORE the incoming character's skills are loaded. WP_ForcePowerStop() reads
+// forcePowerLevel[] to decide some of its cleanup -- Rage picks its recovery penalty from the level
+// the power was used at -- so stopping first is what makes that penalty the right one.
+//
+// Deliberately not WP_SpawnInitForcePowers(): in GT_HOLOCRON that zeroes every forcePowerLevel and
+// clears holocronsCarried[], which outside a spawn would wipe an RPG character's force levels and
+// destroy the holocrons they are carrying. forcePowerDuration[] is deliberately left alone as well,
+// exactly as the ClientBegin()/ClientDisconnect() loops leave it: a duration outstanding on a power
+// that is no longer active simply expires on its own in WP_ForcePowersUpdate()'s own sweep.
+void zyk_stop_active_force_powers( gentity_t *ent )
+{
+	int i = 0;
+
+	if (!ent || !ent->client)
+		return;
+
+	for (i = 0; i < NUM_FORCE_POWERS; i++)
+	{
+		if (ent->client->ps.fd.forcePowersActive & (1 << i))
+		{
+			WP_ForcePowerStop(ent, (forcePowers_t)i);
+		}
+	}
+}
+
+// GalaxyRP fix: [Account] load the incoming character's skills without resurrecting a corpse.
+//
+// initialize_rpg_skills() ends by restoring health and shield to the character's maximum, and it
+// does so unconditionally -- nothing there asks whether the player is alive. /login and /char both
+// call it, so running either while lying dead put health back above zero, and ClientThink_real()'s
+// pm_type ladder reads exactly that ("stats[STAT_HEALTH] <= 0" is the whole test for PM_DEAD). The
+// corpse stood up where it fell, at full health and full shield, with no respawn, no spawn point
+// and no respawn delay. /logout never showed it because it only clamps health downward.
+//
+// rp_seamlesslogin 0 hid it: the deferred kill landed 300ms later and killed them again, so the
+// revive was brief and ended in a proper respawn -- at the cost of a second obituary and a second
+// score penalty. At rp_seamlesslogin 1 nothing followed it at all, which made /login a free
+// self-revive on the spot.
+//
+// Fixed here rather than inside initialize_rpg_skills() because that restore is not always wrong:
+// quest_power_events() in g_main.c calls it precisely to bring a dead player back, as the whole
+// point of the Resurrection quest power, and the sniper and melee battle-end loops call it for
+// their survivors. A guard in there would break the first of those. This wrapper changes only the
+// two account paths that are actually wrong.
+//
+// The character's new MAXIMUMS still apply either way -- only the current values are put back, and
+// only for a player who was already dead. For a living player, wounded or not, this is exactly
+// initialize_rpg_skills() and nothing else.
+void zyk_apply_character_skills( gentity_t *ent )
+{
+	qboolean was_dead = qfalse;
+	int health = 0, health_stat = 0, armor = 0;
+
+	if (!ent || !ent->client)
+		return;
+
+	was_dead = (ent->health <= 0) ? qtrue : qfalse;
+	health = ent->health;
+	health_stat = ent->client->ps.stats[STAT_HEALTH];
+	armor = ent->client->ps.stats[STAT_ARMOR];
+
+	initialize_rpg_skills(ent);
+
+	if (was_dead == qtrue)
+	{
+		ent->health = health;
+		ent->client->ps.stats[STAT_HEALTH] = health_stat;
+		ent->client->ps.stats[STAT_ARMOR] = armor;
+	}
+}
+
 // GalaxyRP fix: [Account] the part of a character switch that initialize_rpg_skills() does not do.
 // /login, /new, /char new and /char use all apply the new character synchronously and then schedule a
 // kill, and the respawn that kill causes is what used to finish the job. That respawn cannot be relied
@@ -3757,7 +3846,14 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// whether this player is about to be killed. The respawn below, when it does fire, calls
 	// initialize_rpg_skills() again via ClientSpawn -- that second call is idempotent (same skill_levels[]
 	// in, same result out), so there's no double-apply side effect from calling it twice.
-	initialize_rpg_skills(ent);
+	// GalaxyRP fix: [Force] stop whatever the OUTGOING character had running first -- see
+	// zyk_stop_active_force_powers(). It has to precede the line below, which overwrites the force
+	// levels WP_ForcePowerStop() reads to clean up properly.
+	zyk_stop_active_force_powers(ent);
+
+	// GalaxyRP fix: [Account] through the wrapper, so switching character while dead no longer
+	// stands the corpse back up -- see zyk_apply_character_skills().
+	zyk_apply_character_skills(ent);
 
 	// GalaxyRP fix: [Account] finish the parts of the switch initialize_rpg_skills() does not cover --
 	// see zyk_apply_character_loadout() for what and why. Covers /new, /char new and /char use, which
@@ -4906,7 +5002,14 @@ void Cmd_Login_F(gentity_t * ent)
 		return;
 	}
 
-	initialize_rpg_skills(ent);
+	// GalaxyRP fix: [Force] same as select_player_character() -- stop anything this player had
+	// running before the incoming character's force levels replace the ones WP_ForcePowerStop()
+	// needs to read. See zyk_stop_active_force_powers().
+	zyk_stop_active_force_powers(ent);
+
+	// GalaxyRP fix: [Account] through the wrapper, so /login while dead no longer resurrects the
+	// player where they fell -- see zyk_apply_character_skills().
+	zyk_apply_character_skills(ent);
 
 	// GalaxyRP fix: [Account] same finishing pass select_player_character() performs for
 	// /new and /char -- see zyk_apply_character_loadout().
@@ -10263,6 +10366,13 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// /give's toggle-off path already uses to strip RPG weapons back to the logged-out baseline (melee +
 	// conditional saber/Bryar Pistol) and to re-init force powers, so reuse it here instead of duplicating
 	// half of it inline.
+	// GalaxyRP fix: [Force] stop anything still running before this line, not after: zyk_remove_guns()
+	// calls WP_InitForcePowers(), which rebuilds forcePowerLevel[] to the logged-out baseline, and
+	// WP_ForcePowerStop() reads those levels to clean up (Rage's recovery penalty is chosen from
+	// them). Logging out left Speed, Protect and the rest running exactly as a character switch did.
+	// See zyk_stop_active_force_powers().
+	zyk_stop_active_force_powers(ent);
+
 	zyk_remove_guns(ent);
 
 	// zyk_remove_guns() always grants saber (conditional on force level) and Bryar Pistol unconditionally,
