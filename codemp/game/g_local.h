@@ -2018,6 +2018,7 @@ void ItemUse_Sentry(gentity_t *ent);
 
 void zyk_training_pole_damage(gentity_t *ent);
 void Cmd_AdmWeather_f( gentity_t *ent );
+void		zyk_learn_inline_model( const char *name );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
 void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);

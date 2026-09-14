@@ -978,6 +978,20 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		level.sp_map = qtrue;
 	}
 
+	// GalaxyRP fix: [Entity System] this MUST be reset before the line below and nowhere else.
+	// The game module has no trap that reports how many inline models a map holds, so
+	// zyk_brush_model_allowed() learns the bound by watching the map's own brush entities as they
+	// spawn -- and that is the call below. It used to be zeroed 200 lines further down, still
+	// inside this function, which threw the bound away as soon as it had been learned: from then
+	// on the map believed it had no inline models past *0, and every /entload, /entadd and
+	// /entedit that named a brush model was refused. Doors came back with no brush (invisible,
+	// non-solid, so the doorway reads as permanently open), and every refused trigger collapsed
+	// to a zero-size volume at the world origin.
+	//
+	// memset( &level, ... ) above already zeroes it; this is here to say where the bound is
+	// filled in, and to make an assignment after the spawn look as wrong as it is.
+	level.zyk_max_inline_model = 0;
+
 	// parse the key/value pairs and spawn gentities
 	G_SpawnEntitiesFromString(qfalse);
 
@@ -1186,11 +1200,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.rpg_lms_quantity = 0;
 
 	level.last_spawned_entity = NULL;
-
-	// GalaxyRP fix: [Entity System] zeroed with the rest of level above, but set explicitly
-	// alongside the other Entity System state so it is obvious this is per-map -- it is filled
-	// in while the map's own entities spawn. See zyk_brush_model_allowed() in g_spawn.c.
-	level.zyk_max_inline_model = 0;
 
 	level.ent_origin_set = qfalse;
 

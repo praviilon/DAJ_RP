@@ -1091,6 +1091,15 @@ void G_SpawnGEntityFromSpawnVars( qboolean inSubBSP ) {
 
 	level.zyk_spawn_strings_values_count[ent->s.number] = j;
 
+	// GalaxyRP fix: [Entity System] learn this map's inline-model bound HERE, before the four
+	// gametype culls below. Those free the entity and return without ever calling G_CallSpawn(),
+	// so a brush entity the current gametype does not want never reaches the SP_ function that
+	// would otherwise teach the bound -- and the map still holds that inline model. Without this,
+	// a preset saved under one gametype could name a brush model that is refused under another,
+	// for no reason the admin can see. zyk_learn_inline_model() ignores anything that is not a
+	// plain "*<digits>" from the main BSP.
+	zyk_learn_inline_model( ent->model );
+
 	// check for "notsingle" flag
 	if ( level.gametype == GT_SINGLE_PLAYER ) {
 		G_SpawnInt( "notsingle", "0", &i );
@@ -1294,6 +1303,50 @@ qboolean zyk_spawn_strings_full(gentity_t *ent)
 // It also restores "#" sub-BSP names to the engine. The inline md3 blocks tested only for '*', so a
 // "#name" model fell into the md3 branch and was registered as a bogus md3 -- vanilla and TaystJK
 // both pass it to SetBrushModel, which loads it as a sub-BSP.
+// GalaxyRP fix: [Entity System] raise the bound for one "*N" the map itself names. Split out of
+// zyk_brush_model_allowed() below so the entity parser can call it too -- see the call in
+// G_SpawnGEntityFromSpawnVars().
+//
+// Two things it is strict about, both because this is the only place the bound ever WIDENS:
+//
+//   Sub-BSP entities are skipped. A misc_bsp's entity string names inline models in the sub-BSP's
+//   own index space, not the map's: SV_SetBrushModel adds sv.mLocalSubBSPModelOffset to any "*N"
+//   it resolves while a sub-BSP is active (sv_gameapi.cpp). So a sub-BSP's *3 is not this map's
+//   *3, and letting one in could push the bound ABOVE what the main BSP holds -- which is the
+//   direction that lets a later /entadd reach CM_InlineModel() with an index the map does not
+//   have, i.e. exactly the drop this guard exists to prevent. level.mBSPInstanceDepth is raised
+//   around the nested spawn in SP_misc_bsp(), so it is the signal for "not our index space".
+//   Nothing is lost by skipping them: a "*N" is only ever CHECKED after the map has loaded, and
+//   by then sv.mLocalSubBSPIndex is -1, so every check is against the main BSP.
+//
+//   The digits have to be digits. atoi("*3junk") is 3, which is fine to accept -- the engine
+//   reads it the same way -- but not fine to widen the bound on. Permissive when testing against
+//   the bound, strict when raising it.
+void zyk_learn_inline_model( const char *name )
+{
+	const char *p = NULL;
+	int index = 0;
+
+	if (!name || name[0] != '*')
+		return;
+
+	if (level.mBSPInstanceDepth > 0)
+		return;
+
+	for (p = name + 1; *p; p++)
+	{
+		if (*p < '0' || *p > '9')
+			return;
+	}
+
+	// zyk: "*" on its own needs no test of its own -- atoi("") is 0, and 0 never beats a bound
+	// that starts at 0 and only rises
+	index = atoi(name + 1);
+
+	if (index > level.zyk_max_inline_model)
+		level.zyk_max_inline_model = index;
+}
+
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 {
 	int index = 0;
@@ -1305,8 +1358,7 @@ qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 
 	if (level.spawning == qtrue)
 	{ // zyk: the map's own entities define what this map considers a valid index
-		if (index > level.zyk_max_inline_model)
-			level.zyk_max_inline_model = index;
+		zyk_learn_inline_model( name );
 
 		return qtrue;
 	}
