@@ -9395,6 +9395,9 @@ void G_RunFrame( int levelTime ) {
 		static char zyk_keys[ZYK_MAX_SPAWN_STRING_SLOTS / 2][sizeof(content)];
 		static char zyk_values[ZYK_MAX_SPAWN_STRING_SLOTS / 2][sizeof(content)];
 		FILE *this_file = NULL;
+		// GalaxyRP fix: [Entity System] only so the refusal below can say where in the file it gave up
+		int zyk_lines_read = 0;
+		int zyk_spawned = 0;
 
 		strcpy(content,"");
 
@@ -9425,6 +9428,8 @@ void G_RunFrame( int levelTime ) {
 				qboolean line_ok = qtrue;
 				qboolean line_full = qfalse;
 				gentity_t *new_ent = NULL;
+
+				zyk_lines_read++;
 
 				content_len = strlen(content);
 
@@ -9503,12 +9508,39 @@ void G_RunFrame( int levelTime ) {
 					continue;
 				}
 
+				// GalaxyRP fix: [Entity System] a good line is not enough on its own. This loop takes an
+				// entity per line and nothing bounds the number of lines, so it was the one player-driven
+				// spawn path with no check at all -- /entadd, /npc, npc_spawner and the asteroid field all
+				// ask first. What it walks into is G_Spawn's trap->Error(ERR_DROP), which on a dedicated
+				// server ends the process rather than dropping a player (see G_Spawn in g_utils.c).
+				//
+				// /entload frees the map's own entities before it reads the file, so a preset that fit once
+				// fits again -- but the default.txt loaded automatically at map start frees nothing, it adds
+				// to everything the map already spawned, and no preset is bounded by anything once it has
+				// been hand-edited.
+				//
+				// The margin is /entadd's, for /entadd's reason: some classes allocate more than the one
+				// entity asked for -- func_plat builds its own trigger, an npc_spawner with no targetname
+				// spawns its NPC immediately. Stop reading rather than skipping the line: the table only
+				// fills further from here, so every later line would be refused too, and a preset half
+				// applied from the front is easier to reason about than one with holes through it.
+				if (G_EntitySlotsAvailable(4) == qfalse)
+				{
+					G_LogPrintf("entity file %s: stopped at line %d after %d entities -- %d entity slots "
+						"free, %d of them reserved. The rest of the file was not loaded.\n",
+						level.load_entities_file, zyk_lines_read, zyk_spawned, G_FreeEntityCount(),
+						ZYK_ENTITY_RESERVE);
+					break;
+				}
+
 				// zyk: the line is good, so now take an entity for it
 				new_ent = G_Spawn();
 
 				if (new_ent)
 				{
 					int m = 0;
+
+					zyk_spawned++;
 
 					while (m < j)
 					{

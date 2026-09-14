@@ -13955,6 +13955,21 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] this and /spawndummy were the two Entity System commands still
+	// reaching G_Spawn() with no check, while /entadd -- which the same admin bit gates, and which
+	// spawns the same kind of thing -- has asked since the exhaustion work. Two slots, not one:
+	// the classname below is func_plat, and SP_func_plat calls SpawnPlatTrigger(), which takes a
+	// second entity for the trigger volume.
+	if ( G_EntitySlotsAvailable( 2 ) == qfalse )
+	{
+		trap->SendServerCommand( ent-g_entities,
+			va("print \"Cannot spawn a platform: the server is near its entity limit. %d slots free, %d held in reserve.\n\"",
+				G_FreeEntityCount(), ZYK_ENTITY_RESERVE) );
+		G_LogPrintf( "/spawnplatform by %s refused: %d entity slots free\n",
+			ent->client->pers.netname, G_FreeEntityCount() );
+		return;
+	}
+
 	new_ent = G_Spawn();
 
 	if (new_ent)
@@ -13987,6 +14002,18 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 	// the refusal name the admin command needed, the way the other thirteen do.
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
+		return;
+	}
+
+	// GalaxyRP fix: [Entity System] ask before allocating, as /entadd and /spawnplatform do. One
+	// slot here: SP_ZykTrainingPole builds nothing of its own.
+	if ( G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		trap->SendServerCommand( ent-g_entities,
+			va("print \"Cannot spawn a dummy: the server is near its entity limit. %d slots free, %d held in reserve.\n\"",
+				G_FreeEntityCount(), ZYK_ENTITY_RESERVE) );
+		G_LogPrintf( "/spawndummy by %s refused: %d entity slots free\n",
+			ent->client->pers.netname, G_FreeEntityCount() );
 		return;
 	}
 
@@ -15938,8 +15965,10 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 	if (level.zyk_weather_slot != 0)
 		return qtrue;
 
-	// zyk: G_EffectIndex drops the server when the table is full, so the room has to be confirmed
-	// before a single slot is taken
+	// GalaxyRP fix: [Weather] this used to read "G_EffectIndex drops the server when the table is
+	// full". It no longer does -- it refuses and returns 0 -- but confirming the room up front is
+	// still what this needs, because a block claimed half way is worse than one not claimed at all.
+	// zyk: the room has to be confirmed before a single slot is taken
 	for (first_free = 1; first_free < MAX_FX; first_free++)
 	{
 		trap->GetConfigstring(CS_EFFECTS + first_free, content, sizeof(content));
@@ -16001,32 +16030,45 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 
 		if (i == 0)
 			base_index = index;
-		else if (index != (base_index + i))
-		{ // zyk: nothing runs between these calls, so this should not be reachable -- but the whole
-		  // design rests on the block being contiguous, so do not assume it
-		  // GalaxyRP fix: [Weather] give back what was taken. These are the highest occupied slots
-		  // in the table -- nothing else can have registered between the calls -- so blanking them
-		  // restores it exactly and leaves no hole for the client's replay loop to stop at.
+
+		// GalaxyRP fix: [Weather] a refusal and a non-contiguous index are the same problem -- the
+		// block cannot be used -- and they have to be handled together, before anything is given
+		// back. They were not: the contiguity test ran first and the "base_index <= 0" test sat
+		// AFTER the loop, where it could no longer help. A refusal on the very first slot left
+		// base_index at 0, the second iteration then failed the contiguity test with base_index 0,
+		// and the rollback blanked CS_EFFECTS+0 and CS_EFFECTS+1 -- the second of which is the
+		// map's own first effect. That both destroys a live effect and puts a hole at index 1,
+		// which is worse than it sounds: the client's replay loop (CG_RegisterSounds) STOPS at the
+		// first empty slot, so every effect the map registered would be lost for everyone who
+		// joined afterwards.
+		//
+		// Unreachable as the code stands -- the slot count and the byte budget are both checked
+		// before the first G_EffectIndex, and the byte pre-check reserves ZYK_WEATHER_SLOTS *
+		// ZYK_WEATHER_CMD_LENGTH against an actual spend of about a tenth of that -- but "cannot
+		// happen" is exactly what the contiguity test already says about itself, and this is the
+		// branch that runs when it does.
+		if (index <= 0 || index != (base_index + i))
+		{
 			int undo = 0;
 
-			for (undo = 0; undo <= i; undo++)
+			// zyk: give back exactly what was taken and nothing else. That is the i contiguous
+			// slots from base_index, plus this one if it was handed out at all. They are the
+			// highest occupied slots in the table -- G_FindConfigstringIndex always returns the
+			// first free slot, and these names are unique, so nothing can have been placed below
+			// them -- which is what makes blanking them leave no hole for the replay loop.
+			for (undo = 0; base_index > 0 && undo < i; undo++)
 				trap->SetConfigstring(CS_EFFECTS + base_index + undo, "");
+
+			if (index > 0)
+				trap->SetConfigstring(CS_EFFECTS + index, "");
 
 			level.zyk_weather_base_count = 0;
 			level.zyk_weather_base_truncated = qfalse;
+			base_index = 0;
 
 			trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve a contiguous block of effect slots for the weather system.\n\"" );
 			return qfalse;
 		}
-	}
-
-	if (base_index <= 0)
-	{
-		level.zyk_weather_base_count = 0;
-		level.zyk_weather_base_truncated = qfalse;
-
-		trap->SendServerCommand( ent-g_entities, "print \"^1Could not reserve effect slots for the weather system.\n\"" );
-		return qfalse;
 	}
 
 	level.zyk_weather_slot = base_index;

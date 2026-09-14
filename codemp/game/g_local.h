@@ -113,8 +113,23 @@ extern vec3_t gPainPoint;
 // transient allocations ordinary play depends on -- G_TempEntity for every effect and sound event,
 // missiles, gibs -- always have somewhere to go. G_Spawn() cannot fail gracefully: it has ~70 call
 // sites, G_TempEntity among them dereferences the result immediately, and when it runs out it calls
-// trap->Error(ERR_DROP), which drops the server and disconnects everyone at once. Refusing the
-// controllable spawns early is what keeps it from ever getting there.
+// trap->Error(ERR_DROP). Refusing the controllable spawns early is what keeps it from ever getting
+// there.
+//
+// GalaxyRP fix: [Entity System] and what ERR_DROP does is worse than the name suggests, which is
+// worth stating once here because several comments in this mod reach for it. gi.Error is Com_Error
+// itself (sv_gameapi.cpp), and Com_Error opens with:
+//
+//     // ERR_DROPs on dedicated drop to an interactive console
+//     // which doesn't make sense for dedicated as it's generally run unattended
+//     if ( com_dedicated && com_dedicated->integer ) { code = ERR_FATAL; }
+//
+// ERR_FATAL runs CL_Shutdown, SV_Shutdown, Com_Shutdown and then Sys_Error, so on a dedicated
+// server -- which is every server this mod is played on -- an ERR_DROP raised from game code is a
+// PROCESS EXIT, not a disconnect. Nobody reconnects; the server is gone until something restarts
+// it. (More than three ERR_DROPs inside 100ms escalate the same way even on a listen server.)
+// That is the cost these guards exist to avoid, and the reason the one surviving call in G_Spawn
+// writes its reason to the log first.
 #define ZYK_ENTITY_RESERVE			64
 
 // GalaxyRP fix: [Entity System] most asteroids one trigger_asteroid_field may keep alive. count is a

@@ -300,7 +300,8 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 	// fixed set. It is not fine for anything a player or admin can drive, and plenty can: every
 	// SP_* function that does G_ModelIndex(ent->model) takes its name straight from a spawn key,
 	// and "model" is a key /entadd will set to whatever it is given. 512 /entadd calls with
-	// distinct model names used to be a one-line way for an admin to drop the server.
+	// distinct model names used to be a one-line way for an admin to take the server process down
+	// (see ZYK_ENTITY_RESERVE in g_local.h on what ERR_DROP does on a dedicated build).
 	//
 	// Refusing instead returns 0, which is the index of the empty configstring: the client draws
 	// no model, plays no sound, shows no effect for that entity. Degraded, but alive, and every
@@ -1153,7 +1154,8 @@ int G_FreeEntityCount( void ) {
 // GalaxyRP fix: [Entity System] the gate every player- or admin-driven spawn goes through. G_Spawn()
 // itself cannot be made to fail politely -- it never returns NULL, ~70 call sites rely on that, and
 // G_TempEntity() dereferences the result on the next line -- so when it runs out it calls
-// trap->Error(ERR_DROP) and the whole server goes down with everyone on it. The fix is not to make
+// trap->Error(ERR_DROP), which on a dedicated server ends the process rather than disconnecting
+// anyone (see ZYK_ENTITY_RESERVE in g_local.h). The fix is not to make
 // G_Spawn() fail better but to stop it ever being the one that runs out: keep ZYK_ENTITY_RESERVE
 // slots that only the uncontrollable allocations can reach, and refuse the controllable ones first.
 //
@@ -1209,13 +1211,14 @@ gentity_t *G_Spawn( void ) {
 		// says MAX_GENTITIES, and every JKA fork inherited it.
 		//
 		// The inner loop above always ends with i == level.num_entities, and level.num_entities can
-		// never exceed ENTITYNUM_MAX_NORMAL (1022) because the check just below drops the server at
+		// never exceed ENTITYNUM_MAX_NORMAL (1022) because the check just below ends the server at
 		// that point -- it can never be MAX_GENTITIES (1024). So the test was always true, the break
 		// always fired after the first pass, and the whole "force" pass was unreachable code. The
 		// comment at the top of this loop describes something that had never once run.
 		//
 		// What that cost: with the table full and nothing free except slots released in the last
-		// second, the server dropped every player on it rather than reusing one. Temp entities are
+		// second, the server EXITED rather than reusing one -- see ZYK_ENTITY_RESERVE in
+		// g_local.h for why ERR_DROP is not a drop here. Temp entities are
 		// the easy way to get there -- each is freed a frame after it is created, so a busy moment
 		// puts hundreds of slots inside that window at once.
 		//
@@ -1233,16 +1236,28 @@ gentity_t *G_Spawn( void ) {
 		}
 		*/
 		G_SpewEntList();
+
+		// GalaxyRP fix: [Entity System] say why, in the log, before the error. On a dedicated
+		// server trap->Error(ERR_DROP) is a process exit -- Com_Error promotes ERR_DROP to
+		// ERR_FATAL under com_dedicated, see ZYK_ENTITY_RESERVE in g_local.h -- so an admin
+		// investigating afterwards has only whatever reached games.log. G_SpewEntList() above
+		// writes its census with trap->Print, which goes to the console and not to the log, so
+		// without this line the log simply stops mid-map with no reason given. G_ShutdownGame
+		// closes level.logFile on the way down, which flushes it.
+		G_LogPrintf( "entity table exhausted at %d slots: no free entities and nothing recently "
+			"freed to recycle. The server is about to exit; see the console for the entity "
+			"census.\n", level.num_entities );
+
 		trap->Error( ERR_DROP, "G_Spawn: no free entities" );
 	}
 
 	// GalaxyRP fix: [Entity System] one-time early warning. The guards on the player-driven spawn
 	// paths keep ZYK_ENTITY_RESERVE slots back for allocations nothing can refuse -- temp entities,
 	// missiles, gibs -- but sustained pressure from those can still eat the reserve, and when it is
-	// gone, all that stands between this function and trap->Error(ERR_DROP) -- which takes the
-	// server down with everyone on it -- is the force pass recycling a slot freed moments ago.
+	// gone, all that stands between this function and trap->Error(ERR_DROP) -- which ends the
+	// server process on a dedicated build -- is the force pass recycling a slot freed moments ago.
 	// Say so once while there is still room to act, rather than leaving the log silent until the
-	// drop. Deliberately not a refusal: this path has ~70 callers that cannot handle one.
+	// exit. Deliberately not a refusal: this path has ~70 callers that cannot handle one.
 	if ( !level.zyk_entity_reserve_warned
 		&& (ENTITYNUM_MAX_NORMAL - level.num_entities) < ZYK_ENTITY_RESERVE )
 	{

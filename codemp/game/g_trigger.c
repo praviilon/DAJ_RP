@@ -1913,7 +1913,8 @@ void asteroid_field_think(gentity_t *self)
 	// GalaxyRP fix: [Entity System] an asteroid field spawns one asteroid every think until it has
 	// self->count of them, and count comes straight off a spawn key -- "/entadd
 	// trigger_asteroid_field ... count 900" used to be a slow, patient way to walk the entity table
-	// off its end and drop the server. SP_trigger_asteroid_field now clamps count, and this refuses
+	// off its end and take the server process down with it. SP_trigger_asteroid_field now clamps
+	// count, and this refuses
 	// the individual spawn as well, because the field is not the only thing competing for slots.
 	if ( numAsteroids < self->count && G_EntitySlotsAvailable( 1 ) == qfalse )
 	{
@@ -2022,7 +2023,8 @@ void SP_trigger_asteroid_field(gentity_t *self)
 {
 	// GalaxyRP fix: [Entity System] this was the one SetBrushModel call with no model test at all,
 	// so "/entadd trigger_asteroid_field" with no model reached SV_SetBrushModel's own
-	// Com_Error(ERR_DROP, "SV_SetBrushModel: NULL") and dropped the server. It now refuses the same
+	// Com_Error(ERR_DROP, "SV_SetBrushModel: NULL"), which on a dedicated server ends the process
+	// (see ZYK_ENTITY_RESERVE in g_local.h). It now refuses the same
 	// two ways every other site does -- see zyk_brush_model_allowed() in g_spawn.c.
 	if (!self->model || zyk_brush_model_allowed(self, self->model) == qfalse)
 	{

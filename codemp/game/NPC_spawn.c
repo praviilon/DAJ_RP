@@ -4384,9 +4384,10 @@ gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboo
 
 	// GalaxyRP fix: [Entity System] refuse before allocating, not after. One NPC costs three slots
 	// -- this spawner, the NPC itself and its NPC->tempGoal -- and G_Spawn() does not report
-	// failure, it calls trap->Error(ERR_DROP) and takes the server down with everyone on it. That
-	// is the crash an admin gets from overspawning NPCs, and it is why the "if (!NPCspawner)"
-	// check that used to be here could never fire: G_Spawn() never returns NULL.
+	// failure, it calls trap->Error(ERR_DROP), which on a dedicated server ends the process (see
+	// ZYK_ENTITY_RESERVE in g_local.h). That is the crash an admin gets from overspawning NPCs,
+	// and it is why the "if (!NPCspawner)" check that used to be here could never fire: G_Spawn()
+	// never returns NULL.
 	if ( G_EntitySlotsAvailable( 3 ) == qfalse )
 	{
 		Com_Printf( S_COLOR_RED"NPC_Spawn Error: too few entity slots left (%d free, %d held in reserve)\n",
