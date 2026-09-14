@@ -65,7 +65,6 @@
 			hide 			buyWeaponsControls ;
 			hide 			buyMiscControls ;
 			hide 			cameraControls ;
-			hide 			gamesControls ;
 		}
 
 		itemDef 
@@ -172,7 +171,6 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
-				hide 			gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		listButton		forecolor 1 1 1 1 ;
 			}
@@ -256,7 +254,6 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
-				hide 			gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		upButton		forecolor 1 1 1 1 ;
 			}
@@ -340,7 +337,6 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
-				hide 			gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		charButton		forecolor 1 1 1 1 ;
 			}
@@ -423,102 +419,21 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
-				hide 			gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		commandsButton		forecolor 1 1 1 1 ;
 			}
 		}
 
-		itemDef 
-		{
-			name				gamesButton_glow
-			style				WINDOW_STYLE_SHADER
-			rect				5 168 140 30
-			background			"gfx/menus/menu_blendbox2"
-			forecolor			1 1 1 1
-			visible				0
-			decoration
-			cvarTest			"ui_loggedin"
-			showCvar
-			{
-				"1"
-			}
-		}
-
-		itemDef 
-		{
-			name				gamesButton
-			group				mainButtons
-			text				"Games"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				10 168 140 30
-			font				3
-			textscale			0.8
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			// GalaxyRP: [Profile UI] mini-games are tied to the RPG account, which a logged-out
-			// player does not have.
-			cvarTest			"ui_loggedin"
-			showCvar
-			{
-				"1"
-			}
-			descText			"Play mini-games"
-
-			mouseEnter 
-			{ 
-				show			gamesButton_glow
-			}
-			mouseExit 
-			{ 
-				hide			gamesButton_glow
-			}	  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				show 			gamesControls ;
-				hide			charControls ;
-				hide			changePassControls ;
-				hide 			rpgClassControls ;
-				hide 			upControls ;
-				hide 			forceLoginSkillsControls ;
-				hide			weaponSkillsControls ;
-				hide			otherSkillsControls ;
-				hide			ammoSkillsControls ;
-				hide			itemsSkillsControls ;
-				hide			questControls ;
-				hide			universeControls ;
-				hide			lightControls ;
-				hide			darkControls ;
-				hide			eternityControls ;
-				hide			questMapsControls ;
-				hide 			listControls ;
-				hide 			commandsControls ;
-				hide			levelweapon ;
-				hide			levelother ;
-				hide			levelammo ;
-				hide			levelitem ;
-				hide 			buyControls ;
-				hide 			buyAmmoControls ;
-				hide 			buyWeaponsControls ;
-				hide 			buyMiscControls ;
-				hide 			cameraControls ;
-				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
-				setitemcolor		gamesButton 		forecolor 1 1 1 1 ;
-			}
-		}
+		// GalaxyRP: [Profile UI] the "Games" sidebar button (gamesButton/gamesButton_glow, rect y 168)
+		// used to sit here, between Shop above and Camera below. See the matching note further down
+		// where its panel was.
 
 		itemDef
 		{
 			name				cameraButton_glow
 			style				WINDOW_STYLE_SHADER
 			// GalaxyRP: [Profile UI] moved down near the bottom-left of the panel, away from the
-			// Skills/Characters/Shop/Games slots directly above (rect y 78-168) that are hidden for
+			// Skills/Characters/Shop slots directly above (rect y 78-138) that are hidden for
 			// logged-out players -- keeping Camera stacked right under Customize left an awkward gap
 			// of empty sidebar space for anyone not logged in.
 			rect				5 350 140 30
@@ -536,7 +451,7 @@
 			type				ITEM_TYPE_BUTTON
 			style				WINDOW_STYLE_EMPTY
 			// GalaxyRP: [Profile UI] see cameraButton_glow above -- moved to the bottom-left of the
-			// panel instead of directly under Games. Still comfortably above the descText line
+			// panel instead of directly under the last sidebar button. Still comfortably above the descText
 			// (descY 400) so hover descriptions don't collide with the button.
 			rect				10 350 140 30
 			font				3
@@ -586,7 +501,6 @@
 				hide 				buyAmmoControls ;
 				hide 				buyWeaponsControls ;
 				hide 				buyMiscControls ;
-				hide 				gamesControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		cameraButton	forecolor 1 1 1 1 ;
 			}
@@ -918,7 +832,6 @@
 				hide			buyWeaponsControls ;
 				hide			buyMiscControls ;
 				hide			cameraControls ;
-				hide			gamesControls ;
 				show			forceLoginSkillsControls ;
 			}
 		}
@@ -6036,139 +5949,14 @@
 		}
 
 //----------------------------------------------------------------------------------------------
-// Games Tab Beginning
+// GalaxyRP: [Profile UI] the Games panel (the gamesControls group: rpgLmsButton, racemodeButton,
+// duelTournamentButton, sniperBattleButton, meleeBattleButton) and its "Games" sidebar button were
+// removed here, along with every "hide gamesControls" line the other sidebar buttons carried.
+// The mini-game modes themselves are untouched -- rpglmsmode, racemode, duelmode, snipermode and
+// meleemode stay registered in commands[] (g_cmds.c) and are still reachable from the console.
+// The panel bound no cvars and ran no uiScripts, so nothing in codemp/ui or codemp/cgame fed it and
+// no ui_* cvar was retired with it.
 //----------------------------------------------------------------------------------------------
-
-		itemDef 
-		{
-			name				rpgLmsButton
-			group				gamesControls
-			text				"RPG LMS"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 50 160 24
-			font				3
-			textscale			0.6
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Last Man Standing battle with RPG players"
-  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				exec			"rpglmsmode" ;
-				close			ingame_galaxyrp ;
-			}
-		}
-
-		itemDef 
-		{
-			name				racemodeButton
-			group				gamesControls
-			text				"Racing Mode"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 75 150 24
-			font				3
-			textscale			0.6
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Race with swoops at t2_trip map or with tauntauns at t3_stamp map"
-	  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				exec			"racemode" ;
-				close			ingame_galaxyrp ;
-			}
-		}
-
-		itemDef 
-		{
-			name				duelTournamentButton
-			group				gamesControls
-			text				"Duel Tournament"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 100 150 24
-			font				3
-			textscale			0.6
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Joins the Duel Tournament"
-  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				exec			"duelmode" ;
-				close			ingame_galaxyrp ;
-			}
-		}
-
-		itemDef 
-		{
-			name				sniperBattleButton
-			group				gamesControls
-			text				"Sniper Battle"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 125 150 24
-			font				3
-			textscale			0.6
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Joins the Sniper Battle"
-	  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				exec			"snipermode" ;
-				close			ingame_galaxyrp ;
-			}
-		}
-
-		itemDef 
-		{
-			name				meleeBattleButton
-			group				gamesControls
-			text				"Melee Battle"
-			type				ITEM_TYPE_BUTTON
-			style				WINDOW_STYLE_EMPTY
-			rect				160 150 150 24
-			font				3
-			textscale			0.6
-			textalignx			15
-			textaligny			5
-			textalign			ITEM_ALIGN_LEFT
-			textstyle			3
-			forecolor			1 .682 0 1
-			visible				0
-			descText			"Joins the Melee Battle"
-	  	  
-			action 
-			{ 
-				play			"sound/interface/button1.wav" ;
-				exec			"meleemode" ;
-				close			ingame_galaxyrp ;
-			}
-		}
-
 //----------------------------------------------------------------------------------------------
 // List Tab Beginning
 //----------------------------------------------------------------------------------------------
