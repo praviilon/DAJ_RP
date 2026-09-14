@@ -2586,12 +2586,40 @@ void ClientThink_real( gentity_t *ent ) {
 	// GalaxyRP fix: [Model] fire any forced kill deferred by select_player_character()/
 	// select_account_and_default_character_data() (see pending_relog_kill_time's declaration in
 	// g_local.h for the full race this avoids) once the buffer window has elapsed.
+	//
+	// GalaxyRP fix: [Account] ...but only if the player is still in the world. The schedule is a
+	// decision taken 300ms ago by zyk_relog_kill_required(), which refuses a spectator outright --
+	// there is no advantage to take away from someone who is not playing. Nothing re-asked that
+	// question here, so a player who left the world inside the buffer window was killed anyway.
+	//
+	// rp_loginRequired made that the normal outcome of /logout rather than a corner case. The
+	// sequence: /logout schedules the respawn while the player is still on a team; ClientTimerActions()
+	// forces them to Spectator on the very next frame, and SetTeam() kills them on the way out as it
+	// does for any team change; then 300ms later this fired a SECOND kill on the spectator they had
+	// become. One /logout, two deaths -- two EV_OBITUARY broadcasts (SVF_BROADCAST, so the whole
+	// server saw it twice), two suicides on their record and two score penalties. The second death
+	// only landed at all because SpectatorThink() resets pm_type to PM_SPECTATOR on the frame after
+	// the move, clearing the PM_DEAD that would otherwise have made player_die() refuse it.
+	//
+	// The test below is the one from the spectator split further down, so "not in the world" means
+	// the same thing in both places. Deliberately NOT a full re-ask of zyk_relog_kill_required():
+	// that would also re-read rp_seamlesslogin and the duel state, and a duel ending inside those
+	// 300ms would then let a player keep a character swapped mid-duel without the respawn that is
+	// supposed to pay for it. Only the "did they leave the world" half can go stale in a way that
+	// makes the kill wrong, so only that half is re-checked.
+	//
+	// The timer is cleared either way, so a skipped kill cannot sit pending and fire later when the
+	// player rejoins a team, which would kill them on the spawn they just asked for.
 	if (client->pers.pending_relog_kill_time > 0 && level.time >= client->pers.pending_relog_kill_time)
 	{
 		extern void G_Kill(gentity_t* ent);
 
 		client->pers.pending_relog_kill_time = 0;
-		G_Kill(ent);
+
+		if (client->sess.sessionTeam != TEAM_SPECTATOR && client->tempSpectate < level.time)
+		{
+			G_Kill(ent);
+		}
 	}
 
 	// This code was moved here from clientThink to fix a problem with g_synchronousClients
