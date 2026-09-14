@@ -99,6 +99,12 @@ extern vec3_t gPainPoint;
 #define ZYK_GAMESTATE_HEADROOM		1024
 #define ZYK_GAMESTATE_BUDGET		(MAX_GAMESTATE_CHARS - ZYK_GAMESTATE_HEADROOM)
 
+// GalaxyRP fix: [Configstrings] how long G_RunFrame waits for the engine to finish writing the
+// gamestate before taking the map-load count anyway. SV_SpawnServer writes CS_SYSTEMINFO four
+// frames -- 400ms of level time -- after InitGame returns, so this only has to outlast that; it is
+// a backstop in case a future engine never writes it at all, not the path that normally fires.
+#define ZYK_GAMESTATE_BASELINE_WAIT	2000
+
 // GalaxyRP fix: [Configstrings] one "already reported" flag per indexed table, so a table filling up
 // is logged once instead of once per refused name. See zyk_cs_table_slot() in g_utils.c.
 #define ZYK_CS_TABLES				8
@@ -1867,12 +1873,15 @@ typedef struct level_locals_s {
 	// AFTER the teardown for anyone joining later. Claimed on demand, the block is always the
 	// highest weather slots in use, so it always has the last word.
 	// GalaxyRP fix: [Configstrings] the gamestate's byte total as of the last time it was counted:
-	// once at the end of G_InitGame, and again inside G_FindConfigstringIndex before every name it
-	// registers for the first time. It is a measurement, never an estimate carried forward -- bytes
-	// land in the gamestate without passing through that function (player userinfo in CS_PLAYERS,
-	// serverinfo, systeminfo), so anything carried forward would be wrong in the unsafe direction.
+	// once at the end of G_InitGame, once more on the first frame that can see the whole gamestate
+	// (see zyk_gamestate_baseline_done below), and again inside G_FindConfigstringIndex before every
+	// name it registers for the first time. It is a measurement, never an estimate carried forward --
+	// bytes land in the gamestate without passing through that function (player userinfo in
+	// CS_PLAYERS, serverinfo, systeminfo), so anything carried forward would be wrong in the unsafe
+	// direction.
 	int zyk_gamestate_bytes;
 	qboolean zyk_gamestate_full;					// so the refusal is logged once, not per name
+	qboolean zyk_gamestate_baseline_done;			// the map-load count has been taken and reported
 	qboolean zyk_configstring_table_full[ZYK_CS_TABLES];	// same, per indexed table
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
 	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot

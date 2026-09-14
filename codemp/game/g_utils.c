@@ -172,15 +172,58 @@ void RPMod_StringEscape(char *in, char *out, int outSize)
 // The scan is a syscall per configstring. The caller below runs it before every name it is about to
 // register for the first time -- about 44 microseconds each, and only on a create, never on the
 // lookup of a name already in the table.
+//
+// GalaxyRP fix: [Configstrings] read the long ones at their real length. SV_GetConfigstring copies
+// with Q_strncpyz and says nothing when it has to cut the string short, so a MAX_STRING_CHARS
+// buffer silently counted any configstring over 1023 bytes as 1023 -- and configstrings that long
+// are normal, not an error: SV_SendConfigstring splits anything over that into bcs0/bcs1/bcs2
+// chunks precisely so the engine can send them. Two on this server can exceed it:
+//
+//   CS_SYSTEMINFO   built by Cvar_InfoString_Big into a BIG_INFO_STRING buffer, so up to 8191
+//                   bytes. sv_paks and sv_pakNames carry one entry per LOADED pk3 and
+//                   sv_referencedPaks/sv_referencedPakNames one per referenced pk3, so a pure
+//                   server with a map pack puts several kilobytes in this one string.
+//   CS_SHADERSTATE  built by BuildShaderStateConfig() into MAX_STRING_CHARS*4, so up to 4095.
+//
+// (CS_SERVERINFO is built in a MAX_INFO_STRING buffer, so it stops one byte short of the problem.)
+//
+// The client counts their true length, and under-counting here fails in the dangerous direction:
+// the budget below would believe it had kilobytes of room it does not have, allow the registration
+// that carries the real total past 16000, and drop every connected client -- the exact failure this
+// whole file exists to prevent, and the same shape as the fixed foreign-byte allowance removed from
+// G_FindConfigstringIndex().
+//
+// Reading everything into a 16000-byte buffer would fix it and cost fifteen times as much, because
+// Q_strncpyz is strncpy, which pads the whole destination on every one of the 1700 reads. So read
+// cheaply first and re-read only the ones that come back filling the small buffer exactly -- the
+// only ones that can have been cut short. In practice that is two strings out of 1700, so the scan
+// costs what it always did.
 static int zyk_gamestate_bytes_used( void ) {
-	int		i, total = 0;
+	// zyk: static rather than automatic -- 16000 bytes is too much to put on the stack of something
+	// reached from every spawn path, and the game module is single-threaded, so one buffer is safe
+	static char	long_s[MAX_GAMESTATE_CHARS];
+	int		i, len, total = 0;
 	char	s[MAX_STRING_CHARS];
 
 	for ( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
 		trap->GetConfigstring( i, s, sizeof( s ) );
-		if ( s[0] ) {
-			total += (int)strlen( s ) + 1;
+
+		if ( !s[0] ) {
+			continue;
 		}
+
+		len = (int)strlen( s );
+
+		if ( len == (int)sizeof( s ) - 1 ) {
+			// zyk: it filled the buffer exactly, so it is either that long or longer and was cut.
+			// Ask again with room for the whole gamestate: nothing can legitimately be longer than
+			// that, and anything that somehow were would read back long enough to refuse on, which
+			// is the safe answer
+			trap->GetConfigstring( i, long_s, sizeof( long_s ) );
+			len = (int)strlen( long_s );
+		}
+
+		total += len + 1;
 	}
 
 	return total;

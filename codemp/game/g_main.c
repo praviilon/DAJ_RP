@@ -2353,9 +2353,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// this the estimate would begin at zero and the budget check in G_FindConfigstringIndex would
 	// not look at the real total until it believed it had added 14976 bytes by itself -- by which
 	// point the gamestate would be long past the 16000 every client enforces.
+	//
+	// GalaxyRP fix: [Configstrings] this count is no longer the one that gets reported, because it
+	// cannot see the whole gamestate yet -- SV_SpawnServer writes CS_SYSTEMINFO and CS_SERVERINFO
+	// only after InitGame returns. G_RunFrame takes the count again once they are there and logs it
+	// then. This one stays so level.zyk_gamestate_bytes is a real number in the meantime.
 	G_ResetGamestateEstimate();
-	G_LogPrintf( "gamestate after map load: %d of %d bytes used\n",
-		level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET );
 }
 
 /*
@@ -8681,6 +8684,35 @@ void G_RunFrame( int levelTime ) {
 	level.framenum++;
 	level.previousTime = level.time;
 	level.time = levelTime;
+
+	// GalaxyRP fix: [Configstrings] take the map-load count here rather than at the end of
+	// G_InitGame, because at the end of G_InitGame the gamestate is not finished. SV_SpawnServer
+	// clears every configstring, calls InitGame, runs four frames, and only THEN writes
+	// CS_SYSTEMINFO and CS_SERVERINFO (sv_init.cpp: SV_ClearServer, SV_InitGameProgs, the settle
+	// loop, then SV_SetConfigstring for both). So a count taken in InitGame sees neither of them --
+	// and CS_SYSTEMINFO is the largest string on the server, since sv_paks and sv_pakNames hold one
+	// entry per loaded pk3. On a pure server with a map pack that is kilobytes the old baseline, and
+	// the line it logged, simply did not know about.
+	//
+	// Waiting for CS_SYSTEMINFO to appear rather than counting frames is deliberate: the number of
+	// frames the engine runs before it writes that string is the engine's business, and map_restart
+	// takes a different path through it (configstrings survive a restart, so it is already there on
+	// the first frame). The time bound is only a backstop.
+	if ( !level.zyk_gamestate_baseline_done )
+	{
+		char sysinfo[MAX_INFO_STRING];
+
+		trap->GetConfigstring( CS_SYSTEMINFO, sysinfo, sizeof( sysinfo ) );
+
+		if ( sysinfo[0] || level.time > (level.startTime + ZYK_GAMESTATE_BASELINE_WAIT) )
+		{
+			level.zyk_gamestate_baseline_done = qtrue;
+
+			G_ResetGamestateEstimate();
+			G_LogPrintf( "gamestate after map load: %d of %d bytes used\n",
+				level.zyk_gamestate_bytes, ZYK_GAMESTATE_BUDGET );
+		}
+	}
 
 	if (g_allowNPC.integer)
 	{
