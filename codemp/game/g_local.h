@@ -663,8 +663,8 @@ typedef struct clientSession_s {
 } clientSession_t;
 
 // playerstate mGameFlags
-#define	PSG_VOTED				(1 << PLAYER_STATUS_SILENCED)		// already cast a vote
-#define PSG_TEAMVOTED			(1 << PLAYER_STATUS_EMOTE)		// already cast a team vote
+#define	PSG_VOTED				(1<<0)		// already cast a vote
+#define PSG_TEAMVOTED			(1<<1)		// already cast a team vote
 
 //
 #define MAX_NETNAME			36
