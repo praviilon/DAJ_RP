@@ -17690,6 +17690,42 @@ void Cmd_DuelArena_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Duel Tournament] refuse while the mode is switched off. Cmd_DuelMode_f checks
+	// this same cvar as its first guard, so no arena entity could ever be spawned with tournaments
+	// disabled -- but nothing stopped an admin creating, or worse DELETING, a map's saved arena
+	// origin for a mode that is off. This command is a toggle keyed on whether origin.txt exists:
+	// run on a map that already has an arena it removes it, with no confirmation and no mention of
+	// the cvar, so an admin merely checking whether an arena was set would silently destroy it.
+	//
+	// Placed after the admin check rather than before it, so a non-admin still gets the permission
+	// refusal they get today instead of learning the server's cvar state; and before the
+	// zyk_create_dir() below, so a disabled mode touches no files or directories at all.
+	if (zyk_allow_duel_tournament.integer != 1)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^3Duel Tournament: ^7this mode is not allowed in this server\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Duel Tournament] refuse while a tournament is running. The add branch below
+	// does VectorCopy(ent->client->ps.origin, level.duel_tournament_origin) -- it re-points the
+	// arena at whoever typed the command, while the globe entity stays where it was spawned. In
+	// mode 4 the arena bounds in G_RunFrame() (g_main.c) kill, by suicide, any duelist FURTHER
+	// from that origin than the arena radius and any non-duelist CLOSER to it than the radius. So
+	// moving the origin kills both duelists at once (they are suddenly outside) and everyone
+	// standing near the admin (they are suddenly inside) -- the admin included.
+	//
+	// Reachable in two commands even where an arena is already set: one /duelarena to remove the
+	// saved origin, a second to re-add it underfoot. Covers both branches rather than only the
+	// add, because removing the origin mid-tournament also clears duel_arena_loaded, which is what
+	// Cmd_DuelMode_f tests for "There is no duel arena in this map" -- it would silently stop
+	// anyone else joining a tournament that is still running. Signup (mode 1) counts as running:
+	// the globe is spawned by the first sign-up, before the mode ever reaches 2.
+	if (level.duel_tournament_mode > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot change the duel arena while a Duel Tournament is running\n\"");
+		return;
+	}
+
 	zyk_create_dir("duelarena");
 
 	duel_arena_file = fopen(va("GalaxyRP/duelarena/%s/origin.txt", zyk_mapname), "r");
@@ -17932,6 +17968,32 @@ void Cmd_MeleeArena_f(gentity_t *ent) {
 
 	if (!check_admin_command(ent, ADM_DUELARENA, qtrue))
 	{
+		return;
+	}
+
+	// GalaxyRP fix: [Melee Battle] refuse while the mode is switched off -- the same guard, and for
+	// the same reasons, as the one on Cmd_DuelArena_f above. Cmd_MeleeMode_f already checks this
+	// cvar first, so nothing could be spawned with the mode disabled, but the destructive half of
+	// this toggle was reachable regardless.
+	if (zyk_allow_melee_battle.integer != 1)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^3Melee Battle: ^7this mode is not allowed in this server\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Melee Battle] refuse while a battle is running. The add branch below does
+	// VectorCopy(ent->client->ps.origin, level.melee_mode_origin) -- it re-points the arena at
+	// whoever typed the command, while the catwalk entity stays where it was spawned. G_RunFrame()
+	// (g_main.c) kills, by suicide, any combatant whose origin is below melee_mode_origin[2]
+	// ("fell off the catwalk") or more than 1000 units away from it ("too far from the platform"),
+	// so moving the origin kills every player in the battle in the same frame.
+	//
+	// Covers both branches and counts signup as running, for the same reasons set out on
+	// Cmd_DuelArena_f above. Mode 3 is the battle winding down and is refused too: melee_mode_origin
+	// is still the live arena until melee_battle_end() runs.
+	if (level.melee_mode > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot change the melee arena while a Melee Battle is running\n\"");
 		return;
 	}
 
