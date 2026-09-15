@@ -8295,21 +8295,22 @@ void melee_battle_restore(gentity_t *ent)
 
 	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
 
-	// GalaxyRP fix: [Melee Battle] WP_InitForcePowers() above rebuilds force powers from the
-	// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
-	// That is the correct restore for a logged-out player, but an RPG character's powers come
-	// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
-	// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
-	// build) instead of their own skills, and kept it until their next respawn. Both minigames
-	// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_MeleeMode_f (g_cmds.c)
-	// was commented out later -- which is why this half was never added.
+	// GalaxyRP: [Melee Battle] an initialize_rpg_skills(ent) call used to close this function.
+	// WP_InitForcePowers() above rebuilds force powers from the client's "forcepowers" userinfo
+	// string -- the player's vanilla JKA Profile allocation -- which is the correct restore for a
+	// logged-out player but wrong for an RPG character, whose powers come from pers.skill_levels[].
+	// It was added because the amrpgmode==2 join guard in Cmd_MeleeMode_f had been commented out,
+	// letting RPG characters into the battle.
 	//
-	// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
-	// players and needs no check of its own. It MUST stay last in this block: it clears weapons
-	// the character has no skill for, and the unconditional WP_BRYAR_PISTOL line above would
-	// otherwise put back a pistol an RPG character has not unlocked. Same pattern as
-	// ClientSpawn().
-	initialize_rpg_skills(ent);
+	// That guard is live again, and /login, /new and /char are refused while a player is signed
+	// up, so nobody in a Melee Battle can be in RPG Mode: initialize_rpg_skills() self-guards on
+	// amrpgmode == 2 and could no longer do anything here. Removed rather than left as a no-op
+	// that reads like a live requirement -- it also carried an ordering constraint (it had to stay
+	// last, because it strips weapons the unconditional WP_BRYAR_PISTOL line above grants) that no
+	// longer has to be respected by anyone editing this.
+	//
+	// sniper_battle_end() keeps its copy: the Sniper Battle still admits RPG players, its own
+	// amrpgmode guard still being commented out.
 }
 
 // zyk: finishes the melee battle
@@ -9105,13 +9106,13 @@ void G_RunFrame( int levelTime ) {
 				else
 				{
 					duel_tournament_end();
-					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough teams or single duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
+					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
 				}
 			}
 			else
 			{
 				duel_tournament_end();
-				trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough teams or single duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
+				trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
 			}
 		}
 	}
