@@ -10723,6 +10723,24 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/npc showbounds: ^7Toggles npc bounding boxes.\n\
 ^3/npc score <targetname (optional)>: ^7Prints npc scores to the server console.\n\
 ^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
+				// GalaxyRP: [Mini-Games] /duelmode and /meleemode were documented nowhere at all -- not
+				// here, not in /list help, not in /adminlist. The only tournament entries this page
+				// carried were the three ADMIN ones (/duelarena, /meleearena, /duelpause) up in the Admin
+				// block, so it told an admin how to BUILD an arena and nobody how to enter one.
+				//
+				// Its own SendServerCommand call, like every other section here: SV_SendServerCommand
+				// (sv_main.cpp) silently drops the WHOLE formatted "print \"...\"" message once it passes
+				// 1022 characters, and the Misc block below is already split twice for exactly that
+				// reason. This one runs near 330, so it has room for another entry later.
+				//
+				// The logged-out note is the access rule for both, stated once rather than tagged on each
+				// row: both commands refuse sess.amrpgmode == 2 at the door. Both are toggles, which is
+				// the other thing a player cannot guess and the reason the guards below them are scoped
+				// to joining only.
+				trap->SendServerCommand(ent - g_entities, "print \"^3--------Mini-Games--------\n\
+^7For logged-out players only. Both are toggles -- run the command again to leave.\n\
+^3/duelmode: ^7Joins the Duel Tournament, a one-on-one saber bracket in the map's duel arena.\n\
+^3/meleemode: ^7Joins the Melee Battle, a fists-only free-for-all on the map's melee catwalk.\n\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/roll <faces> ^7or ^3/roll <dice>d<faces>: ^7Rolls 1-10 dice of 2-100 faces. Seen by players near you.\n\
 ^3/rollall <faces> ^7or ^3/rollall <dice>d<faces>: ^7Same roll, seen by the whole server. Usable while dead or spectating.\n\
