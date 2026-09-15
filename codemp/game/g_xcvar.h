@@ -263,7 +263,6 @@ XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NOR
 // were also dropped from assets/server/galaxyrp_server.cfg.
 XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_force_duel, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_magic_fist_mp_cost,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_healing_area_mp_cost,	"5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_lightning_dome_mp_cost,	"15",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -383,6 +382,12 @@ XCVAR_DEF( rp_allow_emotes,					"1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					q
 // matches the /playsound command name it actually gates instead of the old internal "zyksound" naming,
 // and moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.
 XCVAR_DEF( rp_allow_playsound_command, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [cleanup] renamed from zyk_allow_force_duel to rp_allow_force_duel -- it gates a
+// GalaxyRP-authored command (/engage_fullforceduel), so it belongs on this mod's rp_ prefix rather
+// than the inherited zyk_ one, the same move rp_allow_emotes and rp_allow_playsound_command above
+// already made. Moved here from beside zyk_allow_duel_tournament for the same reason: the name and
+// the block it sits in should agree.
+XCVAR_DEF( rp_allow_force_duel,			"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_time_to_start, "12000", RP_CVU_duelTournamentTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

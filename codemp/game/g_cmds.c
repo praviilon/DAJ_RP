@@ -8851,7 +8851,7 @@ the rules.
 */
 void Cmd_ForceDuel_f(gentity_t *ent)
 {
-	if (zyk_allow_force_duel.integer != 1)
+	if (rp_allow_force_duel.integer != 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Full force duels are not allowed in this server\n\"");
 		return;
