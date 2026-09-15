@@ -6353,20 +6353,29 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 					else
 						self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_forceRegenTime.integer*0.7, 1);
 				}
-				// GalaxyRP: [Force Duel] force regeneration can be tuned separately inside a full force
-				// duel, which is the one place in this mod where two players spend force against each
-				// other with nothing else going on. Adapted from TaystJK, which carries the same cvar;
-				// its companion g_saberDuelForceRegenTime is deliberately not taken, so an ordinary duel
-				// keeps g_forceRegenTime -- which still matters there, because Jump costs force.
+				// GalaxyRP: [Force Duel] a private duel regenerates force on its own clock, one cvar per
+				// kind, both adapted from TaystJK which carries the same pair. A full force duel is the
+				// one place in this mod where two players spend force against each other with nothing
+				// else going on, and an ordinary duel still spends it too -- Jump costs force, and in a
+				// saber duel that is most of what force is for.
 				//
-				// Defaults to 200, the same as g_forceRegenTime, so the cvar changes nothing until an
-				// admin sets it. Bounds-checked on the client number for the same reason
-				// zyk_duel_is_full_force() is: this runs for NPCs too, whose ps.clientNum is an entity
-				// number rather than a client slot.
+				// Both default to 200, the same as g_forceRegenTime, so neither changes anything until an
+				// an admin sets it -- but note the shipped galaxyrp_server.cfg sets g_forceRegenTime to 60
+				// and therefore sets these two to 60 as well, or a duel would silently regenerate slower
+				// than the rest of the map on that server.
+				//
+				// Bounds-checked on the client number for the same reason zyk_duel_is_full_force() is:
+				// this runs for NPCs too, whose ps.clientNum is an entity number rather than a client
+				// slot. An out-of-range number falls through to g_forceRegenTime, which is the safe
+				// answer -- an NPC cannot be in a private duel to begin with.
 				else if (self->client->ps.duelInProgress && self->s.number < MAX_CLIENTS &&
 					level.duel_types[self->s.number] == 1)
 				{
 					self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_forceDuelForceRegenTime.integer, 1);
+				}
+				else if (self->client->ps.duelInProgress && self->s.number < MAX_CLIENTS)
+				{ // an ordinary saber duel
+					self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_saberDuelForceRegenTime.integer, 1);
 				}
 				else
 				{
