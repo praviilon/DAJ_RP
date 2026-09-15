@@ -1823,7 +1823,16 @@ float botGlobalNavWeaponWeights[WP_NUM_WEAPONS] =
 	3,//WP_THERMAL,
 	3,//WP_TRIP_MINE,
 	3,//WP_DET_PACK,
-	0//WP_EMPLACED_GUN,
+	// GalaxyRP fix: [Bots] the table stopped one weapon early and the last row was mislabelled:
+	// the slot commented WP_EMPLACED_GUN is really WP_CONCUSSION, and WP_BRYAR_OLD,
+	// WP_EMPLACED_GUN and WP_TURRET had no rows at all. weapon_concussion_rifle is a real map
+	// pickup, so bots were reading a zero weight for it and never pathing to one of the
+	// strongest weapons in the game. Weighted with the rocket launcher, which is its match.
+	// The other three are weapons a bot has no business chasing, so nought is right for them.
+	9,//WP_CONCUSSION,
+	0,//WP_BRYAR_OLD,
+	0,//WP_EMPLACED_GUN,
+	0//WP_TURRET,
 };
 
 int GetNearestVisibleWPToItem(vec3_t org, int ignore)
