@@ -769,6 +769,26 @@ typedef struct clientPersistant_s {
 	// zyk: used to backup player force powers before some event that does not allow them. They will be restored after event ends
 	int zyk_saved_force_powers;
 	int zyk_saved_force_power_levels[NUM_FORCE_POWERS];
+	// GalaxyRP fix: [Duel Tournament] says whether the force backup above actually holds this
+	// player's powers. Without it player_restore_force() would happily apply a backup that was
+	// never taken: a duelist chosen in mode 2 but invalidated before mode 3 prepares them (they
+	// disconnect, go spectator, die) reaches the mode-5 restore having never been backed up, and
+	// zyk_saved_force_powers is zero for anyone who has not duelled before -- so the restore
+	// stripped every force power they had.
+	qboolean zyk_saved_force_valid;
+
+	// GalaxyRP fix: [Duel Tournament] duel_tournament_prepare() takes a duelist's weapons, ammo
+	// and holdable items away, and nothing gave them back. player_restore_force() restores only
+	// force powers (plus melee), and duel_tournament_end() touches no client at all -- it is pure
+	// level teardown, which is what makes it safe to call from ClientDisconnect. A duelist who
+	// LOST was covered by accident, because dying respawns them; a duelist who SURVIVED kept a
+	// stripped loadout until they next died or the map changed. Backed up here so the restore can
+	// be the exact inverse of the strip, the way the force pair above already is.
+	int zyk_saved_weapons;
+	int zyk_saved_ammo[MAX_AMMO];
+	int zyk_saved_holdable_items;
+	int zyk_saved_holdable_item;
+	qboolean zyk_saved_loadout_valid;
 
 	// GalaxyRP fix: [Quests] quest_afk_timer used to be declared here. Its only writer was inside
 	// choose_new_player (deleted as unreachable dead code -- see the GalaxyRP fix comment on its old

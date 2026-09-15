@@ -7551,11 +7551,85 @@ void player_backup_force(gentity_t *ent)
 {
 	int i = 0;
 
+	// GalaxyRP fix: [Duel Tournament] first backup wins until it has been restored. Backing up
+	// again while one is outstanding would capture the ALREADY-STRIPPED state and the player
+	// would never get their powers back. Nothing calls prepare twice per match today; this makes
+	// that a property of the pair rather than of the caller.
+	if (ent->client->pers.zyk_saved_force_valid == qtrue)
+		return;
+
 	ent->client->pers.zyk_saved_force_powers = ent->client->ps.fd.forcePowersKnown;
 
 	for (i = 0; i < NUM_FORCE_POWERS; i++)
 	{
 		ent->client->pers.zyk_saved_force_power_levels[i] = ent->client->ps.fd.forcePowerLevel[i];
+	}
+
+	ent->client->pers.zyk_saved_force_valid = qtrue;
+}
+
+// zyk: backup the loadout duel_tournament_prepare() is about to take away
+//
+// GalaxyRP fix: [Duel Tournament] see the field declarations in g_local.h. Must be called BEFORE
+// prepare strips anything -- unlike the force backup, which sits mid-function because the force
+// strip comes later, the weapon/ammo/holdable strip is the first thing prepare does.
+void player_backup_loadout(gentity_t *ent)
+{
+	int i = 0;
+
+	if (ent->client->pers.zyk_saved_loadout_valid == qtrue)
+		return;
+
+	ent->client->pers.zyk_saved_weapons = ent->client->ps.stats[STAT_WEAPONS];
+
+	for (i = 0; i < MAX_AMMO; i++)
+	{
+		ent->client->pers.zyk_saved_ammo[i] = ent->client->ps.ammo[i];
+	}
+
+	ent->client->pers.zyk_saved_holdable_items = ent->client->ps.stats[STAT_HOLDABLE_ITEMS];
+	ent->client->pers.zyk_saved_holdable_item = ent->client->ps.stats[STAT_HOLDABLE_ITEM];
+
+	ent->client->pers.zyk_saved_loadout_valid = qtrue;
+}
+
+// zyk: give back the loadout duel_tournament_prepare() took
+void player_restore_loadout(gentity_t *ent)
+{
+	int i = 0;
+
+	if (ent->client->pers.zyk_saved_loadout_valid == qfalse)
+	{ // zyk: nothing was ever taken from this player
+		return;
+	}
+
+	ent->client->pers.zyk_saved_loadout_valid = qfalse;
+
+	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
+	{ // zyk: he died in his duel, so ClientSpawn already gave him a loadout. Putting the pre-duel
+	  // one back over the top would undo the respawn and take away anything picked up since.
+		return;
+	}
+
+	// GalaxyRP fix: [Duel Tournament] melee is OR'd back in rather than left to the saved value,
+	// so this cannot undo the (1 << WP_MELEE) player_restore_force() grants regardless of which
+	// of the two runs first.
+	ent->client->ps.stats[STAT_WEAPONS] = ent->client->pers.zyk_saved_weapons | (1 << WP_MELEE);
+
+	for (i = 0; i < MAX_AMMO; i++)
+	{
+		ent->client->ps.ammo[i] = ent->client->pers.zyk_saved_ammo[i];
+	}
+
+	ent->client->ps.stats[STAT_HOLDABLE_ITEMS] = ent->client->pers.zyk_saved_holdable_items;
+	ent->client->ps.stats[STAT_HOLDABLE_ITEM] = ent->client->pers.zyk_saved_holdable_item;
+
+	// zyk: prepare left him holding the saber it granted. If he had no saber before the duel,
+	// that bit has just gone away again and he would be holding a weapon he does not own.
+	if (!(ent->client->ps.stats[STAT_WEAPONS] & (1 << ent->client->ps.weapon)))
+	{
+		ent->client->ps.weapon = WP_MELEE;
+		ent->s.weapon = WP_MELEE;
 	}
 }
 
@@ -7563,6 +7637,13 @@ void player_backup_force(gentity_t *ent)
 void player_restore_force(gentity_t *ent)
 {
 	int i = 0;
+
+	if (ent->client->pers.zyk_saved_force_valid == qfalse)
+	{ // zyk: nothing was ever backed up for this player -- see the field declaration in g_local.h
+		return;
+	}
+
+	ent->client->pers.zyk_saved_force_valid = qfalse;
 
 	if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))
 	{ // zyk: do not restore force to players that died in a Duel Tournament duel, because the force was already restored
@@ -7625,6 +7706,11 @@ void duel_tournament_end()
 void duel_tournament_prepare(gentity_t *ent)
 {
 	int i = 0;
+
+	// GalaxyRP fix: [Duel Tournament] first statement in the function, before the strip below
+	// takes the weapons, ammo and holdable items away. player_backup_force() further down is
+	// placed the same way relative to the force strip that follows it.
+	player_backup_loadout(ent);
 
 	for (i = WP_STUN_BATON; i < WP_NUM_WEAPONS; i++)
 	{
@@ -8960,11 +9046,13 @@ void G_RunFrame( int levelTime ) {
 			if (level.duelist_1_id != -1)
 			{
 				player_restore_force(&g_entities[level.duelist_1_id]);
+				player_restore_loadout(&g_entities[level.duelist_1_id]);
 			}
 
 			if (level.duelist_2_id != -1)
 			{
 				player_restore_force(&g_entities[level.duelist_2_id]);
+				player_restore_loadout(&g_entities[level.duelist_2_id]);
 			}
 
 			level.duelist_1_id = -1;
