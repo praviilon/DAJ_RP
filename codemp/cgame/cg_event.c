@@ -1545,11 +1545,32 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			}
 			else
 			{
+				// GalaxyRP: [Force Duel] parm 1 opens an ordinary saber duel, parm 3 a full force one.
+				// The duel type cannot be carried in playerState_t -- the engine delta-encodes that
+				// struct and we replace the game modules, not the engine -- so this event is how the
+				// client learns it, and zyk_duel_is_full_force() in bg_misc.c reads it back. Without
+				// it the client would predict a saber throw as refused while the server allowed it.
+				//
+				// Set explicitly either way rather than only on 3, so a duel can never inherit the
+				// type of the one before it. Parm 2 deliberately does not touch it: that is the
+				// sabers-out announcement partway through a duel already under way.
+				if (es->number >= 0 && es->number < MAX_CLIENTS)
+				{
+					cg_duel_types[es->number] = (es->eventParm == 3) ? 1 : 0;
+				}
+
 				trap->S_StartBackgroundTrack( "music/mp/duel.mp3", "music/mp/duel.mp3", qfalse );
 			}
 		}
 		else
 		{ //ending the duel
+			// GalaxyRP: [Force Duel] and the type goes with it. TaystJK never clears its equivalent,
+			// so a client that misses the next start event keeps answering for the duel before it.
+			if (es->number >= 0 && es->number < MAX_CLIENTS)
+			{
+				cg_duel_types[es->number] = 0;
+			}
+
 			CG_StartMusic(qtrue);
 		}
 		break;

@@ -367,6 +367,16 @@ void CG_ResizeG2TempBone(mdxaBone_v *tempBone, int newCount)
 /*
 Ghoul2 Insert End
 */
+// GalaxyRP: [Force Duel] the client's copy of each player's private-duel type, read by
+// zyk_duel_is_full_force() in bg_misc.c so client prediction agrees with the server about which force
+// powers are usable. Fed by the EV_PRIVATE_DUEL event in cg_event.c and by nothing else.
+//
+// A plain global rather than a field of cg: cg is memset on more occasions than this needs to care
+// about, and TaystJK keeps its equivalent (cg_dueltypes) the same way. In practice only the local
+// client's slot is ever written -- the event handler returns early for anybody else -- and every
+// other slot reads 0, which is the ordinary saber duel and the safe answer.
+int					cg_duel_types[MAX_CLIENTS];
+
 cg_t				cg;
 cgs_t				cgs;
 centity_t			cg_entities[MAX_GENTITIES];

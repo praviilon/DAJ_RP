@@ -1784,6 +1784,14 @@ typedef struct level_locals_s {
 	int duel_tournament_timer; // zyk: timer of duel tournament events. Default 0
 	int duel_players[MAX_CLIENTS]; // zyk: has the score each player in the tournament. Default -1
 	int duel_players_hp[MAX_CLIENTS]; // zyk: used as a untie criteria. If the tournament ends with players tied at score, the sum of remaining hp in all duels is used to untie
+	// GalaxyRP: [Force Duel] which kind of PRIVATE duel each client last asked for -- 0 an ordinary
+	// saber duel, 1 a full force duel. Nothing to do with the Duel Tournament above; it shares this
+	// struct because bg_misc.c already includes g_local.h under _GAME and BG_CanUseFPNow() has to
+	// read it. Written when a challenge is issued and again when one is accepted, and only ever read
+	// while ps.duelInProgress is set -- so a stale entry cannot be reached, because every path that
+	// sets duelInProgress writes this first. Zeroed with the rest of level at G_InitGame(), and reset
+	// per client in ClientConnect()/ClientDisconnect() so a reused slot cannot inherit a type.
+	int duel_types[MAX_CLIENTS];
 	int duel_tournament_model_id; // zyk: model id of the globe
 	qboolean duel_arena_loaded; // zyk: tests if the arena is loaded on this map
 	vec3_t duel_tournament_origin; // zyk: origin of the duel tournament arena, which has the globe around it. Used to validate position of players. If a duelist leaves the arena, he loses
@@ -2044,7 +2052,7 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir );
 void Cmd_SaberAttackCycle_f(gentity_t *ent);
 int G_ItemUsable(playerState_t *ps, int forcedUse);
 void Cmd_ToggleSaber_f(gentity_t *ent);
-void Cmd_EngageDuel_f(gentity_t *ent);
+void Cmd_EngageDuel_f(gentity_t *ent, int duel_type);
 // GalaxyRP: [Saber RGB] republish a player's custom blade colours (configstring + database save)
 // and push the authoritative values back down to their own client cvars.
 void update_saber_colors(gentity_t *ent);

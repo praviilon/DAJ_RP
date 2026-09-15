@@ -1730,6 +1730,7 @@ extern siegeExtended_t cg_siegeExtendedData[MAX_CLIENTS];
 
 extern	cgs_t			cgs;
 extern	cg_t			cg;
+extern	int				cg_duel_types[MAX_CLIENTS];	// GalaxyRP: [Force Duel] see cg_main.c
 extern	centity_t		cg_entities[MAX_GENTITIES];
 
 extern	centity_t		*cg_permanents[MAX_GENTITIES];

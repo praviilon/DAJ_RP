@@ -618,16 +618,34 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 		return 0;
 	}
 
-	// GalaxyRP (Alex): [Dueling] Characters should be able to use force powers while dueling
-	/*if (attacker && attacker->client && attacker->client->ps.duelInProgress)
+	// GalaxyRP fix: [Dueling] the other half of the vanilla restriction, live again, and the half
+	// that matters most. BG_CanUseFPNow() above decides whether a power may be ACTIVATED; this pair
+	// decides who it may be used ON, and with both of them commented out a duel stopped being sealed
+	// off from the rest of the map. A duellist could Grip, Mind Trick or Push a bystander who had
+	// nothing to do with the fight, and a bystander could do the same back -- Push in particular can
+	// shove a duellist past zyk_duel_radius and end a duel the pusher is not even part of. G_Damage
+	// blocks the damage in both directions, but these powers do their real work through effects that
+	// never reach G_Damage: the grip hold, the trick, the knockback.
+	//
+	// OpenJK, TaystJK and JA++ all keep this sealed, and the two with full-force duels keep it sealed
+	// THERE too -- a force duellist may use powers on their own opponent and on nobody else. The
+	// shape below is TaystJK's: the ONLY opening is both players duelling, the duel being a full
+	// force one, and the target being this attacker's own duelIndex. Every other combination, in
+	// either direction, still refuses.
+	if (attacker && attacker->client && attacker->client->ps.duelInProgress)
 	{
+		if (!(other && other->client && other->client->ps.duelInProgress &&
+			attacker->s.number < MAX_CLIENTS &&
+			level.duel_types[attacker->s.number] == 1 &&
+			other->s.number == attacker->client->ps.duelIndex))
+		{
+			return 0;
+		}
+	}
+	else if (other && other->client && other->client->ps.duelInProgress)
+	{ // the attacker is not duelling, so a duellist is never a valid target for them
 		return 0;
 	}
-
-	if (other && other->client && other->client->ps.duelInProgress)
-	{
-		return 0;
-	}*/
 
 	if (forcePower == FP_GRIP)
 	{
@@ -6334,6 +6352,21 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 						self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_forceRegenTime.integer * (0.6 + (.3 * (float)self->client->sess.wins / (float)duel_fraglimit.integer)), 1);
 					else
 						self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_forceRegenTime.integer*0.7, 1);
+				}
+				// GalaxyRP: [Force Duel] force regeneration can be tuned separately inside a full force
+				// duel, which is the one place in this mod where two players spend force against each
+				// other with nothing else going on. Adapted from TaystJK, which carries the same cvar;
+				// its companion g_saberDuelForceRegenTime is deliberately not taken, so an ordinary duel
+				// keeps g_forceRegenTime -- which still matters there, because Jump costs force.
+				//
+				// Defaults to 200, the same as g_forceRegenTime, so the cvar changes nothing until an
+				// admin sets it. Bounds-checked on the client number for the same reason
+				// zyk_duel_is_full_force() is: this runs for NPCs too, whose ps.clientNum is an entity
+				// number rather than a client slot.
+				else if (self->client->ps.duelInProgress && self->s.number < MAX_CLIENTS &&
+					level.duel_types[self->s.number] == 1)
+				{
+					self->client->ps.fd.forcePowerRegenDebounceTime += Q_max(g_forceDuelForceRegenTime.integer, 1);
 				}
 				else
 				{

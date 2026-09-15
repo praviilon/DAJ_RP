@@ -2812,6 +2812,11 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	client->pers.unique_skill_duration = 0;
 
 	// zyk: duelist went to spec. Reset him from duels
+	// GalaxyRP: [Force Duel] the private-duel type goes with them. It is only ever read while
+	// ps.duelInProgress is set and every path that sets that writes it first, so a stale value is
+	// unreachable -- but a slot handed to a new player should not carry the last one's state.
+	level.duel_types[ent->s.number] = 0;
+
 	if (level.duel_players[ent->s.number] > -1)
 	{
 		level.duel_players[ent->s.number] = -1;
@@ -4581,6 +4586,11 @@ void ClientDisconnect( int clientNum ) {
 	}
 
 	// zyk: duelist disconnected. Reset him from duels
+	// GalaxyRP: [Force Duel] the private-duel type goes with them. It is only ever read while
+	// ps.duelInProgress is set and every path that sets that writes it first, so a stale value is
+	// unreachable -- but a slot handed to a new player should not carry the last one's state.
+	level.duel_types[ent->s.number] = 0;
+
 	if (level.duel_players[ent->s.number] > -1)
 	{
 		level.duel_players[ent->s.number] = -1;

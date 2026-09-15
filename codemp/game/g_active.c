@@ -4095,7 +4095,7 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 			else
 			{
-				Cmd_EngageDuel_f(ent);
+				Cmd_EngageDuel_f(ent, 0);
 			}
 			break;
 		case GENCMD_FORCE_HEAL:

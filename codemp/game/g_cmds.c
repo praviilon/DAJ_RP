@@ -8828,7 +8828,43 @@ qboolean G_OtherPlayersDueling(void)
 	return qfalse;
 }
 
-void Cmd_EngageDuel_f(gentity_t *ent)
+/*
+==================
+Cmd_ForceDuel_f
+
+GalaxyRP: [Force Duel] "/engage_fullforceduel" -- the full force half of the private duel system,
+adapted from TaystJK (which took it from JAPRO); JA++ spells the command the same way. Both of them
+add a SEPARATE command rather than lifting the restriction inside /duel, which is the whole point:
+challenging someone for a saber duel gets you a saber duel.
+
+A console command rather than a new GENCMD_* value, for the reason recorded on the genCmds_t enum in
+qcommon/q_shared.h -- generic commands are produced by the player's own engine from a bound key, and
+the distributed TaystJK engine's enum ends at GENCMD_GLOAT, same as ours. An unrecognised console
+command is forwarded to the server as a string, so "bind x engage_fullforceduel" works on a stock
+client with no engine support at all. TaystJK and JA++ both register it exactly this way.
+
+Everything else is Cmd_EngageDuel_f's: aliveness, downed, already-duelling, mini-game membership on
+both sides, the saber requirement, the five-second challenge window, the 256-unit trace, the health
+and shield reset, Jetpack_Off, and zyk_duel_radius. This function is the door, not a second copy of
+the rules.
+==================
+*/
+void Cmd_ForceDuel_f(gentity_t *ent)
+{
+	if (zyk_allow_force_duel.integer != 1)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Full force duels are not allowed in this server\n\"");
+		return;
+	}
+
+	Cmd_EngageDuel_f(ent, 1);
+}
+
+// GalaxyRP: [Force Duel] duel_type picks which kind of private duel this press is offering or
+// accepting -- 0 an ordinary saber duel, 1 a full force duel. Both kinds run through this one
+// function on purpose, the way TaystJK and JA++ both do it, so a full force duel inherits every
+// guard below rather than growing a second, drifting copy of them.
+void Cmd_EngageDuel_f(gentity_t *ent, int duel_type)
 {
 	trace_t tr;
 	vec3_t forward, fwdOrg;
@@ -8974,9 +9010,26 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 			return;
 		}
 
-		if (challenged->client->ps.duelIndex == ent->s.number && challenged->client->ps.duelTime >= level.time)
+		// GalaxyRP: [Force Duel] both players must have asked for the SAME kind. A mismatch falls
+		// through to the challenge branch below, so pressing the duel key on somebody who offered you
+		// a full force duel does not silently start a saber duel -- it sends your own counter-offer,
+		// which they can then accept. Same rule TaystJK uses.
+		if (challenged->client->ps.duelIndex == ent->s.number && challenged->client->ps.duelTime >= level.time &&
+			level.duel_types[challenged->s.number] == duel_type)
 		{
-			trap->SendServerCommand( /*challenged-g_entities*/-1, va("print \"%s ^7%s %s!\n\"", challenged->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELACCEPT"), ent->client->pers.netname) );
+			if (duel_type == 1)
+			{
+				trap->SendServerCommand( -1, va("print \"%s ^7and %s ^7have begun a ^3full force duel^7!\n\"", challenged->client->pers.netname, ent->client->pers.netname) );
+			}
+			else
+			{
+				trap->SendServerCommand( /*challenged-g_entities*/-1, va("print \"%s ^7%s %s!\n\"", challenged->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELACCEPT"), ent->client->pers.netname) );
+			}
+
+			// GalaxyRP: [Force Duel] the accepter takes the type they just matched. The challenged
+			// player already holds it from their own challenge, so both sides now agree, which is what
+			// BG_CanUseFPNow() and WP_ForcePowerUsableOn() read for the rest of the duel.
+			level.duel_types[ent->s.number] = duel_type;
 
 			ent->client->ps.duelInProgress = qtrue;
 			challenged->client->ps.duelInProgress = qtrue;
@@ -8995,8 +9048,15 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 			ent->client->ps.duelTime = level.time + 2000;
 			challenged->client->ps.duelTime = level.time + 2000;
 
-			G_AddEvent(ent, EV_PRIVATE_DUEL, 1);
-			G_AddEvent(challenged, EV_PRIVATE_DUEL, 1);
+			// GalaxyRP: [Force Duel] parm 3 is "the duel starts, and it is a full force one". The duel
+			// type cannot ride in playerState_t (the engine delta-encodes that struct and we do not
+			// replace the engine), so this event is how the client learns it -- cg_event.c caches it in
+			// cg_duel_types[] so BG_CanUseFPNow() predicts the same answer the server will give. Added
+			// as a new value rather than reusing 1: 0 still means "duel over", 1 "duel starts" and 2
+			// "sabers out, fight", all unchanged. TaystJK overloads this parm with its duel type and
+			// lands one off from what its own bg_misc.c compares against; this avoids that entirely.
+			G_AddEvent(ent, EV_PRIVATE_DUEL, (duel_type == 1) ? 3 : 1);
+			G_AddEvent(challenged, EV_PRIVATE_DUEL, (duel_type == 1) ? 3 : 1);
 
 			//Holster their sabers now, until the duel starts (then they'll get auto-turned on to look cool)
 
@@ -9032,8 +9092,20 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 		else
 		{
 			//Print the message that a player has been challenged in private, only announce the actual duel initiation in private
-			trap->SendServerCommand( challenged-g_entities, va("cp \"%s ^7%s\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELCHALLENGE")) );
-			trap->SendServerCommand( ent-g_entities, va("cp \"%s %s\n\"", G_GetStringEdString("MP_SVGAME", "PLDUELCHALLENGED"), challenged->client->pers.netname) );
+			//
+			// GalaxyRP: [Force Duel] the two kinds say which they are. Without this they are
+			// indistinguishable until somebody throws Lightning, and a player who accepts what they
+			// think is a saber duel has no way to find out otherwise in time.
+			if (duel_type == 1)
+			{
+				trap->SendServerCommand( challenged-g_entities, va("cp \"%s ^7has challenged you to a ^3full force duel\n\"", ent->client->pers.netname) );
+				trap->SendServerCommand( ent-g_entities, va("cp \"^3Full force duel ^7challenge sent to %s\n\"", challenged->client->pers.netname) );
+			}
+			else
+			{
+				trap->SendServerCommand( challenged-g_entities, va("cp \"%s ^7%s\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELCHALLENGE")) );
+				trap->SendServerCommand( ent-g_entities, va("cp \"%s %s\n\"", G_GetStringEdString("MP_SVGAME", "PLDUELCHALLENGED"), challenged->client->pers.netname) );
+			}
 		}
 
 		challenged->client->ps.fd.privateDuelTime = 0; //reset the timer in case this player just got out of a duel. He should still be able to accept the challenge.
@@ -9043,6 +9115,12 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 
 		ent->client->ps.duelIndex = challenged->s.number;
 		ent->client->ps.duelTime = level.time + 5000;
+
+		// GalaxyRP: [Force Duel] recorded alongside the challenge it belongs to, and read back by the
+		// accept test above when the other player answers within those five seconds. Written on the
+		// challenge path as well as the accept path so that a challenge can never be answered against
+		// a type left over from an older one.
+		level.duel_types[ent->s.number] = duel_type;
 	}
 }
 
@@ -10891,7 +10969,15 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// leaving 44 for anyone who later adds a Misc command -- and going over does not
 				// truncate, it silently drops the whole section. Splitting here puts both halves back
 				// near 500 and restores the headroom.
+				// GalaxyRP: [Force Duel] the two private-duel commands, listed together. Neither was
+				// documented anywhere before -- /duel has no commands[] row at all (it arrives as
+				// GENCMD_ENGAGE_DUEL from a bound key), so a player had no way to learn either one
+				// existed. Put in this half of Misc rather than the block above it: that one runs at
+				// 402 of SV_SendServerCommand's hard 1022 characters and this one at 607, and the
+				// whole message is dropped rather than truncated once a block passes it.
 				trap->SendServerCommand(ent - g_entities, "print \"\
+^3/duel: ^7Challenges the player you are looking at to a private saber duel. Force powers are disabled for both of you; bind a key to ^3engage_duel^7.\n\
+^3/engage_fullforceduel: ^7The same duel with force powers allowed, on your opponent only. Both players must ask for this kind before it starts.\n\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
 ^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
@@ -19296,6 +19382,7 @@ command_t commands[] = {
 	{ "dueltable",			Cmd_DuelTable_f,			CMD_NOINTERMISSION },
 	{ "duelteam",			Cmd_DuelTeam_f,				CMD_NOINTERMISSION },
 	{ "emote",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "engage_fullforceduel",	Cmd_ForceDuel_f,		CMD_ALIVE | CMD_NOINTERMISSION },	// GalaxyRP: [Force Duel] the ordinary duel has no row here -- it arrives as GENCMD_ENGAGE_DUEL
 	{ "entadd",				Cmd_EntAdd_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entdeletefile",		Cmd_EntDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entedit",			Cmd_EntEdit_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },

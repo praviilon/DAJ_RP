@@ -1698,6 +1698,35 @@ qboolean BG_HasYsalamiri(int gametype, playerState_t *ps)
 	return qfalse;
 }
 
+// GalaxyRP: [Force Duel] answers "is this player in a FULL FORCE private duel", for the one caller
+// below. The duel type cannot live in playerState_t -- the engine knows that struct and delta-encodes
+// it, and we replace the game modules, not the engine -- so each build reads its own copy, exactly as
+// TaystJK does for the same reason:
+//
+//   _GAME   the authority, level.duel_types[], written by Cmd_EngageDuel_f()
+//   _CGAME  cg_duel_types[], fed by the EV_PRIVATE_DUEL event so client prediction agrees
+//   UI      no duel can be in progress, and no copy exists; fail safe and apply the restriction
+//
+// Bounds-checked because BG_CanUseFPNow() is also called for NPCs (see WP_ForcePowerUsableOn() in
+// w_force.c), and an NPC's ps->clientNum is its ENTITY number, which runs to MAX_GENTITIES. The
+// caller's ps->duelInProgress test makes that unreachable today, since NPCs never duel, but an
+// out-of-bounds read on a MAX_CLIENTS array is not a thing to leave resting on that.
+static qboolean zyk_duel_is_full_force( playerState_t *ps )
+{
+	if (!ps || ps->clientNum < 0 || ps->clientNum >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+
+#if defined(_GAME)
+	return (level.duel_types[ps->clientNum] == 1) ? qtrue : qfalse;
+#elif defined(_CGAME)
+	return (cg_duel_types[ps->clientNum] == 1) ? qtrue : qfalse;
+#else
+	return qfalse;
+#endif
+}
+
 qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t power)
 {
 	if (BG_HasYsalamiri(gametype, ps))
@@ -1724,9 +1753,21 @@ qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t
 		return qfalse;
 	}
 	*/
-	// GalaxyRP (Alex): [Dueling] Characters should be able to use force powers while dueling
-	/*
-	if (ps->duelInProgress)
+	// GalaxyRP fix: [Dueling] the vanilla restriction, live again. It had been commented out with
+	// "Characters should be able to use force powers while dueling", which made a private duel the
+	// only one in the JKA family with no force restriction at all -- OpenJK, TaystJK and JA++ all
+	// keep this block for an ordinary duel, and the two that offer full-force duelling put it behind
+	// a SEPARATE command rather than changing what /duel means. A player challenging someone for a
+	// saber duel could not get one.
+	//
+	// What this permits is what vanilla permits: Saber Offense, Saber Defense, Jump, and Push while
+	// locked. Everything else -- Heal, Absorb, Protect, Rage, Speed, Seeing, Push, Pull, Grip,
+	// Lightning, Drain, Mind Trick and Saber Throw -- is refused for the duration.
+	//
+	// GalaxyRP: [Force Duel] ... unless both duellists agreed to a full force duel, which is a
+	// separate command (/engage_fullforceduel) and a separate handshake. See zyk_duel_is_full_force()
+	// above for where the answer comes from in each build.
+	if (ps->duelInProgress && zyk_duel_is_full_force(ps) == qfalse)
 	{
 		if (power != FP_SABER_OFFENSE && power != FP_SABER_DEFENSE && power != FP_LEVITATION)
 		{
@@ -1735,7 +1776,7 @@ qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t
 				return qfalse;
 			}
 		}
-	}*/
+	}
 
 	if (ps->saberLockFrame || ps->saberLockTime > time)
 	{
