@@ -312,9 +312,11 @@ int WeaponAttackAnim[WP_NUM_WEAPONS] =
 	BOTH_THERMAL_THROW,//WP_THERMAL,
 	BOTH_ATTACK3,//BOTH_ATTACK11,//WP_TRIP_MINE,
 	BOTH_ATTACK3,//BOTH_ATTACK12,//WP_DET_PACK,
-	#ifndef BASE_COMPAT
-		BOTH_ATTACK3,//WP_CONCUSSION,
-	#endif // BASE_COMPAT
+	// this row used to sit inside #ifndef BASE_COMPAT, which left the table one row
+	// short of WP_NUM_WEAPONS on our build: WP_CONCUSSION through WP_EMPLACED_GUN each
+	// read their neighbour's animation and WP_TURRET read a zero-filled slot.
+	// WeaponReadyAnim and WeaponReadyLegsAnim have always carried it unconditionally
+	BOTH_ATTACK3,//WP_CONCUSSION,
 	BOTH_ATTACK2,//WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):

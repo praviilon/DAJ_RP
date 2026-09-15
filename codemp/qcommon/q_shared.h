@@ -1407,6 +1407,14 @@ typedef struct siegePers_s
 
 #define BUTTON_FORCE_DRAIN		2048
 
+// the engine we run on sends these bits too (a +button12 bind produces BUTTON_GRAPPLE).
+// naming them here matches the TaystJK engine's own list and only documents what already
+// arrives in usercmd_t->buttons; it does not enable any of them by itself
+#define BUTTON_GRAPPLE			4096
+#define BUTTON_DASH				8192
+#define BUTTON_STRAFEBOT		16384
+#define BUTTON_TARGET			32768
+
 // Here's an interesting bit.  The bots in TA used buttons to do additional gestures.
 // I ripped them out because I didn't want too many buttons given the fact that I was already adding some for JK2.
 // We can always add some back in if we want though.
