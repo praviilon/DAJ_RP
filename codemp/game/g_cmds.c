@@ -1061,11 +1061,17 @@ void zyk_add_guns( gentity_t *ent )
 // GalaxyRP fix: [Classes] zyk_skill_allowed_for_class() used to live here. It had zero callers
 // anywhere in the codebase (dead regardless of the rpg_class removal), so it is deleted outright.
 
+// GalaxyRP fix: [Admin] forward declaration. zyk_minigame_name() is defined further down this
+// file, beside the account-change guards that were its first callers; declared here rather than
+// moved so those callers keep it in view.
+static const char *zyk_minigame_name( gentity_t *ent );
+
 void Cmd_Give_f( gentity_t *ent )
 {
 	char arg1[MAX_TOKEN_CHARS] = {0};
 	char arg2[MAX_TOKEN_CHARS] = {0};
 	int client_id = -1;
+	const char *minigame = NULL;
 
 	if (!check_admin_command(ent, ADM_GIVE, qtrue))
 	{
@@ -1103,6 +1109,37 @@ void Cmd_Give_f( gentity_t *ent )
 	if (g_entities[client_id].client->ps.duelInProgress == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot give stuff to players in private duels\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Admin] and the same refusal for the two mini-games, which had none. /give writes
+	// precisely what the Melee Battle and the Duel Tournament snapshot and strip -- every weapon, all
+	// seven ammo counters, nine holdable items, every force power -- so a gift landing mid-game
+	// overwrote the stripped loadout, and the restore then overwrote the gift straight back while
+	// PLAYER_STATUS_ADM_GIVE_GUNS stayed set, leaving the toggle bit disagreeing with the loadout
+	// until the player next respawned. Both arms were dangerous in both directions: the "remove"
+	// halves end in WP_InitForcePowers(), which hands a stripped combatant their whole force menu
+	// back, and zyk_remove_guns() zeroes ammo and holdables below what either prepare intended.
+	// zyk_add_guns() also grants HI_JETPACK directly, walking past the Melee Battle guard in
+	// Cmd_Jetpack_f() and putting the arena's only loss condition -- falling off -- out of reach.
+	//
+	// Scoped to "signed up" rather than to the live fight, which is the wider scope
+	// zyk_minigame_name() already implements. A duelist's snapshot is outstanding from
+	// duel_tournament_prepare() all the way through mode 5's restore, and that includes the 1500ms
+	// window after every match where the pair is still stripped while the mode reads 5 rather than 4
+	// -- a live-fight test would let a gift land there and be eaten in silence. Refusing during
+	// sign-up costs nothing either way: player_backup_loadout() is first-wins, so a gift made before
+	// the bell is snapshotted and handed back like any other loadout.
+	//
+	// Target side only, and deliberately so. This command is CMD_LOGGEDIN and gated on ADM_GIVE, and
+	// both mini-games refuse logged-in players, so the caller can never be a participant. Reported to
+	// the admin in the third person, like the private-duel refusal above -- the account-change
+	// wrapper next to zyk_minigame_name() is second-person and addressed to the participant, which is
+	// the wrong voice for a refusal about somebody else.
+	minigame = zyk_minigame_name(&g_entities[client_id]);
+	if (minigame != NULL)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Cannot give stuff to a player in a %s\n\"", minigame));
 		return;
 	}
 
