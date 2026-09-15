@@ -3705,7 +3705,22 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		// /new (this function is also the tail end of account creation) and /char use character
 		// switches, even though it's only meant to describe a logged-out player's state. Reset it here
 		// too, at the same "a character is now loaded" point as the rest of this block.
-		ent->client->pers.player_statuses = 0;
+		//
+		// GalaxyRP fix: [Admin] all bits but one. PLAYER_STATUS_SILENCED (bit 0) is an admin
+		// punishment set by /silence, and it is stored nowhere else -- no database column, no sess
+		// field -- so wiping the whole field here was an escape hatch: /new, /char use, /char new,
+		// /login and /logout all reach one of the three resets that spell this line, none of them
+		// announces anything, and the silence simply stopped applying with the admin never told.
+		// That is the same defect the downed guard on these commands was written for -- a bit
+		// cleared "as a side effect of account bookkeeping, not as a decision anyone made", in
+		// Cmd_Char_f's words -- but the remedy has to differ. Refusing /login to a silenced player
+		// would be absurd, so the bit is carried across the reset instead of the command refused.
+		//
+		// A mask rather than a save-and-restore pair, so the reset stays a single statement and
+		// cannot drift out of order with the do_scale() call each of these resets is sequenced
+		// against. Bit 0 is deliberately the only one kept: every other bit here either describes a
+		// logged-out player's state, re-establishes itself just below, or expires on its own.
+		ent->client->pers.player_statuses &= (1 << PLAYER_STATUS_SILENCED);
 
 		// GalaxyRP (Alex): [Database] Grab info from characters table.
 		ent->client->pers.CharID = sqlite3_column_int(stmt, 1);
@@ -4190,7 +4205,12 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// moment following login. select_player_character() above already resets player_statuses before
 		// its own do_scale() call for exactly this reason; matching that order here fixes the same bug
 		// for /login and for ClientBegin()'s map-change reload of an already-logged-in player.
-		ent->client->pers.player_statuses = 0;
+		//
+		// GalaxyRP fix: [Admin] the admin silence is carried across this reset too -- /login lands
+		// here, and it was the easiest of the four ways out. See select_player_character() above
+		// for the reasoning; this is the same line for the same reason. On the ClientBegin() path
+		// the mask keeps nothing, because ClientConnect() has already zeroed the field by then.
+		ent->client->pers.player_statuses &= (1 << PLAYER_STATUS_SILENCED);
 
 		do_scale(ent, modelScale);
 		// GalaxyRP fix: [security] same fixed-32-byte-buffer overflow risk as the matching strcpy() in
@@ -5671,7 +5691,42 @@ void Cmd_KillOther_f( gentity_t *ent )
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] release the downed state before the kill. G_Kill() refuses a
+	// downed player outright, and that guard belongs to /kill: a combat knockdown and an admin
+	// paralysis both serve a countdown, and neither should be escapable by suiciding out of it. An
+	// admin killing somebody ELSE is not that escape, but /killother shares the function and so
+	// inherited the refusal -- and the aliveness test above cannot catch it either, because
+	// paralyze_player() leaves the target on 50 health. The command returned without a word, which
+	// made /killother the one thing that could not clear a player stuck downed somewhere nobody can
+	// reach to revive them, the case it is the obvious tool for.
+	//
+	// RP_ClearDownedState() rather than a flag threaded through G_Kill(): it is the existing
+	// primitive for exactly this, clearing all four fields of the state together -- player_statuses
+	// bits 6 and 26, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no message,
+	// no grace period. It needs no guard of its own either, being a no-op on a player who is not
+	// downed (FL_NOTARGET is only touched when bit 6 was actually set), and player_die() calls it
+	// again on the way through, which is idempotent. Calling it here also guarantees no stale
+	// downedTime or FL_NOTARGET can survive the kill.
+	//
+	// This ends an admin paralysis too, since bit 26 goes with bit 6. Deliberate: /killother already
+	// sits behind ADM_KICK, and anyone holding that bit could /unparalyze the player instead, so it
+	// is one admin overriding another rather than a player escaping a countdown -- which is the
+	// thing /getup and /helpup refuse, and the only reason they refuse it.
+	RP_ClearDownedState( otherEnt );
+
 	G_Kill(otherEnt);
+
+	// GalaxyRP fix: [Admin] and say so. This command printed on every failure path and nothing at
+	// all on success, so with the silent refusal above an admin had no way to tell a kill from a
+	// no-op. Conditional because G_Kill() still has one refusal of its own -- GT_DUEL/GT_POWERDUEL
+	// with g_allowDuelSuicide at 0 -- which returns before touching health, so reporting
+	// unconditionally would mean claiming a kill that did not happen. Sent to the admin only, not
+	// broadcast: /admkick announces because the target vanishes and the server needs to know why,
+	// whereas a killed player is visibly dead to everyone watching.
+	if (otherEnt->health < 1)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Killed %s^7\n\"", otherEnt->client->pers.netname));
+	}
 }
 
 /*
@@ -10457,7 +10512,13 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// Bit 6 (downed) cannot be set -- this function refuses while downed. Bits 12/13 (admin /give
 	// grants) cannot be set either: Cmd_Give_f refuses logged-in targets. The NPC order bits 18/19
 	// live on the NPCs themselves, not on their leader, so releasing them is not this field's job.
-	ent->client->pers.player_statuses = 0;
+	//
+	// GalaxyRP fix: [Admin] bit 0 is the exception the paragraph above missed. /silence sets it on
+	// logged-in and logged-out players alike -- it has no account-state restriction on its target
+	// at all -- so a silenced player could shed the punishment by logging out, in silence. Carried
+	// across the reset now, like the two matching resets on the /login, /new and /char side; see
+	// select_player_character() for the full reasoning.
+	ent->client->pers.player_statuses &= (1 << PLAYER_STATUS_SILENCED);
 
 	// zyk: initializing mind control attributes used in RPG mode
 	ent->client->pers.being_mind_controlled = -1;
