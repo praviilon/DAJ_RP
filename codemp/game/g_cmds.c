@@ -4744,24 +4744,38 @@ void update_current_character_and_account(gentity_t* ent) {
 // Covers the Duel Tournament and the Melee Battle, which are the only two minigames left.
 // Cmd_LogoutAccount_f keeps its own pair of checks rather than being rewritten here, so nothing
 // that already works is disturbed.
-static qboolean zyk_minigame_blocks_account_change( gentity_t *ent, const char *verb )
+// GalaxyRP fix: [Minigames] the one place that answers "is this player busy with a mini-game",
+// returning the name so callers can say which. The same two conditions were written out at every
+// site that needed the answer, which is how /duel came to guard against the Duel Tournament but
+// not the Melee Battle, and to test duel_tournament_mode > 1 where everywhere else tests > 0.
+//
+// Both halves ask for the mode AND this player's roster slot. Neither alone is enough: the mode
+// says a game exists, the roster slot says this player is in it, and they are cleared together
+// by melee_battle_end() and duel_tournament_end().
+static const char *zyk_minigame_name( gentity_t *ent )
 {
 	if (!ent || !ent->client)
-		return qfalse;
+		return NULL;
 
 	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a Duel Tournament\n\"", verb));
-		return qtrue;
-	}
+		return "Duel Tournament";
 
 	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a Melee Battle\n\"", verb));
-		return qtrue;
-	}
+		return "Melee Battle";
 
-	return qfalse;
+	return NULL;
+}
+
+static qboolean zyk_minigame_blocks_account_change( gentity_t *ent, const char *verb )
+{
+	const char *minigame = zyk_minigame_name(ent);
+
+	if (minigame == NULL)
+		return qfalse;
+
+	trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a %s\n\"", verb, minigame));
+
+	return qtrue;
 }
 
 void Cmd_Register_F(gentity_t * ent)
@@ -8708,6 +8722,7 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 {
 	trace_t tr;
 	vec3_t forward, fwdOrg;
+	const char *minigame = NULL;
 
 	if (!g_privateDuel.integer)
 	{
@@ -8764,8 +8779,19 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 		return;
 	}
 
-	if (level.duel_tournament_mode > 1 && level.duel_players[ent->s.number] != -1)
-	{ // zyk: during a Duel Tournament, players cannot private duel
+	// GalaxyRP fix: [Private Duel] was "duel_tournament_mode > 1 && duel_players[...] != -1", which
+	// left two holes. It tested > 1 where every other mini-game guard tests > 0, so a player could
+	// start a private duel during tournament SIGNUP and carry it into the tournament; and it did
+	// not mention the Melee Battle at all, so the same trick worked there and stalled the battle
+	// outright (see the guard in Cmd_MeleeMode_f). Both now go through zyk_minigame_name().
+	//
+	// It also returned in silence. Every refusal in this function is silent because they are the
+	// vanilla JKA ones -- "no saber", "already duelling" -- that a player can see for themselves.
+	// Being signed up for a mini-game is not visible like that, so this one says so.
+	minigame = zyk_minigame_name(ent);
+	if (minigame != NULL)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Cannot start a private duel while in a %s\n\"", minigame));
 		return;
 	}
 
@@ -8800,6 +8826,18 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 			challenged->client->ps.saberInFlight ||
 			challenged->client->ps.eFlags2 & EF2_HELD_BY_MONSTER) // zyk: added this condition to prevent player being invisible after eaten by a rancor
 		{
+			return;
+		}
+
+		// GalaxyRP fix: [Private Duel] the guard above only covers the player who typed the
+		// command. Nothing stopped them dragging a mini-game participant in from the outside, which
+		// puts that player into exactly the immune state the guard exists to prevent. Reported to
+		// the challenger, not the target: the target did nothing and the challenger is the one
+		// waiting to find out why nothing happened.
+		minigame = zyk_minigame_name(challenged);
+		if (minigame != NULL)
+		{
+			trap->SendServerCommand(ent - g_entities, va("print \"That player is in a %s\n\"", minigame));
 			return;
 		}
 
@@ -17405,6 +17443,21 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Duel Tournament] refuse while in a private duel. G_Damage (g_combat.c) makes
+	// a private duellist mutually immune with everyone except their own opponent, and even with
+	// them only through MOD_SABER, so bringing that state into a tournament means a duelist who
+	// cannot be hurt and cannot hurt back. duel_tournament_validate_duelists() already kills such
+	// a player when their match comes up -- this refuses at the door instead, so they keep the
+	// match they would otherwise have lost without being told why.
+	//
+	// Gated on "not already signed up", like the RPG-mode guard above: /duelmode is a toggle, and
+	// an unconditional refusal would strand anyone who ended up in both states.
+	if (ent->client->ps.duelInProgress == qtrue && level.duel_players[ent->s.number] == -1)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"You are already in a private duel\n\"");
+		return;
+	}
+
 	if (level.duel_players[ent->s.number] == -1 && level.duel_tournament_mode > 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot join the duel tournament now\n\"");
@@ -17865,6 +17918,25 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"You are already in a Duel Tournament\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Melee Battle] refuse while in a private duel, and this one was not merely
+	// untidy -- it stalled the battle outright. G_Damage (g_combat.c) makes a private duellist
+	// mutually immune with everyone but their opponent, and only through MOD_SABER even then, so
+	// two players who signed up together and then challenged each other arrived on the catwalk
+	// unable to be punched by anyone, unable to punch anyone, and unable to punch EACH OTHER --
+	// melee damage is MOD_MELEE. Force Push is one of the fourteen powers the battle strips and
+	// G_Damage returns before applying knockback, so they could not even be pushed off.
+	// melee_mode_quantity never reached 1, melee_battle_winner() never fired, and the battle sat
+	// out its full ten-minute timeout. The arena teleport does not break the duel either: the
+	// starting grid is 45 units per slot and zyk_duel_radius defaults to 1024.
+	//
+	// The Duel Tournament survives the same trick only because validate_duelists() kills such a
+	// duelist on sight; the Melee Battle has no equivalent, which is why it has to refuse here.
+	if (ent->client->ps.duelInProgress == qtrue && level.melee_players[ent->s.number] == -1)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"You are already in a private duel\n\"");
 		return;
 	}
 
