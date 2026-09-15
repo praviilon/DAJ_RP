@@ -4654,6 +4654,7 @@ extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 extern gentity_t *Jedi_CloakPartner( gentity_t *self );
 extern void Boba_FlyStop( gentity_t *self );
 extern void paralyze_player( gentity_t *ent );
+extern qboolean zyk_minigame_forces_death( gentity_t *ent );
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
 void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_t dir, vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t	*client;
@@ -6209,7 +6210,14 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// for real instead of being downed -- consistent for every vehicle type, not just hideRider
 			// ones, and regardless of whether the fatal hit came from their vehicle being destroyed or a
 			// direct hit that bypassed the walker/fighter mounted-damage protection.
-			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum) {
+			// GalaxyRP fix: [Death System] mini-game combatants die outright instead of going down, the
+			// same way a player riding a vehicle already does through the !m_iVehicleNum test beside it.
+			// Both mini-games hang all of their death handling off targ->die(), which the downed path
+			// never reaches on a first knockdown -- see zyk_minigame_forces_death() in g_main.c for what
+			// that cost them. Added to this condition rather than as a fourth arm below, so one place
+			// keeps deciding between "goes down" and "dies".
+			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum
+				&& !zyk_minigame_forces_death(targ)) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				if (targ->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used

@@ -5301,6 +5301,46 @@ qboolean duel_tournament_is_duelist(gentity_t *ent)
 	return qfalse;
 }
 
+// GalaxyRP fix: [Death System] the mini-games and the Death System were written apart and never
+// introduced. G_Damage() only calls targ->die() for a player who is ALREADY downed; the first time
+// their health reaches 0 it calls paralyze_player() instead, which downs them at 50 health and
+// never reaches player_die(). Both mini-games hang every piece of their death handling off
+// player_die(), so the first knockdown registered as nothing at all: the Melee Battle left the
+// player on the roster with melee_mode_quantity unchanged and gave the attacker no kill credit, so
+// the count could never fall to 1 and melee_battle_winner() never fired; the Duel Tournament never
+// set PLAYER_STATUS_DUEL_TOURNAMENT_LOSS, so the mode-4 early win never fired either. And a combat
+// knockdown does not time out -- the auto-release in ClientEndFrame() is for admin paralysis only,
+// so a downed combatant lies there until someone finishes them or they type /getup.
+//
+// Death is forced for them instead, exactly the way it already is for a player riding a vehicle:
+// the caller tests this and drops through to the same targ->die() arm that a mounted player takes.
+// player_die() calls RP_ClearDownedState() itself, so the arm that skips the explicit clear is
+// still correct for a player who somehow arrives already downed.
+//
+// Scoped to the two states where the mini-games' OWN death handlers fire -- melee_mode 2 and
+// duel_tournament_mode 4 with this player actually one of the two duelists -- and deliberately not
+// to sign-up. A player who types /meleemode and then walks off is not in an arena, and forcing
+// death on them anywhere on the map for the next twelve seconds would be a surprise with no
+// purpose: nothing downstream is waiting on it.
+//
+// The private duel needs none of this. It is the one system that reads the downed state directly
+// (see the duelInProgress block in ClientThink_real, g_active.c), ending the duel the moment either
+// side goes down, so it resolves on the first knockdown without a forced death.
+qboolean zyk_minigame_forces_death(gentity_t *ent)
+{
+	if (!ent || !ent->client || ent->s.number >= MAX_CLIENTS)
+		return qfalse;
+
+	if (level.melee_mode == 2 && level.melee_players[ent->s.number] != -1)
+		return qtrue;
+
+	if (level.duel_tournament_mode == 4 && level.duel_players[ent->s.number] != -1 &&
+		duel_tournament_is_duelist(ent) == qtrue)
+		return qtrue;
+
+	return qfalse;
+}
+
 void zyk_quest_effect_spawn(gentity_t *ent, gentity_t *target_ent, char *targetname, char *spawnflags, char *effect_path, int start_time, int damage, int radius, int duration)
 {
 	gentity_t *new_ent = G_Spawn();
@@ -8215,8 +8255,21 @@ qboolean duel_tournament_validate_duelists()
 	}
 
 	// zyk: testing if duelists are still valid
-	first_valid = duel_tournament_valid_duelist(first_duelist);
-	second_valid = duel_tournament_valid_duelist(second_duelist);
+	// GalaxyRP fix: [Death System] a duelist who is downed when their match comes up forfeits it.
+	// The join guard refuses a downed player, but nothing re-checked between signing up and being
+	// picked, so anyone knocked down while waiting was teleported into the arena still downed --
+	// health reset to 100 by duel_tournament_prepare() but unable to move or attack -- and lost
+	// helplessly. Being invalid here routes them through the path a duelist who left or spectated
+	// already takes: the opponent is given the match, duel_matches_done advances, and the
+	// tournament moves on with them still in it for their remaining matches.
+	//
+	// Tested here rather than inside duel_tournament_valid_duelist(): that function is also what
+	// duel_tournament_winner() uses to pick the overall winner, and a player who happens to be
+	// downed at that instant must not be disqualified from winning the whole tournament.
+	first_valid = duel_tournament_valid_duelist(first_duelist) == qtrue &&
+		G_PlayerIsDowned(first_duelist) == qfalse;
+	second_valid = duel_tournament_valid_duelist(second_duelist) == qtrue &&
+		G_PlayerIsDowned(second_duelist) == qfalse;
 
 	if (first_valid == qtrue && second_valid == qtrue)
 	{ // zyk: valid match
@@ -8328,6 +8381,29 @@ void melee_battle_prepare()
 		if (level.melee_players[i] != -1)
 		{ // zyk: a player in the Melee Battle
 			vec3_t origin;
+
+			// GalaxyRP fix: [Death System] drop anyone who is downed when the bell rings. The join
+			// guard refuses a downed player, but nothing re-checked during the twelve-second
+			// countdown, so anyone knocked down while waiting was teleported onto the catwalk still
+			// downed -- the health reset below hides it, but they cannot move or attack -- and just
+			// lay there. The respawn above does not catch it either: a downed player sits on 50
+			// health, not below 1.
+			//
+			// Dropped rather than released: the same state backs the admin /paralyze command, and
+			// clearing it here would let a player shed an admin punishment by signing up.
+			//
+			// No special handling is needed when this takes the battle below two players. The
+			// mode-1 handler counted before calling us, but the mode-2 block in G_RunFrame() picks
+			// up whatever is left on the next frame -- one player left wins by default, none left
+			// ends the battle -- exactly as it does when someone leaves or disconnects.
+			if (G_PlayerIsDowned(ent))
+			{
+				level.melee_players[i] = -1;
+				level.melee_mode_quantity--;
+
+				trap->SendServerCommand(i, "print \"^3Melee Battle: ^7You were downed before the battle began, so you are out of it.\n\"");
+				continue;
+			}
 
 			if (ent->health < 1)
 			{ // zyk: respawn him if he is dead
@@ -9865,7 +9941,19 @@ void G_RunFrame( int levelTime ) {
 
 			if (level.melee_mode == 2 && level.melee_players[ent->s.number] != -1)
 			{ // zyk: Melee Battle
-				if (ent->client->ps.origin[2] < level.melee_mode_origin[2])
+				// GalaxyRP fix: [Death System] a downed combatant inside the arena is treated as
+				// one who fell off it. With death forced (zyk_minigame_forces_death, above) nobody
+				// can be knocked down here any more, and melee_battle_prepare() drops anyone who
+				// arrived downed, so the only way to reach this is an admin /paralyze on a live
+				// combatant -- which would otherwise leave a body on the catwalk that no punch can
+				// remove and no timer releases, holding melee_mode_quantity above 1 until the
+				// ten-minute timeout. player_die() clears the downed state on its way through.
+				if (G_PlayerIsDowned(ent))
+				{
+					ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
+					player_die(ent, ent, ent, 100000, MOD_SUICIDE);
+				}
+				else if (ent->client->ps.origin[2] < level.melee_mode_origin[2])
 				{ // zyk: validating if player fell of the catwalk
 					ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
 					player_die(ent, ent, ent, 100000, MOD_SUICIDE);
