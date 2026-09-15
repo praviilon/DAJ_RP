@@ -6482,6 +6482,24 @@ static qboolean force_switch_allowed(gentity_t* ent)
 		return qfalse;
 	}
 
+	// GalaxyRP fix: [Melee Battle] and on this side it was not merely untidy.
+	// melee_battle_prepare() (g_main.c) clears fourteen powers from forcePowersKnown, and
+	// WP_InitForcePowers() in Cmd_UpdateForce_f() below rebuilds every one of them from the
+	// player's own "forcepowers" userinfo string -- so /updateforce handed a combatant the whole
+	// set back in the middle of a battle, Push included, in an arena whose kill condition is being
+	// knocked off a catwalk. The logged-out gate at the top of this function does not narrow that
+	// at all: the Melee Battle refuses RPG characters, so every combatant is precisely the player
+	// this command exists for. Nothing lasting was corrupted -- zyk_saved_force_valid is untouched,
+	// so melee_battle_restore() still consumes its snapshot correctly afterwards -- but the strip
+	// the battle is built on lasted only until someone typed four words.
+	//
+	// Same mode-2 scope as saber_switch_allowed(); see the comment there for why.
+	if (level.melee_mode == 2 && level.melee_players[ent->s.number] != -1)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while fighting in the Melee Battle.\n\"");
+		return qfalse;
+	}
+
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking this command in boss battles used to be
 	// here. guardian_mode is permanently 0 now, so it was unreachable.
 
@@ -8732,6 +8750,29 @@ void Cmd_EngageDuel_f(gentity_t *ent)
 	if (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL)
 	{ //rather pointless in this mode..
 		trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "NODUEL_GAMETYPE")) );
+		return;
+	}
+
+	// GalaxyRP fix: [Private Duel] refuse a dead caller. The challenged player is tested for this
+	// twice further down; the player who typed the command never was, and there is no CMD_ALIVE flag
+	// to cover for it -- /duel has no row in commands[] at all. It arrives as GENCMD_ENGAGE_DUEL and
+	// is dispatched straight out of ClientThink_real() (g_active.c), which runs for a dead player as
+	// readily as a live one, so every restriction on this command has to be written by hand here.
+	//
+	// Without it the accept branch below writes ent->health = 100 unconditionally and ClientEndFrame()
+	// copies that into stats[STAT_HEALTH]: the corpse stands up at full health without ever
+	// respawning, still carrying the EF_DEAD flag and the CONTENTS_CORPSE bounds player_die() left
+	// behind -- so no MASK_PLAYERSOLID trace can touch it -- while the respawn path itself, gated on
+	// stats[STAT_HEALTH] <= 0, can no longer fire either.
+	//
+	// Both fields, exactly as the challenged-side test below reads them: ent->health is the authority
+	// and stats[STAT_HEALTH] only catches up in ClientEndFrame(), so between a death and the end of
+	// that frame the two disagree.
+	//
+	// Silent, like the vanilla refusals around it: being dead is the one state a player can always
+	// see for themselves. The downed and mini-game refusals speak up because theirs are not.
+	if (ent->health < 1 || ent->client->ps.stats[STAT_HEALTH] < 1)
+	{
 		return;
 	}
 
@@ -16813,6 +16854,18 @@ static qboolean saber_switch_allowed(gentity_t* ent)
 	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
+		return qfalse;
+	}
+
+	// GalaxyRP fix: [Melee Battle] the battle was covered by neither this guard nor its force
+	// counterpart. Scoped to melee_mode 2 -- the fight itself -- for the same reason the
+	// tournament test above is scoped to mode 4: G_RunFrame() (g_main.c) calls
+	// melee_battle_prepare() and sets mode 2 in one block, and melee_battle_winner() restores
+	// before setting mode 3, so mode 2 is exactly the window in which a combatant is stripped.
+	// Sign-up is deliberately left alone: nothing has been taken from anyone yet.
+	if (level.melee_mode == 2 && level.melee_players[ent->s.number] != -1)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while fighting in the Melee Battle.\n\"");
 		return qfalse;
 	}
 
