@@ -17907,9 +17907,18 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 			level.melee_model_id = new_ent->s.number;
 		}
 
+		// GalaxyRP fix: [Melee Battle] only start the countdown, never restart it. This was
+		// unconditional, so every new sign-up pushed the start twelve seconds further out and a
+		// trickle of joiners could hold a battle in signup indefinitely. Cmd_DuelMode_f already
+		// guards its own timer this way -- it resets only when the tournament was not already in
+		// signup -- so the two mini-games now behave the same way at the door.
+		if (level.melee_mode != 1)
+		{
+			level.melee_mode_timer = level.time + 12000;
+		}
+
 		level.melee_players[ent->s.number] = 0;
 		level.melee_mode = 1;
-		level.melee_mode_timer = level.time + 12000;
 		level.melee_mode_quantity++;
 
 		trap->SendServerCommand(-1, va("chat \"^3Melee Battle: ^7%s ^7joined the battle!\n\"", ent->client->pers.netname));
@@ -17926,16 +17935,15 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 		// loadout (WP_MELEE only, binoculars only, fourteen force powers cleared) and kept it until
 		// they next died or the map changed.
 		//
-		// Gated on melee_mode > 1 because that is exactly the "has been prepared" test:
-		// melee_battle_prepare() runs once, at the 1 -> 2 transition, over everyone signed up at
-		// that moment, and nobody can join afterwards (the melee_mode > 1 refusal above). Leaving
-		// during signup takes nothing away, so it must put nothing back -- restoring there would
-		// mean a player who merely changed their mind had initialize_rpg_skills() re-applied to
-		// them, stripping anything an admin had given them for the price of a toggle.
-		if (level.melee_mode > 1)
-		{
-			melee_battle_restore(ent);
-		}
+		// This used to be gated on melee_mode > 1 -- the "has been prepared" test -- because the
+		// old restore was a baseline re-issue that granted a Bryar Pistol and rebuilt force powers
+		// from the client profile, so running it on someone who merely changed their mind during
+		// signup handed them things they never had. It restores from a real snapshot now and both
+		// halves return early when no snapshot was taken, so the call is a no-op for a player
+		// leaving during signup and the gate has nothing left to decide. Called unconditionally
+		// instead, which also means this path flushes a stray backup rather than stranding it --
+		// the same contract melee_battle_end() has.
+		melee_battle_restore(ent);
 
 		level.melee_players[ent->s.number] = -1;
 		level.melee_mode_quantity--;

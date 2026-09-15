@@ -7646,6 +7646,58 @@ void player_restore_force(gentity_t *ent)
 	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_MELEE);
 }
 
+// GalaxyRP fix: [Minigames] drop a pending backup without applying it.
+//
+// The backup/restore pair is first-wins on the way in and consume-on-use on the way out, so a
+// backup that is taken and never consumed is worse than no backup at all: the NEXT
+// player_backup_loadout() sees the valid flag still set and returns early, keeping the stale
+// snapshot, and the next restore then hands the player a loadout from a battle they left long ago
+// -- or, because the same two functions serve both mini-games, from the other mini-game entirely.
+//
+// This is for the exits that re-equip the player by themselves and so must not have the snapshot
+// applied: dying, and being dropped from a battle by ClientBegin. Both come back through
+// ClientSpawn(), which rebuilds stats[STAT_WEAPONS] from scratch (see the WP_NONE reset there), so
+// writing the snapshot first would only be overwritten a moment later.
+//
+// ClientDisconnect deliberately does NOT call this: ClientConnect memsets the whole gclient_t
+// before it does anything else, so the flags cannot survive into the next occupant of the slot,
+// and adding a call there would be dead code that reads like a live requirement.
+void player_discard_backup(gentity_t *ent)
+{
+	if (!ent || !ent->client)
+		return;
+
+	ent->client->pers.zyk_saved_force_valid = qfalse;
+	ent->client->pers.zyk_saved_loadout_valid = qfalse;
+}
+
+// GalaxyRP fix: [Duel Tournament] everything duel_tournament_prepare() applied, undone in one
+// place, so the two call sites in the mode-5 block below cannot drift apart.
+//
+// The immunity clear is the part that was missing. prepare() sets quest_power_status bit 0 -- the
+// Immunity Power, which zyk_check_immunity_power() tests to block quest and magic damage -- and
+// sets quest_power1_timer to level.duel_tournament_timer, the duel's SCHEDULED end. Nothing
+// cleared the bit when a duel finished early, and quest_power_events() only clears it once that
+// original deadline passes, so a duelist who won at ten seconds of a sixty-second match kept
+// magic immunity for the remaining fifty -- through the score screen, the next pairing, and into
+// their next duel or open play. Losers were covered by accident (player_die zeroes the whole of
+// quest_power_status) and so was anyone who spectated (ClientSpawn does the same); only the
+// survivor leaked it, which is exactly the player it most advantaged.
+//
+// Only the bit is cleared, not quest_power1_timer: that timer is shared with quest_power_status
+// bit 10, and zeroing it would make a pending bit-10 check fire immediately. With bit 0 down the
+// timer's value no longer means anything to this power.
+void duel_tournament_restore_duelist(gentity_t *ent)
+{
+	if (!ent || !ent->client)
+		return;
+
+	player_restore_force(ent);
+	player_restore_loadout(ent);
+
+	ent->client->pers.quest_power_status &= ~(1 << 0);
+}
+
 // zyk: finished the duel tournament
 void duel_tournament_end()
 {
@@ -8205,28 +8257,38 @@ qboolean duel_tournament_validate_duelists()
 // only, binoculars only, fourteen force powers cleared from forcePowersKnown -- until their next
 // death or a map change. Lifted into its own function so the leave path and the end path restore
 // through the same code and cannot drift apart.
+//
+// GalaxyRP fix: [Melee Battle] this did not restore anything -- it re-issued a baseline. The body
+// was WP_InitForcePowers() plus an unconditional WP_BRYAR_PISTOL and a conditional saber, because
+// melee_battle_prepare() took a loadout away without ever writing it down. Everyone who fought
+// therefore walked out having permanently lost every holdable item (sentry gun, seeker, medpacs,
+// jetpack, cloak -- prepare replaces the whole field with binoculars) and every weapon except
+// saber and Bryar, including anything picked up off the map or handed to them with /give guns.
+// WP_InitForcePowers() had the same shape of problem: it rebuilt force powers from the client's
+// vanilla JKA Profile allocation rather than from what the player actually had.
+//
+// The Duel Tournament had exactly this defect and was given a real backup/restore pair; the
+// Melee Battle now uses the same one, so the two mini-games strip and restore through identical
+// code. Both halves self-guard on their validity flag, which is what makes this safe to call on
+// a player who was never prepared: melee_battle_end() reaches the whole roster including players
+// signed up for a battle that never started, and for them both calls are no-ops rather than the
+// free Bryar Pistol and profile force-rebuild the old body handed out.
+//
+// Order matches the duel's mode-5 block: force first, then loadout. player_restore_loadout()
+// ASSIGNS stats[STAT_WEAPONS] while player_restore_force() only ORs WP_MELEE into it, so the
+// reverse order would discard the assignment.
+//
+// An initialize_rpg_skills(ent) call used to close this function, for RPG characters who could
+// get into a battle while the amrpgmode==2 join guard in Cmd_MeleeMode_f was commented out. That
+// guard is live again and /login, /new and /char are refused while a player is signed up, so
+// nobody in a Melee Battle can be in RPG Mode and the call could no longer do anything.
 void melee_battle_restore(gentity_t *ent)
 {
-	WP_InitForcePowers(ent);
+	if (!ent || !ent->client)
+		return;
 
-	if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
-
-	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
-
-	// GalaxyRP: [Melee Battle] an initialize_rpg_skills(ent) call used to close this function.
-	// WP_InitForcePowers() above rebuilds force powers from the client's "forcepowers" userinfo
-	// string -- the player's vanilla JKA Profile allocation -- which is the correct restore for a
-	// logged-out player but wrong for an RPG character, whose powers come from pers.skill_levels[].
-	// It was added because the amrpgmode==2 join guard in Cmd_MeleeMode_f had been commented out,
-	// letting RPG characters into the battle.
-	//
-	// That guard is live again, and /login, /new and /char are refused while a player is signed
-	// up, so nobody in a Melee Battle can be in RPG Mode: initialize_rpg_skills() self-guards on
-	// amrpgmode == 2 and could no longer do anything here. Removed rather than left as a no-op
-	// that reads like a live requirement -- it also carried an ordering constraint (it had to stay
-	// last, because it strips weapons the unconditional WP_BRYAR_PISTOL line above grants) that no
-	// longer has to be respected by anyone editing this.
+	player_restore_force(ent);
+	player_restore_loadout(ent);
 }
 
 // zyk: finishes the melee battle
@@ -8272,6 +8334,24 @@ void melee_battle_prepare()
 				ClientRespawn(ent);
 			}
 
+			// GalaxyRP fix: [Melee Battle] write down what the battle is about to take, so
+			// melee_battle_restore() can give back exactly that. Taken AFTER the ClientRespawn()
+			// above deliberately: a player who was dead at the starting bell has already been
+			// re-equipped by ClientSpawn, and that respawn loadout -- not the corpse's -- is what
+			// they should be holding when they walk away. First statement of the strip otherwise,
+			// the same placement duel_tournament_prepare() uses.
+			player_backup_loadout(ent);
+
+			// A stale PLAYER_STATUS_DUEL_TOURNAMENT_LOSS would silently cost this player their
+			// loadout. Both restore halves treat that bit as "this player died in a duel, so
+			// ClientSpawn has already re-equipped them" and consume the backup without applying
+			// it. The bit is cleared when a tournament picks its next pair and when it prepares a
+			// duelist, so a player who lost a duel in a tournament that then ended still carries
+			// it. Cleared here for the same reason duel_tournament_prepare() clears it, and safe
+			// to clear because /meleemode refuses anyone signed up for a tournament, so nobody in
+			// a battle can be a duelist whose bit still means something.
+			ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS);
+
 			ent->client->ps.stats[STAT_WEAPONS] = 0;
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_MELEE);
 			ent->client->ps.weapon = WP_MELEE;
@@ -8293,6 +8373,10 @@ void melee_battle_prepare()
 			{
 				ent->client->ps.droneExistTime = level.time + 5000;
 			}
+
+			// GalaxyRP fix: [Melee Battle] same as the loadout backup above, placed against the
+			// force strip that follows it exactly as duel_tournament_prepare() places its own.
+			player_backup_force(ent);
 
 			// zyk: cannot use any force powers, except Jump
 			ent->client->ps.fd.forcePowersKnown &= ~(1 << FP_PUSH);
@@ -8337,6 +8421,19 @@ void melee_battle_winner()
 
 	if (ent)
 	{
+		// GalaxyRP fix: [Melee Battle] restore before granting, because the prize below is applied
+		// with |= on top of whatever the winner is holding. melee_battle_restore() now ASSIGNS
+		// stats[STAT_WEAPONS] from the pre-battle snapshot, and melee_battle_end() calls it for
+		// every player still on the roster three seconds after this runs -- so leaving the restore
+		// until then would have wiped the prize weapons and holdables off the one player who
+		// earned them. Restoring first puts the prize on top of the winner's real loadout instead
+		// of on top of melee_battle_prepare()'s fists-and-binoculars, and the later call in
+		// melee_battle_end() is a no-op because both validity flags have already been consumed.
+		//
+		// This is the ordering the Duel Tournament already has: mode 5 restores the pair, and
+		// duel_tournament_prize() runs afterwards, from mode 2.
+		melee_battle_restore(ent);
+
 		ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 20000;
 		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 20000;
 		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 20000;
@@ -8813,14 +8910,12 @@ void G_RunFrame( int levelTime ) {
 
 			if (level.duelist_1_id != -1)
 			{
-				player_restore_force(&g_entities[level.duelist_1_id]);
-				player_restore_loadout(&g_entities[level.duelist_1_id]);
+				duel_tournament_restore_duelist(&g_entities[level.duelist_1_id]);
 			}
 
 			if (level.duelist_2_id != -1)
 			{
-				player_restore_force(&g_entities[level.duelist_2_id]);
-				player_restore_loadout(&g_entities[level.duelist_2_id]);
+				duel_tournament_restore_duelist(&g_entities[level.duelist_2_id]);
 			}
 
 			level.duelist_1_id = -1;

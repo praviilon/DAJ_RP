@@ -2120,6 +2120,7 @@ extern void zyk_NPC_Kill_f( char *name );
 extern gentity_t *Zyk_NPC_SpawnType(char *npc_type, int x, int y, int z, int yaw);
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern void player_restore_force(gentity_t *ent);
+extern void melee_battle_restore(gentity_t *ent);
 extern void Jedi_DecloakPair( gentity_t *self );
 extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 extern gentity_t *Jedi_CloakPartner( gentity_t *self );
@@ -2197,8 +2198,21 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		level.melee_players[self->s.number] = -1;
 		level.melee_mode_quantity--;
 
-		// zyk: resetting his force powers
-		WP_InitForcePowers(self);
+		// GalaxyRP fix: [Melee Battle] was WP_InitForcePowers(self), which put force powers back
+		// from the client's vanilla JKA Profile rather than from what this player actually had --
+		// and, more importantly, left the pre-battle backup melee_battle_prepare() took still
+		// pending. Clearing level.melee_players[] on the line above takes this player out of
+		// melee_battle_end()'s loop, so nothing downstream would ever have consumed it: their next
+		// battle's backup would have returned early on the stale flag and handed them a loadout
+		// from the previous fight, and a Duel Tournament entered afterwards would have done the
+		// same, since both mini-games share the one snapshot.
+		//
+		// melee_battle_restore() consumes both halves and restores the real force powers. The
+		// loadout half writes to a corpse that ClientSpawn is about to rebuild from scratch, which
+		// is the same outcome the Duel Tournament reaches by a different route -- there
+		// player_restore_loadout() sees PLAYER_STATUS_DUEL_TOURNAMENT_LOSS and consumes the
+		// snapshot without applying it. Dying in a mini-game costs you what dying always costs.
+		melee_battle_restore(self);
 
 		if (attacker && attacker->client && attacker->s.number < MAX_CLIENTS && level.melee_players[attacker->s.number] != -1)
 		{ // zyk: adding score to the attacker

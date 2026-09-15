@@ -2732,6 +2732,7 @@ extern void select_account_and_default_character_data(gentity_t* ent, char usern
 extern void initialize_rpg_skills(gentity_t *ent);
 extern void duel_tournament_end();
 extern void melee_battle_end();
+extern void player_discard_backup(gentity_t *ent);
 void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin);
 void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	gentity_t	*ent;
@@ -2841,6 +2842,15 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	{
 		level.melee_players[ent->s.number] = -1;
 		level.melee_mode_quantity--;
+
+		// GalaxyRP fix: [Melee Battle] drop the pre-battle snapshot melee_battle_prepare() took.
+		// Clearing level.melee_players[] on the line above removes this player from
+		// melee_battle_end()'s loop, so without this the backup would stay pending forever: their
+		// next battle's backup returns early on the stale flag and keeps the old snapshot, and so
+		// does a Duel Tournament entered later, because both mini-games share the one pair of
+		// fields. Discarded rather than applied because ClientSpawn() runs further down this same
+		// function and rebuilds the loadout from scratch anyway.
+		player_discard_backup(ent);
 	}
 
 	// GalaxyRP fix: [Melee Battle] end the battle when this was the last player, exactly as
