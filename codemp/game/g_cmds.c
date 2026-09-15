@@ -4729,6 +4729,44 @@ void update_current_character_and_account(gentity_t* ent) {
 	return;
 }
 
+// GalaxyRP: [Minigames] one definition of "this player is mid-minigame, so their loadout is
+// not their own right now", shared by every command that would swap the account or character
+// out from under it.
+//
+// The Melee Battle and the Duel Tournament take a player's weapons and force powers away for
+// the duration and hand them back when it ends. /login, /new and /char all re-apply an
+// account's skills and loadout on the spot, so running one of them mid-fight handed a
+// combatant their full RPG kit while everyone else was still stripped -- the same hole
+// /logout already refused, reached by a different command. /login and /new also schedule a
+// relog kill that would have removed them a few frames later, but only when
+// rp_seamlesslogin is 0; with it on, nothing took the kit back at all.
+//
+// Refuse rather than allow-and-clean-up: there is no correct way to change accounts halfway
+// through a fight, and the player can simply leave the battle first.
+//
+// Deliberately covers the Duel Tournament and the Melee Battle only. The Sniper Battle is
+// looked at in its own pass; Cmd_LogoutAccount_f keeps its own three checks (including
+// sniper) rather than being rewritten here, so nothing that already works is disturbed.
+static qboolean zyk_minigame_blocks_account_change( gentity_t *ent, const char *verb )
+{
+	if (!ent || !ent->client)
+		return qfalse;
+
+	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a Duel Tournament\n\"", verb));
+		return qtrue;
+	}
+
+	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a Melee Battle\n\"", verb));
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 void Cmd_Register_F(gentity_t * ent)
 {
 	sqlite3 *db;
@@ -4743,6 +4781,11 @@ void Cmd_Register_F(gentity_t * ent)
 	if (G_PlayerIsDowned(ent))
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
+	if (zyk_minigame_blocks_account_change(ent, "register"))
+	{
 		return;
 	}
 
@@ -4929,6 +4972,11 @@ void Cmd_Login_F(gentity_t * ent)
 		return;
 	}
 
+	if (zyk_minigame_blocks_account_change(ent, "login"))
+	{
+		return;
+	}
+
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
@@ -5067,6 +5115,11 @@ void Cmd_Char_f(gentity_t *ent) {
 	if (G_PlayerIsDowned(ent))
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
+	if (zyk_minigame_blocks_account_change(ent, "char"))
+	{
 		return;
 	}
 
@@ -17648,6 +17701,19 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP: [Duel Tournament] the tournament is for logged-out players, the same rule the
+	// Melee Battle carries above and the one New Zyk Mod enforces here ("This tournament is for
+	// non-rpg players"). Ours never had the check at all, so RPG characters could enter and
+	// duel_tournament_prepare() would strip a loadout built from their account skills.
+	//
+	// Gated on "not already signed up" for the same reason as the melee one: /duelmode is a
+	// toggle during signup, and refusing unconditionally would strand anyone already in it.
+	if (ent->client->sess.amrpgmode == 2 && level.duel_players[ent->s.number] == -1)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"This tournament is for non-rpg players\n\"");
+		return;
+	}
+
 	if (level.duel_arena_loaded == qfalse)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"There is no duel arena in this map\n\"");
@@ -18156,11 +18222,24 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	}
 
 
-	/*if (ent->client->sess.amrpgmode == 2)
+	// GalaxyRP: [Melee Battle] the Melee Battle is for logged-out players. This guard was
+	// commented out at some point, which let RPG characters in and is why melee_battle_end()
+	// had to grow an initialize_rpg_skills() call to put their real skills back afterwards --
+	// restoring from the client's vanilla Profile would otherwise have handed them a loadout
+	// they never earned. Live again, matching New Zyk Mod, which refuses ACC_MODE_RPG here.
+	//
+	// Gated on "not already signed up" so it only ever refuses JOINING. /meleemode is a toggle,
+	// and a player who is somehow both logged in and in a battle must still be able to leave
+	// it; an unconditional refusal here would trap them in the arena permanently.
+	//
+	// Tested on amrpgmode, not sess.loggedin: amrpgmode is the durable field (it is the one
+	// carried across a map change in the session string), loggedin is derived from it in
+	// ClientBegin, and every other RPG gate in this file reads amrpgmode.
+	if (ent->client->sess.amrpgmode == 2 && level.melee_players[ent->s.number] == -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"You cannot be in RPG Mode to play the Melee Battle.\n\"");
 		return;
-	}*/
+	}
 
 	if (level.melee_arena_loaded == qfalse)
 	{
