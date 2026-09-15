@@ -701,7 +701,10 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Give",					ADM_GIVE				},
 	{ "Scale",					ADM_SCALE				},
 	{ "Players",				ADM_PLAYERS				},
-	{ "Duel Arena",				ADM_DUELARENA			},
+	// GalaxyRP: [Admin] title covers both arenas -- this one bit gates /duelarena AND
+	// /meleearena, and it is what /adminlist, /adminup, /admindown and the refusal message
+	// all print.
+	{ "Duel/Melee Arena",		ADM_DUELARENA			},
 	{ "Change Map",				ADM_CHANGEMAP			},
 	{ "Create Item",			ADM_CREATEITEM			},
 	// GalaxyRP fix: [Admin] title updated to reflect /notarget now sharing this bit -- see the
@@ -10671,6 +10674,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/clientprint <player name> <text>: ^7Prints text on the player's screen. Use ^3-1 ^7argument to print for all players.\n\
 ^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
 ^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
+^3/meleearena: ^7Sets or unsets the Melee Battle arena in current map.\n\
 ^3/duelpause: ^7Pauses/resumes the Duel Tournament.\n\
 ^3/admmap <gametype number> <map name>: ^7Changes the server to a different map and gametype.\n\" ");
 				// GalaxyRP: [Weather] split here rather than appending -- SV_SendServerCommand drops
@@ -14499,7 +14503,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_DUELARENA)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/duelarena ^7to set or unset the Duel Tournament arena in this map. The arena is saved automatically. Also, use ^3/duelpause ^7to pause/resume the tournament\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/duelarena ^7to set or unset the Duel Tournament arena in this map, and ^3/meleearena ^7for the Melee Battle arena. Both are saved automatically. Also, use ^3/duelpause ^7to pause/resume the tournament\n\n\"");
 		}
 		else if (command_number == ADM_CHANGEMAP)
 		{
@@ -19446,6 +19450,7 @@ command_t commands[] = {
 	{ "listaccount",		Cmd_ListAccount_f,			CMD_NOINTERMISSION },
 	{ "login",				Cmd_Login_F,				CMD_NOINTERMISSION },
 	{ "logout",				Cmd_LogoutAccount_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "meleearena",			Cmd_MeleeArena_f,			CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "meleemode",			Cmd_MeleeMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "modversion",			Cmd_ModVersion_f,			CMD_NOINTERMISSION },
 	{ "new",				Cmd_Register_F,				CMD_NOINTERMISSION },
@@ -19517,7 +19522,6 @@ command_t commands[] = {
 	// was wrong. Character management doesn't need the player to be alive in the world any more than
 	// switching characters itself does.
 	{ "zykchars",			Cmd_ZykChars_f,			CMD_NOINTERMISSION }
-//	{ "meleearena",			Cmd_MeleeArena_f,			CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "thedestroyer",		Cmd_TheDestroyer_f,			CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 //	{ "teamtask",			Cmd_TeamTask_f,				CMD_NOINTERMISSION },
 //	{ "kylesmash",			TryGrapple,					0 },
