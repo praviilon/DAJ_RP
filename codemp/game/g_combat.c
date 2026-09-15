@@ -4656,6 +4656,52 @@ extern void Boba_FlyStop( gentity_t *self );
 extern void paralyze_player( gentity_t *ent );
 extern qboolean zyk_minigame_forces_death( gentity_t *ent );
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
+
+// GalaxyRP fix: [Force Duel] which means of death one duellist may inflict on the other.
+//
+// A private duel has always been saber-only here, enforced by a bare "mod != MOD_SABER" test in
+// G_Damage below. That is correct for an ordinary duel and wrong for a full force one: every
+// offensive force power in w_force.c deals MOD_FORCE_DARK -- Force Lightning, Force Drain's
+// drain-shield finisher and all five Force Grip crush tiers -- so the powers fired, the animations
+// played, the opponent was lifted and shoved, and none of it could take a point of health. The two
+// blocks restoring the vanilla restriction (BG_CanUseFPNow and WP_ForcePowerUsableOn) decide whether
+// a power may be USED and on WHOM; this third gate, in a different file and keyed on the means of
+// death rather than on the duel, decides whether the result lands. It was missed.
+//
+// A whitelist rather than TaystJK's blacklist, which allows every non-saber means of death in a full
+// force duel and then has to carve MOD_TRIP_MINE_SPLASH and MOD_DET_PACK_SPLASH back out -- a
+// tripmine planted before the duel would otherwise detonate inside it. Their own comment calls that
+// "sad hack". The carve-out exists because TaystJK also has GUN duels, which need arbitrary weapon
+// damage; we deliberately took only the force half, and bg_pmove.c pins a duellist's weapon to
+// WP_SABER for the duration, so no gun can be fired in one of ours at all. Listing what a force duel
+// is FOR is therefore both narrower and safer: nothing a player plants, throws or triggers beforehand
+// can leak in, and a means of death nobody thought of fails closed rather than open.
+//
+// World damage is unaffected in either kind: falling, lava and trigger_hurt arrive with no client
+// attacker, so neither this nor the caller's gates ever look at them.
+static qboolean zyk_duel_allows_mod( gentity_t *duellist, int mod )
+{
+	if (mod == MOD_SABER)
+	{ // every duel is a saber duel first
+		return qtrue;
+	}
+
+	// Bounds-checked like every other read of this array: G_Damage runs for NPCs, whose s.number is
+	// an entity number rather than a client slot. An NPC cannot be in a private duel, so this is
+	// belt and braces rather than a live path.
+	if (!duellist || duellist->s.number < 0 || duellist->s.number >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+
+	if (level.duel_types[duellist->s.number] != 1)
+	{ // an ordinary duel: sabers and nothing else, exactly as before
+		return qfalse;
+	}
+
+	return (mod == MOD_FORCE_DARK) ? qtrue : qfalse;
+}
+
 void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_t dir, vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t	*client;
 	int			take, asave = 0, max, subamt = 0, knockback;
@@ -5052,7 +5098,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		{
 			return;
 		}
-		else if (attacker && attacker->client && mod != MOD_SABER)
+		else if (attacker && attacker->client && zyk_duel_allows_mod(attacker, mod) == qfalse)
 		{
 			return;
 		}
@@ -5063,7 +5109,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		{
 			return;
 		}
-		else if (targ && targ->client && mod != MOD_SABER)
+		else if (targ && targ->client && zyk_duel_allows_mod(attacker, mod) == qfalse)
 		{
 			return;
 		}
