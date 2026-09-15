@@ -3560,8 +3560,8 @@ void SP_ZykTrainingPole(gentity_t *ent)
 
 /* zyk: zyk_mini_game_joiner, allows a player to join a mini-game by going inside the bounding box
 spawnflags:
-1 -  Sniper Battle
-2 -  Racing Mode
+1 -  unused (was the Sniper Battle, since removed)
+2 -  unused (was Racing Mode, since removed)
 4 -  Melee Battle
 8 -  Duel Tournament
 64 - must press Use key
@@ -3570,22 +3570,10 @@ spawnflags:
 "mins" bounding box
 "maxs" bounding box
 */
-extern void Cmd_SniperMode_f(gentity_t *ent);
-extern void Cmd_RaceMode_f(gentity_t *ent);
 extern void Cmd_MeleeMode_f(gentity_t *ent);
 extern void Cmd_DuelMode_f(gentity_t *ent);
 void zyk_mini_gamer_joiner_do(gentity_t *ent, gentity_t *player_ent, gentity_t *the_player_ent)
 {
-	if (ent->spawnflags & 1)
-	{
-		Cmd_SniperMode_f(player_ent);
-	}
-
-	if (ent->spawnflags & 2)
-	{
-		Cmd_RaceMode_f(player_ent);
-	}
-
 	if (ent->spawnflags & 4)
 	{
 		Cmd_MeleeMode_f(player_ent);
@@ -3660,8 +3648,8 @@ void SP_ZykMiniGameJoiner(gentity_t *ent)
 
 	// GalaxyRP fix: [Entity System] the clamp above only applied to the press-Use variant. Without
 	// spawnflag 64 the default wait of 0 made nextthink == level.time, so the think ran every frame
-	// and re-invoked Cmd_SniperMode_f / RaceMode / MeleeMode / DuelMode for every player standing in
-	// the box, every frame. Those commands guard themselves, but each answers with a server command,
+	// and re-invoked Cmd_MeleeMode_f / Cmd_DuelMode_f for every player standing in the box, every
+	// frame. Those commands guard themselves, but each answers with a server command,
 	// so a player in the box was flooded with refusals at server framerate. Same floor either way.
 	if (ent->wait < 100)
 		ent->wait = 100;

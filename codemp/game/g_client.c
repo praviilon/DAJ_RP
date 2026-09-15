@@ -2836,13 +2836,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
 	}
 
-	// zyk: sniper battle player went to spec
-	if (level.sniper_players[ent->s.number] > -1)
-	{
-		level.sniper_players[ent->s.number] = -1;
-		level.sniper_mode_quantity--;
-	}
-
 	// zyk: melee battle player went to spec
 	if (level.melee_players[ent->s.number] > -1)
 	{
@@ -4171,9 +4164,6 @@ void ClientSpawn(gentity_t *ent) {
 	ent->client->pers.being_mind_controlled = -1;
 	ent->client->pers.mind_controlled1_id = -1;
 
-	// zyk: loading default value of race_position
-	ent->client->pers.race_position = 0;
-
 	// zyk: initializing flame thrower timer
 	ent->client->pers.flame_thrower = 0;
 
@@ -4431,7 +4421,6 @@ void G_ClearTeamVote( gentity_t *ent, int team ) {
 	}
 }
 
-extern void try_finishing_race();
 // GalaxyRP: [Account] forward-declared so ClientDisconnect (below) can flush the currently active
 // character before this client's slot is torn down -- same pattern already used in g_cmds.c for
 // Cmd_Char_f, whose own comment goes into the full history of why this matters.
@@ -4607,13 +4596,6 @@ void ClientDisconnect( int clientNum ) {
 		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
 	}
 
-	// zyk: sniper battle player disconnected
-	if (level.sniper_players[ent->s.number] > -1)
-	{
-		level.sniper_players[ent->s.number] = -1;
-		level.sniper_mode_quantity--;
-	}
-
 	// zyk: melee battle player disconnected
 	if (level.melee_players[ent->s.number] > -1)
 	{
@@ -4768,14 +4750,6 @@ void ClientDisconnect( int clientNum ) {
 	// to their own escort NPCs the first time they claim one.
 	ent->enemy = NULL;
 	ent->lastEnemy = NULL;
-
-	// zyk: player is no longer part of the race, testing if it must be finished
-	if (level.quest_map == 17)
-	{
-		ent->client->pers.race_position = 0;
-
-		try_finishing_race();
-	}
 
 	// zyk: logout player from account
 	ent->client->sess.amrpgmode = 0;

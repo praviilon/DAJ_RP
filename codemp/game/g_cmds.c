@@ -1106,12 +1106,6 @@ void Cmd_Give_f( gentity_t *ent )
 		return;
 	}
 
-	if (client_id < MAX_CLIENTS && level.sniper_players[client_id] != -1)
-	{
-		trap->SendServerCommand(ent - g_entities, "print \"Cannot give stuff to players in Sniper Battle\n\"");
-		return;
-	}
-
 	if (ent != &g_entities[client_id] && g_entities[client_id].client->sess.amrpgmode > 0 && g_entities[client_id].client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(g_entities[client_id].client->pers.player_settings & (1 << 13)))
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
@@ -3051,8 +3045,8 @@ void zyk_apply_character_skills( gentity_t *ent )
 // Deliberately its own function, called from each site that needs it rather than folded into
 // initialize_rpg_skills(): that has eight callers, and re-pointing a held weapon in all of them would
 // change what the quest and minigame restore paths do. The call sites are the two character-switch
-// paths below (select_player_character() for /new, /char new and /char use; Cmd_Login_F() for /login)
-// and sniper_battle_end() in g_main.c, which takes away a disruptor and a jetpack the same way.
+// paths below: select_player_character() for /new, /char new and /char use, and Cmd_Login_F() for
+// /login. sniper_battle_end() in g_main.c was a third call site until the Sniper Battle was removed.
 void zyk_apply_character_loadout( gentity_t *ent )
 {
 	if (!ent || !ent->client)
@@ -4747,9 +4741,9 @@ void update_current_character_and_account(gentity_t* ent) {
 // Refuse rather than allow-and-clean-up: there is no correct way to change accounts halfway
 // through a fight, and the player can simply leave the battle first.
 //
-// Deliberately covers the Duel Tournament and the Melee Battle only. The Sniper Battle is
-// looked at in its own pass; Cmd_LogoutAccount_f keeps its own three checks (including
-// sniper) rather than being rewritten here, so nothing that already works is disturbed.
+// Covers the Duel Tournament and the Melee Battle, which are the only two minigames left.
+// Cmd_LogoutAccount_f keeps its own pair of checks rather than being rewritten here, so nothing
+// that already works is disturbed.
 static qboolean zyk_minigame_blocks_account_change( gentity_t *ent, const char *verb )
 {
 	if (!ent || !ent->client)
@@ -10230,40 +10224,9 @@ extern qboolean zyk_spawn_strings_full(gentity_t *ent);
 // dead, see g_local.h) and Challenge Mode itself was removed as dead in an earlier pass than this
 // comment's own claim.
 
-// zyk: tests if the race must be finished
-void try_finishing_race()
-{
-	int j = 0, has_someone_racing = 0;
-	gentity_t *this_ent = NULL;
-
-	if (level.race_mode != 0)
-	{
-		for (j = 0; j < level.maxclients; j++)
-		{ 
-			this_ent = &g_entities[j];
-			if (this_ent && this_ent->client && this_ent->inuse && this_ent->health > 0 && this_ent->client->sess.sessionTeam != TEAM_SPECTATOR && this_ent->client->pers.race_position > 0)
-			{ // zyk: searches for the players who are still racing to see if we must finish the race
-				has_someone_racing = 1;
-			}
-		}
-
-		if (has_someone_racing == 0)
-		{ // zyk: no one is racing, so finish the race
-			level.race_mode = 0;
-
-			for (j = MAX_CLIENTS; j < level.num_entities; j++)
-			{
-				this_ent = &g_entities[j];
-				if (this_ent && Q_stricmp(this_ent->targetname, "zyk_race_line") == 0)
-				{ // zyk: removes this start or finish line
-					G_FreeEntity(this_ent);
-				}
-			}
-
-			trap->SendServerCommand( -1, va("chat \"^3Race System: ^7The race is over!\""));
-		}
-	}
-}
+// GalaxyRP: [Race Mode] try_finishing_race() used to sit here. It was called from Cmd_RaceMode_f's
+// leave branch, player_die() (g_combat.c), ClientDisconnect() (g_client.c) and the race handler in
+// G_RunFrame() (g_main.c) -- all of them removed with Race Mode, so nothing could reach it.
 
 /*
 ==================
@@ -10296,12 +10259,6 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot logout while in a Duel Tournament\n\"");
-		return;
-	}
-
-	if (level.sniper_mode > 0 && level.sniper_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot logout while in a Sniper Battle\n\"");
 		return;
 	}
 
@@ -10860,9 +10817,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 // seller NPC) has been removed for good -- it was already commented out of the command table below
 // (unreachable) since the jawa-seller proximity requirement in Cmd_Buy_f was itself disabled earlier.
 // Its only supporting field, pers.seller_invoked_by_id, has been removed from g_local.h and its
-// NPC_spawn.c initializer along with it. NPC_SpawnType is still used elsewhere in this file (swoop/
-// tauntaun spawning below), so its extern declaration is kept.
-extern gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
+// NPC_spawn.c initializer along with it. Its extern declaration of NPC_SpawnType was kept at the
+// time because Cmd_RaceMode_f still spawned swoops through it; Race Mode has since been removed
+// too, leaving no caller in this file, so the declaration has gone with it.
 
 /*
 ==================
@@ -12248,298 +12205,16 @@ void Cmd_Settings_f( gentity_t *ent ) {
 // codebase -- so it has been deleted outright rather than short-circuited, per the same convention
 // used for other confirmed-unreachable code in this file.
 
-void zyk_spawn_race_line(int x, int y, int z, int yaw)
-{
-	gentity_t *new_ent_line = G_Spawn();
-
-	// zyk: starting line
-	zyk_set_entity_field(new_ent_line, "classname", "fx_runner");
-	zyk_set_entity_field(new_ent_line, "targetname", "zyk_race_line");
-	new_ent_line->s.modelindex = G_EffectIndex("mp/crystalbeamred");
-	zyk_set_entity_field(new_ent_line, "origin", va("%d %d %d", x, y, z));
-	zyk_set_entity_field(new_ent_line, "angles", va("0 %d 0", yaw));
-
-	zyk_spawn_entity(new_ent_line);
-}
-
-/*
-==================
-Cmd_RaceMode_f
-==================
-*/
-void Cmd_RaceMode_f( gentity_t *ent ) {
-	if (zyk_allow_race_mode.integer != 1)
-	{
-		trap->SendServerCommand(ent->s.number, va("chat \"^3Race System: ^7this mode is not allowed in this server\n\""));
-		return;
-	}
-
-	// GalaxyRP fix: [Death System] same guard /snipermode, /meleemode and /duelmode carry -- a
-	// downed player keeps 50 health, so without this they could sign up and be put on a swoop
-	// while incapacitated.
-	if (G_PlayerIsDowned(ent))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"^1You cannot do this while you are downed.\n\"");
-		return;
-	}
-
-	if (ent->client->pers.race_position == 0)
-	{
-		int j = 0, swoop_number = -1;
-		int occupied_positions[MAX_CLIENTS]; // zyk: sets 1 to each race position already occupied by a player
-		gentity_t *this_ent = NULL;
-		vec3_t origin, yaw;
-		char zyk_info[MAX_INFO_STRING] = {0};
-		char zyk_mapname[128] = {0};
-
-		if (level.gametype == GT_CTF)
-		{
-			trap->SendServerCommand(ent->s.number, "print \"Races are not allowed in CTF.\n\"");
-			return;
-		}
-
-		if (level.race_mode > 1)
-		{
-			trap->SendServerCommand(ent->s.number, "print \"Race has already started. Try again at the next race!\n\"");
-			return;
-		}
-
-		// GalaxyRP fix: [Guardian] a loop blocking race start while any player had guardian_mode > 0
-		// used to be here. guardian_mode is permanently 0 now, so it was unreachable.
-
-		// zyk: getting the map name
-		trap->GetServerinfo(zyk_info, sizeof(zyk_info));
-		Q_strncpyz(zyk_mapname, Info_ValueForKey( zyk_info, "mapname" ), sizeof(zyk_mapname));
-
-		if (Q_stricmp(zyk_mapname, "t2_trip") == 0)
-		{
-			level.race_map = 1;
-
-			// zyk: initializing array of occupied_positions
-			for (j = 0; j < MAX_CLIENTS; j++)
-			{
-				occupied_positions[j] = 0;
-			}
-
-			// zyk: calculates which position the swoop of this player must be spawned
-			for (j = 0; j < MAX_CLIENTS; j++)
-			{
-				this_ent = &g_entities[j];
-				if (this_ent && ent != this_ent && this_ent->client && this_ent->inuse && this_ent->health > 0 && this_ent->client->sess.sessionTeam != TEAM_SPECTATOR && this_ent->client->pers.race_position > 0)
-					occupied_positions[this_ent->client->pers.race_position - 1] = 1;
-			}
-
-			for (j = 0; j < MAX_RACERS; j++)
-			{
-				if (occupied_positions[j] == 0)
-				{ // zyk: an empty race position, use this one
-					swoop_number = j;
-					break;
-				}
-			}
-
-			if (swoop_number == -1)
-			{ // zyk: exceeded the MAX_RACERS
-				trap->SendServerCommand( ent-g_entities, "print \"The race is already full of racers! Try again later!\n\"" );
-				return;
-			}
-			
-			origin[0] = -3930;
-			origin[1] = (-20683 + (swoop_number * 80));
-			origin[2] = 1509;
-
-			yaw[0] = 0.0f;
-			yaw[1] = -179.0f;
-			yaw[2] = 0.0f;
-
-			if (level.race_mode == 0)
-			{ // zyk: if this is the first player entering the race, clean the old race swoops left in the map and place start and finish lines
-				int k = 0;
-
-				// zyk: starting line
-				zyk_spawn_race_line(-4568, -20820, 1494, 90);
-				zyk_spawn_race_line(-4568, -18720, 1494, -90);
-
-				// zyk: finish line
-				zyk_spawn_race_line(4750, -9989, 1520, 179);
-				zyk_spawn_race_line(3225, -9962, 1520, -1);
-
-				for (k = 0; k < MAX_RACERS; k++)
-				{
-					if (level.race_mode_vehicle[k] != -1)
-					{
-						gentity_t *vehicle_ent = &g_entities[level.race_mode_vehicle[k]];
-						if (vehicle_ent)
-						{
-							G_FreeEntity(vehicle_ent);
-						}
-						
-						level.race_mode_vehicle[k] = -1;
-					}
-				}
-			}
-
-			if (swoop_number < MAX_RACERS)
-			{
-				// zyk: removing a possible swoop that was in the same position by a player who tried to race before in this position
-				if (level.race_mode_vehicle[swoop_number] != -1)
-				{
-					gentity_t *vehicle_ent = &g_entities[level.race_mode_vehicle[swoop_number]];
-
-					if (vehicle_ent && vehicle_ent->NPC && Q_stricmp(vehicle_ent->NPC_type, "swoop") == 0)
-					{
-						G_FreeEntity(vehicle_ent);
-					}
-				}
-
-				// zyk: teleporting player to the swoop area
-				zyk_TeleportPlayer( ent, origin, yaw);
-
-				ent->client->pers.race_position = swoop_number + 1;
-
-				this_ent = NPC_SpawnType(ent,"swoop",NULL,qtrue);
-				if (this_ent)
-				{ // zyk: setting the vehicle hover height and hover strength
-					this_ent->m_pVehicle->m_pVehicleInfo->hoverHeight = 40.0;
-					this_ent->m_pVehicle->m_pVehicleInfo->hoverStrength = 40.0;
-
-					level.race_mode_vehicle[swoop_number] = this_ent->s.number;
-				}
-
-				level.race_start_timer = level.time + zyk_start_race_timer.integer; // zyk: race will start some seconds after the last player who joined the race
-				level.race_mode = 1;
-
-				trap->SendServerCommand( -1, va("chat \"^3Race System: ^7%s ^7joined the race!\n\"",ent->client->pers.netname) );
-			}
-		}
-		else if (Q_stricmp(zyk_mapname, "t3_stamp") == 0)
-		{
-			int i = 0;
-
-			level.race_map = 2;
-
-			// zyk: initializing array of occupied_positions
-			for (j = 0; j < MAX_CLIENTS; j++)
-			{
-				occupied_positions[j] = 0;
-			}
-
-			// zyk: calculates which position the swoop of this player must be spawned
-			for (j = 0; j < MAX_CLIENTS; j++)
-			{
-				this_ent = &g_entities[j];
-				if (this_ent && ent != this_ent && this_ent->client && this_ent->inuse && this_ent->health > 0 && this_ent->client->sess.sessionTeam != TEAM_SPECTATOR && this_ent->client->pers.race_position > 0)
-					occupied_positions[this_ent->client->pers.race_position - 1] = 1;
-			}
-
-			for (j = 0; j < MAX_RACERS; j++)
-			{
-				if (occupied_positions[j] == 0)
-				{ // zyk: an empty race position, use this one
-					swoop_number = j;
-					break;
-				}
-			}
-
-			if (swoop_number == -1)
-			{ // zyk: exceeded the MAX_RACERS
-				trap->SendServerCommand(ent - g_entities, "print \"The race is already full of racers! Try again later!\n\"");
-				return;
-			}
-
-			origin[0] = (1020 - ((swoop_number % 4) * 90));
-			origin[1] = (1370 + ((swoop_number/4) * 90));
-			origin[2] = 97;
-
-			yaw[0] = 0.0f;
-			yaw[1] = -90.0f;
-			yaw[2] = 0.0f;
-
-			if (level.race_mode == 0)
-			{ // zyk: if this is the first player entering the race, clean the old race swoops left in the map
-				int k = 0;
-
-				for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
-				{ // zyk: removing all entities except the spawnpoints
-					gentity_t *removed_ent = &g_entities[i];
-
-					if (removed_ent && Q_stricmp(removed_ent->classname, "func_breakable") == 0 && removed_ent->s.number >= 471 && removed_ent->s.number <= 472)
-					{
-						GlobalUse(removed_ent, removed_ent, removed_ent);
-					}
-					else if (removed_ent && Q_stricmp(removed_ent->classname, "info_player_deathmatch") != 0)
-					{
-						G_FreeEntity(removed_ent);
-					}
-				}
-
-				for (k = 0; k < MAX_RACERS; k++)
-				{
-					if (level.race_mode_vehicle[k] != -1)
-					{
-						gentity_t *vehicle_ent = &g_entities[level.race_mode_vehicle[k]];
-						if (vehicle_ent)
-						{
-							G_FreeEntity(vehicle_ent);
-						}
-
-						level.race_mode_vehicle[k] = -1;
-					}
-				}
-
-				// zyk: starting line
-				zyk_spawn_race_line(660, 1198, 88, 1);
-				zyk_spawn_race_line(1070, 1198, 88, 179);
-
-				// zyk: finish line
-				zyk_spawn_race_line(-6425, -168, -263, -1);
-				zyk_spawn_race_line(-5700, -180, -263, 179);
-			}
-
-			if (swoop_number < MAX_RACERS)
-			{
-				// zyk: removing a possible swoop that was in the same position by a player who tried to race before in this position
-				if (level.race_mode_vehicle[swoop_number] != -1)
-				{
-					gentity_t *vehicle_ent = &g_entities[level.race_mode_vehicle[swoop_number]];
-
-					if (vehicle_ent && vehicle_ent->NPC && Q_stricmp(vehicle_ent->NPC_type, "tauntaun") == 0)
-					{
-						G_FreeEntity(vehicle_ent);
-					}
-				}
-
-				// zyk: teleporting player to the swoop area
-				zyk_TeleportPlayer(ent, origin, yaw);
-
-				ent->client->pers.race_position = swoop_number + 1;
-
-				this_ent = NPC_SpawnType(ent, "tauntaun", NULL, qtrue);
-				if (this_ent)
-				{ // zyk: setting the vehicle id and increasing tauntaun hp
-					this_ent->health *= 5;
-					level.race_mode_vehicle[swoop_number] = this_ent->s.number;
-				}
-
-				level.race_start_timer = level.time + zyk_start_race_timer.integer; // zyk: race will start some seconds after the last player who joined the race
-				level.race_mode = 1;
-
-				trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%s ^7joined the race!\n\"", ent->client->pers.netname));
-			}
-		}
-		else
-		{
-			trap->SendServerCommand( ent-g_entities, "print \"Races can only be done in ^3t2_trip ^7and ^3t3_stamp ^7maps.\n\"" );
-		}
-	}
-	else
-	{
-		trap->SendServerCommand( -1, va("chat \"^3Race System: ^7%s ^7abandoned the race!\n\"",ent->client->pers.netname) );
-
-		ent->client->pers.race_position = 0;
-		try_finishing_race();
-	}
-}
+// GalaxyRP: [Race Mode] zyk_spawn_race_line() and Cmd_RaceMode_f() -- the "/racemode" command --
+// used to sit here, and the command's row in commands[] below went with them. Cmd_RaceMode_f was
+// the only way into Race Mode: joining set pers.race_position and level.race_mode, which is what
+// every other Race Mode branch in the mod tested for. With the zyk_allow_race_mode and
+// zyk_start_race_timer cvars gone and the whole feature removed, nothing can raise that state any
+// more, so all of it -- try_finishing_race() above, the countdown and per-racer handling in
+// G_RunFrame() (g_main.c), the force-power and damage immunity during the countdown (w_force.c and
+// g_combat.c), the death handling in player_die() (g_combat.c), the disconnect reset (g_client.c),
+// the spawnflag-2 branch of zyk_mini_gamer_joiner_do() (g_misc.c) and the level_locals_t and
+// clientPersistant_t fields themselves (g_local.h) -- has been removed with it.
 
 /*
 ==================
@@ -17698,7 +17373,7 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 
 	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stopped
 	// them signing up while incapacitated -- they would just be teleported into the arena and left
-	// lying there. Same explicit test /snipermode and /meleemode already carry.
+	// lying there. Same explicit test /meleemode already carries.
 	if (G_PlayerIsDowned(ent))
 	{
 		trap->SendServerCommand(ent->s.number, "print \"^1You cannot do this while you are downed.\n\"");
@@ -17721,12 +17396,6 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 	if (level.duel_arena_loaded == qfalse)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"There is no duel arena in this map\n\"");
-		return;
-	}
-
-	if (level.sniper_mode > 0 && level.sniper_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"You are already in a Sniper Battle\n\"");
 		return;
 	}
 
@@ -18095,112 +17764,18 @@ void Cmd_DuelPause_f(gentity_t *ent) {
 	}
 }
 
-/*
-==================
-Cmd_SniperMode_f
-==================
-*/
-void Cmd_SniperMode_f(gentity_t *ent) {
-	if (zyk_allow_sniper_battle.integer != 1)
-	{
-		trap->SendServerCommand(ent->s.number, va("chat \"^3Sniper Battle: ^7this mode is not allowed in this server\n\""));
-		return;
-	}
-
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stops
-	// them signing up while incapacitated -- they would just be teleported in and left lying
-	// there. Same explicit test the force powers and holdable items use.
-	if (G_PlayerIsDowned(ent))
-	{
-		trap->SendServerCommand(ent->s.number, "print \"^1You cannot do this while you are downed.\n\"");
-		return;
-	}
-
-
-	/*if (ent->client->sess.amrpgmode == 2)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"You cannot be in RPG Mode to play the Sniper Battle.\n\"");
-		return;
-	}*/
-
-	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"You are already in a Duel Tournament\n\"");
-		return;
-	}
-
-	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"You are already in a Melee Battle\n\"");
-		return;
-	}
-
-	if (level.sniper_players[ent->s.number] == -1 && level.sniper_mode > 1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Cannot join the Sniper Battle now\n\"");
-		return;
-	}
-	else if (level.sniper_players[ent->s.number] == -1)
-	{ // zyk: join the sniper battle
-		level.sniper_players[ent->s.number] = 0;
-		level.sniper_mode = 1;
-		level.sniper_mode_timer = level.time + zyk_sniper_battle_time_to_start.integer;
-		level.sniper_mode_quantity++;
-
-		trap->SendServerCommand(-1, va("chat \"^3Sniper Battle: ^7%s ^7joined the battle!\n\"", ent->client->pers.netname));
-	}
-	else
-	{
-		level.sniper_players[ent->s.number] = -1;
-		level.sniper_mode_quantity--;
-		trap->SendServerCommand(-1, va("chat \"^3Sniper Battle: ^7%s ^7left the battle!\n\"", ent->client->pers.netname));
-	}
-}
-
-/*
-==================
-Cmd_SniperTable_f
-==================
-*/
-void Cmd_SniperTable_f(gentity_t *ent) {
-	int i = 0;
-	char content[1024];
-
-	strcpy(content, "\nSniper Battle Players\n\n");
-
-	if (level.sniper_mode == 0)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"There is no Sniper Battle now\n\"");
-		return;
-	}
-
-	// GalaxyRP fix: [overflow] this list was built with strcpy(buf, va("%s...", buf, ...)). va()
-	// formats into a 32000-byte buffer and knows nothing about the destination, so once the text
-	// passed the buffer's size that strcpy wrote off the end of a stack array -- 24 bytes of header plus 32 rows of 45 is 1465 into char content[1024]. Rows are now
-	// formatted into their own bounded buffer and appended with Q_strcat, and the message is
-	// flushed and continued whenever the next row would not fit. Same text, same order.
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.sniper_players[i] != -1)
-		{ // zyk: a player in Sniper Battle
-			gentity_t *player_ent = &g_entities[i];
-			char entry[MAX_NETNAME + 64];
-
-			Com_sprintf(entry, sizeof(entry), "^7%s   ^3%d\n", player_ent->client->pers.netname, level.sniper_players[i]);
-
-			if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
-			{
-				trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
-				strcpy(content, "");
-			}
-
-			Q_strcat(content, sizeof(content), entry);
-		}
-	}
-
-	Q_strcat(content, sizeof(content), "\n");
-	trap->SendServerCommand(ent->s.number, va("print \"%s\"", content));
-}
+// GalaxyRP: [Sniper Battle] Cmd_SniperMode_f() and Cmd_SniperTable_f() -- the "/snipermode" and
+// "/snipertable" commands -- used to sit here, and their rows in commands[] below went with them.
+// Cmd_SniperMode_f was the only way into the Sniper Battle: joining set level.sniper_players[client]
+// to 0 and level.sniper_mode to 1, which is what every other Sniper Battle branch in the mod tested
+// for. With the zyk_allow_sniper_battle and zyk_sniper_battle_time_to_start cvars gone and the whole
+// feature removed, nothing can raise that state any more, so all of it -- sniper_battle_end/prepare/
+// winner and the G_RunFrame block that drove them (g_main.c), the hit restriction in
+// zyk_can_hit_target() (g_main.c), the death handling in player_die() (g_combat.c), the pickup block
+// in Touch_Item() (g_items.c), the /give and /logout guards and the /duelmode and /meleemode join
+// refusals in this file, the spectator/disconnect resets (g_client.c), the spawnflag-1 branch of
+// zyk_mini_gamer_joiner_do() (g_misc.c) and the level_locals_t fields themselves (g_local.h) -- has
+// been removed with it.
 
 /*
 ==================
@@ -18254,12 +17829,6 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	if (level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"You are already in a Duel Tournament\n\"");
-		return;
-	}
-
-	if (level.sniper_mode > 0 && level.sniper_players[ent->s.number] != -1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"You are already in a Sniper Battle\n\"");
 		return;
 	}
 
@@ -18664,8 +18233,8 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 // damage other players and, more importantly, unable to be damaged BY them. It has been removed
 // entirely, along with every check that read that bit: the two in zyk_can_hit_target() (g_main.c),
 // the sentry-gun one in G_Damage() (g_combat.c), and the "cannot join X while being in nofight
-// mode" guards on /race, /duelmode, /sniper and /melee above. There was a fifth, on /rpglms, which
-// went with the RPG LMS removal.
+// mode" guards on /duelmode and /melee above. There were three more -- on /rpglms, /race and
+// /sniper -- which went with the RPG LMS, Race Mode and Sniper Battle removals.
 //
 // It could only be toggled while spectating, so a player who enabled it and then joined had no way
 // to turn it back off, and nothing in the game told them it was on -- the only documentation was an
@@ -19478,7 +19047,6 @@ command_t commands[] = {
 	{ "playsound",			Cmd_ZykSound_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "playmusic",			Cmd_Music_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "players",			Cmd_Players_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "racemode",			Cmd_RaceMode_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "remap",				Cmd_Remap_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "remapdeletefile",	Cmd_RemapDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "remaplist",			Cmd_RemapList_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
@@ -19492,8 +19060,6 @@ command_t commands[] = {
 	{ "silence",			Cmd_Silence_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "skilldown",			Cmd_RpModeDown_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "skillup",			Cmd_RpModeUp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "snipermode",			Cmd_SniperMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "snipertable",		Cmd_SniperTable_f,			CMD_NOINTERMISSION },
 	{ "spendcredits",		Cmd_CreditSpend_f,			CMD_RPG | CMD_NOINTERMISSION },
 	{ "stuff",				Cmd_Stuff_f,				CMD_RPG | CMD_NOINTERMISSION },
 	{ "tele",				Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },

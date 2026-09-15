@@ -251,9 +251,15 @@ XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NOR
 // GalaxyRP: [RPG LMS] zyk_allow_rpg_lms used to be defined here. Its only consumer was the join
 // guard in Cmd_RpgLmsMode_f, and the whole RPG LMS feature has been removed; see the note where
 // that command used to live in g_cmds.c. Also dropped from assets/server/galaxyrp_server.cfg.
-XCVAR_DEF( zyk_allow_race_mode, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [Race Mode] zyk_allow_race_mode and zyk_start_race_timer used to be defined here and
+// below. Their only consumers were Cmd_RaceMode_f's join guard and its start timer, and the whole
+// Race Mode feature has been removed; see the note where that command used to live in g_cmds.c.
+// GalaxyRP: [Sniper Battle] zyk_allow_sniper_battle and zyk_sniper_battle_time_to_start used to be
+// defined here and below, the latter with an RP_CVU_sniperBattleTimeToStart callback. Their only
+// consumers were Cmd_SniperMode_f's join guard and its start timer, and the whole Sniper Battle
+// feature has been removed; see the note where that command used to live in g_cmds.c. Both modes
+// were also dropped from assets/server/galaxyrp_server.cfg.
 XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_sniper_battle, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_magic_fist_mp_cost,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_healing_area_mp_cost,	"5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -341,7 +347,6 @@ XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHI
 // GalaxyRP fix: [validation] RP_CVU_listCmdsResultsPerPage (g_cvar.c) clamps a non-positive value
 // back to 1 -- see its comment for why 0 needs its own floor instead of the usual clamp-to-0 pattern.
 XCVAR_DEF( zyk_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_start_race_timer,	"15000",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_flameThrowerCooldown (g_cvar.c) clamps a negative value back to
 // 0 -- see its comment for why.
 XCVAR_DEF( zyk_flame_thrower_cooldown,	"50",			RP_CVU_flameThrowerCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -378,7 +383,6 @@ XCVAR_DEF( rp_allow_playsound_command, "1",				NULL,				CVAR_ARCHIVE|CVAR_NOREST
 XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_time_to_start, "12000", RP_CVU_duelTournamentTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_sniper_battle_time_to_start, "12000",	RP_CVU_sniperBattleTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_buying_selling_cooldown to rp_buying_cooldown -- there has
 // never been a working /sell command (see the Shop wording fixes elsewhere), so "selling" no longer
 // belongs in the name, and this moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.

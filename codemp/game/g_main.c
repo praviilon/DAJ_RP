@@ -1150,9 +1150,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		}
 	}
 
-	// zyk: initializing race mode
-	level.race_mode = 0;
-
 	// zyk: initializing quest_map value
 	level.quest_map = 0;
 	level.custom_quest_map = -1;
@@ -1184,10 +1181,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.duel_arena_loaded = qfalse;
 	level.duel_leaderboard_step = 0;
 
-	// zyk: initializing Sniper Battle variables
-	level.sniper_mode = 0;
-	level.sniper_mode_quantity = 0;
-
 	// zyk: initializing Melee Battle variables
 	level.melee_mode = 0;
 	level.melee_model_id = -1;
@@ -1213,7 +1206,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		for (zyk_iterator = 0; zyk_iterator < MAX_CLIENTS; zyk_iterator++)
 		{ // zyk: initializing duelist scores
 			level.duel_players[zyk_iterator] = -1;
-			level.sniper_players[zyk_iterator] = -1;
 			level.melee_players[zyk_iterator] = -1;
 		}
 
@@ -1223,11 +1215,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			level.duel_matches[zyk_iterator][1] = -1;
 			level.duel_matches[zyk_iterator][2] = 0;
 			level.duel_matches[zyk_iterator][3] = 0;
-		}
-
-		for (zyk_iterator = 0; zyk_iterator < MAX_RACERS; zyk_iterator++)
-		{ // zyk: initializing race vehicle ids
-			level.race_mode_vehicle[zyk_iterator] = -1;
 		}
 
 		for (zyk_iterator = 0; zyk_iterator < ENTITYNUM_MAX_NORMAL; zyk_iterator++)
@@ -1806,11 +1793,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				G_FreeEntity( ent );
 			}
 			else if (Q_stricmp( ent->classname, "func_door") == 0 && i > 200)
-			{ // zyk: door after the teleports of the race mode
+			{ // zyk: door in the far end of the map, past the teleports the old Race Mode used
 				G_FreeEntity( ent );
 			}
 			else if (Q_stricmp( ent->targetname, "t547") == 0)
-			{ // zyk: removes swoop at end of map. Must be removed to prevent bug in racemode
+			{ // zyk: removes the swoop at the end of the map
+			  // GalaxyRP: [Race Mode] this removal and the func_door one above were written for Race Mode,
+			  // which is gone. Kept anyway: both are unconditional map fix-ups that run on every t2_trip
+			  // load, so dropping them would put a stray swoop and a door back into the map for everyone --
+			  // a content change rather than dead-code removal.
 				G_FreeEntity( ent );
 			}
 		}
@@ -5414,12 +5405,6 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 			return qfalse;
 		}
 
-		if (level.sniper_mode > 1 && ((level.sniper_players[attacker->s.number] != -1 && level.sniper_players[target->s.number] == -1) || 
-			(level.sniper_players[attacker->s.number] == -1 && level.sniper_players[target->s.number] != -1)))
-		{ // zyk: players outside sniper battle cannot hit ones in it and vice-versa
-			return qfalse;
-		}
-
 		if (level.melee_mode > 1 && ((level.melee_players[attacker->s.number] != -1 && level.melee_players[target->s.number] == -1) ||
 			(level.melee_players[attacker->s.number] == -1 && level.melee_players[target->s.number] != -1)))
 		{ // zyk: players outside melee battle cannot hit ones in it and vice-versa
@@ -7071,7 +7056,8 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 
 // zyk: controls the quest powers stuff
 extern void initialize_rpg_skills(gentity_t *ent);
-extern void zyk_apply_character_loadout(gentity_t *ent);
+// GalaxyRP: [Sniper Battle] the zyk_apply_character_loadout() declaration that sat here went with
+// the removal -- sniper_battle_end() was this file's only caller.
 void quest_power_events(gentity_t *ent)
 {
 	if (ent && ent->client)
@@ -7944,7 +7930,8 @@ void duel_tournament_generate_leaderboard(char *filename, char *netname)
 }
 
 // zyk: determines who is the tournament winner
-extern void add_credits(gentity_t *ent, int credits);
+// GalaxyRP: [Race Mode] the add_credits() declaration that sat here went with the removal -- the
+// race prize block in G_RunFrame() was this file's only caller.
 // GalaxyRP fix: [Duel Tournament] forward declaration -- duel_tournament_valid_duelist() is
 // defined further down this file and duel_tournament_winner() now asks it who is still eligible.
 extern qboolean duel_tournament_valid_duelist(gentity_t *ent);
@@ -8200,163 +8187,9 @@ qboolean duel_tournament_validate_duelists()
 	return qfalse;
 }
 
-// zyk: finishes the Sniper Battle
-void sniper_battle_end()
-{
-	int i = 0;
-
-	level.sniper_mode = 0;
-	level.sniper_mode_quantity = 0;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.sniper_players[i] != -1)
-		{ // zyk: restoring default guns and force powers to this player
-			gentity_t *ent = &g_entities[i];
-
-			ent->client->ps.fd.forceDeactivateAll = 0;
-
-			WP_InitForcePowers(ent);
-
-			// GalaxyRP fix: [Sniper Battle] restoring the force pool from the raw cvar ignores the RPG
-			// cap. In RPG mode a character's real maximum is pers.max_force_power, derived from their
-			// Force Power skill (see initialize_rpg_skills in g_cmds.c), which is a quarter of this
-			// cvar per skill level -- so a low-skill character walked out of a sniper battle with the
-			// full server maximum instead of their own, and kept it until their next respawn. This line
-			// predates RPG players being allowed into sniper battles at all (the check that used to
-			// reject them was commented out later), which is why it was never updated.
-			ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : RP_MAX_FORCE_POWER_LOGGED_OUT;
-
-			if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
-				ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
-
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL);
-
-			// GalaxyRP fix: [Sniper Battle] WP_InitForcePowers() above rebuilds force powers from the
-			// client's "forcepowers" userinfo string -- the player's vanilla JKA Profile allocation.
-			// That is the correct restore for a logged-out player, but an RPG character's powers come
-			// from pers.skill_levels[], so a logged-in player left the battle carrying whatever their
-			// client profile happened to hold (with g_maxForceRank 7 that is a near-complete level-3
-			// build) instead of their own skills, and kept it until their next respawn. Both minigames
-			// predate RPG players being allowed in -- the amrpgmode==2 join guard in Cmd_SniperMode_f (g_cmds.c)
-			// was commented out later -- which is why this half was never added.
-			//
-			// initialize_rpg_skills() self-guards on amrpgmode == 2, so this is a no-op for logged-out
-			// players and needs no check of its own. It MUST stay ahead of the loadout call below: it
-			// clears weapons the character has no skill for, and the unconditional WP_BRYAR_PISTOL line
-			// above would otherwise put back a pistol an RPG character has not unlocked. Same pattern as
-			// ClientSpawn().
-			initialize_rpg_skills(ent);
-
-			// GalaxyRP fix: [Sniper Battle] sniper_battle_prepare() above hands every participant a
-			// disruptor (ps.weapon is left on WP_MELEE, but nothing stops them selecting it) and a
-			// jetpack. initialize_rpg_skills() then takes both away from an RPG character who has no
-			// Sniper/Jetpack skill -- but ownership is all it touches. Nothing re-pointed ps.weapon, so
-			// a player holding the disruptor when the battle ended was left holding a weapon they no
-			// longer own, and PM_BeginWeaponChange() refuses to switch to an unowned weapon, so they
-			// were stuck with it; and nothing cleared client->jetPackOn, which is what actually drives
-			// PM_JETPACK (ClientThink_real() never consults the ownership bit), so a player still in
-			// the air simply kept flying. Both lasted until their next respawn, which the battle does
-			// not force. This is the same finishing pass the character-switch commands perform -- see
-			// zyk_apply_character_loadout() in g_cmds.c.
-			//
-			// Like initialize_rpg_skills() itself, this only reaches RPG characters: a logged-out
-			// player's disruptor and jetpack are still theirs as far as the ownership bits are
-			// concerned, so the helper correctly leaves both alone.
-			zyk_apply_character_loadout(ent);
-		}
-
-		level.sniper_players[i] = -1;
-	}
-}
-
-// zyk: sets the sniper gun with full ammo for players and remove everything else from them
-void sniper_battle_prepare()
-{
-	int i = 0;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		gentity_t *ent = &g_entities[i];
-
-		if (level.sniper_players[i] != -1)
-		{ // zyk: a player in the Sniper Battle. Gives disruptor with full ammo and a jetpack
-			if (ent->health < 1)
-			{ // zyk: respawn him if he is dead
-				ClientRespawn(ent);
-			}
-
-			ent->client->ps.stats[STAT_WEAPONS] = 0;
-			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_MELEE) | (1 << WP_DISRUPTOR);
-			ent->client->ps.weapon = WP_MELEE;
-
-			ent->client->ps.ammo[AMMO_POWERCELL] = zyk_max_power_cell_ammo.integer;
-
-			ent->health = 100;
-			ent->client->ps.stats[STAT_ARMOR] = 100;
-
-			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] = (1 << HI_JETPACK);
-			ent->client->ps.stats[STAT_HOLDABLE_ITEM] = 0;
-
-			// zyk: removing the seeker drone in case if is activated
-			if (ent->client->ps.droneExistTime > (level.time + 5000))
-			{
-				ent->client->ps.droneExistTime = level.time + 5000;
-			}
-
-			ent->client->ps.jetpackFuel = 100;
-			ent->client->pers.jetpack_fuel = MAX_JETPACK_FUEL;
-			
-			// zyk: cannot use any force powers
-			ent->client->ps.fd.forcePowerLevel[FP_LEVITATION] = FORCE_LEVEL_1;
-			ent->client->ps.fd.forceDeactivateAll = 1;
-			ent->client->ps.fd.forcePower = 0;
-			ent->client->ps.fd.forcePowerMax = 0;
-		}
-	}
-}
-
-// zyk: shows the winner of the Sniper Battle
-void sniper_battle_winner()
-{
-	int i = 0;
-	gentity_t *ent = NULL;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (level.sniper_players[i] != -1)
-		{
-			ent = &g_entities[i];
-			break;
-		}
-	}
-
-	if (ent)
-	{
-		// GalaxyRP fix: [Sniper Battle] same RPG force-cap bypass fixed in sniper_battle_end() above --
-		// this is the winner's restore, and it handed the winner the raw server maximum regardless of
-		// their own Force Power skill.
-		ent->client->ps.fd.forcePowerMax = (ent->client->sess.amrpgmode == 2) ? ent->client->pers.max_force_power : RP_MAX_FORCE_POWER_LOGGED_OUT;
-
-		ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 20000;
-		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = level.time + 20000;
-		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 20000;
-
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER) | (1 << WP_BLASTER) | (1 << WP_DISRUPTOR) | (1 << WP_REPEATER);
-		ent->client->ps.ammo[AMMO_BLASTER] = zyk_max_blaster_pack_ammo.integer;
-		ent->client->ps.ammo[AMMO_POWERCELL] = zyk_max_power_cell_ammo.integer;
-		ent->client->ps.ammo[AMMO_METAL_BOLTS] = zyk_max_metal_bolt_ammo.integer;
-		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_SENTRY_GUN) | (1 << HI_SEEKER) | (1 << HI_MEDPAC_BIG);
-
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-
-		trap->SendServerCommand(-1, va("chat \"^3Sniper Battle: ^7%s ^7is the winner! Kills: %d\"", ent->client->pers.netname, level.sniper_players[ent->s.number]));
-	}
-	else
-	{
-		trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7No one is the winner!\"");
-	}
-}
+// GalaxyRP: [Sniper Battle] sniper_battle_end(), sniper_battle_prepare() and sniper_battle_winner()
+// used to sit here. Their only callers were the Sniper Battle block in G_RunFrame below, which is
+// gone along with the rest of the mode; see the note where Cmd_SniperMode_f used to live in g_cmds.c.
 
 // GalaxyRP: [RPG LMS] rpg_lms_end(), rpg_lms_prepare() and rpg_lms_winner() used to sit here.
 // Their only callers were the RPG LMS block in G_RunFrame below, which is gone; see the note where
@@ -8394,9 +8227,6 @@ void melee_battle_restore(gentity_t *ent)
 	// that reads like a live requirement -- it also carried an ordering constraint (it had to stay
 	// last, because it strips weapons the unconditional WP_BRYAR_PISTOL line above grants) that no
 	// longer has to be respected by anyone editing this.
-	//
-	// sniper_battle_end() keeps its copy: the Sniper Battle still admits RPG players, its own
-	// amrpgmode guard still being commented out.
 }
 
 // zyk: finishes the melee battle
@@ -8652,7 +8482,6 @@ int g_siegeRespawnCheck = 0;
 void SetMoverState( gentity_t *ent, moverState_t moverState, int time );
 
 extern void remove_credits(gentity_t *ent, int credits);
-extern void try_finishing_race();
 extern void set_max_health(gentity_t *ent);
 extern void set_max_shield(gentity_t *ent);
 extern void duel_show_table(gentity_t *ent);
@@ -8847,29 +8676,6 @@ void G_RunFrame( int levelTime ) {
 	// removed as dead (see g_local.h); this reader never fired since the field could never become
 	// nonzero.
 
-	if (level.race_mode == 1 && level.race_start_timer < level.time)
-	{ // zyk: Race Mode. Tests if we should start the race
-		level.race_countdown = 3;
-		level.race_countdown_timer = level.time;
-		level.race_last_player_position = 0;
-		level.race_mode = 2;
-	}
-	else if (level.race_mode == 2 && level.race_countdown_timer < level.time)
-	{ // zyk: Race Mode. Shows the countdown messages in players screens and starts the race
-		level.race_countdown_timer = level.time + 1000;
-
-		if (level.race_countdown > 0)
-		{
-			trap->SendServerCommand( -1, va("cp \"^7Race starts in ^3%d\"", level.race_countdown));
-			level.race_countdown--;
-		}
-		else if (level.race_countdown == 0)
-		{
-			level.race_mode = 3;
-			trap->SendServerCommand( -1, "cp \"^2Go!\"");
-		}
-	}
-
 	// zyk: Melee Battle
 	if (level.melee_mode == 3 && level.melee_mode_timer < level.time)
 	{
@@ -8896,7 +8702,7 @@ void G_RunFrame( int levelTime ) {
 		// so the last two players falling together take the count straight from 2 to 0. The battle then
 		// sat in mode 2 for its entire remaining timeout -- ten minutes at the shipped default --
 		// rejecting every attempt to join with no explanation, until the "Time is up" message finally
-		// fired. Same for the sniper battle and RPG LMS below.
+		// fired. The sniper battle and the RPG LMS had the same defect; both have since been removed.
 		else if (level.melee_mode_quantity <= 0)
 		{
 			melee_battle_end();
@@ -8916,44 +8722,6 @@ void G_RunFrame( int levelTime ) {
 		{ // zyk: finish the battle
 			melee_battle_end();
 			trap->SendServerCommand(-1, "chat \"^3Melee Battle: ^7Not enough players. Melee Battle is over!\"");
-		}
-	}
-
-	// zyk: Sniper Battle
-	if (level.sniper_mode == 2)
-	{
-		if (level.sniper_mode_timer < level.time)
-		{
-			sniper_battle_end();
-			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7Time is up! No winner!\"");
-		}
-		else if (level.sniper_mode_quantity == 1)
-		{
-			sniper_battle_winner();
-			sniper_battle_end();
-		}
-		// GalaxyRP fix: [Sniper Battle] see the matching comment in the Melee Battle block above --
-		// a count that reaches 0 (both remaining players dying in the same frame, or disconnecting)
-		// never satisfied the "== 1" test, leaving the mode unjoinable until its full timeout.
-		else if (level.sniper_mode_quantity <= 0)
-		{
-			sniper_battle_end();
-			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7No players left! Sniper Battle is over!\"");
-		}
-	}
-	else if (level.sniper_mode == 1 && level.sniper_mode_timer < level.time)
-	{
-		if (level.sniper_mode_quantity > 1)
-		{ // zyk: if at least 2 players joined in it, start the battle
-			sniper_battle_prepare();
-			level.sniper_mode = 2;
-			level.sniper_mode_timer = level.time + 600000;
-			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7the battle has begun! The battle will have a max of 10 minutes!\"");
-		}
-		else
-		{ // zyk: finish the battle
-			sniper_battle_end();
-			trap->SendServerCommand(-1, "chat \"^3Sniper Battle: ^7Not enough players. Sniper Battle is over!\"");
 		}
 	}
 
@@ -10011,129 +9779,6 @@ void G_RunFrame( int levelTime ) {
 				{ // zyk: validating if player is too far from the platform
 					ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
 					player_die(ent, ent, ent, 100000, MOD_SUICIDE);
-				}
-			}
-
-			if (ent->client->pers.race_position > 0)
-			{ // zyk: Race Mode management
-				if (level.race_mode == 3)
-				{ // zyk: if race already started
-					if (ent->client->ps.m_iVehicleNum != level.race_mode_vehicle[ent->client->pers.race_position - 1] && ent->health > 0)
-					{ // zyk: if player loses his vehicle, he loses the race
-						trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%s ^7lost his vehicle and so he lost the race!\n\"", ent->client->pers.netname));
-
-						ent->client->pers.race_position = 0;
-
-						try_finishing_race();
-					}
-					else if (level.race_map == 1)
-					{ // zyk: t2_trip map
-						if ((int)ent->client->ps.origin[0] > 3200 && (int)ent->client->ps.origin[0] < 4770 && (int)ent->client->ps.origin[1] > -11136 && (int)ent->client->ps.origin[1] < -9978)
-						{ // zyk: player reached the finish line
-							level.race_last_player_position++;
-							ent->client->pers.race_position = 0;
-
-							if (level.race_last_player_position == 1)
-							{ // zyk: this player won the race. Send message to everyone and give his prize
-								if (ent->client->sess.amrpgmode == 2)
-								{ // zyk: give him credits
-									add_credits(ent, 2000);
-									save_account(ent, qtrue);
-									G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-									trap->SendServerCommand(-1, va("chat \"^3Race System: ^7Winner: %s^7 - Prize: 2000 Credits!\"", ent->client->pers.netname));
-								}
-							}
-							else if (level.race_last_player_position == 2)
-							{ // zyk: second place
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^72nd Place - %s\"", ent->client->pers.netname));
-							}
-							else if (level.race_last_player_position == 3)
-							{ // zyk: third place
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^73rd Place - %s\"", ent->client->pers.netname));
-							}
-							else
-							{
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%dth Place - %s\"", level.race_last_player_position, ent->client->pers.netname));
-							}
-
-							try_finishing_race();
-						}
-						else if ((int)ent->client->ps.origin[0] > -14795 && (int)ent->client->ps.origin[0] < -13830 && (int)ent->client->ps.origin[1] > -11483 && (int)ent->client->ps.origin[1] < -8474)
-						{ // zyk: teleporting to get through the wall
-							vec3_t origin, yaw;
-
-							origin[0] = -14785;
-							origin[1] = -9252;
-							origin[2] = 1848;
-
-							yaw[0] = 0.0f;
-							yaw[1] = 179.0f;
-							yaw[2] = 0.0f;
-
-							zyk_TeleportPlayer(&g_entities[ent->client->ps.m_iVehicleNum], origin, yaw);
-						}
-						else if ((int)ent->client->ps.origin[0] > -18845 && (int)ent->client->ps.origin[0] < -17636 && (int)ent->client->ps.origin[1] > -7530 && (int)ent->client->ps.origin[1] < -6761)
-						{ // zyk: teleporting to get through the door
-							vec3_t origin, yaw;
-
-							origin[0] = -18248;
-							origin[1] = -6152;
-							origin[2] = 1722;
-
-							yaw[0] = 0.0f;
-							yaw[1] = 90.0f;
-							yaw[2] = 0.0f;
-
-							zyk_TeleportPlayer(&g_entities[ent->client->ps.m_iVehicleNum], origin, yaw);
-						}
-					}
-					else if (level.race_map == 2)
-					{ // zyk: t3_stamp map
-						if ((int)ent->client->ps.origin[1] > -174 && (int)ent->client->ps.origin[2] < -170)
-						{ // zyk: player reached the finish line
-							level.race_last_player_position++;
-							ent->client->pers.race_position = 0;
-
-							if (level.race_last_player_position == 1)
-							{ // zyk: this player won the race. Send message to everyone and give his prize
-								if (ent->client->sess.amrpgmode == 2)
-								{ // zyk: give him credits
-									add_credits(ent, 500);
-									save_account(ent, qtrue);
-									G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
-									trap->SendServerCommand(-1, va("chat \"^3Race System: ^7Winner: %s^7 - Prize: 500 Credits!\"", ent->client->pers.netname));
-								}
-							}
-							else if (level.race_last_player_position == 2)
-							{ // zyk: second place
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^72nd Place - %s\"", ent->client->pers.netname));
-							}
-							else if (level.race_last_player_position == 3)
-							{ // zyk: third place
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^73rd Place - %s\"", ent->client->pers.netname));
-							}
-							else
-							{
-								trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%dth Place - %s\"", level.race_last_player_position, ent->client->pers.netname));
-							}
-
-							try_finishing_race();
-						}
-					}
-				}
-				else if (level.race_map == 1 && (int)ent->client->ps.origin[0] < -4536)
-				{ // zyk: player cant start racing before the countdown timer
-					ent->client->pers.race_position = 0;
-					trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%s ^7lost for trying to race before it starts!\n\"", ent->client->pers.netname));
-
-					try_finishing_race();
-				}
-				else if (level.race_map == 2 && (int)ent->client->ps.origin[1] < 1230)
-				{ // zyk: player cant start racing before the countdown timer
-					ent->client->pers.race_position = 0;
-					trap->SendServerCommand(-1, va("chat \"^3Race System: ^7%s ^7lost for trying to race before it starts!\n\"", ent->client->pers.netname));
-
-					try_finishing_race();
 				}
 			}
 

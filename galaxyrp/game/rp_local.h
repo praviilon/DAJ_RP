@@ -39,7 +39,8 @@ int RP_DB_Open(sqlite3 **db);
 #define NUM_OF_SKILLS					60 // zyk: number of RPG Mode skills
 
 #define MAX_SHADER_REMAPS				128
-#define MAX_RACERS						16 // zyk: Max racers in the map
+// GalaxyRP: [Race Mode] MAX_RACERS used to be defined here. Its only users were Cmd_RaceMode_f's
+// starting-grid search and level.race_mode_vehicle[], both removed with Race Mode itself.
 #define MAX_DUEL_MATCHES				496 // zyk: max matches a tournament may have
 #define MAX_CUSTOM_QUESTS				64 // zyk: max amount of custom quests
 #define MAX_CUSTOM_QUEST_MISSIONS		512 // zyk: max missions a custom quest can have

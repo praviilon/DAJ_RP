@@ -1035,8 +1035,8 @@ typedef struct clientPersistant_s {
 	int tutorial_step; // zyk: sets the current tutorial step, to display the correct message to hthe player
 	int tutorial_timer; // zyk: used by the tutorial to set the interval between messages
 
-	// zyk: Race Mode. Sets the initial position of this racer which is calculated in racemode command. Default 0. If greater than 0, player joined a race
-	int race_position;
+	// GalaxyRP: [Race Mode] race_position used to be declared here -- the racer's starting-grid slot,
+	// written only by Cmd_RaceMode_f and read only by the race handlers. Removed with Race Mode.
 
 	// zyk: tests if this player can play a RPG Mode quest. Default 0. If 1, player can play a quest now
 	int can_play_quest;
@@ -1762,13 +1762,10 @@ typedef struct level_locals_s {
 
 	gametype_t	gametype;
 
-	// zyk: Race Mode
-	int race_mode; // zyk: sets 1 when someone joined the race and 2 when countdown starts and 3 when race starts. Default 0
-	int race_map; // zyk: the map where this race is being done
-	int race_start_timer; // zyk: timer to determine the time to start the race if race_mode is 1
-	int race_countdown_timer; // zyk: shows the countdown on the players screens
-	int race_countdown; // zyk: used to print each of the countdown messages
-	int race_last_player_position; // zyk: after race starts, sets the position of the last player who crossed the finish line
+	// GalaxyRP: [Race Mode] race_mode, race_map, race_start_timer, race_countdown_timer,
+	// race_countdown and race_last_player_position used to be declared here. Nothing can raise
+	// race_mode any more now that Cmd_RaceMode_f is gone, so all six went with the feature; see the
+	// note where that command used to live in g_cmds.c.
 
 	// zyk: Duel Tournament
 
@@ -1814,11 +1811,10 @@ typedef struct level_locals_s {
 	// because the compiler happens to pick an int-sized underlying type; the values were always out
 	// of the enum's range. Now int, matching duel_players[] and the duelist_*_ally_id fields it feeds.
 
-	// zyk: Sniper Battle
-	int sniper_mode; // zyk: Default 0. Sets 1 when someone joins, and 2 after battle begins
-	int sniper_players[MAX_CLIENTS]; // zyk: default -1, when a player joins, sets 0. It is the amount of enemies defeated in Sniper Battle
-	int sniper_mode_timer; // zyk: timer used in Sniper Battle
-	int sniper_mode_quantity; // zyk: amount of players who joined the Sniper Battle
+	// GalaxyRP: [Sniper Battle] sniper_mode, sniper_players[MAX_CLIENTS], sniper_mode_timer and
+	// sniper_mode_quantity used to be declared here. Nothing can raise sniper_mode any more now that
+	// Cmd_SniperMode_f is gone, so all four went with the feature; see the note where that command
+	// used to live in g_cmds.c.
 
 	// zyk: Melee Battle
 	int melee_mode; // zyk: Default 0. Sets 1 when someone joins, and 2 after battle begins
@@ -1867,8 +1863,8 @@ typedef struct level_locals_s {
 	// zyk: timer to remove each effect used in Special Powers
 	int special_power_effects_timer[ENTITYNUM_MAX_NORMAL];
 
-	// zyk: vehicle ids of the swoops used in Race Mode. Used to validate if player is using the correct vehicle
-	int race_mode_vehicle[MAX_RACERS];
+	// GalaxyRP: [Race Mode] race_mode_vehicle[MAX_RACERS] used to be declared here, holding the swoop
+	// entity ids used to validate racers. Removed with Race Mode, along with MAX_RACERS itself.
 
 	// zyk: the player who called the last vote
 	int voting_player;
@@ -2470,7 +2466,6 @@ void RP_CVU_duelRadius(void);
 void RP_CVU_duelTournamentArenaScale(void);
 void RP_CVU_duelTournamentDuelTime(void);
 void RP_CVU_duelTournamentTimeToStart(void);
-void RP_CVU_sniperBattleTimeToStart(void);
 void RP_CVU_diceRollCooldown(void);
 void RP_CVU_maxRpgCredits(void);
 void RP_CVU_rpgMaxLevel(void);

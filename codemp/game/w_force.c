@@ -609,13 +609,6 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 	// settings_number_to_bit in Cmd_Settings_f) -- allies never block each other's force powers now,
 	// which is what this guard already did by default whenever the setting was left at ON.
 
-	if (level.race_mode > 0 && level.race_mode < 3 && attacker && attacker->client && other && other->client &&
-		((attacker->client->pers.race_position > 0) || 
-		 (attacker->client->pers.race_position == 0 && other->client->pers.race_position > 0)))
-	{ // zyk: Race Mode. Cannot use force powers on targets waiting for race to start 
-		return 0;
-	}
-
 	// GalaxyRP fix: [Quests] removed the "special quest npcs that cannot be hit by force" guard here
 	// (universe_quest_messages == -2000) — that sentinel value is never assigned anywhere in the
 	// codebase (the only remaining assignment is a reset to 0), so this was permanently dead.
@@ -705,9 +698,8 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 // RP_MAX_FORCE_POWER_LOGGED_OUT, so they too get exactly two heals from a full pool.
 //
 // The floor of 1 matters: forcePowerMax is legitimately 0 for a character with no levels in Force
-// Power, and for anyone inside a Sniper Battle (see sniper_battle_prepare in g_main.c). A cost of 0
-// would hit the "if ( !drain ) return qtrue;" shortcut in WP_ForcePowerAvailable below and hand
-// those players unlimited free heals.
+// Power. A cost of 0 would hit the "if ( !drain ) return qtrue;" shortcut in WP_ForcePowerAvailable
+// below and hand those players unlimited free heals.
 static int RP_ForceHealCost( gentity_t *self )
 {
 	int cost = self->client->ps.fd.forcePowerMax / 2;

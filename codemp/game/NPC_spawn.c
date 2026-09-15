@@ -1788,7 +1788,6 @@ finish:
 		newent->client->pers.player_statuses = 0;
 		// GalaxyRP fix: [Quests] universe_quest_objective_control reset removed here — field removed as dead (see g_local.h)
 		newent->client->pers.universe_quest_artifact_holder_id = -1;
-		newent->client->pers.race_position = 0;
 		// GalaxyRP fix: [Shop] seller_invoked_by_id initializer removed along with the field itself --
 		// it only supported the now-removed /callseller command (see g_cmds.c).
 		newent->client->pers.stun_baton_less_speed_timer = 0;

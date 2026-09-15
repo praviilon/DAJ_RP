@@ -2758,10 +2758,6 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	{ // zyk: players with all force powers given by admin cannot pickup some things
 		return;
 	}
-	else if (level.sniper_mode == 2 && other->s.number < MAX_CLIENTS && level.sniper_players[other->s.number] != -1)
-	{ // zyk: players in Sniper Battle cannot grab anything
-		return;
-	}
 	else if (level.duel_tournament_mode == 4 && other->s.number < MAX_CLIENTS && duel_tournament_is_duelist(other) == qtrue)
 	{ // zyk: duelists in Duel Tournament cannot grab anything
 		return;

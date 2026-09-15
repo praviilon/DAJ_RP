@@ -2114,7 +2114,6 @@ extern qboolean g_endPDuel;
 extern qboolean g_noPDuelCheck;
 extern void saberReactivate(gentity_t *saberent, gentity_t *saberOwner);
 extern void saberBackToOwner(gentity_t *saberent);
-extern void try_finishing_race();
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
 extern void remove_credits(gentity_t *ent, int credits);
 extern void zyk_NPC_Kill_f( char *name );
@@ -2179,31 +2178,6 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_3);
 
 	// GalaxyRP fix: [Dead Code] removed boss-battle-music-reset guardian logic (guardian_invoked_by_id/guardian_mode always dead)
-
-	if (self->client->pers.race_position > 0) // zyk: if a player dies during a race, he loses the race
-	{
-		self->client->pers.race_position = 0;
-		trap->SendServerCommand( -1, va("chat \"^3Race System: ^7%s ^7died during the race!\n\"",self->client->pers.netname) );
-		try_finishing_race();
-	}
-
-	// zyk: player died in Sniper Battle
-	if (level.sniper_mode == 2 && self->s.number < MAX_CLIENTS && level.sniper_players[self->s.number] != -1)
-	{
-		trap->SendServerCommand(-1, va("chat \"^3Sniper Battle: ^7%s ^7died in Sniper Battle!\n\"", self->client->pers.netname));
-		level.sniper_players[self->s.number] = -1;
-		level.sniper_mode_quantity--;
-
-		// zyk: resetting his force powers
-		self->client->ps.fd.forceDeactivateAll = 0;
-
-		WP_InitForcePowers(self);
-
-		if (attacker && attacker->client && attacker->s.number < MAX_CLIENTS && level.sniper_players[attacker->s.number] != -1)
-		{ // zyk: adding score to the attacker
-			level.sniper_players[attacker->s.number]++;
-		}
-	}
 
 	// zyk: player died in Duel Tournament
 	if (level.duel_tournament_mode == 4 && self->s.number < MAX_CLIENTS && level.duel_players[self->s.number] != -1 && 
@@ -4709,14 +4683,6 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	// zyk: players with noclip cannot damage
 	if (attacker && attacker->client && attacker->s.number < MAX_CLIENTS && attacker->client->noclip == qtrue)
 		return;
-
-	// zyk: Race Mode. Players in the race waiting for it to start cannot be hit or hit anyone
-	if (level.race_mode > 0 && level.race_mode < 3 && attacker && attacker->client && targ && targ->client && 
-		((attacker->client->pers.race_position > 0) || 
-		 (attacker->client->pers.race_position == 0 && targ->client->pers.race_position > 0)))
-	{
-		return;
-	}
 
 	if (targ && targ->client && targ->NPC && targ->health <= 0 && targ->client->ps.eFlags & EF_DISINTEGRATION)
 	{ // zyk: bug fix. If this npc was desintegrated, do not damage it again

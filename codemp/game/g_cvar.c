@@ -135,19 +135,18 @@ void RP_CVU_duelTournamentDuelTime(void)
 	RP_ClampCvarMinimum(&zyk_duel_tournament_duel_time, "zyk_duel_tournament_duel_time", 5000);
 }
 
-// Both of these set "<timer> = level.time + cvar" when the first player signs up, and the mode's
-// per-frame handler ends the event the moment that timer elapses with too few players. At 0 or
-// below the timer is already in the past, so the first person to join instantly ends the event they
-// just started and the mode can never be entered at all.
+// This sets "duel_tournament_timer = level.time + cvar" when the first player signs up, and the
+// mode's per-frame handler ends the event the moment that timer elapses with too few players. At 0
+// or below the timer is already in the past, so the first person to join instantly ends the event
+// they just started and the mode can never be entered at all.
 void RP_CVU_duelTournamentTimeToStart(void)
 {
 	RP_ClampCvarMinimum(&zyk_duel_tournament_time_to_start, "zyk_duel_tournament_time_to_start", 1000);
 }
 
-void RP_CVU_sniperBattleTimeToStart(void)
-{
-	RP_ClampCvarMinimum(&zyk_sniper_battle_time_to_start, "zyk_sniper_battle_time_to_start", 1000);
-}
+// GalaxyRP: [Sniper Battle] RP_CVU_sniperBattleTimeToStart() used to sit here, clamping
+// zyk_sniper_battle_time_to_start the same way. Both the callback and the cvar went with the
+// Sniper Battle removal (see g_xcvar.h).
 
 // GalaxyRP: [Dice] rp_dice_roll_cooldown is added to level.time to schedule pers.dice_roll_timer.
 // 0 is a legitimate setting (it means "no cooldown"), and a negative value would mean the same thing
