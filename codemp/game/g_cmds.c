@@ -346,6 +346,43 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 #define ACTION_DISTANCE_LOW 200
 #define ACTION_DISTANCE_LONG 2000
 
+// GalaxyRP fix: [Admin] bounds for /shakescreen's three arguments, which used to be passed to the
+// client exactly as typed. Kept up here beside the distance ladder they are calibrated against,
+// and because /adminlist's own help text (further down) needs them as well as the command does.
+//
+// Intensity is the important one. CGCam_Shake() (cg_view.c) clamps only the TOP of the range, so a
+// negative number went straight through it -- and the sign makes no difference to what is drawn,
+// because the displacement is Q_flrand(-1,1) * intensity, which is symmetric. "/shakescreen 1500
+// -100000 5" therefore threw every nearby player's view a hundred thousand units off its own origin
+// each frame. The client-side clamp is two-sided now as well (see CGCam_Shake), but that one is the
+// backstop for the map-entity path; this is the gate for the typed one.
+//
+// The ceiling is 10 rather than the client's own 16. 16 is the engine's refusal threshold, not a
+// tuned maximum: the strongest shake anywhere in the shipped game is 10 (the quake event in
+// g_main.c and target_screenshake's default), the rancor's footstep is 4 and weapon fire tops out
+// at 6. Intensity is also applied to the view ANGLES as well as the origin, so 10 already means ten
+// degrees of random pitch and yaw every frame.
+//
+// Length is bounded because nothing else bounds it. cgScreenEffects is a plain cgame global that
+// only ever clears itself when its own timer runs out -- not on death, respawn, logout or team
+// change -- so a long enough shake was permanent until the map changed, and since the falloff is
+// (1 - elapsed/length) a long one does not visibly weaken either. The old code also multiplied the
+// raw argument by 1000 before anyone looked at it, which overflowed a signed int above 2147483 and
+// produced a length unrelated to what was typed; the range check in Cmd_ShakeScreen_f now runs on
+// the SECONDS, so the multiply that follows it cannot overflow at all.
+//
+// Distance matches SHOUT_DISTANCE from the ladder directly above: a shake is a physical
+// event, so the audience that a shout reaches is the natural one, and it stops "everyone on the
+// map" from being one large number away. 0 is kept as a valid value -- it means "only me", since no
+// two players ever share an exact origin -- and it also retires the old negative-distance case,
+// which quietly matched nobody while still reporting success.
+#define RP_SHAKE_MIN_DISTANCE		0
+#define RP_SHAKE_MAX_DISTANCE		1500
+#define RP_SHAKE_MIN_INTENSITY		1
+#define RP_SHAKE_MAX_INTENSITY		10
+#define RP_SHAKE_MIN_SECONDS		1
+#define RP_SHAKE_MAX_SECONDS		5
+
 const chat_modifiers_t chat_modifiers[] = {
 	{"/low",		"chat \"%s^9 lowers their voice:%s\n\"",			VOICE_DISTANCE_LOW	},
 	{"/long",		"chat \"%s:%s\n\"",									VOICE_DISTANCE_LONG	},
@@ -10930,7 +10967,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/killother <player name>: ^7Kills a player.\n\
 ^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\
 ^3/clientprint <player name> <text>: ^7Prints text on the player's screen. Use ^3-1 ^7argument to print for all players.\n\
-^3/shakescreen <distance from player> <intensity> <length>: ^7Shakes players' screen who are a certain distance from you.\n\
+^3/shakescreen <distance (0-1500)> <intensity (1-10)> <seconds (1-5)>: ^7Shakes the screen of everyone within that distance of you.\n\
 ^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
 ^3/meleearena: ^7Sets or unsets the Melee Battle arena in current map.\n\
 ^3/duelpause: ^7Pauses/resumes the Duel Tournament.\n\
@@ -14521,7 +14558,9 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_SHAKESCREEN)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/shakescreen ^7to shake player's screen\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, va("print \"\nUse ^3/shakescreen <distance (%d-%d)> <intensity (%d-%d)> <length in seconds (%d-%d)> ^7to shake the screen of everyone within that distance of you. Example: ^3/shakescreen 600 4 2\n\n\"",
+				RP_SHAKE_MIN_DISTANCE, RP_SHAKE_MAX_DISTANCE, RP_SHAKE_MIN_INTENSITY, RP_SHAKE_MAX_INTENSITY,
+				RP_SHAKE_MIN_SECONDS, RP_SHAKE_MAX_SECONDS) );
 		}
 		else if (command_number == ADM_KICK)
 		{
@@ -18673,9 +18712,11 @@ void Cmd_Attributes_f(gentity_t *ent) {
 Cmd_ShakeScreen_f
 ==================
 */
+// The RP_SHAKE_* bounds this enforces, and the reasoning behind each one, are defined beside the
+// chat distance ladder near the top of this file.
 void Cmd_ShakeScreen_f(gentity_t* ent)
 {
-	int i, distanceFromPlayer, intensity, duration;
+	int i, distanceFromPlayer, intensity, seconds, duration;
 	char arg1[MAX_STRING_CHARS], arg2[MAX_STRING_CHARS], arg3[MAX_STRING_CHARS];
 	gentity_t *other;
 
@@ -18686,7 +18727,8 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 
 	if (trap->Argc() != 4)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^2Command Usage: /shakeScreen <distance from player> <intensity> <length>\nExample: /shakeScreen 1 5 7\"");
+		trap->SendServerCommand(ent - g_entities, va("print \"^2Command Usage: /shakescreen <distance (%d-%d)> <intensity (%d-%d)> <length in seconds (%d-%d)>\nExample: /shakescreen 600 4 2\n\"",
+			RP_SHAKE_MIN_DISTANCE, RP_SHAKE_MAX_DISTANCE, RP_SHAKE_MIN_INTENSITY, RP_SHAKE_MAX_INTENSITY, RP_SHAKE_MIN_SECONDS, RP_SHAKE_MAX_SECONDS));
 		return;
 	}
 
@@ -18695,7 +18737,34 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 	trap->Argv(2, arg2, sizeof(arg2));
 	intensity = atoi(arg2);
 	trap->Argv(3, arg3, sizeof(arg3));
-	duration = atoi(arg3) * 1000;
+	seconds = atoi(arg3);
+
+	// Rejected rather than clamped, matching /paralyze's and /scale's out-of-range handling, so an
+	// admin who mistypes an argument is told instead of silently getting a different shake. Checked
+	// in argument order so the message names the first one that is wrong.
+	if (distanceFromPlayer < RP_SHAKE_MIN_DISTANCE || distanceFromPlayer > RP_SHAKE_MAX_DISTANCE)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Distance must be between %d and %d.\n\"",
+			RP_SHAKE_MIN_DISTANCE, RP_SHAKE_MAX_DISTANCE));
+		return;
+	}
+
+	if (intensity < RP_SHAKE_MIN_INTENSITY || intensity > RP_SHAKE_MAX_INTENSITY)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Intensity must be between %d and %d.\n\"",
+			RP_SHAKE_MIN_INTENSITY, RP_SHAKE_MAX_INTENSITY));
+		return;
+	}
+
+	if (seconds < RP_SHAKE_MIN_SECONDS || seconds > RP_SHAKE_MAX_SECONDS)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Length must be between %d and %d seconds.\n\"",
+			RP_SHAKE_MIN_SECONDS, RP_SHAKE_MAX_SECONDS));
+		return;
+	}
+
+	// range-checked above, so this cannot overflow
+	duration = seconds * 1000;
 
 	for (i = 0; i < level.maxclients; i++)
 	{

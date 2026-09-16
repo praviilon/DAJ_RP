@@ -1996,6 +1996,23 @@ void CG_CalcScreenEffects(void)
 
 void CGCam_Shake( float intensity, int duration )
 {
+	// GalaxyRP fix: [Screen Shake] the clamp below only ever looked at the top of the range, so a
+	// negative intensity passed straight through it -- and a negative one is not a gentler shake,
+	// it is the same shake: CG_SE_UpdateShake() displaces by Q_flrand(-1.0f, 1.0f) * intensity,
+	// which is symmetric about zero, so only the magnitude is ever visible. MAX_SHAKE_INTENSITY
+	// was therefore one minus sign away from meaning nothing at all.
+	//
+	// Taking the magnitude rather than clamping negatives up to 0 is deliberate: a map that ships
+	// a negative "intensity" key on a target_screenshake keeps drawing exactly what it always drew
+	// (capped), instead of silently losing its shake. /shakescreen range-checks its own argument
+	// server-side (see RP_SHAKE_MIN_INTENSITY in g_cmds.c); this is the backstop for every other
+	// caller, the map-entity path above all, where the value is not ours to validate.
+	//
+	// This is a deliberate divergence from base JKA/OpenJK, whose CGCam_Shake is otherwise
+	// identical -- upstream simply never had a path that let a person type the number.
+	if ( intensity < 0 )
+		intensity = -intensity;
+
 	if ( intensity > MAX_SHAKE_INTENSITY )
 		intensity = MAX_SHAKE_INTENSITY;
 
