@@ -17410,11 +17410,43 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	// straight from /saber, whose arguments are player-supplied and unbounded in length. Repeated use
 	// therefore consumed the pool with no way to reclaim it, ending in a dropped game VM. Pass the
 	// caller's strings directly; nothing reads them again after these calls.
-	value = saber1Model;
+	// GalaxyRP fix: [Saber] normalise an empty hilt before it can reach userinfo. Info_SetValueForKey
+	// REMOVES a key outright when handed an empty value (Info_RemoveKey, then an early return on
+	// !strlen(value) -- q_shared.c), so an empty saber1Model/saber2Model did not store "" here, it
+	// deleted the key from this client's userinfo entirely. Two things went wrong from there.
+	//
+	// First, the second saber. "" is not "none", so WP_SetSaber() (bg_saberLoad.c) does not take its
+	// WP_RemoveSaber branch -- it falls through to the invalid-name path and parses DEFAULT_SABER
+	// instead, handing the player a real second hilt they never asked for. That is the same
+	// two-sabers-from-an-empty-value bug UI_UpdateSaberCvars() (ui_main.c) already normalises against
+	// on the menu's Apply path; the "/saber <a> <b>" console path never did, and it is reachable with
+	// a literal empty argument.
+	//
+	// Second, and worse since the refused-switch echo below was added: that echo reports what userinfo
+	// actually holds, so a deleted key made it send an empty argument, CG_SaberUpdate_f (cg_servercmds.c)
+	// cleared the client's own saber1/saber2 cvar, and Cvar_InfoString() then dropped the key from the
+	// CLIENT's userinfo too. G_ValidateUserinfo() (g_client.c) requires exactly one saber1 and one
+	// saber2 -- UIF( saberN, 1, 1 ), both enabled by g_userinfoValidate's default -- and returns
+	// "saberN field not found" on the client's next resend, which ClientUserinfoChanged() answers with
+	// trap->DropClient(). A player could kick themselves off the server by typing /saber <hilt> "".
+	//
+	// Slot 0's substitution is behaviour-neutral, only well-formed: WP_SetSaber() already routes any
+	// name that fails WP_SaberValidForPlayerInMP() -- "" included -- through
+	// WP_SaberParseParms(DEFAULT_SABER), so the player ended up with the default hilt either way. Slot
+	// 1's is a real change, and the intended one: "none" is what every other path in this file means by
+	// "no second saber", and it is what the player asking for an empty second hilt actually wants.
+	if (saber1Model && saber1Model[0])
+	{
+		value = saber1Model;
+	}
+	else
+	{
+		value = DEFAULT_SABER;
+	}
 
 	Info_SetValueForKey(userinfo, "saber1", value);
 
-	if (number_of_args == 2)
+	if (number_of_args == 2 || !saber2Model || !saber2Model[0])
 	{
 		value = "none";
 	}
