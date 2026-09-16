@@ -12511,6 +12511,7 @@ void Cmd_Drop_f( gentity_t *ent ) {
 	vec3_t uorg, vecnorm, thispush_org;
 	int current_ammo = 0;
 	int ammo_count = 0;
+	qboolean has_ammo_type = qfalse;
 
 	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so CMD_ALIVE waves them through
 	// and nothing else here stopped them throwing their weapon (or their selected holdable, on melee)
@@ -12519,6 +12520,17 @@ void Cmd_Drop_f( gentity_t *ent ) {
 	if (G_PlayerIsDowned(ent))
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Drop] riding a vehicle was never checked. The item spawns at ps.origin,
+	// which while mounted is inside or under the vehicle, and the ammo transfer below reads
+	// ps.ammo[] -- whose slot 0 the vehicle's own weapon uses (see the fix further down).
+	// Neither is something a passenger should be able to reach, so the command is refused
+	// outright while mounted rather than half-guarded.
+	if (ent->client->ps.m_iVehicleNum)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while riding a vehicle.\n\"");
 		return;
 	}
 
@@ -12585,28 +12597,56 @@ void Cmd_Drop_f( gentity_t *ent ) {
 
 		launched->count = bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity;
 
-		// zyk: setting amount of ammo in this dropped weapon
-		current_ammo = ent->client->ps.ammo[weaponData[weapon].ammoIndex];
-		ammo_count = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity * zyk_add_ammo_scale.value);
+		// GalaxyRP fix: [Drop] the ammo transfer used to run for every weapon, including the ones whose
+		// ammoIndex is AMMO_NONE. AMMO_NONE is 0, and slot 0 is not spare -- it holds the ammo for a
+		// vehicle's own weapon (bg_pmove.c reads ps.ammo[0] for that, and cg_draw.c draws it). Of the
+		// three AMMO_NONE weapons only the stun baton reaches here; the saber and melee take the two
+		// branches above. On foot slot 0 is zero so the arithmetic subtracted nothing and this was
+		// invisible, but a mounted player -- and the stun baton is on PM_WeaponOkOnVehicle's allowed
+		// list -- had up to half a weapon's worth of vehicle ammo moved into a dropped baton. Dropping
+		// while mounted is refused outright now, so this is the second lock on the same door: a weapon
+		// with no ammo type simply carries no ammo, which is what it always looked like it did.
+		has_ammo_type = (weaponData[weapon].ammoIndex != AMMO_NONE) ? qtrue : qfalse;
 
-		if (current_ammo < ammo_count)
-		{ // zyk: player does not have the default ammo to set in the weapon, so set the current_ammo of the player in the weapon
-			ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= current_ammo;
-			if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
-				launched->count = (current_ammo / zyk_add_ammo_scale.value);
+		if (has_ammo_type == qtrue)
+		{
+			// zyk: setting amount of ammo in this dropped weapon
+			current_ammo = ent->client->ps.ammo[weaponData[weapon].ammoIndex];
+			ammo_count = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity * zyk_add_ammo_scale.value);
+
+			if (current_ammo < ammo_count)
+			{ // zyk: player does not have the default ammo to set in the weapon, so set the current_ammo of the player in the weapon
+				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= current_ammo;
+				if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
+					launched->count = (current_ammo / zyk_add_ammo_scale.value);
+				else
+					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+			}
 			else
-				launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+			{
+				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= ammo_count;
+				if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
+					launched->count = (ammo_count / zyk_add_ammo_scale.value);
+				else
+					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+			}
 		}
 		else
-		{
-			ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= ammo_count;
-			if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
-				launched->count = (ammo_count / zyk_add_ammo_scale.value);
-			else
-				launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+		{ // no ammo type, so the dropped weapon gives none -- the same -1 the empty case above uses
+			launched->count = -1;
 		}
 
-		if ((ent->client->ps.ammo[weaponData[weapon].ammoIndex] < 1 && weapon != WP_DET_PACK) ||
+		// GalaxyRP fix: [Drop] the first clause used to carry "&& weapon != WP_DET_PACK", and the second
+		// excludes the det pack as well, so for that one weapon the test could never be true and it was
+		// never taken off the player. Once its ammo reached zero every further /drop still spawned an
+		// item -- carrying no ammo, since count is -1 by then -- and left the weapon in hand to do it
+		// again, as fast as the engine's flood protection allows. Dropped items live for five minutes
+		// here (see LaunchItem in g_items.c), so one player could hold a few hundred entities open.
+		// The det pack now leaves with its last charge, exactly as the thermal and the trip mine do.
+		//
+		// The ammo read is gated too: for a weapon with no ammo type it means nothing, and the second
+		// clause is true for all of those anyway, so the outcome is unchanged for them.
+		if ((has_ammo_type == qtrue && ent->client->ps.ammo[weaponData[weapon].ammoIndex] < 1) ||
 			(weapon != WP_THERMAL && weapon != WP_DET_PACK && weapon != WP_TRIP_MINE))
 		{
 			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << weapon);
