@@ -1361,6 +1361,23 @@ void Cmd_God_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Death System] refuse while downed, as /notarget and /noclip already do. The
+	// reason is not the one /notarget has -- that toggle collides with FL_NOTARGET, which the
+	// downed state owns and sets, so an admin flipping it mid-countdown strips their own
+	// protection. Nothing of the sort happens here: FL_GODMODE is not part of the downed state,
+	// and the countdown does not kill through G_Damage either -- a knockdown merely unlocks
+	// /getup and an admin paralysis releases itself -- so godmode can neither be lost nor strand
+	// anyone. What it does is make a downed player unfinishable: nobody can shoot them and
+	// /killother cannot reach them, and they simply wait the timer out and stand up. Being down
+	// is meant to be the one state an admin cannot toy their way out of, which is why the other
+	// two refuse; this one was the only one that did not. Ordered after the permission check so a
+	// player without God Mode is told the more fundamental reason first.
+	if (G_PlayerIsDowned(ent))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		return;
+	}
+
 	ent->flags ^= FL_GODMODE;
 	if (!(ent->flags & FL_GODMODE)) {
 		trap->SendServerCommand(-1, va("chat \"^7%s ^7turned god mode ^1OFF\n\"", ent->client->pers.netname));
@@ -10667,6 +10684,35 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
 		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_BRYAR_PISTOL);
 	}
+
+	// GalaxyRP fix: [Admin] the three admin self-toggles go out with the account that granted
+	// them. /god and /notarget live on ent->flags and /noclip on client->noclip, and none of the
+	// three was part of the logged-out baseline this function otherwise restores.
+	//
+	// client->noclip is the one that was plainly wrong: nothing clears it anywhere. ClientSpawn()
+	// does not touch it, so it survived logout, death and respawn alike -- only the rancor and
+	// some NPC AI ever turn it off. A player could take Noclip as an admin, log out, and keep
+	// flying as nobody, with no way to switch it off again since /noclip needs the permission
+	// back to toggle.
+	//
+	// The two flags are subtler. ClientSpawn() does clear ent->flags outright, and
+	// zyk_schedule_relog_kill() at the end of this function usually gets us there -- but only
+	// usually: it refuses a spectator, and at rp_seamlesslogin 1 it fires only for a player who is
+	// duelling. In those cases the flags outlived the permission exactly as noclip did. Clearing
+	// them here makes it unconditional instead of a side effect of a respawn that may not happen,
+	// so a later change to either condition cannot quietly reopen it.
+	//
+	// Placed below zyk_remove_guns() on purpose, because FL_NOTARGET has two other legitimate
+	// owners on a player and this spot is past both of them. The downed state sets it
+	// (RP_EnterDownedState) -- ruled out by the guard at the top of this function, which refuses
+	// while downed. The Cloak Item sets it too, in Jedi_Cloak(), and that one is live here: a
+	// logged-in player can be cloaked when they type /logout. zyk_remove_guns() drops the whole
+	// holdable-item mask and then calls zyk_adjust_holdable_items(), which decloaks through
+	// Jedi_DecloakPair() -- clearing PW_CLOAKED and FL_NOTARGET together, on the vehicle half of a
+	// paired cloak as well. Running after it means the only FL_NOTARGET still standing at this
+	// line is one /notarget set, so this clear can never leave a player cloaked but targetable.
+	ent->flags &= ~(FL_GODMODE | FL_NOTARGET);
+	ent->client->noclip = qfalse;
 
 	ent->client->sess.loggedin = qfalse;
 
