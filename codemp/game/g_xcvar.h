@@ -192,6 +192,35 @@ XCVAR_DEF( RMG,							"0",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( sv_cheats,					"1",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( sv_fps,						"40",			NULL,				CVAR_ARCHIVE|CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( sv_maxclients,				"8",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARCHIVE,		qfalse )
+// GalaxyRP: [Saber RGB] capability advertisement for TaystJK clients, which is what most players
+// connect with. TaystJK picks a "server mod" purely from the serverinfo gamename string
+// (CG_ParseServerinfo, cg_servercmds.c) and ours matches none of its patterns, so it files us as
+// SVMOD_BASEJKA. Its ClampSaberColor() (cg_players.c) then throws away any colour above
+// SABER_PURPLE unless the server is JA+/JAPro OR advertises the matching taystJKinfo bit -- and
+// because those two tests are ORed with the client's own cg_noRGBSabers, the server half fires on
+// its own. Every TaystJK client was therefore seeing "color -= SABER_RGB": our RGB blades came out
+// red, the flame/elec blade styles came out orange/yellow/green/blue, and black came out orange.
+//
+// Nothing else was wrong -- the wire format already matches TaystJK exactly and always did (same
+// saber_colors_t ordinals in q_shared.h, same c1/c2 mode and c3/c4 packed-RGB configstring keys in
+// ClientUserinfoChanged, same r|g<<8|b<<16 packing). The data was arriving intact and being
+// discarded on arrival for want of this one key.
+//
+// The value is a bitmask; TaystJK's own names for the bits (bg_public.h in its tree) are:
+//     1<<0 RGBSABERS   1<<1 BLACKSABERS   1<<2 FLIPKICK   1<<3 GRAPPLE
+//     1<<4 FIXROLL_1   1<<5 FIXROLL_2     1<<6 FIXROLL_3
+// We advertise 3 -- RGBSABERS|BLACKSABERS -- and deliberately stop there. Those two are read only
+// in cg_players.c, i.e. they are purely about how a blade is drawn. Every bit from 1<<2 up is read
+// in bg_pmove.c instead: they tell the client to PREDICT MOVEMENT under rules the server is
+// promising to implement. Our pmove implements none of them, so setting any of those bits would
+// desync client prediction from the server and produce rubber-banding. Do not widen this value
+// without making our bg_pmove.c actually match the behaviour the added bit claims.
+//
+// CVAR_ROM for the same reason gamename above is: this states what the mod IS, not a knob, and a
+// well-meaning "taystJKinfo 127" in a server config would break movement for every TaystJK player.
+// Black is included because our palette really does offer it (/sabercolor black, the UI palette,
+// and its own shaders in ui_saber.c/cg_main.c) and TaystJK gates it on the same mechanism.
+XCVAR_DEF( taystJKinfo,					"3",			NULL,				CVAR_SERVERINFO|CVAR_ROM,						qfalse )
 XCVAR_DEF( timelimit,					"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( zyk_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
