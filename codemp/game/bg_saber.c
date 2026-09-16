@@ -3810,6 +3810,26 @@ void PM_SetSaberMove(short newMove)
 			anim = PM_GetSaberStance();
 		}
 
+		// GalaxyRP fix: [Saber Kick] the line above that reads anim = pm->ps->legsAnim exists so the
+		// upper body matches the lower body on the way back to ready, and the checks beside this one
+		// name the leg anims that must not be copied. A kick anim was missing from that list, and it
+		// is the one that could not recover: nothing else ever rewrites the torso once saberMove is
+		// already LS_READY, and the repair further up this file that copies the legs back over the
+		// torso only runs with the blade off (see the BG_SabersOff block). So the upper body stayed
+		// clamped on the kick's last frame for the rest of the life, the player walking normally
+		// underneath it, and BG_KickingAnim(torsoAnim) in the kick guard meant they could never kick
+		// again either.
+		//
+		// The legs reach here still holding the kick because PM_KickMoveForConditions() zeroes the
+		// movement command on the frame the kick fires, and PM_Footsteps() sets no leg anim at all
+		// when both move axes are zero but the player still carries speed -- it returns early. Whether
+		// that happens is a race against friction, which is why a player who had come to rest never
+		// saw this and a moving one always did. Refusing the copy settles it at either speed.
+		if (BG_KickingAnim( anim ))
+		{
+			anim = PM_GetSaberStance();
+		}
+
 		parts = SETANIM_TORSO;
 	}
 
