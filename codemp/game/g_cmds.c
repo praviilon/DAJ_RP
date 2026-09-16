@@ -4895,16 +4895,52 @@ static const char *zyk_minigame_name( gentity_t *ent )
 	return NULL;
 }
 
-static qboolean zyk_minigame_blocks_account_change( gentity_t *ent, const char *verb )
+// GalaxyRP fix: [Account] renamed from zyk_minigame_blocks_account_change(). It no longer answers
+// only "is this player in a mini-game" -- a private duel blocks an account or character change for
+// exactly the same reason the two mini-games do, so the question this asks is now the broader one
+// its name states.
+//
+// The duel test deliberately does NOT go into zyk_minigame_name() above: that answers "which
+// mini-game", and its three other callers (/duel's two challenge checks and the admin path further
+// up this file) must keep it meaning exactly the Duel Tournament and the Melee Battle. Widening it
+// there would silently change what those sites refuse.
+static qboolean zyk_account_change_blocked( gentity_t *ent, const char *verb )
 {
-	const char *minigame = zyk_minigame_name(ent);
+	const char *minigame = NULL;
 
-	if (minigame == NULL)
+	if (!ent || !ent->client)
 		return qfalse;
 
-	trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a %s\n\"", verb, minigame));
+	minigame = zyk_minigame_name(ent);
 
-	return qtrue;
+	if (minigame != NULL)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a %s\n\"", verb, minigame));
+
+		return qtrue;
+	}
+
+	// GalaxyRP fix: [Account] a private duel blocks an account or character change for the same
+	// reason the two mini-games above do -- the player's loadout is not their own right now. /new,
+	// /login and /char all re-apply an account's skills and loadout on the spot, which handed a
+	// duellist a different kit in the middle of a fight. zyk_relog_kill_required() does force a
+	// respawn for a duellist regardless of rp_seamlesslogin, but that ends the duel in the
+	// opponent's favour rather than undoing the swap, and it lands far too late to prevent it: the
+	// kill is deferred 300ms (pending_relog_kill_time) and respawnTime adds 1700ms on top.
+	//
+	// It also closes the one remaining window in which update_saber() stores a saber hilt the client
+	// is never told about. saber_switch_allowed() refuses the instant apply during a private duel,
+	// and it is that refusal which skips the "supdatesaber" echo -- see the else branch added to
+	// update_saber() for the other half of this fix. This guard is the half that also works for
+	// players running someone else's cgame, which never receives that echo.
+	if (ent->client->ps.duelInProgress == qtrue)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Cannot %s while in a private duel\n\"", verb));
+
+		return qtrue;
+	}
+
+	return qfalse;
 }
 
 void Cmd_Register_F(gentity_t * ent)
@@ -4924,7 +4960,7 @@ void Cmd_Register_F(gentity_t * ent)
 		return;
 	}
 
-	if (zyk_minigame_blocks_account_change(ent, "register"))
+	if (zyk_account_change_blocked(ent, "register"))
 	{
 		return;
 	}
@@ -5116,7 +5152,7 @@ void Cmd_Login_F(gentity_t * ent)
 		return;
 	}
 
-	if (zyk_minigame_blocks_account_change(ent, "login"))
+	if (zyk_account_change_blocked(ent, "login"))
 	{
 		return;
 	}
@@ -5262,7 +5298,7 @@ void Cmd_Char_f(gentity_t *ent) {
 		return;
 	}
 
-	if (zyk_minigame_blocks_account_change(ent, "char"))
+	if (zyk_account_change_blocked(ent, "char"))
 	{
 		return;
 	}
@@ -10588,6 +10624,19 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Cannot logout while in a Melee Battle\n\"");
+		return;
+	}
+
+	// GalaxyRP fix: [Account] the private duel was missing from this list, as it was from the shared
+	// zyk_account_change_blocked() the other three account commands use -- see the longer comment
+	// there for why a duel belongs in the same group as the two mini-games. /logout keeps its own
+	// pair of checks rather than being rewritten onto that helper, so this is the third written out
+	// by hand beside them. Placed with its two siblings rather than above save_account(): the save
+	// on a refused logout writes the state the player already has, and hoisting this one would leave
+	// the three reading as if they were different kinds of check.
+	if (ent->client->ps.duelInProgress == qtrue)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"Cannot logout while in a private duel\n\"");
 		return;
 	}
 
@@ -17379,7 +17428,53 @@ void update_saber(gentity_t* ent, char* saber1Model, char* saber2Model, int numb
 	trap->SetUserinfo(ent->s.number, userinfo);
 
 	if (instantApplyAllowed)
+	{
 		apply_saber_from_userinfo(ent, qtrue);
+	}
+	else
+	{
+		// GalaxyRP fix: [Saber] the SetUserinfo above only updates the SERVER's cached copy of this
+		// client's userinfo. On the allowed path apply_saber_from_userinfo() ends by pushing the
+		// result down into the client's own saber1/saber2 cvars ("supdatesaber"); on this path
+		// nothing did, so the two sides were left disagreeing -- and saber1/saber2 are CVAR_USERINFO
+		// cvars whose authoritative copy lives on the CLIENT, not here.
+		//
+		// Any later change to ANY userinfo cvar makes CL_CheckUserinfo() (cl_main.cpp) resend the
+		// client's WHOLE userinfo string, and SV_UpdateUserinfo_f (sv_client.cpp) replaces the
+		// server's copy wholesale with it -- so the hilt stored just above was silently reverted
+		// before the respawn that was supposed to apply it. ClientUserinfoChanged() cannot catch
+		// that: its own G_SetSaber() calls are gated on pers.saber1/2 being invalid, i.e. first
+		// connect only.
+		//
+		// On a character switch that revert was automatic rather than incidental. update_saber() is
+		// called by select_player_character() and select_account_and_default_character_data() with
+		// the incoming character's saved hilt, and Cmd_GalaxyRpUi_f's zykmod payload then sets that
+		// client's own "name" and "model" cvars (CG_ZykMod, cg_servercmds.c) -- both CVAR_USERINFO,
+		// both changing on essentially every switch, so the resend fired every time. The outgoing
+		// character's hilt came back, ClientSpawn()'s userinfo-vs-pers.saber1/2 diff then found the
+		// two already equal so it neither corrected the hilt nor sent its own echo (that send sits
+		// inside its changedSaber branch), and the next save_account() wrote the wrong hilt into the
+		// incoming character's row. Echoing here makes the resend carry the value the server chose,
+		// turning a revert into a no-op.
+		//
+		// Read back OUT of userinfo rather than reusing saber1Model/value: Info_SetValueForKey
+		// refuses a value containing '\\', '"' or ';' and leaves the previous one in place, so this
+		// is what the server actually stored -- and it already accounts for the "none" substitution
+		// above. Copied into locals because Info_ValueForKey returns one of only two rotating static
+		// buffers and va() has a ring of its own; two live pointers inside one va() happens to work
+		// today but is not a property worth depending on.
+		//
+		// This does not conflict with the requestedChange rule in apply_saber_from_userinfo(). That
+		// guards the CLIENT-proposed /updatesaber path (syncClientAlways qfalse), where echoing on a
+		// no-op overwrites a pick that simply has not arrived yet. Here the SERVER chose the value
+		// and has just written it, which is exactly the syncClientAlways case.
+		char pendingSaber1[MAX_QPATH] = { 0 }, pendingSaber2[MAX_QPATH] = { 0 };
+
+		Q_strncpyz(pendingSaber1, Info_ValueForKey(userinfo, "saber1"), sizeof(pendingSaber1));
+		Q_strncpyz(pendingSaber2, Info_ValueForKey(userinfo, "saber2"), sizeof(pendingSaber2));
+
+		trap->SendServerCommand(ent - g_entities, va("supdatesaber \"%s\" \"%s\"\n", pendingSaber1, pendingSaber2));
+	}
 }
 
 /*
