@@ -290,8 +290,25 @@ XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NOR
 // consumers were Cmd_SniperMode_f's join guard and its start timer, and the whole Sniper Battle
 // feature has been removed; see the note where that command used to live in g_cmds.c. Both modes
 // were also dropped from assets/server/galaxyrp_server.cfg.
-XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Minigames] both are CVAR_LATCH, so a change waits for the next map.
+//
+// Switching either off mid-event does not stop the event: the state machines in G_RunFrame test
+// level.duel_tournament_mode / level.melee_mode and never read these cvars, so a running tournament
+// or battle carries on to completion regardless. What the cvar guard at the top of Cmd_DuelMode_f
+// and Cmd_MeleeMode_f does is refuse the command outright -- and those commands are the only way
+// OUT, so switching the mode off during sign-up trapped everyone already in it. Their account
+// commands are refused too, by zyk_account_change_blocked(), and no admin command ends a running
+// event: duel_tournament_end() and melee_battle_end() are reachable only from those same leave
+// branches and from inside G_RunFrame. So the mode became both inescapable and unstoppable until
+// the map changed.
+//
+// Latching costs an admin nothing they actually had. Both modes reset to 0 in G_InitGame, so an
+// event cannot survive a map change either way -- the moment a latched value takes effect is the
+// same moment the event ends. trackChange is qfalse for the reason it is on rp_downed_timer:
+// G_UpdateCvars broadcasts vmCvar->string, still the OLD value for a latched cvar, which would
+// contradict the engine's own "will be changed upon restarting" a moment after it printed.
+XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_magic_fist_mp_cost,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_healing_area_mp_cost,	"5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_lightning_dome_mp_cost,	"15",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -392,7 +409,18 @@ XCVAR_DEF( zyk_duel_saberDmgDelay_Idle,		"350",		NULL,				CVAR_ARCHIVE|CVAR_NORE
 XCVAR_DEF( zyk_duel_saberDamageScale,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_radius,					"1024",		RP_CVU_duelRadius,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaScale,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Duel Tournament] CVAR_LATCH, because lowering this mid-match freezes the duelists
+// for the rest of it. The arena-entry freeze in bg_pmove.c asks
+// "(level.duel_tournament_timer - level.time) > (zyk_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME)",
+// and duel_tournament_timer was baked from this cvar's value when the match began. Drop the cvar
+// from 180000 to 20000 while a match is running and the left side is still huge while the right
+// side collapses, so the test goes true again and PM_ pins the duelist in place until the last
+// couple of seconds of the match.
+//
+// RP_CVU_duelTournamentDuelTime()'s floor of 5000 does not cover this: it stops the value being set
+// too low BEFORE a match, and 20000 passes it. The latch removes the mid-match route instead, which
+// is the only one left. trackChange qfalse for the same reason as the two allow cvars above.
+XCVAR_DEF( zyk_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_duel_tournament_min_players, "2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_allow_jetpack_command,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
