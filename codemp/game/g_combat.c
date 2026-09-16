@@ -6262,8 +6262,22 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// never reaches on a first knockdown -- see zyk_minigame_forces_death() in g_main.c for what
 			// that cost them. Added to this condition rather than as a fourth arm below, so one place
 			// keeps deciding between "goes down" and "dies".
+			// GalaxyRP fix: [Death System] rp_downed_timer 0 switches the downed system off, and a
+			// lethal hit then kills outright the way it did before the system existed -- added to
+			// this condition rather than as another arm below, for the same reason
+			// zyk_minigame_forces_death() was: one place keeps deciding between "goes down" and
+			// "dies".
+			//
+			// The "|| G_PlayerIsDowned(targ)" half is not about players left over from a change of
+			// setting -- the cvar is CVAR_LATCH and cannot change mid-map. It is there for ADMIN
+			// PARALYSIS, which is independent of this cvar and can still put a player down while the
+			// gameplay system is off. Such a player taking a lethal hit must still reach the
+			// clear-then-die arm below; sending them to the plain targ->die() in the else would skip
+			// RP_ClearDownedState(), and player_die()'s early returns would leave status bits 6 and
+			// 26 set on a corpse.
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum
-				&& !zyk_minigame_forces_death(targ)) {
+				&& !zyk_minigame_forces_death(targ)
+				&& (RP_DownedSystemEnabled() || G_PlayerIsDowned(targ))) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				if (targ->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used

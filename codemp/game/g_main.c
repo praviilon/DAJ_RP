@@ -5324,7 +5324,7 @@ qboolean duel_tournament_is_duelist(gentity_t *ent)
 
 // GalaxyRP fix: [Death System] the mini-games and the Death System were written apart and never
 // introduced. G_Damage() only calls targ->die() for a player who is ALREADY downed; the first time
-// their health reaches 0 it calls paralyze_player() instead, which downs them at 50 health and
+// their health reaches 0 it calls paralyze_player() instead, which downs them at RP_DOWNED_HEALTH health and
 // never reaches player_die(). Both mini-games hang every piece of their death handling off
 // player_die(), so the first knockdown registered as nothing at all: the Melee Battle left the
 // player on the roster with melee_mode_quantity unchanged and gave the attacker no kill credit, so

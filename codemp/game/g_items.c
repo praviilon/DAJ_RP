@@ -573,7 +573,7 @@ void ItemUse_Binoculars(gentity_t *ent)
 
 void ItemUse_Shield(gentity_t *ent)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing above stops
 	// them using this while incapacitated. Same explicit guard as the cloak item below.
 	if ( G_PlayerIsDowned( ent ) )
 	{
@@ -1169,7 +1169,7 @@ void ItemUse_Sentry( gentity_t *ent )
 		return;
 	}
 
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing above stops
 	// them using this while incapacitated. Same explicit guard as the cloak item below.
 	if ( G_PlayerIsDowned( ent ) )
 	{
@@ -1252,7 +1252,7 @@ void ItemUse_Sentry( gentity_t *ent )
 extern gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
 void ItemUse_Seeker(gentity_t *ent)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing above stops
 	// them using this while incapacitated. Same explicit guard as the cloak item below.
 	if ( G_PlayerIsDowned( ent ) )
 	{
@@ -1319,7 +1319,7 @@ static void MedPackGive(gentity_t *ent, int amount)
 
 void ItemUse_MedPack_Big(gentity_t *ent)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing above stops
 	// them using this while incapacitated. Same explicit guard as the cloak item below.
 	if ( G_PlayerIsDowned( ent ) )
 	{
@@ -1338,7 +1338,7 @@ void ItemUse_MedPack_Big(gentity_t *ent)
 
 void ItemUse_MedPack(gentity_t *ent)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing above stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing above stops
 	// them using this while incapacitated. Same explicit guard as the cloak item below.
 	if ( G_PlayerIsDowned( ent ) )
 	{
@@ -1483,7 +1483,7 @@ void ItemUse_UseCloak( gentity_t *ent )
 	}
 
 	// GalaxyRP fix: [Cloak Item] same downed test as the /use_cloak console path (g_active.c) -- a
-	// downed player keeps 50 health, so nothing above stops them re-cloaking after being downed and
+	// downed player keeps RP_DOWNED_HEALTH health, so nothing above stops them re-cloaking after being downed and
 	// lying there invisible. Gates only the cloak direction; the decloak below stays reachable.
 	if ( !ent->client->ps.powerups[PW_CLOAKED] &&
 		(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) )
@@ -1596,7 +1596,7 @@ void G_PrecacheDispensers(void)
 
 void ItemUse_UseDisp(gentity_t *ent, int type)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health. This one was already
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health. This one was already
 	// blocked in practice by the forceHandExtend test below, but only as a side effect of the
 	// downed state pinning HANDEXTEND_KNOCKDOWN -- the exact accident this fix stops relying on.
 	if ( G_PlayerIsDowned( ent ) )
@@ -2238,7 +2238,7 @@ gentity_t *EWeb_Create(gentity_t *spawner)
 //use the e-web
 void ItemUse_UseEWeb(gentity_t *ent)
 {
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health. This one was already
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health. This one was already
 	// blocked in practice by the forceHandExtend test below, but only as a side effect of the
 	// downed state pinning HANDEXTEND_KNOCKDOWN -- the exact accident this fix stops relying on.
 	if ( G_PlayerIsDowned( ent ) )

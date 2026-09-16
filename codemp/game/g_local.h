@@ -2106,6 +2106,9 @@ void SaveRegisteredItems( void );
 //
 // GalaxyRP fix: [Death System] qtrue while the player is downed (player_statuses bit 6).
 // See the long comment on the definition in g_utils.c for why the state blocks nothing by itself.
+// GalaxyRP fix: [Death System] rp_downed_timer 0 switches the downed system off entirely -- see
+// RP_DownedSystemEnabled() in g_utils.c. The cvar is CVAR_LATCH, so this cannot change mid-map.
+qboolean RP_DownedSystemEnabled( void );
 qboolean G_PlayerIsDowned( gentity_t *ent );
 // GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (player_statuses bit 26, always
 // accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely

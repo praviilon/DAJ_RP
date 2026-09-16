@@ -33,16 +33,18 @@ static void CVU_Derpity( void ) {
 }
 */
 
-// GalaxyRP fix: [validation] rp_downed_timer, rp_downed_invulnerability_timer and
-// rp_screen_message_timer are all read as plain countdown lengths (a value is copied out of the
-// cvar once, then only ever decremented toward 0 -- see downedTime in g_combat.c/g_active.c and
-// motdTime in g_client.c/g_active.c). None of them validated their value, so a negative setting
-// (e.g. a server admin fat-fingering "set rp_downed_timer -30") produced a counter that counted
-// away from zero forever instead of toward it, since decrementing a negative number never reaches
-// 0 -- permanently soft-locking a downed player (Cmd_Getup_f/can_player_get_up() both gate on
-// downedTime == 0) or leaving a MOTD stuck on-screen indefinitely. Clamp back to 0 the moment the
-// cvar changes, using this codebase's existing XCVAR update-callback mechanism (see
-// G_UpdateCvars() below) rather than re-validating at every read site.
+// GalaxyRP fix: [validation] rp_screen_message_timer and zyk_flame_thrower_cooldown are read as
+// plain countdown lengths (a value is copied out of the cvar once, then only ever decremented
+// toward 0 -- see motdTime in g_client.c/g_active.c). Neither validated its value, so a negative
+// setting produced a counter that counted away from zero forever instead of toward it, since
+// decrementing a negative number never reaches 0 -- leaving a MOTD stuck on-screen indefinitely.
+// Clamp back to 0 the moment the cvar changes, using this codebase's existing XCVAR
+// update-callback mechanism (see G_UpdateCvars() below) rather than re-validating at every read
+// site.
+//
+// The two downed-system timers used to share this helper. They have real ranges now rather than
+// just a floor of 0, so they have their own callbacks further down; this one is unchanged and
+// keeps its two remaining callers.
 static void RP_ClampNonNegativeCvar(vmCvar_t* cvar, const char* cvarName)
 {
 	if (cvar->integer < 0)
@@ -52,14 +54,84 @@ static void RP_ClampNonNegativeCvar(vmCvar_t* cvar, const char* cvarName)
 	}
 }
 
+// GalaxyRP fix: [Death System] the ranges rp_downed_timer and rp_downed_invulnerability_timer are
+// held to. Both are read as plain countdown lengths, and neither was bounded above at all.
+//
+// rp_downed_timer is the sharper of the two, because it sets the PRICE of being downed while
+// rp_downed_invulnerability_timer sets the REWARD: paralyze_player() puts a downed player on
+// RP_DOWNED_HEALTH instead of killing them, and help_up() hands out that many seconds of
+// EF_INVULNERABLE once they stand. At the shipped 30 against 10 that is a net loss, which is the
+// point. Set the timer below the invulnerability and it inverts -- taking a lethal hit becomes worth
+// more than it costs, and a player who can find someone to shoot them is invulnerable more or less
+// continuously. Below 3 they could even stand while still invulnerable from the knockdown itself.
+//
+// So: 0 turns the downed system off outright (see RP_DownedSystemEnabled() in g_utils.c -- a lethal
+// hit simply kills, the way it did before the system existed), anything else lands in 30..100, and
+// a value over 100 comes down to 100 rather than being taken literally.
+//
+// The ceiling is tested BEFORE the floor, and that order is load-bearing rather than stylistic.
+// Cvar values arrive through atoi(), which wraps: "99999999999" reads as 1215752191. An admin who
+// types a huge number means "a very long time", so it has to land on 100 -- floor-first would work
+// here by luck, but ceiling-first says what is meant. (Nothing rescues "2147483648", which atoi
+// gives as -2147483648 and which therefore reads as 0; the engine still echoes what was typed.)
+#define RP_DOWNED_TIMER_MIN				30
+#define RP_DOWNED_TIMER_MAX				100
+#define RP_DOWNED_INVULNERABILITY_MIN	0
+#define RP_DOWNED_INVULNERABILITY_MAX	30
+
+// GalaxyRP fix: [validation] snap a cvar to a value and say so on the console. The caller decides
+// what the value should be; this exists so an admin who types 5 and gets 30 can find out why
+// without reading the source. Silent on a no-op, so a value already in range prints nothing.
+static void RP_SnapCvar(vmCvar_t* cvar, const char* cvarName, int newValue, const char* reason)
+{
+	if (cvar->integer == newValue)
+	{
+		return;
+	}
+
+	trap->Print("%s: %i is out of range (%s) -- using %i.\n", cvarName, cvar->integer, reason, newValue);
+
+	trap->Cvar_Set(cvarName, va("%i", newValue));
+	trap->Cvar_Update(cvar);
+}
+
 void RP_CVU_downedTimer(void)
 {
-	RP_ClampNonNegativeCvar(&rp_downed_timer, "rp_downed_timer");
+	// rp_downed_timer is CVAR_LATCH (see g_xcvar.h), so this is only ever effective at
+	// G_RegisterCvars() -- which is exactly when a latched value takes effect. It still applies
+	// rather than latching again, because trap->Cvar_Set() forces (Cvar_VM_Set -> Cvar_Set2 with
+	// force=qtrue) and the latch branch is inside "if (!force)".
+	if (rp_downed_timer.integer > RP_DOWNED_TIMER_MAX)
+	{
+		RP_SnapCvar(&rp_downed_timer, "rp_downed_timer", RP_DOWNED_TIMER_MAX, "maximum is 100");
+	}
+	else if (rp_downed_timer.integer <= 0)
+	{
+		// Covers negatives as well. 0 is a real setting here, not a rejection: it disables the
+		// downed system, so there is nothing to snap it up to.
+		RP_SnapCvar(&rp_downed_timer, "rp_downed_timer", 0, "0 disables the downed system");
+	}
+	else if (rp_downed_timer.integer < RP_DOWNED_TIMER_MIN)
+	{
+		RP_SnapCvar(&rp_downed_timer, "rp_downed_timer", RP_DOWNED_TIMER_MIN, "minimum is 30, or 0 to disable");
+	}
 }
 
 void RP_CVU_downedInvulnerabilityTimer(void)
 {
-	RP_ClampNonNegativeCvar(&rp_downed_invulnerability_timer, "rp_downed_invulnerability_timer");
+	// 0 stays meaningful here -- help_up() tests "if (rp_downed_invulnerability_timer.integer)", so
+	// 0 means a revived player gets no invulnerability at all. Only the ceiling and negatives need
+	// handling, which makes this a plain range unlike the timer above.
+	if (rp_downed_invulnerability_timer.integer > RP_DOWNED_INVULNERABILITY_MAX)
+	{
+		RP_SnapCvar(&rp_downed_invulnerability_timer, "rp_downed_invulnerability_timer",
+			RP_DOWNED_INVULNERABILITY_MAX, "maximum is 30");
+	}
+	else if (rp_downed_invulnerability_timer.integer < RP_DOWNED_INVULNERABILITY_MIN)
+	{
+		RP_SnapCvar(&rp_downed_invulnerability_timer, "rp_downed_invulnerability_timer",
+			RP_DOWNED_INVULNERABILITY_MIN, "minimum is 0");
+	}
 }
 
 void RP_CVU_screenMessageTimer(void)

@@ -1678,6 +1678,13 @@ extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 #define RP_PARALYZE_MIN_SECONDS			30
 #define RP_PARALYZE_MAX_SECONDS			900
 
+// GalaxyRP fix: [Death System] the health a combat knockdown leaves the player on. Was a bare 50
+// written twice in paralyze_player() and quoted as "50 health" in nineteen comments across six
+// files, all of which had to be found and corrected by hand when it changed; named here so the next
+// change is one edit. Deliberately NOT used by the admin /paralyze path, which never sets health at
+// all -- it only refuses a target already at or below 0.
+#define RP_DOWNED_HEALTH				30
+
 // GalaxyRP fix: [Death System] the single entry into the downed state. Both the Death System
 // (paralyze_player below) and the admin /paralyze command used to set this state up by hand, and the
 // two copies had already drifted: /paralyze set the bit but never set downedTime, which left the
@@ -1838,9 +1845,9 @@ void paralyze_player( gentity_t *ent )
 
 	RP_EnterDownedState( ent, rp_downed_timer.integer, qfalse );
 
-	//GalaxyRP (Alex): [Death System] Set their HP to 50 so they don't die the old way instantly.
-	ent->client->ps.stats[STAT_HEALTH] = 50;
-	ent->health = 50;
+	//GalaxyRP (Alex): [Death System] Set their HP so they don't die the old way instantly.
+	ent->client->ps.stats[STAT_HEALTH] = RP_DOWNED_HEALTH;
+	ent->health = RP_DOWNED_HEALTH;
 	ent->client->ps.persistant[PERS_KILLED]++;
 }
 
@@ -6041,7 +6048,7 @@ void Cmd_KillOther_f( gentity_t *ent )
 	// paralysis both serve a countdown, and neither should be escapable by suiciding out of it. An
 	// admin killing somebody ELSE is not that escape, but /killother shares the function and so
 	// inherited the refusal -- and the aliveness test above cannot catch it either, because
-	// paralyze_player() leaves the target on 50 health. The command returned without a word, which
+	// paralyze_player() leaves the target on RP_DOWNED_HEALTH health. The command returned without a word, which
 	// made /killother the one thing that could not clear a player stuck downed somewhere nobody can
 	// reach to revive them, the case it is the obvious tool for.
 	//
@@ -9249,7 +9256,7 @@ void Cmd_EngageDuel_f(gentity_t *ent, int duel_type)
 		return;
 	}
 
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing else here stops
 	// them challenging or accepting a duel while incapacitated. ClientThink_real() already ends
 	// a duel whose opponent goes down mid-fight; this stops one starting that way. Same explicit test the force powers and holdable items use.
 	if (G_PlayerIsDowned(ent))
@@ -12888,7 +12895,7 @@ void Cmd_Drop_f( gentity_t *ent ) {
 	int ammo_count = 0;
 	qboolean has_ammo_type = qfalse;
 
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so CMD_ALIVE waves them through
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so CMD_ALIVE waves them through
 	// and nothing else here stopped them throwing their weapon (or their selected holdable, on melee)
 	// away while lying incapacitated. Same explicit test the force powers and holdable items use --
 	// the knockdown animation that pins them down blocks weapon FIRE, but never reached this command.
@@ -13120,7 +13127,7 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 			}
 			// GalaxyRP fix: [Cloak Item] the downed test, matching the two other cloak entry points
 			// (GENCMD_USE_CLOAK in g_active.c and ItemUse_UseCloak in g_items.c). A downed player keeps
-			// 50 health and so passes every aliveness check above; without this they could still cloak
+			// RP_DOWNED_HEALTH health and so passes every aliveness check above; without this they could still cloak
 			// themselves and the vehicle while down. paralyze_player does not eject a mounted player,
 			// so the state is reachable. Gates only the cloak/resync directions -- the decloak-both
 			// branch above stays gated on the cooldown alone, as designed.
@@ -17134,7 +17141,7 @@ void Cmd_Paralyze_f( gentity_t *ent ) {
 	// released them. Shares RP_EnterDownedState() now, which sets the countdown, FL_NOTARGET and
 	// the brief spawn-style invulnerability alongside the status bit.
 	// Deliberately NOT paralyze_player(): that is the Death System's own wrapper and additionally
-	// forces the target to 50 health and counts a death against them. An admin paralysis leaves
+	// forces the target to RP_DOWNED_HEALTH health and counts a death against them. An admin paralysis leaves
 	// health exactly as it was and is not a death.
 	RP_EnterDownedState( target, seconds, qtrue );
 
@@ -18159,7 +18166,7 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 		return;
 	}
 
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stopped
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing else here stopped
 	// them signing up while incapacitated -- they would just be teleported into the arena and left
 	// lying there. Same explicit test /meleemode already carries.
 	if (G_PlayerIsDowned(ent))
@@ -18630,7 +18637,7 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 		return;
 	}
 
-	// GalaxyRP fix: [Death System] a downed player keeps 50 health, so nothing else here stops
+	// GalaxyRP fix: [Death System] a downed player keeps RP_DOWNED_HEALTH health, so nothing else here stops
 	// them signing up while incapacitated -- they would just be teleported in and left lying
 	// there. Same explicit test the force powers and holdable items use.
 	if (G_PlayerIsDowned(ent))

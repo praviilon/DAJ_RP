@@ -4261,7 +4261,7 @@ void ClientThink_real( gentity_t *ent ) {
 			// toggle direction after the vehicle auto-decloaked from its own weapon fire" bug from the
 			// previous single-command design.
 			// GalaxyRP fix: [Cloak Item] the downed test below. Being downed is supposed to break cloak
-			// (paralyze_player does exactly that), but it also leaves the player on 50 health -- so they
+			// (paralyze_player does exactly that), but it also leaves the player on RP_DOWNED_HEALTH health -- so they
 			// passed every aliveness gate here and could simply press use_cloak again a second later and
 			// lie there invisible for the rest of rp_downed_timer. It gates only the CLOAK direction:
 			// the decloak branch stays reachable, so a player downed while cloaked can always turn it

@@ -449,9 +449,23 @@ XCVAR_DEF( rp_loginRequired,					"0",	NULL,					CVAR_ARCHIVE | CVAR_SERVERINFO,	
 // restriction /updatesaber and /updateforce already use. Any value above 0 counts as on; a
 // negative value behaves like 0, so no validator is needed.
 XCVAR_DEF( rp_seamlesslogin,					"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
-// GalaxyRP fix: [validation] RP_CVU_downedTimer/RP_CVU_downedInvulnerabilityTimer (g_cvar.c) clamp
-// a negative value back to 0 -- see RP_ClampNonNegativeCvar's comment there for why.
-XCVAR_DEF( rp_downed_timer,						"30",	RP_CVU_downedTimer,	CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Death System] rp_downed_timer decides whether the downed system runs at all, so it
+// is CVAR_LATCH: a change waits for the next map. Without that, an admin flipping it to 0 mid-round
+// would leave whoever was lying on the floor in a state that no longer exists -- /getup and /helpup
+// both refuse a player who is not downed, and with the system off nothing would put them back. The
+// engine prints "rp_downed_timer will be changed upon restarting." on the console, which is the
+// feedback an admin needs; the game's own trackChange broadcast is qfalse here precisely because it
+// would contradict that, reading vmCvar->string (still the OLD value until the map restarts) and
+// announcing "changed to 30" a moment after the engine said the change was deferred.
+//
+// The clamp still works despite the latch: trap->Cvar_Set() from a VM goes through Cvar_VM_Set(),
+// which calls Cvar_Set2() with force=qtrue, and the latch branch sits inside "if (!force)". So
+// RP_CVU_downedTimer() below applies immediately -- at G_RegisterCvars(), which is exactly when a
+// latched value takes effect.
+//
+// RP_CVU_downedTimer / RP_CVU_downedInvulnerabilityTimer (g_cvar.c) hold the ranges: 0 disables the
+// downed system entirely, 30..100 is the live range, and the invulnerability timer is 0..30.
+XCVAR_DEF( rp_downed_timer,						"30",	RP_CVU_downedTimer,	CVAR_ARCHIVE | CVAR_NORESTART | CVAR_LATCH,		qfalse )
 XCVAR_DEF( rp_downed_invulnerability_timer,		"10",	RP_CVU_downedInvulnerabilityTimer,	CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_allow_passive_regen,				"1",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)
 XCVAR_DEF( rp_ammo_regen_timer,					"5",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue)

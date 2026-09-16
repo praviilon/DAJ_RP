@@ -3079,6 +3079,26 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 	return current_dist;
 }
 
+// GalaxyRP fix: [Death System] is the downed system switched on at all?
+//
+// rp_downed_timer 0 turns it off: a lethal hit kills outright, the way it did before this system
+// existed. G_Damage() (g_combat.c) is the one place that asks, and it asks as
+// "RP_DownedSystemEnabled() || G_PlayerIsDowned(targ)" -- the second half is not about leftovers,
+// because the cvar is CVAR_LATCH and cannot change mid-map. It is there for ADMIN PARALYSIS, which
+// is deliberately independent of this cvar (its own RP_PARALYZE_MIN/MAX_SECONDS, its own release
+// path) and can still put a player down while the gameplay system is off. Without that half, a
+// lethal hit on a paralysed player would reach targ->die() without RP_ClearDownedState(), and
+// player_die()'s early returns would leave status bits 6 and 26 set on a corpse -- a player whom
+// /paralyze afterwards refuses as "already paralyzed" and only /unparalyze can reset.
+//
+// Nothing else needs a test. With the system off nobody is ever downed, so /getup and /helpup
+// refuse on their existing "you are not downed" checks, RP_EnterDownedState()'s invulnerability and
+// FL_NOTARGET never run, and all forty G_PlayerIsDowned() call sites simply answer qfalse.
+qboolean RP_DownedSystemEnabled( void )
+{
+	return (rp_downed_timer.integer > 0) ? qtrue : qfalse;
+}
+
 // GalaxyRP fix: [Death System] one place that answers "is this player currently downed?", so the
 // rule stops being spelled out as a raw pers.player_statuses bit test at every new call site.
 // Bit 6 is set in one place, RP_EnterDownedState() (g_cmds.c) -- reached both by paralyze_player()
@@ -3089,7 +3109,7 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 // pers.downedTime: rp_downed_timer seconds for a knockdown, or whatever /paralyze was given.
 //
 // This matters because a downed player is NOT dead as far as the rest of the code is concerned:
-// paralyze_player() leaves them on 50 health, so every "health <= 0", "EF_DEAD" and "PM_DEAD" test
+// paralyze_player() leaves them on RP_DOWNED_HEALTH health, so every "health <= 0", "EF_DEAD" and "PM_DEAD" test
 // in the codebase says they are perfectly alive. Nothing about the downed state blocks an action on
 // its own -- the only reason a downed player cannot swing a weapon or use Grip/Lightning/Drain/Mind
 // Trick/Push is that ClientThink_real() pins forceHandExtend at HANDEXTEND_KNOCKDOWN, and those

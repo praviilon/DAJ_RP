@@ -813,7 +813,7 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 	// GalaxyRP fix: [Death System] a downed player cannot START a force power. Every one of the
 	// thirteen powers routes through this function, so this single test covers them all and both
 	// dispatch paths (the GENCMD_FORCE_* switch in g_active.c and the forcepower switch below).
-	// It has to be explicit: paralyze_player() leaves a downed player on 50 health, so the dead
+	// It has to be explicit: paralyze_player() leaves a downed player on RP_DOWNED_HEALTH health, so the dead
 	// tests just above all pass, and the only powers that refused were Grip/Lightning/Drain/Mind
 	// Trick/Push -- purely because those five also guard on forceHandExtend, which the downed state
 	// happens to pin at HANDEXTEND_KNOCKDOWN. Heal, Speed, Rage, Protect, Absorb, Seeing and the two
