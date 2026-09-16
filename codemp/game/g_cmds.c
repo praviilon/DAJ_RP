@@ -18772,7 +18772,31 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 
 		if (g_entities[i].inuse && g_entities[i].client && g_entities[i].client->pers.connected == CON_CONNECTED && Distance(ent->client->ps.origin, other->client->ps.origin) <= distanceFromPlayer)
 		{
-			G_ScreenShake(g_entities[i].s.origin, &g_entities[i], intensity, duration, qtrue);
+			// GalaxyRP fix: [Admin] the event's position is the player's live origin, the same field the
+			// distance test above already reads. It used to be g_entities[i].s.origin, which is not a
+			// stale copy of that -- it is an unrelated point that never moves. The per-frame sync
+			// (BG_PlayerStateToEntityState, called from ClientEndFrame) copies ps.origin into
+			// s.pos.trBase and never into s.origin, and G_SetOrigin -- what ClientSpawn uses -- writes
+			// s.pos.trBase and r.currentOrigin, also not s.origin. The only things that ever write a
+			// player's s.origin are SpectatorThink (every frame, but only while spectating) and
+			// MoveClientToIntermission. So for someone actually playing it holds either (0,0,0) -- the
+			// slot as g_entities[] was memset at map load -- or wherever they last floated as a
+			// spectator, frozen there for the rest of the map.
+			//
+			// Nothing reads it today, twice over: SVF_BROADCAST short-circuits the snapshot loop before
+			// any PVS test, so the position cannot affect who receives this, and the cgame handler
+			// (EV_SCREENSHAKE) passes only angles[0] and time to CGCam_Shake, which has no origin
+			// parameter at all. It is fixed because the two things that would start reading it are both
+			// plausible -- dropping the broadcast so this is PVS-culled instead, or giving the shake a
+			// distance falloff the way CG_DoCameraShake does -- and either one would silently be
+			// culling against, or measuring from, the world origin. A temp entity at (0,0,0) usually
+			// lands in solid, where numClusters is 0 and the snapshot loop drops it for everyone.
+			//
+			// s.origin is the right field for a non-client entity -- Use_Target_Screenshake passes it
+			// for a target_screenshake, correctly -- which is where the confusion comes from. For a
+			// client it is ps.origin (or r.currentOrigin, which ClientThink_real keeps in step); see
+			// the explicit if(ent->client) branch in ai_main.c for the same distinction spelled out.
+			G_ScreenShake(g_entities[i].client->ps.origin, &g_entities[i], intensity, duration, qtrue);
 			trap->SendServerCommand(i, "print \"^3An admin shook your screen.\n\"");
 		}
 	}
