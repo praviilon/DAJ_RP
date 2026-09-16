@@ -235,18 +235,19 @@ qboolean admin_account_exists(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* 
 void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt)
 {
 	int accountID = 1;
+	int charID = 0;
 	char comparisonName[256] = { 0 };
-	char char_name[10] = "admin";
+	char char_name[] = "admin";
 
 	// GalaxyRP fix: [Database] PlayerSettings='0' here is intentionally left as a literal, unlike the
 	// same column in g_cmds.c's UPDATE sites -- this is a one-time bootstrap of a brand new admin
 	// account with no gentity_t/pers.player_settings to bind at all, so 0 (no custom settings) is
 	// simply the correct starting value, not an instance of the same bug.
-	char statement_account_entry_creation[200] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','-1','0','admin')";
-	char statement_account_id_select[100] = "SELECT AccountID FROM Accounts WHERE Username='admin'";
-	char statement_character_entry_creation[207] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i', '100', '1', '100', '%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
-	char statement_skill_entry_creation[1000] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements, Armor, Flamethrower, ShieldRegen, HealthRegen) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
-	char statement_weapon_entry_creation[200] = "INSERT INTO Weapons(AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('0', '0', '0', '0', '0', '0', '0')";
+	char statement_account_entry_creation[] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','-1','0','admin')";
+	char statement_account_id_select[] = "SELECT AccountID FROM Accounts WHERE Username='admin'";
+	char statement_character_entry_creation[] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i', '100', '1', '100', '%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
+	char statement_skill_entry_creation[] = "INSERT INTO Skills(CharID, Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements, Armor, Flamethrower, ShieldRegen, HealthRegen) VALUES('%i', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
+	char statement_weapon_entry_creation[] = "INSERT INTO Weapons(CharID, AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('%i', '0', '0', '0', '0', '0', '0', '0')";
 
 	//alex: Create account record
 	// GalaxyRP fix: [stability] this used to call sqlite3_close(db) before returning on this specific
@@ -299,8 +300,28 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 		return;
 	}
 
+	// GalaxyRP fix: [Database] the Skills and Weapons rows below are bound to the Characters row by
+	// its actual CharID now. Both INSERTs used to leave CharID out of the column list entirely and
+	// rely on SQLite handing all three tables the same auto-assigned rowid -- which it does only for
+	// as long as the three stay in perfect lockstep. On a brand new database they do (every table is
+	// empty, so all three rows come out as 1), which is why this has always appeared to work, and
+	// the one reachable delete path (remove_character, g_cmds.c) removes all three rows together, so
+	// nothing routine pulls them apart either.
+	//
+	// What pulls them apart is a failure partway through this very function. If the INSERT above
+	// succeeds and the Skills INSERT below then fails, this returns with Characters at rowid N and
+	// Skills still at N-1 -- and from then on EVERY later CharID-less insert pair on this database
+	// binds mismatched ids, silently giving new characters somebody else's skills row or none at
+	// all. The failure is rare; the corruption it leaves behind is permanent and invisible.
+	//
+	// sqlite3_last_insert_rowid() is read here rather than re-selected, and read immediately, while
+	// the INSERT above is still the last statement executed on this connection. This is the same
+	// thing create_new_character() (g_cmds.c) already does -- that path was written later and got it
+	// right; this one and Cmd_Register_F's are the two that predate it.
+	charID = (int)sqlite3_last_insert_rowid(db);
+
 	//alex: Create skill record
-	rc = sqlite3_exec(db, statement_skill_entry_creation, 0, 0, &zErrMsg);
+	rc = sqlite3_exec(db, va(statement_skill_entry_creation, charID), 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", zErrMsg);
@@ -309,7 +330,7 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	}
 
 	//alex: Create ammo record
-	rc = sqlite3_exec(db, statement_weapon_entry_creation, 0, 0, &zErrMsg);
+	rc = sqlite3_exec(db, va(statement_weapon_entry_creation, charID), 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", zErrMsg);
@@ -404,19 +425,19 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 		return;
 	}
 
-	char statement_account_table_creation[186] = "CREATE TABLE IF NOT EXISTS 'Accounts' ('AccountID' INTEGER, 'PlayerSettings' INTEGER, 'AdminLevel' INTEGER, 'Password' TEXT, 'Username' TEXT, 'DefaultChar' TEXT, PRIMARY KEY(AccountID))";
-	char statement_character_table_creation[249] = "CREATE TABLE IF NOT EXISTS 'Characters' ('AccountID' INTEGER, 'CharID' INTEGER, 'Credits' INTEGER, 'Level' INTEGER, 'ModelScale' INTEGER, 'Name' TEXT, 'SkillPoints' INTEGER, 'Description' TEXT, 'NetName' TEXT, 'ModelName' TEXT, PRIMARY KEY(CharID))";
-	char statement_weapon_table_creation[244] = "CREATE TABLE IF NOT EXISTS 'Weapons' ('CharID' INTEGER, 'AmmoBlaster' INTEGER, 'AmmoPowercell' INTEGER, 'AmmoMetalBolts' INTEGER, 'AmmoRockets' INTEGER, 'AmmoThermal' INTEGER, 'AmmoTripmine' INTEGER, 'AmmoDetpack' INTEGER, PRIMARY KEY(CharID))";
-	char statement_skill_table_creation[1289] = "CREATE TABLE IF NOT EXISTS 'Skills' ('CharID' INTEGER, 'Jump' INTEGER, 'Push' INTEGER, 'Pull' INTEGER, 'Speed' INTEGER, 'Sense' INTEGER, 'SaberAttack' INTEGER, 'SaberDefense' INTEGER, 'SaberThrow' INTEGER, 'Absorb' INTEGER, 'Heal' INTEGER, 'Protect' INTEGER, 'MindTrick' INTEGER, 'TeamHeal' INTEGER, 'Lightning' INTEGER, 'Grip' INTEGER, 'Drain' INTEGER, 'Rage' INTEGER, 'TeamEnergize' INTEGER, 'StunBaton' INTEGER, 'BlasterPistol' INTEGER, 'BlasterRifle' INTEGER, 'Disruptor' INTEGER, 'Bowcaster' INTEGER, 'Repeater' INTEGER, 'DEMP2' INTEGER, 'Flechette' INTEGER, 'RocketLauncher' INTEGER, 'ConcussionRifle' INTEGER, 'BryarPistol' INTEGER, 'Melee' INTEGER, 'MaxShield' INTEGER, 'ShieldStrength' INTEGER, 'HealthStrength' INTEGER, 'DrainShield' INTEGER, 'Jetpack' INTEGER, 'SenseHealth' INTEGER, 'ShieldHeal' INTEGER, 'TeamShieldHeal' INTEGER, 'UniqueSkill' INTEGER, 'BlasterPack' INTEGER, 'PowerCell' INTEGER, 'MetalBolts' INTEGER, 'Rockets' INTEGER, 'Thermals' INTEGER, 'TripMines' INTEGER, 'Detpacks' INTEGER, 'Binoculars' INTEGER, 'BactaCanister' INTEGER, 'SentryGun' INTEGER, 'SeekerDrone' INTEGER, 'Eweb' INTEGER, 'BigBacta' INTEGER, 'ForceField' INTEGER, 'CloakItem' INTEGER, 'ForcePower' INTEGER, 'Improvements' INTEGER, PRIMARY KEY(CharID))";
-	char statement_item_table_creation[110] = "CREATE TABLE IF NOT EXISTS 'Items' ('ItemID' INTEGER, 'CharID' INTEGER, 'ItemName' TEXT, PRIMARY KEY(ItemID))";
-	char statement_news_table_creation[155] = "CREATE TABLE IF NOT EXISTS 'News' ('newsID' INTEGER, 'channel' TEXT, 'date' TEXT DEFAULT (strftime('%d-%m-%Y','now')), 'text' TEXT, PRIMARY KEY('newsID'))";
+	char statement_account_table_creation[] = "CREATE TABLE IF NOT EXISTS 'Accounts' ('AccountID' INTEGER, 'PlayerSettings' INTEGER, 'AdminLevel' INTEGER, 'Password' TEXT, 'Username' TEXT, 'DefaultChar' TEXT, PRIMARY KEY(AccountID))";
+	char statement_character_table_creation[] = "CREATE TABLE IF NOT EXISTS 'Characters' ('AccountID' INTEGER, 'CharID' INTEGER, 'Credits' INTEGER, 'Level' INTEGER, 'ModelScale' INTEGER, 'Name' TEXT, 'SkillPoints' INTEGER, 'Description' TEXT, 'NetName' TEXT, 'ModelName' TEXT, PRIMARY KEY(CharID))";
+	char statement_weapon_table_creation[] = "CREATE TABLE IF NOT EXISTS 'Weapons' ('CharID' INTEGER, 'AmmoBlaster' INTEGER, 'AmmoPowercell' INTEGER, 'AmmoMetalBolts' INTEGER, 'AmmoRockets' INTEGER, 'AmmoThermal' INTEGER, 'AmmoTripmine' INTEGER, 'AmmoDetpack' INTEGER, PRIMARY KEY(CharID))";
+	char statement_skill_table_creation[] = "CREATE TABLE IF NOT EXISTS 'Skills' ('CharID' INTEGER, 'Jump' INTEGER, 'Push' INTEGER, 'Pull' INTEGER, 'Speed' INTEGER, 'Sense' INTEGER, 'SaberAttack' INTEGER, 'SaberDefense' INTEGER, 'SaberThrow' INTEGER, 'Absorb' INTEGER, 'Heal' INTEGER, 'Protect' INTEGER, 'MindTrick' INTEGER, 'TeamHeal' INTEGER, 'Lightning' INTEGER, 'Grip' INTEGER, 'Drain' INTEGER, 'Rage' INTEGER, 'TeamEnergize' INTEGER, 'StunBaton' INTEGER, 'BlasterPistol' INTEGER, 'BlasterRifle' INTEGER, 'Disruptor' INTEGER, 'Bowcaster' INTEGER, 'Repeater' INTEGER, 'DEMP2' INTEGER, 'Flechette' INTEGER, 'RocketLauncher' INTEGER, 'ConcussionRifle' INTEGER, 'BryarPistol' INTEGER, 'Melee' INTEGER, 'MaxShield' INTEGER, 'ShieldStrength' INTEGER, 'HealthStrength' INTEGER, 'DrainShield' INTEGER, 'Jetpack' INTEGER, 'SenseHealth' INTEGER, 'ShieldHeal' INTEGER, 'TeamShieldHeal' INTEGER, 'UniqueSkill' INTEGER, 'BlasterPack' INTEGER, 'PowerCell' INTEGER, 'MetalBolts' INTEGER, 'Rockets' INTEGER, 'Thermals' INTEGER, 'TripMines' INTEGER, 'Detpacks' INTEGER, 'Binoculars' INTEGER, 'BactaCanister' INTEGER, 'SentryGun' INTEGER, 'SeekerDrone' INTEGER, 'Eweb' INTEGER, 'BigBacta' INTEGER, 'ForceField' INTEGER, 'CloakItem' INTEGER, 'ForcePower' INTEGER, 'Improvements' INTEGER, PRIMARY KEY(CharID))";
+	char statement_item_table_creation[] = "CREATE TABLE IF NOT EXISTS 'Items' ('ItemID' INTEGER, 'CharID' INTEGER, 'ItemName' TEXT, PRIMARY KEY(ItemID))";
+	char statement_news_table_creation[] = "CREATE TABLE IF NOT EXISTS 'News' ('newsID' INTEGER, 'channel' TEXT, 'date' TEXT DEFAULT (strftime('%d-%m-%Y','now')), 'text' TEXT, PRIMARY KEY('newsID'))";
 
 	// GalaxyRP (Alex): [Database] New columns that are added as part of updates. If they were included in the previous columns, upgrading servers would have to redo their database from scratch.
-	char statement_xp_column_alter[110] = "ALTER TABLE Characters ADD COLUMN xp INTEGER DEFAULT 0";
-	char statement_armor_column_alter[110] = "ALTER TABLE Skills ADD COLUMN Armor INTEGER DEFAULT 0";
-	char statement_flamethrower_column_alter[110] = "ALTER TABLE Skills ADD COLUMN Flamethrower INTEGER DEFAULT 0";
-	char statement_shieldregen_columns_alter[110] = "ALTER TABLE Skills ADD COLUMN ShieldRegen INTEGER DEFAULT 0";
-	char statement_heathregen_columns_alter[110] = "ALTER TABLE Skills ADD COLUMN HealthRegen INTEGER DEFAULT 0";
+	char statement_xp_column_alter[] = "ALTER TABLE Characters ADD COLUMN xp INTEGER DEFAULT 0";
+	char statement_armor_column_alter[] = "ALTER TABLE Skills ADD COLUMN Armor INTEGER DEFAULT 0";
+	char statement_flamethrower_column_alter[] = "ALTER TABLE Skills ADD COLUMN Flamethrower INTEGER DEFAULT 0";
+	char statement_shieldregen_columns_alter[] = "ALTER TABLE Skills ADD COLUMN ShieldRegen INTEGER DEFAULT 0";
+	char statement_heathregen_columns_alter[] = "ALTER TABLE Skills ADD COLUMN HealthRegen INTEGER DEFAULT 0";
 	// GalaxyRP fix: [Database] wrapped in an explicit BEGIN/COMMIT so the four ADD COLUMNs apply
 	// atomically -- previously they ran as four separate auto-committed statements within one
 	// sqlite3_exec() call, so a server crash at the exact instant between two of them could in
@@ -434,7 +455,7 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	// saber_colors_t mode and the custom RGB payload via SABER_STORED_PACK (g_local.h) instead of
 	// just the RGB payload. The DEFAULT 1 a pre-existing row still holds decodes to mode 0
 	// (SABER_RED) with no RGB payload -- a reasonable default for a row this feature predates.
-	char statement_saber_columns_alter[400] = "BEGIN;\
+	char statement_saber_columns_alter[] = "BEGIN;\
 												ALTER TABLE Characters ADD COLUMN saberOneModel TEXT DEFAULT 'saber_1';\
 												ALTER TABLE Characters ADD COLUMN saberOneColor INTEGER DEFAULT 1;\
 												ALTER TABLE Characters ADD COLUMN saberTwoModel TEXT DEFAULT 'saber_1';\
@@ -453,7 +474,7 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	// SQLite has no ALTER TABLE support for adding to an existing table) closes this at the storage layer
 	// itself: insert_accounts_table_row() now checks its own INSERT's result and reports failure to
 	// Cmd_Register_F instead of silently ignoring a constraint violation this index can now raise.
-	char statement_username_unique_index[120] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_accounts_username_unique' ON 'Accounts' ('Username')";
+	char statement_username_unique_index[] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_accounts_username_unique' ON 'Accounts' ('Username')";
 
 	//Alex: Create Account Table
 	trap->Print("Initializing Account table.\n");

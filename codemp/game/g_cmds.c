@@ -2496,7 +2496,7 @@ void update_credits_value(gentity_t* ent) {
 		return;
 	}
 
-	char update_char_query[148] = "UPDATE Characters SET Credits='%i' WHERE CharID='%i'";
+	char update_char_query[] = "UPDATE Characters SET Credits='%i' WHERE CharID='%i'";
 	run_db_query(va(update_char_query,
 		ent->client->pers.credits,
 		ent->client->pers.CharID
@@ -2511,7 +2511,11 @@ void update_credits_value(gentity_t* ent) {
 // GalaxyRP fix: [stability] now returns qboolean (used to be void) -- its one caller, Cmd_Register_F,
 // needs to know whether this row actually got created before it marks the session logged in or proceeds
 // to create the matching Skills/Weapons rows. See the matching fix on Cmd_Register_F.
-qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
+// GalaxyRP fix: [Database] reports the new row's CharID through out_charID so the Skills and
+// Weapons rows that follow it in Cmd_Register_F can be bound to this character explicitly --
+// see the comment on those two inserts. Read via sqlite3_last_insert_rowid() immediately after
+// the step below, while this INSERT is still the last statement executed on this connection.
+qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, int* out_charID) {
 	// GalaxyRP fix: [security] this used to go through run_db_query() with the character name
 	// spliced straight into the INSERT text via va("...%s..."). Reachable via /new, using the new
 	// account's own username as its first character's name. Prepare/bind/step directly instead.
@@ -2539,6 +2543,11 @@ qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* d
 		return qfalse;
 	}
 	sqlite3_finalize(stmt);
+
+	if (out_charID)
+	{
+		*out_charID = (int)sqlite3_last_insert_rowid(db);
+	}
 
 	return qtrue;
 }
@@ -2801,7 +2810,7 @@ void update_chars_table_row_with_current_values(gentity_t* ent) {
 // GalaxyRP (Alex): [Database] DELETE This method deletes a characters table row which is associated with the ID given.
 void delete_chars_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
-	char delete_char_query[41] = "DELETE FROM Characters WHERE CharID='%i'";
+	char delete_char_query[] = "DELETE FROM Characters WHERE CharID='%i'";
 
 	run_db_query(va(delete_char_query, id), db, zErrMsg, rc, stmt);
 
@@ -2844,10 +2853,17 @@ void delete_chars_table_row_with_name(gentity_t* ent, char* charName, sqlite3* d
 // it marks the session logged in. Calls sqlite3_exec() directly instead of going through run_db_query()
 // so the result can be reported; run_db_query() itself is left untouched since ~20 other call sites in
 // this file use it for fire-and-forget UPDATE/DELETE statements where a return value isn't needed.
-qboolean insert_skills_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char insert_new_entry_to_skills_table[919] = "INSERT INTO Skills(Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
+// GalaxyRP fix: [Database] takes the CharID this row belongs to. The INSERT used to leave CharID
+// out of the column list entirely and rely on SQLite handing Characters, Skills and Weapons the
+// same auto-assigned rowid -- true only while all three tables stay in perfect lockstep. A
+// failure partway through Cmd_Register_F's three inserts breaks that lockstep permanently, and
+// every later CharID-less insert pair then binds mismatched ids, silently giving new characters
+// somebody else's skills row. See the longer comment in create_admin_account() (g_main.c), and
+// create_new_character() below, which was written later and already binds CharID properly.
+qboolean insert_skills_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, int charID) {
+	char insert_new_entry_to_skills_table[] = "INSERT INTO Skills(CharID, Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements) VALUES('%i', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
 
-	rc = sqlite3_exec(db, insert_new_entry_to_skills_table, 0, 0, &zErrMsg);
+	rc = sqlite3_exec(db, va(insert_new_entry_to_skills_table, charID), 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", zErrMsg);
@@ -2873,7 +2889,7 @@ void update_skills_table_row_with_current_values(gentity_t* ent) {
 		return;
 	}
 	
-	char update_skills_query[1054] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i', Armor='%i', Flamethrower='%i', ShieldRegen='%i', HealthRegen='%i' WHERE CharID='%i'; UPDATE Characters SET SkillPoints='%i' WHERE CharID='%i';";
+	char update_skills_query[] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i', Armor='%i', Flamethrower='%i', ShieldRegen='%i', HealthRegen='%i' WHERE CharID='%i'; UPDATE Characters SET SkillPoints='%i' WHERE CharID='%i';";
 	run_db_query(va(update_skills_query,
 		ent->client->pers.skill_levels[0],	//Jump
 		ent->client->pers.skill_levels[1],	//Push
@@ -2947,7 +2963,7 @@ void update_skills_table_row_with_current_values(gentity_t* ent) {
 // GalaxyRP (Alex): [Database] DELETE This method deletes a skills table row which is associated with the ID given.
 void delete_skills_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
-	char delete_skills_query[41] = "DELETE FROM Skills WHERE CharID='%i'";
+	char delete_skills_query[] = "DELETE FROM Skills WHERE CharID='%i'";
 
 	run_db_query(va(delete_skills_query, id), db, zErrMsg, rc, stmt);
 
@@ -2962,10 +2978,12 @@ void delete_skills_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* 
 // GalaxyRP fix: [stability] same reasoning and same treatment as insert_skills_table_row() just above --
 // now returns qboolean and calls sqlite3_exec() directly instead of the void run_db_query() wrapper, so
 // its one caller, Cmd_Register_F, can tell whether this row actually got created.
-qboolean insert_weapons_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	char insert_new_entry_to_weapons_table[159] = "INSERT INTO Weapons(AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('0', '0', '0', '0', '0', '0', '0')";
+// GalaxyRP fix: [Database] takes the CharID this row belongs to, for the same reason
+// insert_skills_table_row() above does -- see that comment.
+qboolean insert_weapons_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt, int charID) {
+	char insert_new_entry_to_weapons_table[] = "INSERT INTO Weapons(CharID, AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('%i', '0', '0', '0', '0', '0', '0', '0')";
 
-	rc = sqlite3_exec(db, insert_new_entry_to_weapons_table, 0, 0, &zErrMsg);
+	rc = sqlite3_exec(db, va(insert_new_entry_to_weapons_table, charID), 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", zErrMsg);
@@ -3230,7 +3248,7 @@ void update_weapons_table_row_with_current_values(gentity_t* ent) {
 		return;
 	}
 
-	char update_ammo_query[168] = "UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
+	char update_ammo_query[] = "UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
 	run_db_query(va(update_ammo_query,
 		ent->client->ps.ammo[AMMO_BLASTER],
 		ent->client->ps.ammo[AMMO_POWERCELL],
@@ -3250,7 +3268,7 @@ void update_weapons_table_row_with_current_values(gentity_t* ent) {
 // GalaxyRP (Alex): [Database] DELETE This method deletes a weapons table row which is associated with the ID given.
 void delete_weapons_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
-	char delete_weapons_query[41] = "DELETE FROM Weapons WHERE CharID='%i'";
+	char delete_weapons_query[] = "DELETE FROM Weapons WHERE CharID='%i'";
 
 	run_db_query(va(delete_weapons_query, id), db, zErrMsg, rc, stmt);
 
@@ -3422,7 +3440,7 @@ void select_news_channels(gentity_t* ent) {
 	// had no collation, so /newschannels could list them as two separate channels even though /news
 	// merges their entries. Collate the same way here so the channel list matches what /news actually
 	// groups together.
-	char select_channels_query[300] = "SELECT DISTINCT channel COLLATE NOCASE \
+	char select_channels_query[] = "SELECT DISTINCT channel COLLATE NOCASE \
 		from News\
 		ORDER BY channel COLLATE NOCASE";
 
@@ -3496,7 +3514,7 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 	// channel, numberOfEntries) -- splicing the raw channel name straight into the SQL string.
 	// Reachable via /news <channel> <count>, a public command any connected (even unauthenticated)
 	// player can run. Bind both values as parameters instead.
-	char select_news_query[300] = "SELECT newsID, text, date\
+	char select_news_query[] = "SELECT newsID, text, date\
 		from(SELECT newsID, text, date from News WHERE channel = ? COLLATE NOCASE ORDER BY newsID DESC LIMIT ?) \
 		ORDER BY newsID ASC";
 
@@ -3725,7 +3743,7 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// va("...Name = '%s'...", character_name, accountID) -- splicing the raw character name straight
 	// into the SQL string. Reachable via /new (using the new account's own username as its first
 	// character's name) and via /char use <name>. Bind both values as parameters instead.
-	char select_character_query[202] = "SELECT *\
+	char select_character_query[] = "SELECT *\
 		FROM Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
@@ -4124,7 +4142,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 	// join is constrained to this account's characters, and the subquery only resolves names within
 	// it (Accounts.AccountID there is a correlated reference to the outer Accounts row -- the inner
 	// FROM Characters shadows only the Characters alias, not Accounts).
-	char select_account_table_row[640] = "SELECT *\
+	char select_account_table_row[] = "SELECT *\
 		FROM Accounts, Characters\
 		INNER JOIN Skills\
 		ON Skills.CharID = Characters.CharID\
@@ -4757,7 +4775,7 @@ void update_current_character_and_account(gentity_t* ent) {
 	// change via /rpmodeup and /rpmodedown, which always call update_skills_table_row_with_current_values()
 	// immediately afterward and save all 60 columns themselves), but this save path should still
 	// write a complete, self-consistent row rather than relying on another function to cover the gap.
-	char update_character_query[1200] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i', Armor='%i', Flamethrower='%i', ShieldRegen='%i', HealthRegen='%i' WHERE CharID='%i';\
+	char update_character_query[] = "UPDATE Skills SET Jump='%i', Push='%i', Pull='%i', Speed='%i', Sense='%i', SaberAttack='%i', SaberDefense='%i', SaberThrow='%i', Absorb='%i', Heal='%i', Protect='%i', MindTrick='%i', TeamHeal='%i', Lightning='%i', Grip='%i', Drain='%i', Rage='%i', TeamEnergize='%i', StunBaton='%i', BlasterPistol='%i', BlasterRifle='%i', Disruptor='%i', Bowcaster='%i', Repeater='%i', DEMP2='%i', Flechette='%i', RocketLauncher='%i', ConcussionRifle='%i', BryarPistol='%i', Melee='%i', MaxShield='%i', ShieldStrength='%i', HealthStrength='%i', DrainShield='%i', Jetpack='%i', SenseHealth='%i', ShieldHeal='%i', TeamShieldHeal='%i', UniqueSkill='%i', BlasterPack='%i', PowerCell='%i', MetalBolts='%i', Rockets='%i', Thermals='%i', TripMines='%i', Detpacks='%i', Binoculars='%i', BactaCanister='%i', SentryGun='%i', SeekerDrone='%i', Eweb='%i', BigBacta='%i', ForceField='%i', CloakItem='%i', ForcePower='%i', Improvements='%i', Armor='%i', Flamethrower='%i', ShieldRegen='%i', HealthRegen='%i' WHERE CharID='%i';\
 		UPDATE Weapons SET AmmoBlaster='%i', AmmoPowercell='%i', AmmoMetalBolts='%i', AmmoRockets='%i', AmmoThermal='%i', AmmoTripmine='%i', AmmoDetpack='%i' WHERE CharID='%i'";
 
 	run_db_query(va(update_character_query,
@@ -5033,21 +5051,25 @@ void Cmd_Register_F(gentity_t * ent)
 	// concerned) print "Character X does not exist" if the Characters row it depends on was never
 	// actually created. All three now report success, checked in order, aborting immediately on the
 	// first failure instead of carrying on with a half-created character.
-	if (insert_chars_table_row(ent, username, db, zErrMsg, rc, stmt) == qfalse) {
+	// GalaxyRP fix: [Database] the CharID the Characters INSERT just produced, bound explicitly into
+	// the two rows that belong to it instead of being left to SQLite's rowid counters to agree on.
+	int newCharID = 0;
+
+	if (insert_chars_table_row(ent, username, db, zErrMsg, rc, stmt, &newCharID) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Registration failed: could not create your starting character. Please contact an admin.\n\"");
 		G_LogPrintf("WARNING: Cmd_Register_F failed to insert the initial Characters row for username '%s' (AccountID %i); the account was created but has no character.\n", username, ent->client->sess.accountID);
 		sqlite3_close(db);
 		return;
 	}
 
-	if (insert_skills_table_row(ent, db, zErrMsg, rc, stmt) == qfalse) {
+	if (insert_skills_table_row(ent, db, zErrMsg, rc, stmt, newCharID) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Registration failed: could not create your starting skills. Please contact an admin.\n\"");
 		G_LogPrintf("WARNING: Cmd_Register_F failed to insert the initial Skills row for username '%s' (AccountID %i); the account/character were created but have no skills row.\n", username, ent->client->sess.accountID);
 		sqlite3_close(db);
 		return;
 	}
 
-	if (insert_weapons_table_row(ent, db, zErrMsg, rc, stmt) == qfalse) {
+	if (insert_weapons_table_row(ent, db, zErrMsg, rc, stmt, newCharID) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Registration failed: could not create your starting weapons. Please contact an admin.\n\"");
 		G_LogPrintf("WARNING: Cmd_Register_F failed to insert the initial Weapons row for username '%s' (AccountID %i); the account/character were created but have no weapons row.\n", username, ent->client->sess.accountID);
 		sqlite3_close(db);
