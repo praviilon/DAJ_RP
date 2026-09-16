@@ -9001,6 +9001,37 @@ void G_RunFrame( int levelTime ) {
 		}
 	}
 
+	// GalaxyRP fix: [Duel Tournament] /duelpause used to stop the state machine below without
+	// stopping the clock. level.duel_tournament_timer is always an absolute level.time + N, and
+	// level.time keeps advancing while paused, so every pending transition expired DURING the pause
+	// and fired on the first frame after resuming. Pausing did not hold the tournament, it only
+	// deferred it and then let it snap forward.
+	//
+	// Worst in signup, where the effect was the opposite of the intent: an admin pausing mode 1 to
+	// let latecomers in burned the countdown while paused, and on resume the mode-1 branch below ran
+	// immediately -- ending the tournament outright via duel_tournament_end() if the roster was still
+	// under zyk_duel_tournament_min_players. The pause killed the tournament it was meant to extend.
+	// Milder elsewhere: mode 3's three-second "X vs Y" announcement collapsed to nothing, so duelists
+	// were teleported into the arena the instant an admin resumed.
+	//
+	// Carrying the timer forward by the frame delta keeps it a valid absolute time at every instant,
+	// so nothing that reads it has to know pausing exists -- duel_show_table() (g_cmds.c) and the
+	// arena-entry freeze in bg_pmove.c both do, and both currently only run in mode 4, which cannot
+	// be paused. Storing a remaining-time delta at pause and re-basing it at resume would work too,
+	// but only while every clear of the flag goes through Cmd_DuelPause_f, and duel_tournament_end()
+	// clears it directly.
+	//
+	// Safe against a competing write: every other assignment to this timer is either inside the
+	// "not paused" block below, or in the mode-4 block above (mode 4 cannot be paused), or is
+	// Cmd_DuelMode_f's sign-up write, which is guarded by "if (level.duel_tournament_mode != 1)" and
+	// so cannot fire for a tournament already in signup -- and joining at mode 2 or later is refused
+	// outright. level.previousTime is taken at the top of G_RunFrame, well above this, so the delta
+	// here is exactly one frame.
+	if (level.duel_tournament_paused == qtrue)
+	{
+		level.duel_tournament_timer += level.time - level.previousTime;
+	}
+
 	if (level.duel_tournament_paused == qfalse)
 	{
 		if (level.duel_tournament_mode == 5 && level.duel_tournament_timer < level.time)

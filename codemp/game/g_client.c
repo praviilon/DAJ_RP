@@ -2836,7 +2836,25 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	// duel_tournament_mode > 1, so no second globe can be spawned once the tournament starts, and the
 	// mode-2 block in G_RunFrame() (g_main.c) already ends an emptied tournament there with its own
 	// announcement. Ending early here would silence that message for no gain.
-	if (level.duel_tournament_mode == 1 && level.duelists_quantity <= 0)
+	//
+	// GalaxyRP fix: [Duel Tournament] the "or paused" half. The reasoning above holds only while the
+	// tournament is running: the mode-2 block that ends an emptied tournament lives inside
+	// G_RunFrame()'s "not paused" wrapper, so while an admin has /duelpause on, nothing ends one at
+	// all. Everyone leaving a paused mode-2-or-later tournament left it sitting at that mode with
+	// duelists_quantity at 0 and the paused flag still set, which also refuses every new sign-up
+	// (the join branch stops at duel_tournament_mode > 1) -- so that map had no duel tournament
+	// available until somebody resumed or the map changed. Now that pausing genuinely freezes the
+	// tournament clock, that state persists instead of resolving the moment anyone resumes.
+	//
+	// This is the whole of the reachable surface: ClientBegin (this site -- re-entering the world,
+	// which is how a team change including one to spectator gets here) and ClientDisconnect are the
+	// only two routes out of the roster while paused at mode 2 or later, because Cmd_DuelMode_f
+	// refuses to let anyone leave once the tournament has started and its own leave branch already
+	// ends an emptied signup. A paused tournament cannot be at mode 0 either -- Cmd_DuelPause_f
+	// refuses there, and duel_tournament_end() clears the flag -- so the added clause cannot fire
+	// when no tournament exists.
+	if (level.duelists_quantity <= 0 &&
+		(level.duel_tournament_mode == 1 || level.duel_tournament_paused == qtrue))
 	{
 		duel_tournament_end();
 		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
@@ -4610,7 +4628,25 @@ void ClientDisconnect( int clientNum ) {
 	// duel_tournament_mode > 1, so no second globe can be spawned once the tournament starts, and the
 	// mode-2 block in G_RunFrame() (g_main.c) already ends an emptied tournament there with its own
 	// announcement. Ending early here would silence that message for no gain.
-	if (level.duel_tournament_mode == 1 && level.duelists_quantity <= 0)
+	//
+	// GalaxyRP fix: [Duel Tournament] the "or paused" half. The reasoning above holds only while the
+	// tournament is running: the mode-2 block that ends an emptied tournament lives inside
+	// G_RunFrame()'s "not paused" wrapper, so while an admin has /duelpause on, nothing ends one at
+	// all. Everyone leaving a paused mode-2-or-later tournament left it sitting at that mode with
+	// duelists_quantity at 0 and the paused flag still set, which also refuses every new sign-up
+	// (the join branch stops at duel_tournament_mode > 1) -- so that map had no duel tournament
+	// available until somebody resumed or the map changed. Now that pausing genuinely freezes the
+	// tournament clock, that state persists instead of resolving the moment anyone resumes.
+	//
+	// This is the whole of the reachable surface: ClientBegin (this site -- re-entering the world,
+	// which is how a team change including one to spectator gets here) and ClientDisconnect are the
+	// only two routes out of the roster while paused at mode 2 or later, because Cmd_DuelMode_f
+	// refuses to let anyone leave once the tournament has started and its own leave branch already
+	// ends an emptied signup. A paused tournament cannot be at mode 0 either -- Cmd_DuelPause_f
+	// refuses there, and duel_tournament_end() clears the flag -- so the added clause cannot fire
+	// when no tournament exists.
+	if (level.duelists_quantity <= 0 &&
+		(level.duel_tournament_mode == 1 || level.duel_tournament_paused == qtrue))
 	{
 		duel_tournament_end();
 		trap->SendServerCommand(-1, "chat \"^3Duel Tournament: ^7There are no duelists anymore. Tournament is over!\"");
