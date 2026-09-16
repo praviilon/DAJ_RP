@@ -9405,10 +9405,13 @@ qboolean TryGrapple(gentity_t *ent)
 				// Time Power) and Magic Power (Ultra Strength/Ultra Resistance/Enemy Weakening) branches
 				// themselves used to be here. All seven powers they could ever trigger turned out to be
 				// permanently unreachable: every one of them is gated on pers.defeated_guardians and/or
-				// pers.universe_quest_progress/universe_quest_counter being nonzero, and the only place
-				// anywhere in the codebase that ever writes those fields is add_new_char(), which resets them
-				// to 0 at character creation -- no quest completion, admin command, or database load ever
-				// advances them (confirmed by grepping every assignment to all three fields). Removed the
+				// pers.universe_quest_progress/universe_quest_counter being nonzero, and NOTHING anywhere in
+				// the codebase ever writes those fields at all -- no quest completion, admin command, or
+				// database load advances them, and they are simply left at the zero that
+				// memset(client, 0, sizeof(*client)) in ClientConnect (g_client.c) gives them. This comment
+				// used to name add_new_char() as their one writer; that function has since been removed as
+				// dead itself (see its old location further down this file), which only strengthens the case
+				// for the deletion below. Removed the
 				// whole dead dispatch outright, including the now-pointless use_this_power/
 				// universe_mp_cost_factor locals that existed solely to feed it. zyk_show_magic_in_chat() and
 				// zyk_set_magic_power_cooldown_time() lost their only callers here and have been removed too
@@ -10458,41 +10461,26 @@ void Cmd_DateTime_f( gentity_t *ent ) {
 	trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", ctime(&current_time)) ); 
 }
 
-// TODO: Char class is set here, to be removed.
-// zyk: adds a new RPG char with default values
-void add_new_char(gentity_t *ent)
-{
-	int i = 0;
-
-	ent->client->pers.level_up_score = 0;
-	ent->client->pers.level = 1;
-	ent->client->pers.skillpoints = 1;
-
-	for (i = 0; i < NUM_OF_SKILLS; i++)
-	{
-		ent->client->pers.skill_levels[i] = 0;
-	}
-
-	ent->client->pers.defeated_guardians = 0;
-	// GalaxyRP fix: [Quests] hunter_quest_progress/eternity_quest_progress resets removed here — both fields removed as dead (see g_local.h)
-	ent->client->pers.secrets_found = 0;
-	ent->client->pers.universe_quest_progress = 0;
-	ent->client->pers.universe_quest_counter = 0;
-	ent->client->pers.credits = 100;
-	// GalaxyRP fix: [Classes] rpg_class is permanently 0 now that character classes are gone; the
-	// reset-to-0 assignment that used to be here (its sole assignment anywhere) has been removed.
-	ent->client->sess.magic_disabled_powers = 0;
-	ent->client->sess.magic_more_disabled_powers = 0;
-	ent->client->sess.selected_special_power = MAGIC_MAGIC_SENSE;
-	ent->client->sess.selected_left_special_power = MAGIC_MAGIC_SENSE;
-	ent->client->sess.selected_right_special_power = MAGIC_MAGIC_SENSE;
-	ent->client->sess.magic_fist_selection = 0;
-
-	// GalaxyRP fix: [Challenge Mode] the reset that used to clear the Challenge Mode flag
-	// (player_settings bit 15) here for a new char has been removed since /settings 15 no longer
-	// exists. universe_quest_counter is already fully zeroed just above (it also holds unrelated
-	// live bits, e.g. bits 0-3, so that whole-field reset is left in place).
-}
+// GalaxyRP fix: [Dead Code] add_new_char() used to sit here -- "adds a new RPG char with default
+// values", carrying zyk's own "TODO: ... to be removed" marker. It had no callers anywhere: not in
+// the commands[] dispatch table, not declared in any header, and referenced nowhere but the two
+// comments that cited it as evidence (g_main.c's magic_sense() note and the magic-dispatch note
+// further up this file, both corrected alongside this removal). Character creation and loading go
+// through create_new_character() and select_player_character() instead.
+//
+// Every one of its fifteen assignments was already produced by live code, so removing it changes
+// no behaviour:
+//   - level = 1, skillpoints = 1, credits = 100 and skill_levels[] = 0 all come back from the
+//     database -- create_new_character() inserts exactly those values and
+//     select_player_character() loads them.
+//   - level_up_score, defeated_guardians, secrets_found, universe_quest_progress and
+//     universe_quest_counter are already zero from the memset(client, 0, sizeof(*client)) that
+//     ClientConnect does (g_client.c), and nothing else in the codebase ever writes them.
+//   - the six sess.magic_* fields (magic_fist_selection, magic_disabled_powers,
+//     magic_more_disabled_powers and the three selected_*_special_power) are set to exactly these
+//     same values, MAGIC_MAGIC_SENSE included, by G_InitSessionData() (g_session.c) on every
+//     connect. Those six were the only assignments here that were not merely redundant with a
+//     memset -- and they were verbatim duplicates of live code.
 
 // GalaxyRP: Sets up the GalaxyRP directory
 void zyk_create_dir(char *file_path)

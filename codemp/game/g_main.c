@@ -5782,7 +5782,9 @@ void chaos_power(gentity_t *ent, int distance, int duration)
 // GalaxyRP fix: [Magic] magic_sense() removed. The player-facing magic dispatch in
 // Cmd_ForceUse_f()/the grab-anim block in g_cmds.c was deleted earlier as permanently
 // unreachable (every power it could trigger is gated on pers.defeated_guardians or
-// pers.universe_quest_progress, which only add_new_char() ever writes, always to 0), and that
+// pers.universe_quest_progress, which nothing in the codebase ever writes -- they sit at the zero
+// ClientConnect's memset gives them. This note used to credit add_new_char() with writing them at
+// character creation; that function has since been removed as dead too, see g_cmds.c), and that
 // deletion took magic_sense()'s only call site with it. Its siblings magic_shield(),
 // magic_disable() and magic_explosion() survive because the custom-quest-NPC block further
 // down this file still calls them; nothing anywhere called magic_sense(). It also wrote
