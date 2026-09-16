@@ -2711,6 +2711,35 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 
 	self->enemy = attacker;
 
+	// GalaxyRP fix: [Death System] count the death when the downed system is switched off.
+	//
+	// This increment used to live here unconditionally, straight out of stock JKA. Commit 54a1b823
+	// ("Added Death count to the scoreboard. It will NOT be affected by /kill") moved it into
+	// paralyze_player(), because with the Death System running a player's death is the KNOCKDOWN --
+	// player_die() only fires afterwards, when somebody finishes off a body that is already down, so
+	// counting here as well would have charged two deaths for one. That made paralyze_player() the
+	// only place in the mod that touches PERS_KILLED.
+	//
+	// rp_downed_timer 0 takes paralyze_player() out of the picture entirely: a lethal hit goes
+	// straight to targ->die() and nothing increments the counter, so the scoreboard's Deaths column
+	// sat at 0 for every player for the whole map. Restoring the increment on exactly the arm where
+	// the knockdown no longer happens keeps the field counting the same event in both modes -- one
+	// death per death, never two.
+	//
+	// Self-inflicted deaths stay excluded, which is what 54a1b823's title is about: a downed player
+	// cannot /kill at all (G_Kill refuses on status bit 6), and a live one reaching here through
+	// /kill did not count with the system on, so it must not start counting with it off. "self ==
+	// attacker" is the test the suicide counter just below already uses, so the two agree. A /kill
+	// during a private duel is deliberately NOT self-inflicted by this test -- G_Kill hands the kill
+	// to the opponent and passes them as the attacker, so the frag and the death stay balanced.
+	//
+	// NPCs and vehicles reach player_die() too and have a client of their own; the slot test keeps
+	// the counter to real players, which is the only place it was ever read.
+	if ( !RP_DownedSystemEnabled() && self->s.number < MAX_CLIENTS && self != attacker )
+	{
+		self->client->ps.persistant[PERS_KILLED]++;
+	}
+
 	if (self == attacker)
 	{
 		self->client->ps.fd.suicides++;

@@ -4319,6 +4319,22 @@ void ClientSpawn(gentity_t *ent) {
 				// already re-applied after a respawn, so the flag belongs here with it.
 				ent->flags |= FL_NOTARGET;
 
+				// GalaxyRP fix: [Death System] and the ADMIN paralysis invulnerability, for the same
+				// reason FL_NOTARGET is re-applied above: it lives on the client rather than in pers,
+				// and the g_spawnInvulnerability block a few lines up has just overwritten
+				// invulnerableTimer with its own much shorter value. Without this a paralyzed player
+				// pushed through a respawn (rcon's forceteam and the duel-queue rotation both reach
+				// ClientSpawn() directly) would serve the rest of their punishment killable, which is
+				// the one thing RP_EnterDownedState() sets the flag to prevent. pers.downedTime is the
+				// authoritative remaining time and survives the respawn alongside the status bits, so
+				// the window is rebuilt from it; the trailing second is the same slack
+				// RP_EnterDownedState() uses, and RP_ClearDownedState() still ends it at the release.
+				if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADMIN_PARALYSIS))
+				{
+					ent->client->invulnerableTimer = level.time + (ent->client->pers.downedTime * 1000) + 3000;
+					ent->client->ps.eFlags |= EF_INVULNERABLE;
+				}
+
 				ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 				ent->client->ps.forceHandExtendTime = level.time + 500;
 				ent->client->ps.velocity[2] += 150;

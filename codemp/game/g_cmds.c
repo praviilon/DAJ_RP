@@ -1740,7 +1740,34 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 	// whatever part-second was left over from a previous stay in this state.
 	ent->client->downedTimeResidual = 0;
 
-	ent->client->invulnerableTimer = level.time + 3000;
+	// GalaxyRP fix: [Death System] an admin paralysis is invulnerable for the whole punishment, not
+	// just the three seconds a combat knockdown gets.
+	//
+	// Being killed used to end a paralysis early: G_Damage()'s clear-then-die arm runs
+	// RP_ClearDownedState() and the target respawns free, so any willing player with a gun could
+	// cancel an admin's /paralyze on request. Holding EF_INVULNERABLE for the duration closes that,
+	// because G_Damage() returns before reaching that arm while the flag is up.
+	//
+	// It is not total protection and is not meant to be. G_Damage()'s test is "targ has the flag AND
+	// attacker->client AND targ != attacker", so it only stops players and NPCs: world damage (lava,
+	// trigger_hurt, drowning, falling) is dealt by the world entity, which has no client, and
+	// self-inflicted damage is exempt by the same test. The whole check also sits inside
+	// "if (!(dflags & DAMAGE_NO_PROTECTION))". A player paralyzed standing over a pit can still die
+	// in it. Closing that too would mean a guard written on the paralysis rather than on this flag.
+	//
+	// The extra 3000 is slack, not extra punishment. RP_RunDownedTimer() (g_active.c) clamps its
+	// frame delta to 1000ms, so a server hitch makes the countdown run slower than the wall clock and
+	// the flag would otherwise lapse a moment before the release. The release itself is what ends the
+	// invulnerability -- RP_ClearDownedState() clears it -- so the slack is never actually served.
+	if ( adminParalysis )
+	{
+		ent->client->invulnerableTimer = level.time + (downedSeconds * 1000) + 3000;
+	}
+	else
+	{
+		ent->client->invulnerableTimer = level.time + 3000;
+	}
+
 	ent->client->ps.eFlags |= EF_INVULNERABLE;
 
 	// GalaxyRP fix: [Jetpack] a knockdown while the jetpack is running leaves the player flying with no
@@ -1789,6 +1816,20 @@ void RP_ClearDownedState( gentity_t *ent )
 	if ( G_PlayerIsDowned( ent ) && (ent->flags & FL_NOTARGET) )
 	{
 		ent->flags &= ~FL_NOTARGET;
+	}
+
+	// GalaxyRP fix: [Death System] and the invulnerability that comes with an ADMIN paralysis, which
+	// RP_EnterDownedState() sets to run for the whole punishment. Tested before the bits are cleared,
+	// exactly like FL_NOTARGET above, and gated on bit 26 so this never strips the flag from a player
+	// who has it for another reason -- a fresh spawn, a duel-tournament placement, or the three
+	// seconds a combat knockdown gets. Putting it here rather than in RP_ReleaseFromDownedState()
+	// covers every exit: /unparalyze, the countdown's auto-release, /killother, and a death the
+	// invulnerability did not stop. help_up() is unaffected -- it cannot reach an admin paralysis at
+	// all, and for a combat knockdown it calls this first and grants its own invulnerability after.
+	if ( G_PlayerIsAdminParalyzed( ent ) )
+	{
+		ent->client->ps.eFlags &= ~EF_INVULNERABLE;
+		ent->client->invulnerableTimer = 0;
 	}
 
 	ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_DOWNED);
