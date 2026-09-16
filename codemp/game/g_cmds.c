@@ -62,6 +62,31 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define MAX_ITEMS_PER_CHARACTER 50
 #define MAX_ITEM_NAME_LENGTH 64
 
+// GalaxyRP fix: [News] how many distinct channels the news system may hold, and how long a channel
+// name may be.
+//
+// Neither was bounded before, and channels are minted implicitly: /newsadd <channel> <text> on an
+// unused name creates one, so a typo ("genral" beside "general") silently adds a channel. That
+// matters because select_news_channels() lists every DISTINCT channel with no LIMIT, one
+// zyk_print_long_line() per row, and SV_AddServerCommand drops the client once
+// MAX_RELIABLE_COMMANDS + 1 (129) commands are outstanding -- so around 128 channels made
+// /newschannels disconnect whoever ran it. That command carries no flags at all: no login, no admin
+// gate, not even CMD_NOINTERMISSION, so the state would have hit every player who tried it,
+// including one who had only just connected.
+//
+// The name cap is a second ceiling on the same command and one more besides. A name over roughly
+// 900 characters costs two commands per row instead of one, halving the count above; and
+// Cmd_News_f's "Viewing entries in channel %s" header goes out as a single unsplit command, which
+// SV_SendServerCommand drops WHOLE past 1022 characters, so a long enough name made that header
+// vanish. trap->Argv() allowed up to MAX_STRING_CHARS - 1 of them.
+//
+// The channel cap bounds growth only: it is tested just for a channel that does not exist yet, so
+// posting to the channels already in use keeps working at the limit. The length cap is deliberately
+// unconditional -- a simple rule, checked before the database is even opened. A pre-existing
+// channel whose name is longer stays readable and listed; it just cannot take new entries.
+#define MAX_NEWS_CHANNELS 16
+#define MAX_NEWS_CHANNEL_LENGTH 32
+
 // GalaxyRP fix: [Chat] how many characters of payload a single SendServerCommand may carry.
 // SV_SendServerCommand silently drops the entire message -- not the tail, the whole thing -- once
 // the formatted command passes 1022 characters, and the wrapper around a printed line
@@ -3398,17 +3423,115 @@ static void zyk_print_long_line(gentity_t *ent, const char *prefix, const char *
 	}
 }
 
-void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
+// GalaxyRP fix: [News] does this channel already hold at least one entry? Matched COLLATE NOCASE,
+// the same way select_news_from_channel() groups entries and select_news_channels() lists them, so
+// the cap below agrees with what a player actually sees -- posting to "General" when "general"
+// exists has always gone to the same channel, and must not be counted as creating a new one.
+// Returns -1 if the question could not be answered, distinct from a real "no".
+static int news_channel_exists(const char *channel, sqlite3 *db, sqlite3_stmt *stmt)
+{
+	int found = -1;
+
+	if (sqlite3_prepare(db, "SELECT count(*) FROM News WHERE channel = ? COLLATE NOCASE", -1, &stmt, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	sqlite3_bind_text(stmt, 1, channel, -1, SQLITE_TRANSIENT);
+
+	if (sqlite3_step(stmt) == SQLITE_ROW)
+	{
+		found = (sqlite3_column_int(stmt, 0) > 0) ? 1 : 0;
+	}
+	else
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+
+	sqlite3_finalize(stmt);
+
+	return found;
+}
+
+// GalaxyRP fix: [News] how many distinct channels exist, or -1 if the count could not be read.
+// Collated the same way as everything else that groups channels, so this counts exactly the rows
+// /newschannels would print -- which is the number that has to stay under MAX_NEWS_CHANNELS.
+static int news_channel_count(sqlite3 *db, sqlite3_stmt *stmt)
+{
+	int count = -1;
+
+	if (sqlite3_prepare(db, "SELECT count(*) FROM (SELECT DISTINCT channel COLLATE NOCASE FROM News)", -1, &stmt, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	if (sqlite3_step(stmt) == SQLITE_ROW)
+	{
+		count = sqlite3_column_int(stmt, 0);
+	}
+	else
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+
+	sqlite3_finalize(stmt);
+
+	return count;
+}
+
+// GalaxyRP fix: [News] now returns qboolean. Cmd_UpdateNews_f used to announce "Added news to
+// channel %s" unconditionally, so a refused or failed insert still read as success -- the same
+// thing inventory_add_item() was changed for. The caller now reports what actually happened.
+qboolean insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 	sqlite3* db;
 	int rc;
 	sqlite3_stmt* stmt = 0;
+	int exists = 0;
+	int channels = 0;
 
 	rc = RP_DB_Open(&db);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("Can't open database: %s\n", sqlite3_errmsg(db));
 		sqlite3_close(db);
-		return;
+		return qfalse;
+	}
+
+	// GalaxyRP fix: [News] refuse to mint a SEVENTEENTH channel -- see MAX_NEWS_CHANNELS for why the
+	// set has to be bounded at all. Scoped to a channel that does not exist yet, so an admin can go
+	// on posting to the channels already in use once the limit is reached; only new names are
+	// refused. Both lookups are collated the same way /news and /newschannels group channels, and a
+	// lookup that fails refuses rather than guessing.
+	exists = news_channel_exists(channel, db, stmt);
+
+	if (exists < 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1Could not read the news channels. Nothing was added.\n\"");
+		sqlite3_close(db);
+		return qfalse;
+	}
+
+	if (exists == 0)
+	{
+		channels = news_channel_count(db, stmt);
+
+		if (channels < 0)
+		{
+			trap->SendServerCommand(ent->s.number, "print \"^1Could not read the news channels. Nothing was added.\n\"");
+			sqlite3_close(db);
+			return qfalse;
+		}
+
+		if (channels >= MAX_NEWS_CHANNELS)
+		{
+			trap->SendServerCommand(ent->s.number, va("print \"^1There are already %d news channels. Post to an existing one, or clear a channel out with /newsremove first.\n\"", MAX_NEWS_CHANNELS));
+			sqlite3_close(db);
+			return qfalse;
+		}
 	}
 
 	// GalaxyRP fix: [security] this used to go through run_db_query() with the channel name and news
@@ -3422,7 +3545,7 @@ void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		sqlite3_close(db);
-		return;
+		return qfalse;
 	}
 	sqlite3_bind_text(stmt, 1, channel, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, news_text, -1, SQLITE_TRANSIENT);
@@ -3435,7 +3558,7 @@ void insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 
 	sqlite3_close(db);
 
-	return;
+	return (rc == SQLITE_DONE) ? qtrue : qfalse;
 }
 
 // GalaxyRP (Alex): [Database] SELECT This method selects all the unique channels from the news table.
@@ -18857,9 +18980,28 @@ void Cmd_UpdateNews_f(gentity_t *ent) {
 		return;
 	}
 
-	insert_news_table_row(ent, arg1, arg2);
+	// GalaxyRP fix: [News] refuse a channel name past MAX_NEWS_CHANNEL_LENGTH -- see the constant for
+	// what an unbounded one costs. Checked here, before insert_news_table_row() opens a database
+	// connection below, so a rejected name never opens one. Deliberately unconditional rather than
+	// scoped to new channels: a pre-existing channel with a longer name stays readable and listed by
+	// /newschannels, it simply cannot take new entries, and one plain rule is easier to explain than
+	// "this long name works and that one does not". strlen is safe on arg1 -- trap->Argv() always
+	// NUL-terminates within the buffer it is given.
+	if ((int)strlen(arg1) > MAX_NEWS_CHANNEL_LENGTH)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"^1Channel names are limited to %d characters.\n\"", MAX_NEWS_CHANNEL_LENGTH));
+		return;
+	}
 
-	trap->SendServerCommand(ent->s.number, va("print \"Added news to channel %s\n\"", arg1));
+	// GalaxyRP fix: [News] announce the addition only when a row was actually written.
+	// insert_news_table_row() now reports its outcome, and it has real refusal paths of its own (the
+	// channel cap), so claiming success unconditionally would have told an admin their entry had
+	// been posted when it had not. Its refusals print their own reason, so there is nothing to add
+	// on the failing branch.
+	if (insert_news_table_row(ent, arg1, arg2) == qtrue)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Added news to channel %s\n\"", arg1));
+	}
 
 }
 
