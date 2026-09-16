@@ -41,6 +41,27 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // construction rather than by two separately-maintained "15"s drifting apart.
 #define MAX_CHARACTERS_PER_ACCOUNT 15
 
+// GalaxyRP fix: [Items] how many items one character may hold, and how long an item's name may be.
+//
+// Neither was bounded before. /inventory sends one reliable server command per item -- three from
+// inventory_display_beginning(), one per row, one from inventory_display_end() -- and
+// SV_AddServerCommand (sv_main.cpp) drops the client outright with "Server command overflow" once
+// MAX_RELIABLE_COMMANDS + 1 (129) of them are outstanding unacknowledged. So a character holding
+// around 125 items was disconnected the moment they typed /inventory or /inv, every time, with no
+// way to see their own item ids to trash any. Reachable against somebody else too, through repeated
+// /createitem and /giveitem. At 50 a full listing costs 54 commands, comfortably inside the window.
+//
+// The name cap is a separate ceiling with the same root: each row goes out as its own print, and
+// SV_SendServerCommand drops a formatted message over 1022 characters WHOLE rather than truncating
+// it (see RP_LIST_FLUSH_AT below), so a name past roughly 1005 characters made that item invisible
+// in /inventory for good -- still there, still transferable by id, just never shown. trap->Argv()
+// allowed up to MAX_STRING_CHARS - 1 of them.
+//
+// Both caps bound growth only. A character that already holds more than 50 items keeps every one of
+// them and can still trash and give them away; it simply cannot gain more until it is back under.
+#define MAX_ITEMS_PER_CHARACTER 50
+#define MAX_ITEM_NAME_LENGTH 64
+
 // GalaxyRP fix: [Chat] how many characters of payload a single SendServerCommand may carry.
 // SV_SendServerCommand silently drops the entire message -- not the tail, the whole thing -- once
 // the formatted command passes 1022 characters, and the wrapper around a printed line
@@ -5394,6 +5415,37 @@ void Cmd_Char_f(gentity_t *ent) {
 
 //INVENTORY
 
+// GalaxyRP fix: [Items] how many items a given character holds, or -1 if the count could not be
+// read. Takes a CharID rather than a gentity_t because the two callers ask about different people:
+// inventory_add_item() asks about the player running /createitem, and Cmd_GiveItem_f() asks about
+// the RECIPIENT of a /giveitem -- which is the half that stops one player filling another player's
+// inventory past the point where /inventory disconnects them. -1 is distinct from a real count so a
+// failed read refuses the action rather than silently reading as "empty" and waving it through.
+static int inventory_item_count(int charID, sqlite3 *db, sqlite3_stmt *stmt)
+{
+	int count = -1;
+
+	if (sqlite3_prepare(db, va("SELECT count(ItemID) FROM Items WHERE CharID='%i'", charID), -1, &stmt, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	if (sqlite3_step(stmt) == SQLITE_ROW)
+	{
+		count = sqlite3_column_int(stmt, 0);
+	}
+	else
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+
+	sqlite3_finalize(stmt);
+
+	return count;
+}
+
 qboolean inventory_does_player_own_item(gentity_t *ent, int itemID, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt)
 {
 	rc = sqlite3_prepare(db, va("SELECT count(ItemID) FROM Items WHERE ItemID='%i' AND CharID='%i'", itemID, ent->client->pers.CharID), -1, &stmt, NULL);
@@ -5447,6 +5499,24 @@ void inventory_display_end(gentity_t *ent) {
 // Bound as a parameter instead. Also now returns qboolean so Cmd_CreateItem_f can tell whether the
 // item was actually created before logging it as created.
 qboolean inventory_add_item(gentity_t *ent, char item_to_add[MAX_STRING_CHARS], sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
+	// GalaxyRP fix: [Items] refuse once this character is at MAX_ITEMS_PER_CHARACTER -- see the
+	// constant for why the collection has to be bounded at all. Placed here rather than in
+	// Cmd_CreateItem_f so that any future caller of this function inherits the limit instead of
+	// having to remember it, and ahead of the INSERT so a refused creation writes nothing.
+	int item_count = inventory_item_count(ent->client->pers.CharID, db, stmt);
+
+	if (item_count < 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1Could not read your inventory. Item not created.\n\"");
+		return qfalse;
+	}
+
+	if (item_count >= MAX_ITEMS_PER_CHARACTER)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"^1Your inventory is full (%d items). Trash or give something away first.\n\"", MAX_ITEMS_PER_CHARACTER));
+		return qfalse;
+	}
+
 	rc = sqlite3_prepare(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
@@ -5567,7 +5637,14 @@ void inventory_display_items(gentity_t *ent, sqlite3 *db, char *zErrMsg, int rc,
 		int itemID;
 		char item[MAX_STRING_CHARS];
 		itemID = sqlite3_column_int(stmt, 0);
-		strcpy(item, sqlite3_column_text(stmt, 1));
+		// GalaxyRP fix: [Items] this used to be strcpy(item, sqlite3_column_text(stmt, 1)) -- the
+		// same unbounded, NULL-unsafe read zyk_db_column_string() was written for in the news
+		// reads. sqlite3_column_text() returns NULL for a NULL column and strcpy() with a NULL
+		// source is undefined behaviour, not an empty string; the Items table declares ItemName
+		// without NOT NULL, so only inventory_add_item() being the sole writer kept that off the
+		// table. The copy was unbounded too, fitting only because /createitem's name comes through
+		// trap->Argv() into a buffer of the same size -- a property of the caller, not of the copy.
+		zyk_db_column_string(item, sizeof(item), stmt, 1);
 
 		trap->SendServerCommand(ent - g_entities, va("print \"^3%i. ^2%s\n\"", itemID, item));
 		rc = sqlite3_step(stmt);
@@ -5622,6 +5699,16 @@ void Cmd_CreateItem_f(gentity_t *ent) {
 	}
 
 	trap->Argv(1, arg1, sizeof(arg1));
+
+	// GalaxyRP fix: [Items] refuse a name past MAX_ITEM_NAME_LENGTH -- see the constant for why an
+	// over-long name made the item permanently invisible in /inventory. Checked here, before
+	// RP_DB_Open() below, so a rejected name never opens a database connection. strlen is safe on
+	// arg1: trap->Argv() always NUL-terminates within the buffer it is given.
+	if ((int)strlen(arg1) > MAX_ITEM_NAME_LENGTH)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"^1Item names are limited to %d characters.\n\"", MAX_ITEM_NAME_LENGTH));
+		return;
+	}
 
 	sqlite3 *db;
 	char *zErrMsg = 0;
@@ -5750,6 +5837,29 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 	// "player doesn't own this item" path this returned without calling sqlite3_close(db), leaking
 	// a database connection on every failed /giveitem attempt; closing it here fixes that leak too.
 	if (inventory_does_player_own_item(ent, item_id, db, zErrMsg, rc, stmt) == qfalse) {
+		sqlite3_close(db);
+		return;
+	}
+
+	// GalaxyRP fix: [Items] refuse when the RECIPIENT is already at MAX_ITEMS_PER_CHARACTER. This is
+	// the half of the cap that matters for other people: without it, repeated /createitem and
+	// /giveitem could push somebody else's inventory past the point where their own /inventory
+	// disconnects them (see the constant). Checked after the ownership test above so the giver still
+	// learns "you do not own this item" first when both are true, and before the transfer so a
+	// refused give moves nothing. Closes the connection on the way out, like the ownership path
+	// above -- this function opened it.
+	int recipient_items = inventory_item_count(g_entities[player_id].client->pers.CharID, db, stmt);
+
+	if (recipient_items < 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1Could not read that player's inventory. Item not transferred.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
+	if (recipient_items >= MAX_ITEMS_PER_CHARACTER)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"^1That player's inventory is full (%d items).\n\"", MAX_ITEMS_PER_CHARACTER));
 		sqlite3_close(db);
 		return;
 	}
