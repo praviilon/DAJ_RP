@@ -256,6 +256,19 @@
 				hide 			cameraControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		upButton		forecolor 1 1 1 1 ;
+				// GalaxyRP fix: [Profile UI] clear the tab strip's own highlight too. setitemcolor
+				// writes window.foreColor on the loaded menu and nothing ever puts it back on its own
+				// -- the menu is parsed once at UI init, and opening or closing it only toggles
+				// visibility -- so the white a tab paints on itself outlived every trip through this
+				// button. This is the only place that shows upControls, and it shows the strip with
+				// every tab body hidden, so whichever tab was clicked last sat there looking selected
+				// above an empty pane until another tab was clicked. Weapons most of the time, being
+				// the top of the strip and so the first one anybody clicks.
+				//
+				// Same two lines the four tab actions use, for the same reason: the group repaint
+				// covers forceSkillsButton as well, so its own light blue goes back on afterwards.
+				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
 			}
 		}
 
@@ -421,6 +434,19 @@
 				hide 			cameraControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		commandsButton		forecolor 1 1 1 1 ;
+				// GalaxyRP fix: [Shop] clear the Upgrades/Ammo/Misc strip's own highlight too, the same
+				// repair upButton ("Skills") needed for its tab strip and for the same reason:
+				// setitemcolor writes window.foreColor on the loaded menu and nothing puts it back on
+				// its own, so the white a shop tab paints on itself when clicked survived every trip
+				// back through this button. This is the only place that shows commandsControls, and it
+				// shows the strip with all three panel bodies hidden, so whichever tab was clicked last
+				// sat there still lit above an empty pane. Upgrades most of the time, being the top of
+				// the strip.
+				//
+				// One line rather than the two the Skills strip needs: all three members of
+				// commandsControls are plain 1 .682 0 tabs, so there is no odd colour to put back
+				// afterwards the way forceSkillsButton's light blue has to be.
+				setitemcolor		commandsControls	forecolor 1 .682 0 1 ;
 			}
 		}
 
@@ -2003,6 +2029,10 @@
 				hide			levelammo ;
 				hide			levelitem ;
 				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				// GalaxyRP: [Profile UI] the line above repaints every item in upControls, which now
+				// includes forceSkillsButton -- put its own light blue back so switching tabs does not
+				// turn the Force button yellow like the rest of the strip.
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
 				setitemcolor		weaponSkillsButton	forecolor 1 1 1 1 ;
 			}
 		}
@@ -2261,6 +2291,10 @@
 				hide			levelammo ;
 				hide			levelitem ;
 				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				// GalaxyRP: [Profile UI] the line above repaints every item in upControls, which now
+				// includes forceSkillsButton -- put its own light blue back so switching tabs does not
+				// turn the Force button yellow like the rest of the strip.
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
 				setitemcolor		otherSkillsButton	forecolor 1 1 1 1 ;
 			}
 		}
@@ -2444,6 +2478,10 @@
 				show			levelammo ;
 				hide			levelitem ;
 				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				// GalaxyRP: [Profile UI] the line above repaints every item in upControls, which now
+				// includes forceSkillsButton -- put its own light blue back so switching tabs does not
+				// turn the Force button yellow like the rest of the strip.
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
 				setitemcolor		ammoSkillsButton	forecolor 1 1 1 1 ;
 			}
 		}
@@ -2622,6 +2660,10 @@
 				hide			levelammo ;
 				show			levelitem ;
 				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				// GalaxyRP: [Profile UI] the line above repaints every item in upControls, which now
+				// includes forceSkillsButton -- put its own light blue back so switching tabs does not
+				// turn the Force button yellow like the rest of the strip.
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
 				setitemcolor		itemsSkillsButton	forecolor 1 1 1 1 ;
 			}
 		}
@@ -3399,6 +3441,107 @@
 			forecolor			1 1 1 1
 			visible				0
 			decoration
+		}
+
+		// GalaxyRP: [Profile UI] fifth tab in the Skills strip, under Weapons/Protection/Ammo/Items
+		// at the next 30px step (rect y 100/130/160/190 -> 220). It opens forceLoginSkillsControls --
+		// the same Force skill panel the Customize page's Force icon (forceLogin, above) opens, not a
+		// second copy of it -- so the two entry points cannot drift apart.
+		//
+		// The action mirrors forceLogin's hide list rather than the shorter one its four neighbours
+		// use, because this panel is not a tab body: forceLoginSkillsControls is laid out from
+		// x 170 y 80 and sits directly on top of the tab strip at x 160 y 100-220, so the strip has to
+		// go with everything else. That is why upControls is hidden here and is not in the neighbours'
+		// lists. The visible consequence is the same one the Customize route already has: the Force
+		// panel fills the pane on its own, and "Skills" in the left nav brings the strip back.
+		//
+		// Deliberately no exec "zykmod", matching the four neighbours: reaching this button at all
+		// means upButton ("Skills") was clicked, and that execs zykmod on the way in. The Customize
+		// page's Force icon needs its own exec because it is reachable without passing through Skills.
+		//
+		// No cvarTest either. The whole Skills tab is already gated on ui_loggedin at upButton, which
+		// is the only way to make upControls visible, so a logged-out player can never see this.
+		itemDef 
+		{
+			name				forceSkillsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 220 100 30
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef 
+		{
+			name				forceSkillsButton
+			group				upControls
+			text				"Force"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 220 100 30
+			font				3
+			textscale			0.7
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			// GalaxyRP: [Profile UI] the light blue of forceLoginTitle -- the word "Force" above the
+			// Force icon on the Customize page -- rather than the 1 .682 0 yellow its four neighbours
+			// use, so the one button that leaves the tab strip does not read as another tab.
+			forecolor			.549 .854 1 1
+			visible				0
+			descText			"Force power skills"
+
+			mouseEnter 
+			{ 
+				show			forceSkillsButton_glow
+			}
+			mouseExit 
+			{ 
+				hide			forceSkillsButton_glow
+			}	  	  
+			action 
+			{ 
+				play			"sound/interface/button1.wav" ;
+				// GalaxyRP: [Profile UI] this button hides itself, which its four neighbours never do,
+				// and a hidden item is skipped outright by Menu_HandleMouseMove (ui_shared.c) -- so
+				// mouseExit never fires and the hover glow it just switched on would stay painted over
+				// the Force panel underneath. Switch it off here rather than relying on a script that
+				// cannot run.
+				hide			forceSkillsButton_glow ;
+				hide			listControls ;
+				hide			charControls ;
+				hide			changePassControls ;
+				hide			rpgClassControls ;
+				hide			upControls ;
+				hide			weaponSkillsControls ;
+				hide			otherSkillsControls ;
+				hide			ammoSkillsControls ;
+				hide			itemsSkillsControls ;
+				hide			questControls ;
+				hide			universeControls ;
+				hide			lightControls ;
+				hide			darkControls ;
+				hide			eternityControls ;
+				hide			questMapsControls ;
+				hide			commandsControls ;
+				hide			levelweapon ;
+				hide			levelother ;
+				hide			levelammo ;
+				hide			levelitem ;
+				hide			buyControls ;
+				hide			buyAmmoControls ;
+				hide			buyWeaponsControls ;
+				hide			buyMiscControls ;
+				hide			cameraControls ;
+				show			forceLoginSkillsControls ;
+				// Clear the strip's highlight on the way out instead of claiming it. The strip is
+				// hidden while this panel is up, so a white "active tab" would only be seen again
+				// when "Skills" brings it back -- pointing at a tab whose body is no longer shown.
+				setitemcolor		upControls		forecolor 1 .682 0 1 ;
+				setitemcolor		forceSkillsButton	forecolor .549 .854 1 1 ;
+			}
 		}
 
 //----------------------------------------------------------------------------------------------
