@@ -29,6 +29,15 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "sqlite/sqlite3.h"
 
+// GalaxyRP fix: [portability] for zyk_create_dir() below, which creates directories itself
+// rather than shelling out to mkdir(1).
+#if defined(_WIN32)
+	#include <direct.h>
+#else
+	#include <sys/types.h>
+	#include <sys/stat.h>
+#endif
+
 #define MAX_EMOTE_WORDS 11;
 #define MAX_CHAT_MODIFIERS 24;
 
@@ -10836,13 +10845,57 @@ void Cmd_DateTime_f( gentity_t *ent ) {
 //     memset -- and they were verbatim duplicates of live code.
 
 // GalaxyRP: Sets up the GalaxyRP directory
+//
+// GalaxyRP fix: [portability] this was two system() calls, and the Linux one was wrong:
+// "mkdir -p GalaxyRP%s" with no separator, while all twelve callers pass a relative path such as
+// "entities/mp/ffa3". It created GalaxyRPentities/mp/ffa3, so the fopen() that follows every one of
+// these calls -- into GalaxyRP/entities/... -- opened nothing, and /entsave and /remapsave simply
+// did not work on a Linux server for any map whose folder did not already exist.
+//
+// Fixing the separator would have been one character. The shell goes as well for three further
+// reasons: the Windows branch depended on cmd.exe accepting forward slashes inside a quoted md,
+// which is not something to rely on; every call forked a shell mid-frame; and the map name is
+// interpolated straight into that command line, so a map file whose name carries shell
+// metacharacters would have them executed. mkdir(2) takes the path as a path.
+//
+// One component at a time, because these paths nest -- a JKA map name is itself "mp/ffa3" -- and
+// neither _mkdir() nor mkdir() creates intermediate directories. Failures are ignored exactly as
+// they were before: the usual one is EEXIST, and the callers all check their fopen() anyway.
+static void zyk_mkdir_one( const char *path )
+{
+#if defined(_WIN32)
+	_mkdir( path );
+#else
+	mkdir( path, 0755 );
+#endif
+}
+
 void zyk_create_dir(char *file_path)
 {
-#if defined(__linux__)
-	system(va("mkdir -p GalaxyRP%s", file_path));
-#else
-	system(va("mkdir \"GalaxyRP/%s\"", file_path));
-#endif
+	char path[MAX_OSPATH];
+	int i;
+
+	if (!file_path || !file_path[0])
+	{
+		return;
+	}
+
+	Com_sprintf(path, sizeof(path), "GalaxyRP/%s", file_path);
+
+	// zyk: i starts at 1 so a leading separator is never taken for a component of its own
+	for (i = 1; path[i] != '\0'; i++)
+	{
+		if (path[i] == '/' || path[i] == '\\')
+		{
+			char separator = path[i];
+
+			path[i] = '\0';
+			zyk_mkdir_one(path);
+			path[i] = separator;
+		}
+	}
+
+	zyk_mkdir_one(path);
 }
 
 // GalaxyRP fix: [Guardian] clean_guardians() used to live here. Its entire body was permanently a
@@ -13239,6 +13292,30 @@ void Cmd_VehicleCloak_f( gentity_t *ent ) {
 	}
 }
 
+// GalaxyRP fix: [security] one length test for the six commands that build a file path out of a
+// name the admin typed. zyk_check_user_input() already refuses anything but letters and digits, but
+// it bounds the length only by MAX_STRING_CHARS, and every one of those six splices the result into
+// "GalaxyRP/<kind>/<map>/<name>.txt". /entload then copied that path into
+// level.load_entities_file, a char[512], with a plain strcpy() -- a 1023-character name builds a
+// 1054-byte path, which ran over the rest of level_locals_t including the last_spawned_entity
+// pointer. That copy is bounded now too; refusing the name here is what stops a path from being
+// built over-long at all, and refusing beats truncating for the same reason /remap refuses an
+// over-long shader name: a silently shortened name opens a different file than the one asked for.
+//
+// It lives beside zyk_check_user_input()'s callers rather than inside it because character names
+// and account usernames go through that helper as well and have limits of their own.
+static qboolean zyk_preset_name_too_long( gentity_t *ent, const char *name )
+{
+	if ( name && (int)strlen(name) > ZYK_PRESET_NAME_MAX )
+	{
+		trap->SendServerCommand( ent-g_entities,
+			va("print \"File name is too long. At most %d characters.\n\"", ZYK_PRESET_NAME_MAX) );
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 /*
 ==================
 Cmd_Remap_f
@@ -13320,7 +13397,11 @@ void Cmd_RemapList_f(gentity_t *ent) {
 	
 	page = atoi(arg1);
 
-	if (page == 0)
+	// GalaxyRP fix: [Shader Remap] this tested only for 0. A negative page reached the paging
+	// arithmetic below as i = 8 * (page - 1), so "/remaplist -1" started at remappedShaders[-16] and
+	// read eight entries from BEFORE the table -- about a kilobyte of whatever globals sit there,
+	// printed to the admin's console. Pages are 1-based, so anything under 1 is not a page.
+	if (page < 1)
 	{
 		trap->SendServerCommand(ent->s.number, "print \"Invalid page number\n\"");
 		return;
@@ -13435,6 +13516,13 @@ void Cmd_RemapDeleteFile_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -13489,6 +13577,13 @@ void Cmd_RemapSave_f( gentity_t *ent ) {
 	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
 		return;
 	}
 
@@ -13548,6 +13643,13 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
 		return;
 	}
 
@@ -13908,6 +14010,27 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
+		// GalaxyRP fix: [Entity System] the display branch above has always tested inuse and this
+		// one never did, so a free slot -- and after any /entremove there are plenty, in the range
+		// this command accepts -- could be "edited".
+		//
+		// What made that more than a no-op is that G_FreeEntity() ends with
+		// memset(ed, 0, sizeof(*ed)) and does not put s.number back; only G_InitGentity() does, when
+		// the slot is handed out again. So a freed entity carries s.number == 0, and both
+		// zyk_main_set_entity_field() and zyk_main_spawn_entity() key everything off ent->s.number:
+		// the key/value pairs landed in CLIENT 0's spawn-string row, and the respawn then linked the
+		// thing into the world -- and could ICARUS_InitEnt() it -- as entity 0. It also left live
+		// fields, a think pointer among them, in a slot G_Spawn() hands out later.
+		//
+		// Both helpers refuse a slot that is not in use now as well (see zyk_main_set_entity_field
+		// in g_spawn.c), because this command is not the only caller that reached them without
+		// looking. This is the half that can tell the admin why nothing happened.
+		if (!this_ent->inuse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is not in use\n\"", entity_id) );
+			return;
+		}
+
 		if ( number_of_args % 2 != 0)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments, because they are key/value pairs.\n\"") );
@@ -14014,6 +14137,13 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
 	{
 		trap->SendServerCommand( ent->s.number, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
 		return;
 	}
 
@@ -14189,13 +14319,24 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
+		return;
+	}
+
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
 
 	zyk_create_dir(va("entities/%s", zyk_mapname));
 
-	strcpy(level.load_entities_file, va("GalaxyRP/entities/%s/%s.txt",zyk_mapname,arg1));
+	// GalaxyRP fix: [security] was strcpy() into a char[512] from a path built out of a name
+	// bounded only by MAX_STRING_CHARS -- see ZYK_PRESET_NAME_MAX in g_local.h. The name is
+	// refused above if it is too long; this makes the copy itself safe whatever that limit
+	// becomes, and whatever length of map name the path picks up.
+	Q_strncpyz(level.load_entities_file, va("GalaxyRP/entities/%s/%s.txt",zyk_mapname,arg1), sizeof(level.load_entities_file));
 
 	this_file = fopen(level.load_entities_file,"r");
 	if (this_file)
@@ -14257,6 +14398,13 @@ void Cmd_EntDeleteFile_f( gentity_t *ent ) {
 	if (zyk_check_user_input(arg1, strlen(arg1)) == qfalse)
 	{
 		trap->SendServerCommand( ent-g_entities, "print \"Invalid file name. Only letters and numbers allowed.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [security] and refuse a name too long to build a sane path with -- see
+	// zyk_preset_name_too_long() above Cmd_Remap_f().
+	if (zyk_preset_name_too_long(ent, arg1) == qtrue)
+	{
 		return;
 	}
 
@@ -14533,6 +14681,17 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		trap->Argv( 1, arg1, sizeof( arg1 ) );
 		entity_id = atoi(arg1);
 
+		// GalaxyRP fix: [Entity System] a negative id is refused before the reserved-range test
+		// below, which only fires for an id that is >= 0. Harmless in this branch -- no slot can
+		// equal a negative number, so it simply reported "not found" -- but it is the same argument
+		// the range branch reads as its lower bound, where it was not harmless at all. Refused in
+		// both, with the message that fits: -1 is not a reserved slot, it is not an entity id.
+		if (entity_id < 0)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid Entity ID %d.\n\"",entity_id) );
+			return;
+		}
+
 		// GalaxyRP fix: [Entity System] this guarded the 32 player slots but not the 8 body-queue
 		// slots above them. Those are neverFree, so G_FreeEntity() bailed out without freeing them --
 		// after having already unlinked the corpse from the world, which is the only thing the
@@ -14567,6 +14726,20 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		trap->Argv( 1, arg1, sizeof( arg1 ) );
 		entity_id = atoi(arg1);
 
+		// GalaxyRP fix: [Entity System] and here is why the negative test matters. The reserved-range
+		// refusal below reads "entity_id >= 0 && entity_id < (MAX_CLIENTS + BODY_QUEUE_SIZE)", so a
+		// negative first id failed its first half and was never refused -- and this branch then used
+		// that same value as the LOWER BOUND of the removal loop, where "i >= -1" is true for every
+		// slot on the server. "/entremove -1 50" walked from slot 0 and freed connected players and
+		// the body queue: G_FreeEntity() memsets a player's entity, ent->client included, and the
+		// next ClientThink_real() dereferences it. The reserved range is exactly what this command
+		// has always said it would not touch.
+		if (entity_id < 0)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid Entity 1 ID %d.\n\"",entity_id) );
+			return;
+		}
+
 		// GalaxyRP fix: [Entity System] same reserved-range widening as the single-id path above --
 		// this one mattered more, because a range simply spanning the reserved slots reached them
 		// without either bound naming one.
@@ -14578,6 +14751,16 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 
 		trap->Argv( 2, arg2, sizeof( arg2 ) );
 		entity_id2 = atoi(arg2);
+
+		// GalaxyRP fix: [Entity System] the upper bound needs the same test as the lower one. A
+		// negative second id could not reach the loop on its own -- the "entity_id2 < entity_id"
+		// check below refuses it once the first id is known to be >= 0 -- but it is refused here so
+		// the admin is told which argument was wrong rather than being told the range runs backwards.
+		if (entity_id2 < 0)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Invalid Entity 2 ID %d.\n\"",entity_id2) );
+			return;
+		}
 
 		// GalaxyRP fix: [Entity System] this message printed entity_id, the FIRST argument, so a
 		// rejected second argument was reported with the wrong number.

@@ -2022,6 +2022,21 @@ char *G_NewString( const char *string );
 
 #define ZYK_ENTITY_FILE_LINE_LENGTH 2048
 
+// GalaxyRP fix: [security] the longest preset name the six file commands -- /entsave, /entload,
+// /entdeletefile, /remapsave, /remapload, /remapdeletefile -- will accept.
+//
+// They all splice the name into "GalaxyRP/<kind>/<map>/<name>.txt", and /entload then copied that
+// path into level.load_entities_file with a plain strcpy(). The name reaches them through
+// zyk_check_user_input(), which rejects anything but letters and digits but bounds the LENGTH only
+// by MAX_STRING_CHARS -- so a 1023-character name of perfectly legal characters built a 1054-byte
+// path and wrote it into a char[512], straight over ignored_players[] and the last_spawned_entity
+// pointer that /entundo then hands to G_FreeEntity().
+//
+// The copy is bounded now as well; this is the limit that stops the path being built over-long in
+// the first place, and it cannot live inside zyk_check_user_input() because character names and
+// account usernames share that helper and have their own lengths.
+#define ZYK_PRESET_NAME_MAX 64
+
 // GalaxyRP fix: [Entity System] the buffer one encoded token needs, in one place. Every character
 // of a token can escape to two, plus the terminator, so a token as long as a whole line needs
 // 2 * (ZYK_ENTITY_FILE_LINE_LENGTH - 1) + 1 bytes -- which this covers with one byte spare.

@@ -1241,6 +1241,22 @@ void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 {
 	int i = 0;
 
+	// GalaxyRP fix: [Entity System] every line below indexes level.zyk_spawn_strings[ent->s.number],
+	// and a freed entity has s.number == 0 -- G_FreeEntity() memsets the whole struct and only
+	// G_InitGentity() ever puts the number back. So called on a slot that is not in use, this wrote
+	// the pair into client 0's row and bumped client 0's count, and zyk_main_spawn_entity() then read
+	// that row back to spawn with.
+	//
+	// /entedit refuses a free slot itself now, with a message. This is here because it was not the
+	// only way in: the SP map fixes in G_InitGame() reach both helpers on hardcoded entity indices
+	// (see the "fixing the final door" block in g_main.c) and test nothing at all. Every legitimate
+	// caller passes a G_Spawn() result, which is in use by definition, so nothing that works today
+	// changes.
+	if (!ent || !ent->inuse)
+	{
+		return;
+	}
+
 	// zyk: see if this key already exists to edit it. If not, add a new one
 	while (i < level.zyk_spawn_strings_values_count[ent->s.number])
 	{
@@ -1420,6 +1436,16 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	int j = 0;
 	char		*s, *value, *gametypeName;
 	static char *gametypeNames[] = { "ffa", "holocron", "jedimaster", "duel", "powerduel", "single", "team", "siege", "ctf", "cty" };
+
+	// GalaxyRP fix: [Entity System] the same guard zyk_main_set_entity_field() carries, and for the
+	// same reason: the row this reads, and everything G_CallSpawn() goes on to link and register, is
+	// keyed off ent->s.number, which a freed entity no longer has. Spawning into a slot that is not
+	// in use put a live, linked entity in the world wearing entity 0's number and left the slot
+	// looking free to G_Spawn().
+	if (!ent || !ent->inuse)
+	{
+		return;
+	}
 
 	// GalaxyRP fix: [Entity System] i was bounded only by the key count, which nothing bounded, so a
 	// row that had been overrun carried straight on into level.spawnVars[MAX_SPAWN_VARS]. The row can

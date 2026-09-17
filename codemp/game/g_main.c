@@ -9645,6 +9645,25 @@ void G_RunFrame( int levelTime ) {
 					continue;
 				}
 
+				// GalaxyRP fix: [Entity System] a preset written or edited on Windows ends its lines
+				// with CRLF. Read on Linux -- or in binary-identical form on any platform where the
+				// runtime does not translate it -- only the '\n' was stripped, so the '\r' stayed on
+				// the end of the line. The parse loop below then ran one more time, the decoder took
+				// the '\r' as the start of a key and reached the end of the line looking for its ';',
+				// and "key was not terminated" refused the line. Every line, so an admin who moved a
+				// server from Windows to Linux, or who opened a preset in Notepad, lost every entity
+				// in the file and got one log line per entity saying it was malformed.
+				//
+				// It cannot eat real data: zyk_entity_file_encode() writes a carriage return that is
+				// part of a value as the two-character escape "\r", never as a bare one, so a raw
+				// '\r' at the end of a line is a line terminator and nothing else. After the '\n'
+				// test above rather than inside it, so a final line with no newline is handled too.
+				if (content_len > 0 && content[content_len - 1] == '\r')
+				{
+					content[content_len - 1] = '\0';
+					content_len--;
+				}
+
 				if (content_len == 0)
 				{ // zyk: blank line, nothing to spawn
 					continue;

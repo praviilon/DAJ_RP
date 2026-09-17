@@ -156,11 +156,21 @@ typedef struct shaderRemap_s {
 
 } shaderRemap_t;
 
-#ifdef __linux__
+// GalaxyRP fix: [Shader Remap] this was "#ifdef __linux__ extern ... #else <definition> #endif",
+// which gave the table no storage at all on Linux and one copy per platform accident on Windows.
+//
+// On Windows every translation unit that includes this header took the #else branch and emitted a
+// tentative definition; the linker merges those as a common symbol, so it happened to work. On
+// Linux every unit saw only the extern and nothing anywhere defined the array -- "nm -D" on
+// jampgamex86_64.so shows remappedShaders as the one unresolved symbol in the whole module, and a
+// data relocation is resolved when the module is loaded, not lazily, so dlopen() fails and the game
+// module does not come up at all. Every shader-remap command, and the default remap preset, are
+// dead on a Linux server for that reason.
+//
+// One declaration for both platforms, with the single definition beside remapCount in g_utils.c --
+// the file that owns AddRemap(), BuildShaderStateConfig() and zyk_clear_all_remaps(). cgame and ui
+// include this header too but reference nothing in the table, so neither module changes.
 extern shaderRemap_t remappedShaders[MAX_SHADER_REMAPS];
-#else
-shaderRemap_t remappedShaders[MAX_SHADER_REMAPS];
-#endif
 
 typedef struct saber_db_info_s {
 	char	saber1Model[50];

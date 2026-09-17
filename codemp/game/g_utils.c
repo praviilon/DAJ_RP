@@ -29,6 +29,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 int remapCount = 0;
 
+// GalaxyRP fix: [Shader Remap] the one definition of the remap table. It used to be a per-file
+// tentative definition in rp_local.h, merged by the Windows linker and simply absent on Linux --
+// see the comment on the declaration there. It belongs here, beside the count and the three
+// functions that own the table.
+shaderRemap_t remappedShaders[MAX_SHADER_REMAPS];
+
 int zyk_get_remap_count()
 {
 	return remapCount;
