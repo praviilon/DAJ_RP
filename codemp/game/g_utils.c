@@ -196,14 +196,70 @@ qboolean zyk_load_remap_file( const char *file_path )
 
 const char *BuildShaderStateConfig(void) {
 	static char	buff[MAX_STRING_CHARS*4];
-	char out[(MAX_QPATH * 2) + 5];
+	// GalaxyRP fix: [Shader Remap] this was (MAX_QPATH * 2) + 5, which cannot hold a maximal entry.
+	// The format below needs two names of up to MAX_QPATH-1, three separators and whatever %5.2f
+	// makes of timeOffset -- and timeOffset is level.time * 0.001, so it grows all session: five
+	// characters at the start of a map, six after ten minutes, more after that. Two 62-character
+	// names already overflowed 133 bytes, and Com_sprintf() truncates (it is Q_vsnprintf plus a
+	// console warning), which drops the trailing '@'.
+	//
+	// That '@' is load-bearing. CG_ShaderStateChanged() finds each field with strstr, so a record
+	// without one makes the client read the NEXT record's text as this record's time offset and
+	// then resume after that record's '@' -- one remap silently lost and one applied with a
+	// nonsense offset, on every machine parsing the configstring. 32 covers a thirty-character
+	// numeric field, which %5.2f cannot reach in any plausible uptime.
+	char out[(MAX_QPATH * 2) + 32];
 	int i;
+	int dropped = 0;
+	// Reported only when the number changes, so a map that is permanently over budget says so once
+	// rather than on every remap trigger. Deliberately not reset anywhere: the module is unloaded
+	// and reloaded on a map change (SV_UnbindGame -> VM_Free), which reinitialises it along with
+	// remapCount itself.
+	static int lastReported = -1;
 
-	memset(buff, 0, MAX_STRING_CHARS);
+	// GalaxyRP fix: [Shader Remap] sizeof(buff), not MAX_STRING_CHARS. buff is MAX_STRING_CHARS*4,
+	// so this cleared the first quarter of it. Harmless as the code stands -- Q_strcat() appends at
+	// strlen(buff) and buff[0] was zeroed, so the stale tail always sat past the terminator -- but
+	// it is not what the line says it does, and it becomes real the moment anything writes to this
+	// buffer by index instead of by strlen.
+	memset(buff, 0, sizeof(buff));
 	for (i = 0; i < remapCount; i++) {
-		Com_sprintf(out, (MAX_QPATH * 2) + 5, "%s=%s:%5.2f@", remappedShaders[i].oldShader, remappedShaders[i].newShader, remappedShaders[i].timeOffset);
+		Com_sprintf(out, sizeof(out), "%s=%s:%5.2f@", remappedShaders[i].oldShader, remappedShaders[i].newShader, remappedShaders[i].timeOffset);
+
+		// GalaxyRP fix: [Shader Remap] say when a remap does not reach the clients.
+		//
+		// MAX_SHADER_REMAPS is 128 and this configstring is 4096 bytes, which holds between about
+		// 30 and 83 entries depending on how long the shader paths are -- so the table can always
+		// hold more than the configstring can carry. Q_strcat() refuses an entry that does not fit
+		// whole (both of its Com_Error calls are commented out upstream, so it simply returns), and
+		// the result was that remaps past the limit vanished with nothing said anywhere, while
+		// /remaplist still listed them.
+		//
+		// Deliberately NOT fixed by enlarging buff. 128 maximal entries is roughly 17KB and
+		// MAX_GAMESTATE_CHARS is 16000 for every configstring combined; a full CS_SHADERSTATE is
+		// already a quarter of that budget, and the overflow check is on the CLIENT
+		// (cl_parse.cpp -- Com_Error(ERR_DROP, "MAX_GAMESTATE_CHARS exceeded")). A bigger buffer
+		// would turn "some remaps do not arrive" into "players cannot connect to this map". So the
+		// behaviour is unchanged and only the silence is fixed.
+		if ( (int)strlen(buff) + (int)strlen(out) + 1 > (int)sizeof(buff) )
+		{
+			dropped++;
+			continue;
+		}
+
 		Q_strcat( buff, sizeof( buff ), out);
 	}
+
+	if ( dropped != lastReported )
+	{
+		if ( dropped > 0 )
+		{
+			trap->Print("BuildShaderStateConfig: %i of %i remap(s) did not fit the shader state configstring and were not sent to clients.\n", dropped, remapCount);
+		}
+
+		lastReported = dropped;
+	}
+
 	return buff;
 }
 
