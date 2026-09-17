@@ -46,8 +46,11 @@ option(BuildSPRdVanilla "Whether to create projects for the SP default renderer 
 # Configure the use of bundled libraries.  By default, we assume the user is on
 # a platform that does not require any bundling.
 #
-# Note that we always use the bundled copy of minizip, since it is modified to
-# use Z_Malloc.
+# Note that there is no UseInternalMinizip option: when minizip is built at all it is always
+# our bundled copy, since it is modified to use Z_Malloc.
+#
+# These options are only acted on when the engine, dedicated server or a renderer is being
+# built -- see the gated block further down.
 
 set(UseInternalOpenALDefault OFF)
 set(UseInternalZlibDefault   OFF)
@@ -369,34 +372,55 @@ set(SharedCommonSafeFiles
 # Adding all of the projects
 #
 #=============================================================================
-if(UseInternalJPEG)
-  # GalaxyRP fix: [libs] bumped bundled libjpeg 9a (2014) -> 9c (2018), matching TaystJK, for
-  # renderer-side JPEG texture/screenshot loading. Folder renamed accordingly.
-  add_subdirectory(lib/jpeg-9c)
-else()
-  find_package(JPEG REQUIRED)
-endif()
+# GalaxyRP fix: [build] these four libraries exist for the engine, the dedicated server and the
+# renderer -- nothing else consumes JPEG_LIBRARIES, ZLIB_LIBRARIES, PNG_LIBRARIES or
+# MINIZIP_LIBRARIES (BuildSPGame deliberately is not in the list below; it links none of them).
+# The block used to run unconditionally, which had two consequences for the gamecode-only build
+# this repo actually ships:
+#
+#   1. find_package(... REQUIRED) hard-failed at configure time on any Linux or macOS box
+#      without the matching -dev packages, for libraries the mod never links. That is the
+#      failure our own CI hit (run 33105699123) and works around to this day by forcing
+#      -DUseInternalZlib/PNG/JPEG=ON; a contributor cloning the repo and running plain
+#      `cmake ..` got the same error with no such hint.
+#   2. With the internal copies selected, bundled_zlib/libpng/libjpeg were added to ALL and
+#      fully compiled -- and bundled_minizip on every platform, internal or not -- then linked
+#      by no target at all.
+#
+# Gating on the five options that actually consume them fixes both: a mod-only configure no
+# longer looks for, or builds, any of the four. The UseInternal* options themselves stay
+# declared above so they remain visible in cmake-gui/ccmake for engine builds.
+if(BuildMPEngine OR BuildMPDed OR BuildMPRdVanilla OR BuildSPEngine OR BuildSPRdVanilla)
+	if(UseInternalJPEG)
+	  # GalaxyRP fix: [libs] bumped bundled libjpeg 9a (2014) -> 9c (2018), matching TaystJK, for
+	  # renderer-side JPEG texture/screenshot loading. Folder renamed accordingly.
+	  add_subdirectory(lib/jpeg-9c)
+	else()
+	  find_package(JPEG REQUIRED)
+	endif()
 
-if(UseInternalZlib)
-  # GalaxyRP fix: [libs] bumped bundled zlib 1.2.8 -> 1.3.1, matching TaystJK. Our old 1.2.8
-  # predates the fix for CVE-2018-25032 (a deflate() memory-corruption bug under Z_FIXED).
-  add_subdirectory(lib/zlib)
-else()
-  find_package(ZLIB REQUIRED)
-endif()
+	if(UseInternalZlib)
+	  # GalaxyRP fix: [libs] bumped bundled zlib 1.2.8 -> 1.3.1, matching TaystJK. Our old 1.2.8
+	  # predates the fix for CVE-2018-25032 (a deflate() memory-corruption bug under Z_FIXED).
+	  add_subdirectory(lib/zlib)
+	else()
+	  find_package(ZLIB REQUIRED)
+	endif()
 
-if(UseInternalPNG)
-  # GalaxyRP fix: [libs] bumped bundled libpng 1.6.16 -> 1.6.53, matching TaystJK. Same 1.6
-  # branch (API/ABI-compatible), just ~37 point releases of bug and security fixes we were
-  # missing.
-  add_subdirectory(lib/libpng)
-else()
-  find_package(PNG REQUIRED)
-endif()
+	if(UseInternalPNG)
+	  # GalaxyRP fix: [libs] bumped bundled libpng 1.6.16 -> 1.6.53, matching TaystJK. Same 1.6
+	  # branch (API/ABI-compatible), just ~37 point releases of bug and security fixes we were
+	  # missing.
+	  add_subdirectory(lib/libpng)
+	else()
+	  find_package(PNG REQUIRED)
+	endif()
 
-# Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR}). Bundled alongside zlib's
-# release above; see lib/minizip/CMakeLists.txt for what our copy changes vs. stock minizip.
-add_subdirectory(lib/minizip)
+	# minizip is always our bundled copy -- there is no system-copy branch, because ours is
+	# patched to route allocations through Z_Malloc (sets MINIZIP_{LIBRARIES,INCLUDE_DIR}).
+	# Bundled alongside zlib's release above; see lib/minizip/CMakeLists.txt for the details.
+	add_subdirectory(lib/minizip)
+endif()
 
 # Add projects
 add_subdirectory(${SPDir})
