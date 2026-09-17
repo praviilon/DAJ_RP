@@ -821,6 +821,7 @@ void SP_info_jedimaster_start( gentity_t *ent );
 extern void zyk_create_dir(char *file_path);
 void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int					i;
+	int					rngDiscard;
 	vmCvar_t	mapname;
 	vmCvar_t	ckSum;
 	char serverinfo[MAX_INFO_STRING] = {0};
@@ -829,6 +830,39 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	FILE *zyk_entities_file = NULL;
 	FILE *zyk_duel_arena_file = NULL;
 	FILE *zyk_melee_arena_file = NULL;
+
+	// GalaxyRP fix: [RNG] seed the module's random generator. Q_irand/Q_flrand/erandom all run off
+	// a single "static uint32_t holdrand" in shared/qcommon/q_math.c, which only Rand_Init() ever
+	// sets -- and nothing in codemp/ was calling it. The engine seeds its OWN copy in common.cpp,
+	// but each module compiles q_math.c separately with hidden visibility, so jampgame, cgame and
+	// ui each carry a private holdrand that stayed at its 0x89abcdef initialiser forever.
+	//
+	// That is not once per server start. SV_ShutdownGameProgs ("Called every time a map changes")
+	// runs VM_Free -> Sys_UnloadDll, so the module is genuinely unloaded and reloaded on every map
+	// load and holdrand returns to its initialiser. The first twenty Q_irand(0,100) values were
+	// therefore 44 24 13 74 15 89 61 87 0 14 83 81 48 34 83 81 25 50 53 33 on every map, on every
+	// server. 1066 Q_irand and 233 Q_flrand call sites read from it, including our own percentage
+	// rolls -- the deflect check in g_cmds.c and the dismemberment roll in g_combat.c -- so those
+	// produced an identical outcome pattern after every map load.
+	//
+	// Seeded at the very top so nothing can consume a value before the seed is set. Nothing
+	// currently does (BG_VehicleLoadParms uses no RNG), but bg_panimate.c does, and this removes
+	// the ordering question rather than relying on it.
+	//
+	// srand() is the C library generator, used separately by roll_dice() for /roll; it was already
+	// being seeded further down and is moved up here to keep the two together.
+	Rand_Init( randomSeed );
+	srand( randomSeed );
+	// GalaxyRP fix: [RNG] discard the first few outputs. The generator is a plain LCG
+	//   holdrand = holdrand * 214013 + 2531011;  result = holdrand >> 17
+	// and seeding it with a small number leaves the very first output poorly mixed. The seed here
+	// is the engine's Com_Milliseconds(), which on a freshly started server is only a few thousand
+	// at the first map load: measured over that band (2-8 s of uptime), the first Q_irand(0,100)
+	// took only 31 of its 101 possible values. Discarding even one output takes it to all 101; four
+	// costs nothing and leaves margin. OpenJK's fix (and TaystJK's port of it) seeds without this.
+	for ( rngDiscard = 0; rngDiscard < 4; rngDiscard++ ) {
+		Q_irand( 0, 1 );
+	}
 
 	//Init RMG to 0, it will be autoset to 1 if there is terrain on the level.
 	trap->Cvar_Set("RMG", "0");
@@ -849,8 +883,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	trap->Print ("------- Game Initialization -------\n");
 	trap->Print ("gamename: %s\n", GAMEVERSION);
 	trap->Print ("gamedate: %s\n", SOURCE_DATE);
-
-	srand( randomSeed );
 
 	G_RegisterCvars();
 

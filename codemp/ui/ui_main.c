@@ -10216,6 +10216,17 @@ UI_Init
 */
 void UI_Init( qboolean inGameLoad ) {
 	const char *menuSet;
+	int rngDiscard;
+
+	// GalaxyRP fix: [RNG] same as the game and cgame modules: ui compiles its own q_math.c, so its
+	// holdrand was never seeded. Only a handful of call sites here (ui_saber.c), but leaving one of
+	// the three unseeded would just be a trap for whoever adds the next one.
+	Rand_Init( trap->Milliseconds() );
+	// Discard the first few outputs: the seed here is small on a freshly started client, and this
+	// LCG mixes a small seed poorly on its first result. See the long note in g_main.c's G_InitGame.
+	for ( rngDiscard = 0; rngDiscard < 4; rngDiscard++ ) {
+		Q_irand( 0, 1 );
+	}
 
 	// Get the list of possible languages
 	uiInfo.languageCount = trap->SE_GetNumLanguages();	// this does a dir scan, so use carefully

@@ -2450,6 +2450,19 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum )
 	const char	*s;
 	int i = 0;
 	int j = 0;
+	int rngDiscard;
+
+	// GalaxyRP fix: [RNG] cgame carries its own copy of q_math.c, so its holdrand is separate from
+	// the game module's and from the engine's, and nothing was seeding it -- every client replayed
+	// the same sequence of gore, spark and death-animation picks from the same starting point on
+	// every map load. cg_players.c and cg_effects.c alone account for over a hundred call sites.
+	// There is no randomSeed parameter here, so use the engine clock as OpenJK does.
+	Rand_Init( trap->Milliseconds() );
+	// Discard the first few outputs: the seed here is small on a freshly started client, and this
+	// LCG mixes a small seed poorly on its first result. See the long note in g_main.c's G_InitGame.
+	for ( rngDiscard = 0; rngDiscard < 4; rngDiscard++ ) {
+		Q_irand( 0, 1 );
+	}
 
 	BG_InitAnimsets(); //clear it out
 
