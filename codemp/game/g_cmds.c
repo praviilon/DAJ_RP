@@ -20144,7 +20144,13 @@ command_t commands[] = {
 	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN },
+	// GalaxyRP fix: [NPC] CMD_NOINTERMISSION added. "/npc spawn" reaches NPC_Spawn_f, which takes
+	// entity slots exactly as /entadd does, and every other command that places or removes entities
+	// -- the whole Entity System and shader-remap set, /spawnplatform, /spawndummy, /removepickups --
+	// has carried this flag all along. This row was the one that did not, so an admin could still
+	// spawn NPCs into a map that was already on its way out. The other subcommands (kill, showbounds,
+	// score, team) have nothing to do during intermission either.
+	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ooc",				Cmd_OOC_f,					0 },					// GalaxyRP: [Chat] out-of-character chat, forced in every gametype -- see Cmd_OOC_f for the flags
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "paralyze",			Cmd_Paralyze_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
