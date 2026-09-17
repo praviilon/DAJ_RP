@@ -493,6 +493,12 @@ DeathmatchScoreboardMessage
 void DeathmatchScoreboardMessage( gentity_t *ent ) {
 	char		entry[1024];
 	char		string[1400];
+	// GalaxyRP fix: [Scoreboard] the entries are wrapped in "scores <count> <red> <blue>" and sent
+	// as ONE server command, and SV_SendServerCommand (sv_main.cpp) silently drops any message over
+	// 1022 characters whole -- the scoreboard simply stops updating, with nothing in the log. The
+	// old cap measured the entries alone and left the header outside the budget it was protecting.
+	// Built up front so its real length can be subtracted, rather than guessed at with a constant.
+	char		header[64];
 	int			stringlength;
 	int			i, j;
 	gclient_t	*cl;
@@ -502,6 +508,9 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 	string[0] = 0;
 	stringlength = 0;
 	scoreFlags = 0;
+
+	Com_sprintf( header, sizeof(header), "scores %i %i %i", level.numConnectedClients,
+		level.teamScores[TEAM_RED], level.teamScores[TEAM_BLUE] );
 
 	numSorted = level.numConnectedClients;
 
@@ -529,9 +538,34 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 		}
 		perfect = ( cl->ps.persistant[PERS_RANK] == 0 && cl->ps.persistant[PERS_KILLED] == 0 ) ? 1 : 0;
 
+		// GalaxyRP fix: [Scoreboard] the three standard slots carry what they are named again, and
+		// the mod's own three numbers move into award slots nobody else draws.
+		//
+		// This mod used to put pers.level in the score slot, PERS_KILLED in the ping slot and the
+		// real ping in the time slot, and relabel its own headers to match. That works only for a
+		// player running the GalaxyRP client. Everyone on TaystJK, OpenJK or vanilla reads the same
+		// fourteen fields with their own cgame and their own labels, so they saw an RP level under
+		// "Score" -- 100 for anyone at rp_rpg_max_level, and never changing, because nothing in this
+		// mod increments a kill count at all -- their death count under "Ping", and their real ping
+		// under "Time". It also broke the one convention every JKA scoreboard shares: ping == -1
+		// means "still connecting", and every client gates the whole row on it, so with a death
+		// count in that slot a connecting player was drawn as a live row with "-1" for a ping. Ours
+		// included.
+		//
+		// Slots 11, 12 and 13 (impressive, excellent, gauntlet) are the three that are safe to
+		// borrow. No scoreboard in any of the three clients draws them in any gametype -- TaystJK's
+		// CTF branch does draw captures, assists and defends, which is what rules out 14, 15 and 17
+		// -- and their only other reader is CG_DrawMedal's owner-draws, which no shipped JKA menu
+		// uses. PERS_EXCELLENT_COUNT and PERS_GAUNTLET_FRAG_COUNT are live counters, unlike
+		// PERS_IMPRESSIVE_COUNT, but only their WIRE positions are taken: the playerState values are
+		// untouched, so the medals themselves still fire in cg_playerstate.c.
+		//
+		// Still fourteen fields, still SCORE_OFFSET 14, so nothing on any client has to change to
+		// read this. The GalaxyRP cgame reads the new positions and its columns look the same as
+		// before; every other client gets vanilla meaning back.
 		Com_sprintf (entry, sizeof(entry),
 			" %i %i %i %i %i %i %i %i %i %i %i %i %i %i", level.sortedClients[i],
-			cl->pers.level, cl->ps.persistant[PERS_KILLED], ping,
+			cl->ps.persistant[PERS_SCORE], ping, (level.time - cl->pers.enterTime) / 60000,
 			scoreFlags, g_entities[level.sortedClients[i]].s.powerups, accuracy,
 			// GalaxyRP fix: [Death System] knockdowns ride in the PERS_IMPRESSIVE_COUNT wire
 			// position so the scoreboard command keeps its fourteen fields per client. That
@@ -547,26 +581,28 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 			// three out), and no shipped .menu in any of the three uses the CG_IMPRESSIVE
 			// owner-draw that is its only other reader. The playerState value is untouched, so
 			// the impressive medal in cg_playerstate.c cannot misfire either.
+			cl->pers.level,
 			cl->ps.persistant[PERS_KNOCKED_DOWN],
-			cl->ps.persistant[PERS_EXCELLENT_COUNT],
-			cl->ps.persistant[PERS_GAUNTLET_FRAG_COUNT],
+			cl->ps.persistant[PERS_KILLED],
 			cl->ps.persistant[PERS_DEFEND_COUNT],
 			cl->ps.persistant[PERS_ASSIST_COUNT],
 			perfect,
 			cl->ps.persistant[PERS_CAPTURES]);
 		j = strlen(entry);
-		if (stringlength + j > 1022)
+		// GalaxyRP fix: [Scoreboard] the header counts against the same 1022 characters -- see the
+		// comment on header[] above. Measured at twenty clients with worst-case values this leaves
+		// about a hundred characters spare, so no scoreboard in practice reaches either bound; the
+		// point is that the bound is now the right one.
+		if (stringlength + j > 1022 - (int)strlen(header))
 			break;
 		strcpy (string + stringlength, entry);
 		stringlength += j;
 	}
 
-	//still want to know the total # of clients
-	i = level.numConnectedClients;
-
-	trap->SendServerCommand( ent-g_entities, va("scores %i %i %i%s", i,
-		level.teamScores[TEAM_RED], level.teamScores[TEAM_BLUE],
-		string ) );
+	// zyk: the header still announces the total number of connected clients rather than the number
+	// of entries written -- every client clamps what it reads to MAX_CLIENT_SCORE_SEND, which is the
+	// same bound the loop above uses, so the two always agree
+	trap->SendServerCommand( ent-g_entities, va("%s%s", header, string ) );
 }
 
 

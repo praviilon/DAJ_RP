@@ -72,9 +72,14 @@ static void CG_ParseScores( void ) {
 		// GalaxyRP fix: [Death System] knockdowns, not impressive awards -- see the matching
 		// comment in DeathmatchScoreboardMessage (g_cmds.c). SCORE_OFFSET deliberately stays at
 		// 14 so a client running a different cgame still parses every row at the right place.
-		cg.scores[i].knockdowns			= atoi( CG_Argv( i*SCORE_OFFSET + 11 ) );
-		cg.scores[i].excellentCount		= atoi( CG_Argv( i*SCORE_OFFSET + 12 ) );
-		cg.scores[i].gauntletCount		= atoi( CG_Argv( i*SCORE_OFFSET + 13 ) );
+		// GalaxyRP fix: [Scoreboard] level, knockdowns and deaths ride in the impressive, excellent
+		// and gauntlet positions so the score, ping and time slots can carry what they are named --
+		// see DeathmatchScoreboardMessage (g_cmds.c). SCORE_OFFSET deliberately stays at 14: the
+		// field count is unchanged, so a client that knows nothing about this mod reads the same
+		// fourteen fields it always did, and gets sensible values in them now.
+		cg.scores[i].level				= atoi( CG_Argv( i*SCORE_OFFSET + 11 ) );
+		cg.scores[i].knockdowns			= atoi( CG_Argv( i*SCORE_OFFSET + 12 ) );
+		cg.scores[i].deaths				= atoi( CG_Argv( i*SCORE_OFFSET + 13 ) );
 		cg.scores[i].defendCount		= atoi( CG_Argv( i*SCORE_OFFSET + 14 ) );
 		cg.scores[i].assistCount		= atoi( CG_Argv( i*SCORE_OFFSET + 15 ) );
 		cg.scores[i].perfect			= atoi( CG_Argv( i*SCORE_OFFSET + 16 ) );

@@ -638,12 +638,20 @@ typedef struct score_s {
 	int				scoreFlags;
 	int				powerUps;
 	int				accuracy;
-	// GalaxyRP fix: [Death System] the scoreboard sends this in impressiveCount's wire position --
-	// see DeathmatchScoreboardMessage (g_cmds.c) for why that slot and not another. impressiveCount
-	// itself stays in the struct so CG_OwnerDrawValue's CG_IMPRESSIVE case still compiles; it is no
-	// longer parsed, and reads 0 from the memset, which is exactly what it read before, since
-	// nothing in codemp/game ever incremented PERS_IMPRESSIVE_COUNT.
+	// GalaxyRP fix: [Scoreboard] the three numbers this mod actually shows. They arrive in the
+	// impressive, excellent and gauntlet wire positions (11, 12, 13) -- see
+	// DeathmatchScoreboardMessage (g_cmds.c) for why those three and not the standard slots they
+	// used to displace.
+	//
+	// score, ping and time above now mean what their names say, so a player on TaystJK, OpenJK or
+	// vanilla reads a sane scoreboard, and "ping == -1 means still connecting" works again here too.
+	int				level;
 	int				knockdowns;
+	int				deaths;
+	// The three fields whose wire positions were taken. They stay in the struct so CG_DrawMedal's
+	// CG_IMPRESSIVE, CG_EXCELLENT and CG_GAUNTLET cases still compile; none is parsed any more and
+	// each reads 0 from the memset. No shipped JKA menu uses those owner-draws, and the playerState
+	// counters behind them are untouched, so the medals themselves are unaffected.
 	int				impressiveCount;
 	int				excellentCount;
 	int				gauntletCount;

@@ -177,24 +177,31 @@ static void CG_DrawClientScore( int y, score_t *score, float *color, float fade,
 			}
 			else
 			{
-				CG_Text_Paint (SB_SCORE_X, y, 1.0f * scale, colorWhite, va("%i", score->score),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
+				// GalaxyRP fix: [Scoreboard] the level has its own field now instead of riding in
+				// the score slot -- see DeathmatchScoreboardMessage (g_cmds.c). Same column, same
+				// "Level" header, same number; it just no longer costs every other client a
+				// meaningful Score column.
+				CG_Text_Paint (SB_SCORE_X, y, 1.0f * scale, colorWhite, va("%i", score->level),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 			}
 		}
 
-		// GalaxyRP fix: [Death System] knockdowns and deaths, in the one column. score->ping is the
-		// death count, not a ping -- this mod sends pers.level, PERS_KILLED and the real ping in
-		// the score/ping/time wire slots respectively, and relabels the headers to match. The two
-		// numbers mean different things now: a knockdown someone was revived from is not a death,
-		// and a death in a vehicle or a mini-game never was a knockdown, so "3/1" reads as "went
-		// down three times, actually died once".
+		// GalaxyRP fix: [Death System] knockdowns and deaths, in the one column. The two numbers
+		// mean different things: a knockdown someone was revived from is not a death, and a death in
+		// a vehicle or a mini-game never was a knockdown, so "3/1" reads as "went down three times,
+		// actually died once".
 		//
 		// One column rather than a fifth: the data fits the space a single number already had, so
 		// nothing has to be re-spaced and the name field keeps its width.
+		//
+		// GalaxyRP fix: [Scoreboard] both numbers now come from fields of their own rather than from
+		// the score and ping slots, and the third column reads score->ping, which is finally a ping.
+		// What this client shows is unchanged; what every other client shows is fixed -- see
+		// DeathmatchScoreboardMessage (g_cmds.c).
 		if ( cg_scoreboardBots.integer && ci->botSkill != -1 )
 			CG_Text_Paint( SB_PING_X, y, 1.0f * scale, colorWhite, "BOT", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 		else
-			CG_Text_Paint (SB_PING_X, y, 1.0f * scale, colorWhite, va("%i/%i", score->knockdowns, score->ping),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
-		CG_Text_Paint (SB_TIME_X, y, 1.0f * scale, colorWhite, va("%i", score->time),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
+			CG_Text_Paint (SB_PING_X, y, 1.0f * scale, colorWhite, va("%i/%i", score->knockdowns, score->deaths),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
+		CG_Text_Paint (SB_TIME_X, y, 1.0f * scale, colorWhite, va("%i", score->ping),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 	}
 	else
 	{

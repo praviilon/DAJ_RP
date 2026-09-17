@@ -2107,7 +2107,11 @@ static const char *CG_FeederItemText(float feederID, int index, int column,
 				return info->name;
 			break;
 			case 4:
-				return va("%i", info->score);
+				// GalaxyRP fix: [Scoreboard] clientinfo.score is filled from the score wire slot,
+				// which carries PERS_SCORE again rather than the RP level -- see
+				// DeathmatchScoreboardMessage (g_cmds.c). This list column has always shown the
+				// level on a GalaxyRP client, so it reads the level's own field and keeps doing so.
+				return va("%i", sp->level);
 			break;
 			case 5:
 				return va("%4i", sp->time);
