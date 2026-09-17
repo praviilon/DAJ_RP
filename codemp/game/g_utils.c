@@ -128,6 +128,60 @@ void AddRemap(const char *oldShader, const char *newShader, float timeOffset) {
 	}
 }
 
+// GalaxyRP fix: [Shader Remap] clear every remap and put the shaders back on the clients.
+//
+// Returns how many entries were cleared, so the caller can word its own message.
+//
+// Nothing could take a remap back before this: /remapdeletefile removes the preset FILE, which does
+// not touch the running map, and the table only ever grew until the map changed. The renderer is
+// what makes the undo possible -- R_RemapShader() (tr_shader.cpp) ends with
+//
+//     if (sh != sh2) { sh->remappedShader = sh2; } else { sh->remappedShader = NULL; }
+//
+// so a shader remapped TO ITSELF has its remap cleared. That is stock renderer code, so it works on
+// a vanilla client and a TaystJK one alike; nothing client-side has to know this command exists.
+//
+// Two passes, and the order is the whole trick:
+//
+// First point every entry at its own shader, with a zero time offset, and send that. Each client
+// runs R_RemapShader(S, S, "0") for every entry and restores it. The zero matters: that function
+// ends with "sh2->timeOffset = atof(timeOffset)", and on an identity remap sh2 IS the shader being
+// restored, so sending the old offset would leave its animation phase shifted.
+//
+// Only then empty the table and send again, so anyone connecting later gets no remaps either.
+// Doing it the other way round would send an empty configstring first and the identity entries
+// would never reach anyone -- the remaps would stay on screen until the map changed. Two sends
+// rather than one is free here: SV_SetConfigstring (sv_init.cpp) transmits on each call rather than
+// deferring to the snapshot, and it is two either way whether the table holds three entries or 128.
+//
+// What it cannot undo: shader remaps built into the map itself, the worldspawn "remapshader" and
+// "vertexremapshader" keys that tr_bsp.cpp applies client-side at load. Those never passed through
+// this table, so there is no record of them here.
+int zyk_clear_all_remaps( void )
+{
+	int i;
+	int cleared = remapCount;
+
+	if ( cleared == 0 )
+	{
+		return 0;
+	}
+
+	for ( i = 0; i < remapCount; i++ )
+	{
+		Q_strncpyz(remappedShaders[i].newShader, remappedShaders[i].oldShader, sizeof(remappedShaders[i].newShader));
+		remappedShaders[i].timeOffset = 0.0f;
+	}
+
+	trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
+
+	remapCount = 0;
+
+	trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
+
+	return cleared;
+}
+
 // GalaxyRP fix: [security] the one reader for a remap preset file.
 //
 // There were two copies of this loop -- Cmd_RemapLoad_f() (g_cmds.c) and the default-preset load in

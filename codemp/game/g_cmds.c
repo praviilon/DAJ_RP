@@ -13361,6 +13361,47 @@ void Cmd_RemapList_f(gentity_t *ent) {
 
 /*
 ==================
+Cmd_RemapReset_f
+
+GalaxyRP fix: [Shader Remap] clears every remap the map is running and puts the shaders back,
+without waiting for a map change.
+
+There was no way to undo a /remap at all. /remapdeletefile removes a preset FILE, which does not
+touch the running map, and the table only ever grew -- so an admin who mistyped a shader path, or
+tried one out, was stuck looking at it until the map rotated.
+
+The work is zyk_clear_all_remaps() (g_utils.c), which lives beside the table and the configstring
+builder it has to drive in the right order. This half is only the permission check and the wording.
+Deliberately all-or-nothing rather than a /remapremove for one entry: removing one means finding it
+by name, shifting the array down, and keeping any remembered index or undo record in step with a
+table that now moves -- which is exactly the stale-reference shape that /entundo had. Emptying the
+whole table cannot invalidate an index nobody kept.
+==================
+*/
+void Cmd_RemapReset_f( gentity_t *ent ) {
+	int cleared;
+
+	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
+		return;
+	}
+
+	cleared = zyk_clear_all_remaps();
+
+	if (cleared > 0)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%d shader remap(s) cleared. Remaps built into the map itself are not affected.\n\"", cleared) );
+	}
+	else
+	{
+		// Says so rather than returning in silence, which reads the same as a command that is
+		// broken or that the admin lacks rights for -- the lesson from /entundo's quiet no-op.
+		trap->SendServerCommand( ent-g_entities, "print \"There are no shader remaps to clear.\n\"" );
+	}
+}
+
+/*
+==================
 Cmd_RemapDeleteFile_f
 ==================
 */
@@ -16216,6 +16257,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/remapload <file name>: ^7Loads remaps from preset file.\n\
 ^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
+^3/remapreset: ^7Clears all shader remaps in the map. Does not undo remaps built into the map itself.\n\
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons).\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" " );
@@ -20120,6 +20162,7 @@ command_t commands[] = {
 	{ "remapdeletefile",	Cmd_RemapDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "remaplist",			Cmd_RemapList_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "remapload",			Cmd_RemapLoad_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "remapreset",			Cmd_RemapReset_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "remapsave",			Cmd_RemapSave_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "removexp",			Cmd_RemoveXp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "removepickups",		Cmd_RemovePickups_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
