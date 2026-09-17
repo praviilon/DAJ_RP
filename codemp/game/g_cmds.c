@@ -2376,12 +2376,17 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 
 	// GalaxyRP fix: [security] same va("...%s...")-into-SQL-text issue as select_accounts_table_row()
 	// above -- bind username as a parameter instead of splicing it into the query text.
+	// GalaxyRP fix: [stability] both error paths used to sqlite3_close(db) before returning. This
+	// function does not own that handle -- it is passed one its caller opened and goes on using --
+	// so closing it here left the caller working through a closed connection. Harmless while this
+	// had no callers at all, which is how it survived; it has one now (the duplicate-session drop in
+	// select_account_and_default_character_data), and that caller runs a further query afterwards.
+	// Report and return the sentinel; let whoever opened the connection close it.
 	rc = sqlite3_prepare(db, "SELECT AccountID FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		sqlite3_close(db);
 		return -1;
 	}
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
@@ -2390,7 +2395,6 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		sqlite3_close(db);
 		return -1;
 	}
 	if (rc == SQLITE_ROW)
@@ -4358,6 +4362,78 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 	sqlite3_finalize(stmt);
 }
 
+// GalaxyRP fix: [Account] nothing ever stopped two connections from holding the same account at the
+// same time, and the damage was silent.
+//
+// ClientDisconnect() calls save_account(ent, qtrue) (g_client.c), and save_account() writes the
+// character row from whatever is in that client's memory. So the ordinary case -- a player whose
+// connection times out, reconnects and logs in again -- ended with the GHOST saving last: the engine
+// drops the dead slot minutes later, and its stale snapshot lands on top of everything the live
+// session has done since. Nobody sees an error; the credits and levels simply go backwards. Two
+// people sharing one password got the same thing on demand, in either direction, which is a
+// duplication vector as much as a data-loss one.
+//
+// Dropping the older connection rather than logging it out is deliberate, and it is the simpler half
+// of the fix as well as the safer one. A forced LOGOUT would have had to bypass every refusal
+// /logout makes -- downed, mind-controlled, duel tournament, melee battle, private duel -- because a
+// guard that can be refused fails exactly when a ghost is stuck mid-something. A drop refuses
+// nothing. It also gets the save ordering right for free: trap->DropClient() reaches SV_DropClient(),
+// which calls GVM_ClientDisconnect() synchronously (sv_client.cpp), so the old session's
+// save_account() has finished before this function returns to read the row. The ghost's in-memory
+// state is newer than anything in the database -- it is everything up to the moment it stopped
+// responding -- so flushing it first is what hands the reconnecting player their real progress
+// rather than their last incidental save.
+//
+// Called from the top of select_account_and_default_character_data() below, before that function
+// reads anything, which is the single point both /login and ClientBegin()'s map-change relogin pass
+// through. In /login it sits after the password check, so this is only ever reachable by someone who
+// could have logged into the account anyway.
+static void zyk_drop_other_sessions_on_account( gentity_t *ent, int accountID )
+{
+	int i;
+	int dropped = 0;
+
+	// zyk: accountID 0 is what a logged-out client carries, so it must never match
+	if ( !ent || !ent->client || accountID <= 0 )
+	{
+		return;
+	}
+
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gentity_t *other = &g_entities[i];
+
+		if ( other == ent || !other->client )
+		{
+			continue;
+		}
+
+		if ( other->client->pers.connected == CON_DISCONNECTED )
+		{
+			continue;
+		}
+
+		if ( other->client->sess.loggedin == qfalse || other->client->sess.accountID != accountID )
+		{
+			continue;
+		}
+
+		G_LogPrintf( "account %d: client %d (%s) logged in, dropping client %d (%s) which still held the same account\n",
+			accountID, ent->s.number, ent->client->pers.netname, i, other->client->pers.netname );
+
+		// zyk: ClientDisconnect() runs inside this call and saves that session before it goes
+		trap->DropClient( i, "Logged in from another connection" );
+
+		dropped++;
+	}
+
+	if ( dropped > 0 )
+	{
+		trap->SendServerCommand( ent - g_entities,
+			va("print \"^3%d other connection(s) on this account were dropped.\n\"", dropped) );
+	}
+}
+
 // GalaxyRP (Alex): [Database] This method loads the account information, as well as the information related to the default character, and assigns it to the entity.
 // GalaxyRP fix: [security] the username parameter used to be declared "char username[MAX_STRING_CHARS]"
 // (1024) -- purely documentation in C (a parameter array decays to a pointer regardless of the size
@@ -4373,6 +4449,25 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 void select_account_and_default_character_data(gentity_t* ent, char username[32], sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	char password[256], name[256], description[MAX_STRING_CHARS], netName[MAX_STRING_CHARS], modelName[MAX_STRING_CHARS];
 	int accountID, player_settings, adminLevel, charID, credits, level, modelScale, skillpoints;
+
+	// GalaxyRP fix: [Account] drop any other connection still holding this account before a single
+	// value is read below -- see zyk_drop_other_sessions_on_account() above for why, and why a drop
+	// rather than a forced logout.
+	//
+	// The id is looked up separately rather than taken from the main query, and that is the whole
+	// point of doing it here: the old session's ClientDisconnect() writes its state to the database,
+	// so it has to finish BEFORE this function reads the row, not after. Reusing the accountID the
+	// query below returns would have put the kick on the wrong side of the read and simply reversed
+	// which session loses its progress. One extra indexed lookup on a UNIQUE column, on a path that
+	// runs at most once per login.
+	//
+	// It also happens while no statement of ours is open, which keeps the dropped session's own
+	// database connection from meeting a read transaction it would have to wait out.
+	//
+	// select_account_id_from_username() had no callers at all until now; it was already hardened
+	// (bound parameter, a real -1 not-found sentinel, no leaked statement) and this is the use it
+	// was waiting for.
+	zyk_drop_other_sessions_on_account( ent, select_account_id_from_username( ent, username, db, zErrMsg, rc, stmt ) );
 
 	// GalaxyRP fix: [security] this used to build the query text via
 	// va("...Username = '%s'...Username = '%s'...", username, username) -- splicing the raw username
