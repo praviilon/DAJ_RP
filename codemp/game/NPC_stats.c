@@ -2571,7 +2571,13 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				//FIXME: need to precache the weapon, too?  (in above func)
 				weap = GetIDForString( WPTable, value );
-				if ( weap >= WP_NONE && weap <= WP_NUM_WEAPONS )///*WP_BLASTER_PISTOL*/WP_SABER ) //?!
+				// GalaxyRP fix: [bounds] "<=" admitted WP_NUM_WEAPONS itself, which would index
+				// weaponData[] one past the end and then write to ps.ammo[] at whatever ammoIndex
+				// that garbage held. Unreachable as things stand -- GetIDForString returns -1 for an
+				// unknown name and no WPTable row is valued WP_NUM_WEAPONS -- so the guard was only
+				// correct by accident of the table's contents. NPC_stats.c:842 already gets this
+				// right a few hundred lines up. Matches OpenJK 6a8a8809.
+				if ( weap >= WP_NONE && weap < WP_NUM_WEAPONS )///*WP_BLASTER_PISTOL*/WP_SABER ) //?!
 				{
 					NPC->client->ps.weapon = weap;
 					NPC->client->ps.stats[STAT_WEAPONS] |= ( 1 << NPC->client->ps.weapon );

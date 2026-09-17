@@ -3375,6 +3375,15 @@ static void Q3_SetWeapon (int entID, const char *wp_name)
 	gentity_t	*ent  = &g_entities[entID];
 	int		wp = GetIDForString( WPTable, wp_name );
 
+	// GalaxyRP fix: [bounds] wp is -1 for any name not in WPTable, and "1 << -1" is undefined
+	// behaviour before ChangeWeapon() even sees the bad index. Reject it and leave the weapon
+	// alone, the same way SP_misc_weapon_shooter now keeps its default.
+	if ( wp <= WP_NONE || wp >= WP_NUM_WEAPONS )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetWeapon: unknown weapon \"%s\"\n", wp_name );
+		return;
+	}
+
 	ent->client->ps.stats[STAT_WEAPONS] = (1<<wp);
 	ChangeWeapon( ent, wp );
 }

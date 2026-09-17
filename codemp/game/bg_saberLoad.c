@@ -596,7 +596,10 @@ static void Saber_ParseSaberType( saberInfo_t *saber, const char **p ) {
 	if ( COM_ParseString( p, &value ) )
 		return;
 	saberType = GetIDForString( saberTable, value );
-	if ( saberType >= SABER_SINGLE && saberType <= NUM_SABERS )
+	// GalaxyRP fix: [bounds] "<=" let NUM_SABERS itself through into saber->type. Unreachable
+	// today (saberTable ends { "", -1 } and has no NUM_SABERS row), but the same accident-of-the-
+	// table reasoning as NPC_stats.c above. Matches OpenJK 6a8a8809.
+	if ( saberType >= SABER_SINGLE && saberType < NUM_SABERS )
 		saber->type = (saberType_t)saberType;
 }
 static void Saber_ParseSaberModel( saberInfo_t *saber, const char **p ) {

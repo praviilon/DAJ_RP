@@ -5011,7 +5011,30 @@ void SP_misc_weapon_shooter( gentity_t *self )
 	self->s.weapon = self->client->ps.weapon = WP_BLASTER;
 	if ( s && s[0] )
 	{//use a different weapon
-		self->s.weapon = self->client->ps.weapon = GetIDForString( WPTable, s );
+		// GalaxyRP fix: [Entity System] this took whatever GetIDForString returned, and that is -1
+		// for any name not in WPTable. BG_FindItemForWeapon() below does not return NULL when it
+		// fails -- it calls Com_Error( ERR_DROP ), and common.cpp promotes ERR_DROP to ERR_FATAL on
+		// a dedicated server ("generally run unattended"), which is Sys_Error and process exit.
+		//
+		// So a single misspelled weapon field on a misc_weapon_shooter took the server down. That
+		// is not only a mapping concern for us: the classname is in g_spawn.c's spawn table, and
+		// both zyk_spawn_entity() and zyk_main_spawn_entity() reach it through G_CallSpawn(), so an
+		// entity preset loaded with /entload could do it too.
+		//
+		// Range-check before committing to it and keep the WP_BLASTER default otherwise, so a typo
+		// costs a warning line instead of the server. Same shape as the check NPC_stats.c:842
+		// already uses.
+		int weap = GetIDForString( WPTable, s );
+
+		if ( weap > WP_NONE && weap < WP_NUM_WEAPONS )
+		{
+			self->s.weapon = self->client->ps.weapon = weap;
+		}
+		else
+		{
+			trap->Print( "SP_misc_weapon_shooter: unknown weapon \"%s\" at %s, using WP_BLASTER\n",
+				s, vtos( self->s.origin ) );
+		}
 	}
 
 	RegisterItem(BG_FindItemForWeapon(self->s.weapon));

@@ -4158,7 +4158,12 @@ static float CG_DrawTeamOverlay( float y, qboolean right, qboolean upper ) {
 			} else {
 				xx = x + w - TINYCHAR_WIDTH;
 			}
-			for (j = 0; j <= PW_NUM_POWERUPS; j++) {
+			// GalaxyRP fix: [bounds] "<=" ran one iteration past the last powerup, asking
+			// BG_FindItemForPowerup for PW_NUM_POWERUPS itself. That is a linear search over
+			// bg_itemlist rather than an index, and no IT_POWERUP/IT_TEAM item carries that tag, so
+			// it found nothing -- but it only stayed harmless because of what the item list happens
+			// to contain. Matches OpenJK 6a8a8809.
+			for (j = 0; j < PW_NUM_POWERUPS; j++) {
 				if (ci->powerups & (1 << j)) {
 
 					item = BG_FindItemForPowerup( j );
