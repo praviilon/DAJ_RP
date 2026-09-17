@@ -77,7 +77,8 @@ qboolean FlyingCreature( gentity_t *ent )
 qboolean NAV_CheckAhead( gentity_t *self, vec3_t end, trace_t *trace, int clipmask );
 void NAV_StoreWaypoint( gentity_t *ent );
 
-extern vec3_t NPCDEBUG_RED;
+// GalaxyRP fix: [NPC] the NPCDEBUG_RED extern that was here named a colour nothing in this file
+// ever used, and the definition itself is gone with NPC_ShowDebugInfo() -- see NPC.c.
 
 
 /*

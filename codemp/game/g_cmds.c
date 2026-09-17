@@ -11485,7 +11485,6 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/npc kill all: ^7Kills every npc.\n\
 ^3/npc kill team <player/enemy/neutral/free or nonally>: ^7Kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
 ^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc you are looking at.\n\
-^3/npc showbounds: ^7Toggles npc bounding boxes.\n\
 ^3/npc score <targetname (optional)>: ^7Prints npc scores to the server console.\n\
 ^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
 				// GalaxyRP: [Mini-Games] /duelmode and /meleemode were documented nowhere at all -- not
@@ -15170,8 +15169,8 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 
 		if (command_number == ADM_NPC)
 		{
-			// GalaxyRP fix: [Admin] this listed spawn and "kill all" only. /npc also has team,
-			// showbounds and score, and kill takes more forms than the one shown -- none of which
+			// GalaxyRP fix: [Admin] this listed spawn and "kill all" only. /npc also has team
+			// and score, and kill takes more forms than the one shown -- none of which
 			// appeared anywhere, here or in /list commands, so the only way to find them was to read
 			// Cmd_NPC_f(). The team names are given in their short form because that is what a player
 			// will type and what the /npc usage listing already shows; zyk_team_from_string() accepts
@@ -15181,7 +15180,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 ^3/npc kill <targetname or type>^7: kills npcs with that targetname or type. ^3/npc kill all^7: kills every npc.\n\
 ^3/npc kill team <player/enemy/neutral/free or nonally>^7: kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
 ^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc you are looking at.\n\
-^3/npc showbounds^7: toggles npc bounding boxes. ^3/npc score <targetname (optional)>^7: prints npc scores to the server console.\n\n\"" );
+^3/npc score <targetname (optional)>^7: prints npc scores to the server console.\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
 		{
@@ -16469,10 +16468,10 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entundo: ^7Removes last added entity. Only works once.\n\
 ^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id>: ^7Removes the entity from the map.\n\"");
+^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given.\n\"");
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
 ^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
-^3/remaplist: ^7Lists already remapped shaders in the map.\n\
+^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/remapload <file name>: ^7Loads remaps from preset file.\n\
 ^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
@@ -20367,8 +20366,8 @@ command_t commands[] = {
 	// entity slots exactly as /entadd does, and every other command that places or removes entities
 	// -- the whole Entity System and shader-remap set, /spawnplatform, /spawndummy, /removepickups --
 	// has carried this flag all along. This row was the one that did not, so an admin could still
-	// spawn NPCs into a map that was already on its way out. The other subcommands (kill, showbounds,
-	// score, team) have nothing to do during intermission either.
+	// spawn NPCs into a map that was already on its way out. The other subcommands (kill, score,
+	// team) have nothing to do during intermission either.
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ooc",				Cmd_OOC_f,					0 },					// GalaxyRP: [Chat] out-of-character chat, forced in every gametype -- see Cmd_OOC_f for the flags
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },

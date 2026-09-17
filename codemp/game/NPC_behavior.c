@@ -32,9 +32,9 @@ we need it...
 #include "g_nav.h"
 #include "icarus/Q3_Interface.h"
 
-extern	qboolean	showBBoxes;
-extern vec3_t NPCDEBUG_BLUE;
-extern void G_Cube( vec3_t mins, vec3_t maxs, vec3_t color, float alpha );
+// GalaxyRP fix: [NPC] the showBBoxes, NPCDEBUG_BLUE and G_Cube declarations that used to be here
+// belonged to the jump-state debug box below, which is removed with "/npc showbounds" -- see
+// Cmd_NPC_f() (NPC_spawn.c).
 extern void NPC_CheckGetNewWeapon( void );
 
 extern qboolean PM_InKnockDown( playerState_t *ps );
@@ -874,12 +874,10 @@ void NPC_BSJump (void)
 		break;
 	case JS_JUMPING:
 
-		if ( showBBoxes )
-		{
-			VectorAdd(NPCS.NPC->r.mins, NPCS.NPC->pos1, p1);
-			VectorAdd(NPCS.NPC->r.maxs, NPCS.NPC->pos1, p2);
-			G_Cube( p1, p2, NPCDEBUG_BLUE, 0.5 );
-		}
+		// GalaxyRP fix: [NPC] a "if (showBBoxes) ... G_Cube(...)" box around the jump target used to
+		// be drawn here. It read the flag "/npc showbounds" toggled and called the same empty stub,
+		// so it drew nothing; removed with the command. p1 and p2 are still used by the jump
+		// arithmetic higher up this function.
 
 		if ( NPCS.NPC->s.groundEntityNum != ENTITYNUM_NONE)
 		{//Landed, start landing anim

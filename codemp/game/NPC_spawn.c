@@ -4785,7 +4785,9 @@ Svcmd_NPC_f
 
 parse and dispatch bot commands
 */
-qboolean	showBBoxes = qfalse;
+// GalaxyRP fix: [NPC] "qboolean showBBoxes = qfalse;" used to live here, the flag behind
+// "/npc showbounds". The subcommand, its help line and everything that read the flag are gone --
+// see the comment where the subcommand was, in Cmd_NPC_f() below.
 void Cmd_NPC_f( gentity_t *ent )
 {
 	char	cmd[1024];
@@ -4812,7 +4814,6 @@ void Cmd_NPC_f( gentity_t *ent )
 		Com_Printf( "Valid NPC commands are:\n" );
 		Com_Printf( " spawn [NPC type (from NPCs.cfg)]\n" );
 		Com_Printf( " kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n" );
-		Com_Printf( " showbounds (draws exact bounding boxes of NPCs)\n" );
 		Com_Printf( " score [NPC targetname] (prints number of kills per NPC)\n" );
 		Com_Printf( " team [team (player or enemy or neutral or free)]\n" ); // zyk: new option
 	}
@@ -4824,10 +4825,30 @@ void Cmd_NPC_f( gentity_t *ent )
 	{
 		NPC_Kill_f();
 	}
-	else if ( Q_stricmp( cmd, "showbounds" ) == 0 )
-	{//Toggle on and off
-		showBBoxes = showBBoxes ? qfalse : qtrue;
-	}
+	// GalaxyRP fix: [NPC] "showbounds" used to be here. It toggled showBBoxes, and in multiplayer
+	// that flag could never draw anything:
+	//
+	//   NPC_ShowDebugInfo() (NPC.c), the function that walked the NPCs and drew a box around each
+	//   one, had no callers at all. Singleplayer calls it at the end of G_RunFrame, in the
+	//   "//DEBUG STUFF" block beside NAV::ShowDebugInfo() (code/game/g_main.cpp); that block was
+	//   never ported to multiplayer.
+	//
+	//   And it could not have worked if it had been. Singleplayer's copy calls CG_Cube() directly,
+	//   because there the game and the renderer are one process. Multiplayer's game module has no
+	//   renderer, so Raven left G_Cube(), G_Line(), G_CubeOutline() and the rest as empty stubs in
+	//   g_nav.c, with the comment "rwwFIXMEFIXME: Write these at some point for the sake of being
+	//   able to debug visually". They are still empty in OpenJK, in TaystJK and in the newer Zyk
+	//   mod -- this is inherited dead code, not something that broke here.
+	//
+	// So the command toggled a flag nothing polled, which would have called a function that does
+	// nothing, and printed not a word either way. Removed along with the flag, the function and the
+	// one other reader (the jump-state box in NPC_BSJump, NPC_behavior.c). An unrecognised
+	// subcommand is ignored without a message, which is what this one effectively did anyway.
+	//
+	// Drawing boxes in multiplayer is possible -- CG_Cube() works client-side and is live behind
+	// cg_showVehBounds, and G_TestLine() broadcasts debug lines that CG_TestLine() renders, live
+	// behind bot_wp_edit -- but it is a new feature, not a repair, so nothing is left here
+	// pretending to be one.
 	else if ( Q_stricmp ( cmd, "score" ) == 0 )
 	{
 		char		cmd2[1024];

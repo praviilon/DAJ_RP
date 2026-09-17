@@ -589,33 +589,18 @@ void ClearNPCGlobals( void )
 }
 //===============
 
-extern	qboolean	showBBoxes;
-vec3_t NPCDEBUG_RED = {1.0, 0.0, 0.0};
-vec3_t NPCDEBUG_GREEN = {0.0, 1.0, 0.0};
-vec3_t NPCDEBUG_BLUE = {0.0, 0.0, 1.0};
-vec3_t NPCDEBUG_LIGHT_BLUE = {0.3f, 0.7f, 1.0};
-extern void G_Cube( vec3_t mins, vec3_t maxs, vec3_t color, float alpha );
-extern void G_Line( vec3_t start, vec3_t end, vec3_t color, float alpha );
-extern void G_Cylinder( vec3_t start, vec3_t end, float radius, vec3_t color );
-
-void NPC_ShowDebugInfo (void)
-{
-	if ( showBBoxes )
-	{
-		gentity_t	*found = NULL;
-		vec3_t		mins, maxs;
-
-		while( (found = G_Find( found, FOFS(classname), "NPC" ) ) != NULL )
-		{
-			if ( trap->InPVS( found->r.currentOrigin, g_entities[0].r.currentOrigin ) )
-			{
-				VectorAdd( found->r.currentOrigin, found->r.mins, mins );
-				VectorAdd( found->r.currentOrigin, found->r.maxs, maxs );
-				G_Cube( mins, maxs, NPCDEBUG_RED, 0.25 );
-			}
-		}
-	}
-}
+// GalaxyRP fix: [NPC] NPC_ShowDebugInfo() used to live here, with the showBBoxes extern, the four
+// NPCDEBUG_* colours and the G_Cube/G_Line/G_Cylinder declarations that existed only for it.
+//
+// Nothing called it. The call singleplayer makes, at the end of G_RunFrame beside
+// NAV::ShowDebugInfo() (code/game/g_main.cpp), was never ported to multiplayer -- and G_Cube() is an
+// empty stub here, because this module has no renderer to draw with. It was the drawing half of
+// "/npc showbounds", which is removed; see the comment where that subcommand was, in Cmd_NPC_f()
+// (NPC_spawn.c), for the whole story.
+//
+// The colours went with it: NPCDEBUG_BLUE had one other user, the jump-state box in NPC_BSJump()
+// that read the same dead flag and is removed too, and the extern for NPCDEBUG_RED in g_nav.c was
+// never used by anything there.
 
 void NPC_ApplyScriptFlags (void)
 {
