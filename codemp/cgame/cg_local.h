@@ -638,6 +638,12 @@ typedef struct score_s {
 	int				scoreFlags;
 	int				powerUps;
 	int				accuracy;
+	// GalaxyRP fix: [Death System] the scoreboard sends this in impressiveCount's wire position --
+	// see DeathmatchScoreboardMessage (g_cmds.c) for why that slot and not another. impressiveCount
+	// itself stays in the struct so CG_OwnerDrawValue's CG_IMPRESSIVE case still compiles; it is no
+	// longer parsed, and reads 0 from the memset, which is exactly what it read before, since
+	// nothing in codemp/game ever incremented PERS_IMPRESSIVE_COUNT.
+	int				knockdowns;
 	int				impressiveCount;
 	int				excellentCount;
 	int				gauntletCount;

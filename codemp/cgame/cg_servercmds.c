@@ -69,7 +69,10 @@ static void CG_ParseScores( void ) {
 		cg.scores[i].scoreFlags			= atoi( CG_Argv( i*SCORE_OFFSET +  8 ) );
 		powerups						= atoi( CG_Argv( i*SCORE_OFFSET +  9 ) );
 		cg.scores[i].accuracy			= atoi( CG_Argv( i*SCORE_OFFSET + 10 ) );
-		cg.scores[i].impressiveCount	= atoi( CG_Argv( i*SCORE_OFFSET + 11 ) );
+		// GalaxyRP fix: [Death System] knockdowns, not impressive awards -- see the matching
+		// comment in DeathmatchScoreboardMessage (g_cmds.c). SCORE_OFFSET deliberately stays at
+		// 14 so a client running a different cgame still parses every row at the right place.
+		cg.scores[i].knockdowns			= atoi( CG_Argv( i*SCORE_OFFSET + 11 ) );
 		cg.scores[i].excellentCount		= atoi( CG_Argv( i*SCORE_OFFSET + 12 ) );
 		cg.scores[i].gauntletCount		= atoi( CG_Argv( i*SCORE_OFFSET + 13 ) );
 		cg.scores[i].defendCount		= atoi( CG_Argv( i*SCORE_OFFSET + 14 ) );

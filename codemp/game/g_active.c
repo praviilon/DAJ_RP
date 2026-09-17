@@ -2618,7 +2618,15 @@ void ClientThink_real( gentity_t *ent ) {
 
 		if (client->sess.sessionTeam != TEAM_SPECTATOR && client->tempSpectate < level.time)
 		{
+			// GalaxyRP fix: [Death System] bookkeeping, not a death -- see g_bookkeepingDeath in
+			// g_local.h. The respawn is the price an account command pays for being used mid-fight
+			// (see zyk_relog_kill_required, g_cmds.c): the player loses their position and their
+			// momentum, which is the part that bites. A scoreboard death on top would charge them
+			// for typing /login. G_Kill() hands the kill to the opponent when the player is
+			// duelling, so the flag has to bracket the call rather than sit inside either branch.
+			g_bookkeepingDeath = qtrue;
 			G_Kill(ent);
+			g_bookkeepingDeath = qfalse;
 		}
 	}
 

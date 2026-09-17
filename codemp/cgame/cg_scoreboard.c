@@ -181,10 +181,19 @@ static void CG_DrawClientScore( int y, score_t *score, float *color, float fade,
 			}
 		}
 
+		// GalaxyRP fix: [Death System] knockdowns and deaths, in the one column. score->ping is the
+		// death count, not a ping -- this mod sends pers.level, PERS_KILLED and the real ping in
+		// the score/ping/time wire slots respectively, and relabels the headers to match. The two
+		// numbers mean different things now: a knockdown someone was revived from is not a death,
+		// and a death in a vehicle or a mini-game never was a knockdown, so "3/1" reads as "went
+		// down three times, actually died once".
+		//
+		// One column rather than a fifth: the data fits the space a single number already had, so
+		// nothing has to be re-spaced and the name field keeps its width.
 		if ( cg_scoreboardBots.integer && ci->botSkill != -1 )
 			CG_Text_Paint( SB_PING_X, y, 1.0f * scale, colorWhite, "BOT", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 		else
-			CG_Text_Paint (SB_PING_X, y, 1.0f * scale, colorWhite, va("%i", score->ping),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
+			CG_Text_Paint (SB_PING_X, y, 1.0f * scale, colorWhite, va("%i/%i", score->knockdowns, score->ping),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 		CG_Text_Paint (SB_TIME_X, y, 1.0f * scale, colorWhite, va("%i", score->time),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
 	}
 	else
@@ -480,7 +489,12 @@ qboolean CG_DrawOldScoreboard( void ) {
 	{
 		CG_Text_Paint ( SB_SCORE_X, y, 1.0f, colorWhite, "Level", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	}
-	CG_Text_Paint ( SB_PING_X, y, 1.0f, colorWhite, "Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+	// GalaxyRP fix: [Death System] two numbers under one heading now. Painted at 0.7 rather than
+	// the 1.0 its neighbours use because the columns are 66px apart and "Deaths" alone already
+	// roughly filled that -- CG_Text_Paint is called with limit 0, so an oversized header does not
+	// clip, it runs into "Ping". Scaling this one label is what keeps the other three columns and
+	// the name field exactly where they were.
+	CG_Text_Paint ( SB_PING_X, y, 0.7f, colorWhite, "Downs/Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	CG_Text_Paint ( SB_TIME_X, y, 1.0f, colorWhite, CG_GetStringEdString("MP_INGAME", "PING"), 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 
 	y = SB_TOP;

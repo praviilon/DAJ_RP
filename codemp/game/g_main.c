@@ -3018,8 +3018,13 @@ void G_ResetDuelists(void)
 	{
 		ent = &g_entities[level.sortedClients[i]];
 
+		// GalaxyRP fix: [Death System] bookkeeping, not a death -- see g_bookkeepingDeath in
+		// g_local.h. Resetting the duelists is the match machinery clearing the arena, not
+		// something any of them did.
 		g_noPDuelCheck = qtrue;
+		g_bookkeepingDeath = qtrue;
 		player_die(ent, ent, ent, 999, MOD_SUICIDE);
+		g_bookkeepingDeath = qfalse;
 		g_noPDuelCheck = qfalse;
 		trap->UnlinkEntity ((sharedEntity_t *)ent);
 		ClientSpawn(ent);
@@ -8263,18 +8268,27 @@ qboolean duel_tournament_validate_duelists()
 	// zyk: removing duelists from private duels
 	// GalaxyRP fix: [Duel Tournament] NULL-guarded -- these now hold NULL for an empty match slot
 	// instead of an out-of-bounds pointer, so they have to be checked before being dereferenced.
+	// GalaxyRP fix: [Death System] both are bookkeeping, not deaths -- see g_bookkeepingDeath in
+	// g_local.h. This is the tournament getting a private duel out of the way before its own match
+	// starts; neither duelist lost anything, and neither should be charged for it. The mini-game
+	// deaths that ARE deaths -- falling off the Melee catwalk, leaving the arena mid-match -- are
+	// deliberately left counting.
 	if (first_duelist && first_duelist->client->ps.duelInProgress == qtrue)
 	{
 		first_duelist->client->ps.stats[STAT_HEALTH] = first_duelist->health = -999;
 
+		g_bookkeepingDeath = qtrue;
 		player_die(first_duelist, first_duelist, first_duelist, 100000, MOD_SUICIDE);
+		g_bookkeepingDeath = qfalse;
 	}
 
 	if (second_duelist && second_duelist->client->ps.duelInProgress == qtrue)
 	{
 		second_duelist->client->ps.stats[STAT_HEALTH] = second_duelist->health = -999;
 
+		g_bookkeepingDeath = qtrue;
 		player_die(second_duelist, second_duelist, second_duelist, 100000, MOD_SUICIDE);
+		g_bookkeepingDeath = qfalse;
 	}
 
 	// zyk: testing if duelists are still valid

@@ -613,7 +613,19 @@ typedef enum {
 	PERS_DEFEND_COUNT,				// defend awards
 	PERS_ASSIST_COUNT,				// assist awards
 	PERS_GAUNTLET_FRAG_COUNT,		// kills with the gauntlet
-	PERS_CAPTURES					// captures
+	PERS_CAPTURES,					// captures
+	// GalaxyRP fix: [Death System] how many times the Death System has knocked this player down.
+	// Separate from PERS_KILLED, which counts actual deaths: a knockdown someone is revived from is
+	// not a death, and a death that never passed through a knockdown (a vehicle, a mini-game, or
+	// rp_downed_timer 0) is not a knockdown. Counted in exactly one place, paralyze_player()
+	// (g_cmds.c), which is the gameplay knockdown path -- an admin /paralyze reaches
+	// RP_EnterDownedState() directly and is deliberately not counted here.
+	//
+	// This is the sixteenth entry and MAX_PERSISTANT (q_shared.h) is 16, so the array is exactly
+	// full. The array is transmitted whole by MSG_WriteDeltaPlayerstate either way, so this costs
+	// no bandwidth -- but there is no room for a seventeenth without raising that constant, which
+	// is part of the network protocol.
+	PERS_KNOCKED_DOWN				// Death System knockdowns (NOT admin /paralyze)
 } persEnum_t;
 
 

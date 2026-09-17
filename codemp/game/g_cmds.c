@@ -524,7 +524,21 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 			" %i %i %i %i %i %i %i %i %i %i %i %i %i %i", level.sortedClients[i],
 			cl->pers.level, cl->ps.persistant[PERS_KILLED], ping,
 			scoreFlags, g_entities[level.sortedClients[i]].s.powerups, accuracy,
-			cl->ps.persistant[PERS_IMPRESSIVE_COUNT],
+			// GalaxyRP fix: [Death System] knockdowns ride in the PERS_IMPRESSIVE_COUNT wire
+			// position so the scoreboard command keeps its fourteen fields per client. That
+			// matters: a client running its own cgame parses this at a FIXED offset, and TaystJK
+			// -- which most players use -- only widens to fifteen for servers it identifies as
+			// JAPro by the serverinfo gamename (see taystJKinfo in g_xcvar.h for why it files us
+			// as basejk). A fifteenth field here would shift every row after the first for them.
+			//
+			// This slot specifically because it is the only one of the six award fields that is
+			// inert everywhere: nothing in codemp/game ever increments PERS_IMPRESSIVE_COUNT, no
+			// scoreboard draws score->impressiveCount (ours, TaystJK's, or vanilla's -- and
+			// TaystJK's CTF branch does draw captures, assists and defends, which rules those
+			// three out), and no shipped .menu in any of the three uses the CG_IMPRESSIVE
+			// owner-draw that is its only other reader. The playerState value is untouched, so
+			// the impressive medal in cg_playerstate.c cannot misfire either.
+			cl->ps.persistant[PERS_KNOCKED_DOWN],
 			cl->ps.persistant[PERS_EXCELLENT_COUNT],
 			cl->ps.persistant[PERS_GAUNTLET_FRAG_COUNT],
 			cl->ps.persistant[PERS_DEFEND_COUNT],
@@ -1889,7 +1903,16 @@ void paralyze_player( gentity_t *ent )
 	//GalaxyRP (Alex): [Death System] Set their HP so they don't die the old way instantly.
 	ent->client->ps.stats[STAT_HEALTH] = RP_DOWNED_HEALTH;
 	ent->health = RP_DOWNED_HEALTH;
-	ent->client->ps.persistant[PERS_KILLED]++;
+
+	// GalaxyRP fix: [Death System] a knockdown, not a death. This used to increment PERS_KILLED,
+	// which made the scoreboard's Deaths column really a knockdown count -- it charged a player who
+	// was revived by /helpup a death they never died, and missed every death that skips the
+	// knockdown (a vehicle, a mini-game, or rp_downed_timer 0). The two are separate columns now:
+	// deaths are counted in player_die() (g_combat.c), and this counts the knockdowns.
+	//
+	// Only the gameplay path reaches here. An admin /paralyze calls RP_EnterDownedState() directly
+	// and is deliberately not counted -- being punished is not being knocked down.
+	ent->client->ps.persistant[PERS_KNOCKED_DOWN]++;
 }
 
 qboolean can_player_get_up(gentity_t* ent, gentity_t* target) {
@@ -6376,7 +6399,11 @@ void SetTeam( gentity_t *ent, char *s ) {
 				{
 					ent->flags &= ~FL_GODMODE;
 					ent->client->ps.stats[STAT_HEALTH] = ent->health = 0;
+					// GalaxyRP fix: [Death System] bookkeeping, not a death -- see
+					// g_bookkeepingDeath in g_local.h.
+					g_bookkeepingDeath = qtrue;
 					player_die( ent, ent, ent, 100000, MOD_TEAM_CHANGE );
+					g_bookkeepingDeath = qfalse;
 				}
 			}
 
@@ -6449,8 +6476,13 @@ void SetTeam( gentity_t *ent, char *s ) {
 		// Kill him (makes sure he loses flags, etc)
 		ent->flags &= ~FL_GODMODE;
 		ent->client->ps.stats[STAT_HEALTH] = ent->health = 0;
+		// GalaxyRP fix: [Death System] bookkeeping, not a death -- see g_bookkeepingDeath in
+		// g_local.h. Leaving a team should not cost a scoreboard death, and under rp_loginRequired
+		// this is the path every /logout takes on its way to Spectator.
 		g_dontPenalizeTeam = qtrue;
+		g_bookkeepingDeath = qtrue;
 		player_die (ent, ent, ent, 100000, MOD_SUICIDE);
+		g_bookkeepingDeath = qfalse;
 		g_dontPenalizeTeam = qfalse;
 
 	}
@@ -6876,7 +6908,11 @@ void Cmd_SiegeClass_f( gentity_t *ent )
 		{
 			ent->flags &= ~FL_GODMODE;
 			ent->client->ps.stats[STAT_HEALTH] = ent->health = 0;
+			// GalaxyRP fix: [Death System] bookkeeping, not a death -- see g_bookkeepingDeath in
+			// g_local.h.
+			g_bookkeepingDeath = qtrue;
 			player_die (ent, ent, ent, 100000, MOD_SUICIDE);
+			g_bookkeepingDeath = qfalse;
 		}
 
 		if (ent->client->sess.sessionTeam == TEAM_SPECTATOR || startedAsSpec)

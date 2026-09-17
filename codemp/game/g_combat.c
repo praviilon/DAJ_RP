@@ -2112,6 +2112,10 @@ extern void Rancor_DropVictim( gentity_t *self );
 extern qboolean g_dontFrickinCheck;
 extern qboolean g_endPDuel;
 extern qboolean g_noPDuelCheck;
+
+// GalaxyRP fix: [Death System] see g_local.h for what this is and which calls set it. Defined here
+// because player_die() below is its only reader.
+qboolean g_bookkeepingDeath = qfalse;
 extern void saberReactivate(gentity_t *saberent, gentity_t *saberOwner);
 extern void saberBackToOwner(gentity_t *saberent);
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
@@ -2144,6 +2148,43 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	if ( !attacker )
 		return;
+
+	// GalaxyRP fix: [Death System] this is where a death is counted, and the only place.
+	//
+	// It used to live further down, and unconditionally, straight out of stock JKA, until commit
+	// 54a1b823 moved it into paralyze_player() -- with the Death System running, a player's death
+	// was taken to be the KNOCKDOWN, since player_die() only fires afterwards when somebody
+	// finishes off a body already lying down. That made the scoreboard column count knockdowns
+	// rather than deaths, and it lost every death that never passed through one: a player killed in
+	// a vehicle or a mini-game (both excluded from the downed path in G_Damage), and, once
+	// rp_downed_timer 0 existed, every death on a server with the system switched off.
+	//
+	// The two are separate counters now. paralyze_player() counts knockdowns into
+	// PERS_KNOCKED_DOWN; this counts deaths. One increment per death, whatever route it took, with
+	// no reference to rp_downed_timer -- the column reads the same with the system on or off.
+	//
+	// Counting inside this function rather than at its call sites is what makes that true. The
+	// three early returns above are the whole of "this is not really a death", so a hit that kills
+	// nobody cannot count. That matters more than it looks: EF_DEAD is not set here, it is derived
+	// from health in BG_PlayerStateToEntityState() once per frame, so a rocket's direct hit and its
+	// splash both re-enter G_Damage()'s death branch on the same corpse within one frame -- the
+	// second one arrives here and leaves on the pm_type test above.
+	//
+	// Placed immediately after those returns rather than beside "self->enemy = attacker" further
+	// down, where stock JKA had it, so nothing between can skip it. There is one such return: a
+	// PowerDuel death that ends the match starts the intermission and leaves early, which would
+	// otherwise drop the last death of the round.
+	//
+	// The slot test keeps the counter to real players: NPCs and vehicles reach player_die() too and
+	// have a client of their own, and nothing ever read their count.
+	//
+	// g_bookkeepingDeath excludes the kills that are administration rather than dying -- see its
+	// declaration in g_local.h for the list. /kill is deliberately NOT one of them: it is a real
+	// death and counts, in a private duel and a mini-game as much as anywhere else.
+	if ( self->s.number < MAX_CLIENTS && !g_bookkeepingDeath )
+	{
+		self->client->ps.persistant[PERS_KILLED]++;
+	}
 
 	// GalaxyRP fix: [Cloak Item] decloak on the real, final kill -- covers both players (this only
 	// reaches player_die() once they're actually dying for good, since a live player's first lethal
@@ -2710,35 +2751,6 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	}
 
 	self->enemy = attacker;
-
-	// GalaxyRP fix: [Death System] count the death when the downed system is switched off.
-	//
-	// This increment used to live here unconditionally, straight out of stock JKA. Commit 54a1b823
-	// ("Added Death count to the scoreboard. It will NOT be affected by /kill") moved it into
-	// paralyze_player(), because with the Death System running a player's death is the KNOCKDOWN --
-	// player_die() only fires afterwards, when somebody finishes off a body that is already down, so
-	// counting here as well would have charged two deaths for one. That made paralyze_player() the
-	// only place in the mod that touches PERS_KILLED.
-	//
-	// rp_downed_timer 0 takes paralyze_player() out of the picture entirely: a lethal hit goes
-	// straight to targ->die() and nothing increments the counter, so the scoreboard's Deaths column
-	// sat at 0 for every player for the whole map. Restoring the increment on exactly the arm where
-	// the knockdown no longer happens keeps the field counting the same event in both modes -- one
-	// death per death, never two.
-	//
-	// Self-inflicted deaths stay excluded, which is what 54a1b823's title is about: a downed player
-	// cannot /kill at all (G_Kill refuses on status bit 6), and a live one reaching here through
-	// /kill did not count with the system on, so it must not start counting with it off. "self ==
-	// attacker" is the test the suicide counter just below already uses, so the two agree. A /kill
-	// during a private duel is deliberately NOT self-inflicted by this test -- G_Kill hands the kill
-	// to the opponent and passes them as the attacker, so the frag and the death stay balanced.
-	//
-	// NPCs and vehicles reach player_die() too and have a client of their own; the slot test keeps
-	// the counter to real players, which is the only place it was ever read.
-	if ( !RP_DownedSystemEnabled() && self->s.number < MAX_CLIENTS && self != attacker )
-	{
-		self->client->ps.persistant[PERS_KILLED]++;
-	}
 
 	if (self == attacker)
 	{

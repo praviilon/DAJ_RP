@@ -2109,6 +2109,13 @@ void SaveRegisteredItems( void );
 // GalaxyRP fix: [Death System] rp_downed_timer 0 switches the downed system off entirely -- see
 // RP_DownedSystemEnabled() in g_utils.c. The cvar is CVAR_LATCH, so this cannot change mid-map.
 qboolean RP_DownedSystemEnabled( void );
+// GalaxyRP fix: [Death System] set around a player_die() call that is bookkeeping rather than a
+// death -- a team or class change, a forced move to Spectator, the respawn an account command
+// charges, or a mini-game tearing down a private duel it needs out of the way. player_die() is the
+// one reader: it skips the PERS_KILLED increment while this is set and does everything else as
+// normal. Same shape as g_noPDuelCheck and g_dontPenalizeTeam, which already bracket several of
+// these very calls. Always cleared on the line after the call it wraps, never left set.
+extern qboolean g_bookkeepingDeath;
 qboolean G_PlayerIsDowned( gentity_t *ent );
 // GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (player_statuses bit 26, always
 // accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely
