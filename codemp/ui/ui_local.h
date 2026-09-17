@@ -248,7 +248,18 @@ typedef struct serverStatusInfo_s {
 	char address[MAX_ADDRESSLENGTH];
 	char *lines[MAX_SERVERSTATUS_LINES][4];
 	char text[MAX_SERVERSTATUS_TEXT];
-	char pings[MAX_CLIENTS * 3];
+	// GalaxyRP fix: [UI] this holds one decimal player index per row, NUL-separated, and the loop
+	// that fills it (UI_GetServerStatusInfo) is bounded by MAX_SERVERSTATUS_LINES rows -- not by
+	// this buffer. Sized against MAX_CLIENTS it held 96 bytes while the loop could write up to 126
+	// entries, and the indices cost 2 bytes up to "9", 3 up to "99" and 4 beyond, so it ran out at
+	// the 37th player. Worse, the size handed to Com_sprintf is "sizeof(pings) - len", a size_t
+	// subtraction: once len passes the end it underflows to ~2^64 and the write stops being bounded
+	// at all. Confirmed under AddressSanitizer against the real loop -- 37 players writes past the
+	// end, 38 segfaults on an unbounded write.
+	//
+	// Tie it to the bound that actually governs the loop. 4 bytes per row covers the widest index
+	// the row cap can produce ("126" plus its NUL); measured worst case is 398 bytes.
+	char pings[MAX_SERVERSTATUS_LINES * 4];
 	int numLines;
 } serverStatusInfo_t;
 

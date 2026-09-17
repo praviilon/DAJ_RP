@@ -8055,6 +8055,15 @@ static int UI_GetServerStatusInfo( const char *serverAddress, serverStatusInfo_t
 				info->numLines++;
 				if (info->numLines >= MAX_SERVERSTATUS_LINES)
 					break;
+				// GalaxyRP fix: [UI] bound the loop by the pings buffer as well as by the row
+				// count. The row cap alone left the buffer size as load-bearing arithmetic -- get
+				// it wrong and "sizeof(pings) - len" underflows into an unbounded write (see
+				// ui_local.h). pings is sized to outlast this check, so it should never fire; it is
+				// here so that a future change to MAX_SERVERSTATUS_LINES, or to the width of an
+				// index, truncates the list instead of corrupting memory. 4 is the widest index
+				// this loop can emit, plus its NUL.
+				if (len > (int)sizeof(info->pings) - 4)
+					break;
 				p = strchr(p, '\\');
 				if (!p)
 					break;
