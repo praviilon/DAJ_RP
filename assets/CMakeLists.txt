@@ -33,19 +33,58 @@ set(GalaxyRPAllLauncherFiles
 	galaxyrp_play.bat galaxyrp_host.bat galaxyrp_host_autorestart.bat
 	galaxyrp_play.sh galaxyrp_host.sh galaxyrp_host_autorestart.sh
 	galaxyrp_play.command galaxyrp_host.command galaxyrp_host_autorestart.command)
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-	set(GalaxyRPLauncherFiles galaxyrp_play.bat galaxyrp_host.bat galaxyrp_host_autorestart.bat)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	set(GalaxyRPLauncherFiles galaxyrp_play.command galaxyrp_host.command galaxyrp_host_autorestart.command)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	set(GalaxyRPLauncherFiles galaxyrp_play.sh galaxyrp_host.sh galaxyrp_host_autorestart.sh)
-else()
-	message(WARNING "GalaxyRP: unrecognized CMAKE_SYSTEM_NAME '${CMAKE_SYSTEM_NAME}' -- shipping "
-		"every platform's launcher script since it's unclear which one applies. Set "
-		"GalaxyRPLauncherFiles explicitly (e.g. -DGalaxyRPLauncherFiles=galaxyrp_play.sh;galaxyrp_host.sh;galaxyrp_host_autorestart.sh) "
-		"to fix this.")
-	set(GalaxyRPLauncherFiles ${GalaxyRPAllLauncherFiles})
+
+# GalaxyRP fix: [packaging] the platform detection below is the DEFAULT, not an override: it only
+# runs when GalaxyRPLauncherFiles has not already been set. Without this guard the message in the
+# else() branch was giving advice that could not work -- a -D on the command line creates a CACHE
+# variable, and the plain set() calls here create a NORMAL variable, which shadows the cache entry
+# for the rest of this directory. The branch always won and the -D was silently discarded
+# (confirmed: -DGalaxyRPLauncherFiles=galaxyrp_play.bat on Linux still installed the .sh set and
+# still excluded every .bat). The else() branch also overwrote it on the line right after telling
+# the user to set it. Now the advice is honoured, and on any platform rather than only the
+# unrecognized one -- which also makes it possible to package for a different target than the host,
+# e.g. building a Linux server package from Windows. An empty -D value is falsy, so it simply means
+# "use the default" rather than shipping nothing.
+if(NOT GalaxyRPLauncherFiles)
+	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+		set(GalaxyRPLauncherFiles galaxyrp_play.bat galaxyrp_host.bat galaxyrp_host_autorestart.bat)
+	elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+		set(GalaxyRPLauncherFiles galaxyrp_play.command galaxyrp_host.command galaxyrp_host_autorestart.command)
+	elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+		set(GalaxyRPLauncherFiles galaxyrp_play.sh galaxyrp_host.sh galaxyrp_host_autorestart.sh)
+	else()
+		message(WARNING "GalaxyRP: unrecognized CMAKE_SYSTEM_NAME '${CMAKE_SYSTEM_NAME}' -- shipping "
+			"every platform's launcher script since it's unclear which one applies. Set "
+			"GalaxyRPLauncherFiles explicitly (e.g. -DGalaxyRPLauncherFiles=galaxyrp_play.sh;galaxyrp_host.sh;galaxyrp_host_autorestart.sh) "
+			"to fix this.")
+		set(GalaxyRPLauncherFiles ${GalaxyRPAllLauncherFiles})
+	endif()
 endif()
+
+# GalaxyRP fix: [packaging] validate the names, because every use of this list is a PATTERN match
+# or a file path that fails SILENTLY when the name is wrong. A typo in a -D would not error -- it
+# would just never match, so the misspelled script would be excluded from the package like all the
+# others and the build would look fine while shipping no launcher at all. Fail loudly instead.
+foreach(GalaxyRPRequestedLauncher ${GalaxyRPLauncherFiles})
+	if(NOT GalaxyRPRequestedLauncher IN_LIST GalaxyRPAllLauncherFiles)
+		message(FATAL_ERROR "GalaxyRP: GalaxyRPLauncherFiles contains '${GalaxyRPRequestedLauncher}', "
+			"which is not one of the launcher scripts in assets/server. Valid names are: "
+			"${GalaxyRPAllLauncherFiles}")
+	endif()
+endforeach()
+
+# The same silent-failure argument applies to GalaxyRPAllLauncherFiles itself: if a script is
+# renamed or removed from assets/server without updating that list, its stale entry stops matching
+# and the file it was meant to exclude quietly starts shipping on every platform. A warning rather
+# than an error, since a deliberately removed launcher should not block anyone's build.
+foreach(GalaxyRPKnownLauncher ${GalaxyRPAllLauncherFiles})
+	if(NOT EXISTS "${CMAKE_SOURCE_DIR}/assets/server/${GalaxyRPKnownLauncher}")
+		message(WARNING "GalaxyRP: GalaxyRPAllLauncherFiles lists '${GalaxyRPKnownLauncher}', but "
+			"assets/server/${GalaxyRPKnownLauncher} does not exist. The list is stale -- any launcher "
+			"it no longer names will be shipped on every platform instead of just its own.")
+	endif()
+endforeach()
+
 set(GalaxyRPExcludedLauncherFiles ${GalaxyRPAllLauncherFiles})
 list(REMOVE_ITEM GalaxyRPExcludedLauncherFiles ${GalaxyRPLauncherFiles})
 
