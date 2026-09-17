@@ -489,12 +489,13 @@ qboolean CG_DrawOldScoreboard( void ) {
 	{
 		CG_Text_Paint ( SB_SCORE_X, y, 1.0f, colorWhite, "Level", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	}
-	// GalaxyRP fix: [Death System] two numbers under one heading now. Painted at 0.7 rather than
-	// the 1.0 its neighbours use because the columns are 66px apart and "Deaths" alone already
-	// roughly filled that -- CG_Text_Paint is called with limit 0, so an oversized header does not
-	// clip, it runs into "Ping". Scaling this one label is what keeps the other three columns and
-	// the name field exactly where they were.
-	CG_Text_Paint ( SB_PING_X, y, 0.7f, colorWhite, "Downs/Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+	// GalaxyRP fix: [Death System] two numbers under one heading now. Painted smaller than the 1.0
+	// its neighbours use because the columns are 66px apart and "Deaths" alone already roughly
+	// filled that -- CG_Text_Paint is called with limit 0, so an oversized header does not clip, it
+	// runs into "Ping". Scaling this one label is what keeps the other three columns and the name
+	// field exactly where they were. 0.8 after looking at 0.7 in game; it is the only number that
+	// needs to move if it wants adjusting again.
+	CG_Text_Paint ( SB_PING_X, y, 0.8f, colorWhite, "Downs/Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	CG_Text_Paint ( SB_TIME_X, y, 1.0f, colorWhite, CG_GetStringEdString("MP_INGAME", "PING"), 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 
 	y = SB_TOP;

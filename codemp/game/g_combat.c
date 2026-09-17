@@ -6316,9 +6316,44 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// clear-then-die arm below; sending them to the plain targ->die() in the else would skip
 			// RP_ClearDownedState(), and player_die()'s early returns would leave status bits 6 and
 			// 26 set on a corpse.
+			// GalaxyRP fix: [Death System] "&& attacker->client" -- damage nobody dealt you kills
+			// outright instead of knocking you down, the same way a vehicle or a mini-game already
+			// does.
+			//
+			// A hazard never arrives once. trigger_hurt re-arms itself every FRAMETIME
+			// (g_trigger.c), and lava, slime and drowning repeat on pain_debounce_time
+			// (P_WorldEffects, g_active.c), so the first tick downed the player at
+			// RP_DOWNED_HEALTH and the next one -- a tenth of a second later -- killed them.
+			// Nothing could happen in between: the three seconds of EF_INVULNERABLE that
+			// RP_EnterDownedState grants are gated on "attacker->client" in the invulnerability
+			// test above, so world damage walks straight through the very protection the
+			// knockdown exists to give. It cost a knockdown and a death for a state that lasted
+			// 100ms and that no one could revive anyone out of.
+			//
+			// Written as the ATTACKER rather than as a list of means of death, which is the
+			// tempting version and the wrong one: MOD_LAVA is the Flame Burst quest power
+			// (g_main.c) and a Jedi NPC attack (NPC_AI_Jedi.c), MOD_CRUSH is a Galak Mech and a
+			// Rancor attack, and MOD_FALLING is passed with a client attacker when somebody
+			// pushed you (the otherKiller credit in g_active.c). Excluding those by name would
+			// have turned Flame Burst into an instant-kill weapon. Asking who dealt the damage
+			// sorts all of them correctly by itself.
+			//
+			// It is deliberately inside the left half of the OR rather than in the AND chain
+			// above. A player who is ALREADY down and then burns must still come in here to
+			// reach the clear-then-die arm -- sending them to the plain targ->die() in the else
+			// would lean on player_die()'s own cleanup, which sits below three early returns.
+			// So: the system is on and somebody did this to you, OR you are already down and
+			// this state has to be torn down however it ends.
+			//
+			// The cost, stated plainly: a fall that leaves you in one piece used to be the one
+			// hazard knockdown an ally could genuinely /helpup you out of, and it is an outright
+			// death now. Anything else without a client goes the same way -- map turrets and
+			// target_lasers included. Sentry guns are not affected (WP_FireTurretMissile passes
+			// the owner through, so the attacker is a player) and Seeker drones are NPCs, which
+			// have clients of their own.
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum
 				&& !zyk_minigame_forces_death(targ)
-				&& (RP_DownedSystemEnabled() || G_PlayerIsDowned(targ))) {
+				&& ((RP_DownedSystemEnabled() && attacker && attacker->client) || G_PlayerIsDowned(targ))) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				if (targ->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used
