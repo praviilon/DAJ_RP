@@ -2277,11 +2277,26 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		fclose(zyk_entities_file);
 
 		// zyk: cleaning entities. Only the ones from the file will be in the map. Do not remove CTF flags
+		// GalaxyRP fix: [Entity System] the surviving twin of the test fixed in Cmd_EntLoad_f. "target_ent"
+		// is the address of a fixed array element and so can never be NULL, so every slot in the range was
+		// freed unconditionally -- including the ones the map's own spawn pass had already freed, because
+		// the current gametype did not want them (notsingle / notteam / notfree / gametype).
+		//
+		// A second G_FreeEntity() on an already-free entity is not merely wasted work. G_FreeEntity() ends
+		// with memset(ed, 0, sizeof(*ed)) and never puts s.number back -- only G_InitGentity() does, when
+		// the slot is handed out again -- so the second call runs with s.number == 0 and therefore unlinks
+		// client slot 0 from the world sectors and calls ICARUS_FreeEnt() on it. Here that happens to be
+		// harmless: G_InitGame() runs before any client enters the world (map_restart re-enters them only
+		// after the game module has initialised) and gSequencers[0] is NULL, so both are no-ops. It is the
+		// same call at runtime, through /entload, that had to be fixed -- there client 0 is a real player.
+		//
+		// Test what was actually meant, and first, so the two classname compares only ever see a live
+		// entity rather than the "freed" placeholder.
 		for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
 		{
 			gentity_t *target_ent = &g_entities[i];
 
-			if (target_ent && Q_stricmp(target_ent->classname, "team_CTF_redflag") != 0 && Q_stricmp(target_ent->classname, "team_CTF_blueflag") != 0)
+			if (target_ent->inuse && Q_stricmp(target_ent->classname, "team_CTF_redflag") != 0 && Q_stricmp(target_ent->classname, "team_CTF_blueflag") != 0)
 				G_FreeEntity( target_ent );
 		}
 
