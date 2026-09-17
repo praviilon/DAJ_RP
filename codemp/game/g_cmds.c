@@ -13545,13 +13545,26 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] the comment used to say "spawned by /entadd". Three commands
+	// write this slot -- /entadd, /spawnplatform and /spawndummy -- so this undoes whichever of them
+	// ran most recently. It is one step, not a stack: a second /entundo has nothing left to do.
 	if (level.last_spawned_entity)
-	{ // zyk: removes the last entity spawned by /entadd command
+	{ // zyk: removes the last entity spawned by /entadd, /spawnplatform or /spawndummy
 		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", level.last_spawned_entity->s.number));
 
 		G_FreeEntity(level.last_spawned_entity);
 
+		// G_FreeEntity() clears this itself now, for entities freed by any other route as well --
+		// see the comment there. Cleared here too so the one path that always went through this
+		// command does not depend on that.
 		level.last_spawned_entity = NULL;
+	}
+	else
+	{
+		// GalaxyRP fix: [Entity System] say so. With nothing to undo this printed nothing at all,
+		// which is indistinguishable from a command that is broken or that the admin lacks rights
+		// for -- and since the undo is a single step, the second press of it is the common case.
+		trap->SendServerCommand(ent->s.number, "print \"Nothing to undo. Only the most recent /entadd, /spawnplatform or /spawndummy can be undone, and only once.\n\"");
 	}
 }
 
@@ -14492,7 +14505,13 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		for (i = 0; i < level.num_entities; i++)
 		{
 			target_ent = &g_entities[i];
-			if ((target_ent-g_entities) == entity_id)
+			// GalaxyRP fix: [Entity System] skip a slot that is already free, the same test
+			// /entload's clearing loop was given. Freeing a freed entity is mostly wasted work --
+			// the ghoul2, NPC and sound-tracker branches of G_FreeEntity() are all gated on fields
+			// a memset entity no longer has -- but it does reset freetime, which pushes that slot's
+			// reuse another second into the future, and it reports "removed" for something that was
+			// not there. An already-free id is "not found", which is what it is.
+			if ((target_ent-g_entities) == entity_id && target_ent->inuse)
 			{
 				G_FreeEntity( target_ent );
 				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed.\n\"",i) );
@@ -14538,7 +14557,10 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		for (i = 0; i < level.num_entities; i++)
 		{
 			target_ent = &g_entities[i];
-			if ((target_ent-g_entities) >= entity_id && (target_ent-g_entities) <= entity_id2)
+			// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of a
+			// few hundred slots is mostly free slots, and each one was being freed again.
+			if ((target_ent-g_entities) >= entity_id && (target_ent-g_entities) <= entity_id2
+				&& target_ent->inuse)
 			{
 				G_FreeEntity( target_ent );
 			}

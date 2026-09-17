@@ -1619,6 +1619,34 @@ void G_FreeEntity( gentity_t *ed ) {
 	// exactly as long as the entity does.
 	level.zyk_spawn_strings_values_count[ed->s.number] = 0;
 
+	// GalaxyRP fix: [Entity System] and the fourth level field that holds an entity reference.
+	//
+	// The three above -- chaos_portal_id, duel_tournament_model_id, melee_model_id -- are cleared
+	// here for exactly this reason, and level.last_spawned_entity was missed in that pass. It is
+	// the /entundo target, written by /entadd, /spawnplatform and /spawndummy, and it was only ever
+	// cleared by /entundo itself and by G_InitGame. Anything else that freed the entity left a
+	// pointer to a dead slot behind.
+	//
+	// Which is worse than the dangling ids, because it is a POINTER: G_Spawn() recycles a freed
+	// slot after about a second, so /entundo did not merely free a blank entity, it freed whatever
+	// had moved in. /entload makes that the normal case rather than a corner one -- it frees
+	// everything from MAX_CLIENTS + BODY_QUEUE_SIZE upward and immediately respawns the preset into
+	// those same slots, so "/entadd X, /entload default, /entundo" deleted one of the preset's
+	// entities instead of X.
+	//
+	// An "is it still in use" test at the /entundo end would not have caught that: a recycled slot
+	// is in use, by something else. Clearing the pointer where the entity actually dies is the only
+	// place that can tell the difference.
+	//
+	// Below the neverFree bail on purpose, with the spawn-string reset above it and for the same
+	// reason: an entity that is not really being freed should not have its record -- or, here, its
+	// undo slot -- thrown away. G_Spawn() never hands out a neverFree entity, so no /entundo target
+	// can reach that bail today; this keeps the two lines honest if one ever does.
+	if ( level.last_spawned_entity == ed )
+	{
+		level.last_spawned_entity = NULL;
+	}
+
 	//rww - this may seem a bit hackish, but unfortunately we have no access
 	//to anything ghoul2-related on the server and thus must send a message
 	//to let the client know he needs to clean up all the g2 stuff for this
