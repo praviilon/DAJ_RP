@@ -34,23 +34,164 @@ int zyk_get_remap_count()
 	return remapCount;
 }
 
+// GalaxyRP fix: [security] is this string usable as a shader name?
+//
+// Two separate reasons, and both of them bite:
+//
+// Length. remappedShaders[] holds char[MAX_QPATH] (rp_local.h), so anything longer cannot be
+// stored. AddRemap() below bounds the copy now, but a name that only fits after truncation is not
+// the name anybody meant, so it is refused rather than silently shortened.
+//
+// Content. BuildShaderStateConfig() joins entries as "%s=%s:%5.2f@" and the client takes them
+// apart with strstr on those same three characters (CG_ShaderStateChanged, cg_servercmds.c), so a
+// name containing '=', ':' or '@' splits in the wrong place on every machine that parses it. And
+// /remapsave writes the table as whitespace-separated tokens, which fscanf reads back the same
+// way, so a name containing a space or a newline comes back as two records and shifts every
+// record after it -- the whole file silently changes meaning. Q3's tokenizer keeps quoted
+// arguments intact (Cmd_TokenizeString, cmd.cpp), so /remap "foo bar" baz really does reach us
+// with a space in it.
+//
+// Rejecting those six characters is what lets /remapsave's format stay as simple as it is: no
+// token can contain a separator, so nothing needs escaping the way the entity files do.
+qboolean zyk_valid_shader_name( const char *name )
+{
+	int i;
+
+	if ( !name || !name[0] )
+	{
+		return qfalse;
+	}
+
+	if ( strlen(name) >= MAX_QPATH )
+	{
+		return qfalse;
+	}
+
+	for ( i = 0; name[i] != '\0'; i++ )
+	{
+		if ( name[i] <= ' ' )
+		{ // space, tab, newline, carriage return and every control character
+			return qfalse;
+		}
+
+		if ( name[i] == '=' || name[i] == ':' || name[i] == '@' )
+		{ // the separators BuildShaderStateConfig() and the client's parser rely on
+			return qfalse;
+		}
+	}
+
+	return qtrue;
+}
+
 void AddRemap(const char *oldShader, const char *newShader, float timeOffset) {
 	int i;
+
+	// GalaxyRP fix: [security] validate here, not only at the callers.
+	//
+	// There are four ways into this function and only two of them are commands. /remap checks its
+	// arguments itself so it can say why it refused; zyk_load_remap_file() checks each record so it
+	// can skip one bad line instead of the file. The other two arrive from map data:
+	// zyk_remap_quest_item() (g_main.c) and G_UseTargets2() (below), and that second one is the
+	// reason this check is here rather than only up there.
+	//
+	// G_UseTargets2() passes ent->targetShaderName and ent->targetShaderNewName straight through.
+	// Those are F_STRING spawn fields (g_spawn.c), which G_NewString() allocates at whatever length
+	// the value happens to be -- no cap anywhere -- and the remap fires ABOVE that function's
+	// "if (!string || !string[0]) return", so the entity does not even need a target key. Any of
+	// the sixty-odd G_UseTargets() call sites reaches it, including Touch_Item(): an entity with a
+	// long targetshadername is triggered by any player walking over it, not by the admin who
+	// placed it. That made an ordinary pickup a buffer overflow.
+	if ( zyk_valid_shader_name(oldShader) == qfalse || zyk_valid_shader_name(newShader) == qfalse )
+	{
+		trap->Print("AddRemap: refused a shader remap -- a name is empty, longer than %i characters, or contains whitespace or one of = : @\n", MAX_QPATH - 1);
+		return;
+	}
 
 	for (i = 0; i < remapCount; i++) {
 		if (Q_stricmp(oldShader, remappedShaders[i].oldShader) == 0) {
 			// found it, just update this one
-			strcpy(remappedShaders[i].newShader,newShader);
+			// GalaxyRP fix: [security] bounded. This was a bare strcpy() into char[MAX_QPATH], as
+			// were the two below -- the "remapCount < MAX_SHADER_REMAPS" test bounds the index, and
+			// nothing bounded the length. The validation above already refuses anything too long,
+			// so this is the guarantee rather than the gate: it holds even if a fifth caller
+			// appears that forgets to check.
+			Q_strncpyz(remappedShaders[i].newShader, newShader, sizeof(remappedShaders[i].newShader));
 			remappedShaders[i].timeOffset = timeOffset;
 			return;
 		}
 	}
 	if (remapCount < MAX_SHADER_REMAPS) {
-		strcpy(remappedShaders[remapCount].newShader,newShader);
-		strcpy(remappedShaders[remapCount].oldShader,oldShader);
+		Q_strncpyz(remappedShaders[remapCount].newShader, newShader, sizeof(remappedShaders[remapCount].newShader));
+		Q_strncpyz(remappedShaders[remapCount].oldShader, oldShader, sizeof(remappedShaders[remapCount].oldShader));
 		remappedShaders[remapCount].timeOffset = timeOffset;
 		remapCount++;
 	}
+}
+
+// GalaxyRP fix: [security] the one reader for a remap preset file.
+//
+// There were two copies of this loop -- Cmd_RemapLoad_f() (g_cmds.c) and the default-preset load in
+// G_InitGame() (g_main.c) -- and they had already drifted apart: the command's copy was given
+// field widths and short-record handling at some point, and its twin was left with bare "%s"
+// conversions into char[128] and two unchecked follow-up reads. So the file an admin loads by hand
+// was safe and the identical file loaded automatically at map start was not, which is the more
+// dangerous of the two because nobody types anything to trigger it. One copy now.
+//
+// Returns qtrue if the file existed and was read, qfalse if it could not be opened, so each caller
+// can word its own "not found" message.
+qboolean zyk_load_remap_file( const char *file_path )
+{
+	// Deliberately wider than MAX_QPATH: a token that does not fit is a record to REJECT, and to
+	// reject one it has to be read whole first. Narrowing the conversion to the destination instead
+	// would split an over-long token in two and shift every record after it -- the corruption this
+	// is here to prevent.
+	char old_shader[128] = {0};
+	char new_shader[128] = {0};
+	char time_offset[128] = {0};
+	int skipped = 0;
+	FILE *remap_file = fopen(file_path, "r");
+
+	if ( !remap_file )
+	{
+		return qfalse;
+	}
+
+	while ( fscanf(remap_file, "%127s", old_shader) == 1 )
+	{
+		if ( fscanf(remap_file, "%127s", new_shader) != 1 )
+		{ // a record that stops halfway ends the read -- it used to re-use the previous
+		  // iteration's buffers and register a remap built out of them
+			break;
+		}
+
+		if ( fscanf(remap_file, "%127s", time_offset) != 1 )
+		{
+			break;
+		}
+
+		if ( zyk_valid_shader_name(old_shader) == qfalse || zyk_valid_shader_name(new_shader) == qfalse )
+		{
+			skipped++;
+			continue;
+		}
+
+		// GalaxyRP fix: [cleanup] no G_NewString() here any more. AddRemap() copies into its own
+		// fixed buffers, so allocating a level-lifetime copy of each name bought nothing -- and
+		// G_NewString() turns a literal backslash-n in the file into a real linefeed, which would
+		// have put a newline inside a shader name and through into the configstring.
+		AddRemap(old_shader, new_shader, atof(time_offset));
+	}
+
+	fclose(remap_file);
+
+	if ( skipped > 0 )
+	{
+		trap->Print("%s: skipped %i unusable remap record(s).\n", file_path, skipped);
+	}
+
+	trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
+
+	return qtrue;
 }
 
 const char *BuildShaderStateConfig(void) {

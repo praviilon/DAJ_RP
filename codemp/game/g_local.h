@@ -2116,6 +2116,11 @@ qboolean RP_DownedSystemEnabled( void );
 // normal. Same shape as g_noPDuelCheck and g_dontPenalizeTeam, which already bracket several of
 // these very calls. Always cleared on the line after the call it wraps, never left set.
 extern qboolean g_bookkeepingDeath;
+// GalaxyRP fix: [security] shader-name validation and the one remap-preset reader -- see their
+// definitions in g_utils.c for what a name is allowed to contain and why the two reader copies
+// became one.
+qboolean zyk_valid_shader_name( const char *name );
+qboolean zyk_load_remap_file( const char *file_path );
 qboolean G_PlayerIsDowned( gentity_t *ent );
 // GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (player_statuses bit 26, always
 // accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely

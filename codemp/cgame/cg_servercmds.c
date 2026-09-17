@@ -342,25 +342,48 @@ void CG_ShaderStateChanged(void) {
 	const char *o;
 	char *n,*t;
 
+	// GalaxyRP fix: [security] every one of these three copies used the distance to the next
+	// separator as its length, with nothing comparing that to the size of the destination. A
+	// shader name longer than MAX_QPATH-1, or a time offset longer than fifteen characters,
+	// therefore overran a stack buffer in this function -- on the client, driven entirely by a
+	// configstring the server sent. The server side is fixed too (AddRemap and /remap now refuse a
+	// name that cannot fit, so this server can no longer emit one), but that only protects players
+	// while they are HERE; this is the half that travels with them onto any other server.
+	//
+	// Clamping rather than skipping the record, because a truncated name simply fails to match a
+	// real shader and the remap quietly does nothing, which is the right outcome for a value this
+	// client was never going to be able to represent.
 	o = CG_ConfigString( CS_SHADERSTATE );
 	while (o && *o) {
 		n = strstr(o, "=");
 		if (n && *n) {
-			strncpy(originalShader, o, n-o);
-			originalShader[n-o] = 0;
+			int len = n - o;
+
+			if ( len >= (int)sizeof(originalShader) )
+				len = (int)sizeof(originalShader) - 1;
+			strncpy(originalShader, o, len);
+			originalShader[len] = 0;
 			n++;
 			t = strstr(n, ":");
 			if (t && *t) {
-				strncpy(newShader, n, t-n);
-				newShader[t-n] = 0;
+				len = t - n;
+
+				if ( len >= (int)sizeof(newShader) )
+					len = (int)sizeof(newShader) - 1;
+				strncpy(newShader, n, len);
+				newShader[len] = 0;
 			} else {
 				break;
 			}
 			t++;
 			o = strstr(t, "@");
 			if (o) {
-				strncpy(timeOffset, t, o-t);
-				timeOffset[o-t] = 0;
+				len = o - t;
+
+				if ( len >= (int)sizeof(timeOffset) )
+					len = (int)sizeof(timeOffset) - 1;
+				strncpy(timeOffset, t, len);
+				timeOffset[len] = 0;
 				o++;
 				trap->R_RemapShader( originalShader, newShader, timeOffset );
 			}

@@ -827,7 +827,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// zyk: variable used in the SP buged maps fix
 	char zyk_mapname[128] = {0};
 	FILE *zyk_entities_file = NULL;
-	FILE *zyk_remap_file = NULL;
 	FILE *zyk_duel_arena_file = NULL;
 	FILE *zyk_melee_arena_file = NULL;
 
@@ -2292,30 +2291,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 
 	// zyk: loading default remaps
-	zyk_remap_file = fopen(va("GalaxyRP/remaps/%s/default.txt",zyk_mapname),"r");
-
-	if (zyk_remap_file != NULL)
-	{
-		char old_shader[128];
-		char new_shader[128];
-		char time_offset[128];
-
-		strcpy(old_shader,"");
-		strcpy(new_shader,"");
-		strcpy(time_offset,"");
-
-		while(fscanf(zyk_remap_file,"%s",old_shader) != EOF)
-		{
-			fscanf(zyk_remap_file,"%s",new_shader);
-			fscanf(zyk_remap_file,"%s",time_offset);
-
-			AddRemap(G_NewString(old_shader), G_NewString(new_shader), atof(time_offset));
-		}
-		
-		fclose(zyk_remap_file);
-
-		trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
-	}
+	// GalaxyRP fix: [security] this was a second, unhardened copy of /remapload's read loop, and
+	// the more dangerous of the two because it runs at map start with nobody typing anything. Its
+	// conversions were bare "%s" into char[128] with no field width -- a straight overflow from any
+	// token of 128 characters or more in remaps/<map>/default.txt -- and the two follow-up reads
+	// were unchecked, so a file ending mid-record registered a remap built from whatever the
+	// previous iteration had left in the buffers. The command's copy had been given both of those
+	// fixes at some point and this one was missed, which is the argument for there being one copy:
+	// zyk_load_remap_file() (g_utils.c). It also validates each record now and skips the unusable
+	// ones instead of trusting the file.
+	zyk_load_remap_file(va("GalaxyRP/remaps/%s/default.txt", zyk_mapname));
 
 	// zyk: loading duel arena, if this map has one
 	zyk_duel_arena_file = fopen(va("GalaxyRP/duelarena/%s/origin.txt", zyk_mapname), "r");

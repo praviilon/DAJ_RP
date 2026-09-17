@@ -13264,7 +13264,27 @@ void Cmd_Remap_f( gentity_t *ent ) {
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 	trap->Argv( 2, arg2, sizeof( arg2 ) );
 
-	AddRemap(G_NewString(arg1), G_NewString(arg2), f);
+	// GalaxyRP fix: [security] neither argument was checked at all, and both went straight into
+	// char[MAX_QPATH] fields through an unbounded strcpy in AddRemap(). They also go straight out
+	// to every client: BuildShaderStateConfig() joins them with '=', ':' and '@', and the client
+	// takes them apart with strstr on those characters into its own char[MAX_QPATH] stack buffers
+	// (CG_ShaderStateChanged, cg_servercmds.c), where the copy length is the distance to the
+	// separator rather than the size of the buffer. So one over-long name here overran a global
+	// array on the server and a stack buffer on every machine connected to it.
+	//
+	// Refused rather than truncated, matching /paralyze's out-of-range handling: an admin who
+	// mistypes a shader path should be told, not handed a different remap than the one they asked
+	// for. See zyk_valid_shader_name() (g_utils.c) for the rule.
+	if (zyk_valid_shader_name(arg1) == qfalse || zyk_valid_shader_name(arg2) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Invalid shader name. Each must be 1-%i characters, with no spaces and none of ^3= : @^7\n\"", MAX_QPATH - 1) );
+		return;
+	}
+
+	// GalaxyRP fix: [cleanup] G_NewString() dropped -- AddRemap() copies into its own buffers, so
+	// the allocation bought nothing, and G_NewString() turns a typed backslash-n into a real
+	// linefeed, which would have put a newline into a shader name after it had passed validation.
+	AddRemap(arg1, arg2, f);
 	trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
 
 	trap->SendServerCommand( ent-g_entities, "print \"Shader remapped\n\"" );
@@ -13466,10 +13486,6 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 	char arg1[MAX_STRING_CHARS];
 	char serverinfo[MAX_INFO_STRING] = {0};
 	char zyk_mapname[128] = {0};
-	char old_shader[128];
-	char new_shader[128];
-	char time_offset[128];
-	FILE *remap_file = NULL;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -13494,10 +13510,6 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 		return;
 	}
 
-	strcpy(old_shader,"");
-	strcpy(new_shader,"");
-	strcpy(time_offset,"");
-
 	// zyk: getting mapname
 	trap->GetServerinfo( serverinfo, sizeof( serverinfo ) );
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
@@ -13505,30 +13517,15 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 	zyk_create_dir(va("remaps/%s", zyk_mapname));
 
 	// zyk: loading remaps from the file
-	remap_file = fopen(va("GalaxyRP/remaps/%s/%s.txt",zyk_mapname,arg1),"r");
-	if (remap_file)
+	// GalaxyRP fix: [security] the read loop that used to sit here has moved into
+	// zyk_load_remap_file() (g_utils.c), which is now the only copy. The identical loop in
+	// G_InitGame()'s default-preset load had drifted out of step with this one -- this copy had
+	// been given field widths and short-record handling, that one still had bare "%s" conversions
+	// -- so the file loaded by hand was safe and the same file loaded automatically at map start
+	// was not. Sharing the reader is what stops that happening again; it also validates each
+	// record and skips the unusable ones rather than the whole file.
+	if (zyk_load_remap_file(va("GalaxyRP/remaps/%s/%s.txt", zyk_mapname, arg1)) == qtrue)
 	{
-		// GalaxyRP fix: [security] these were bare "%s" conversions into char[128] buffers, with no
-		// field width -- any token in the file longer than 127 characters overran the buffer, and
-		// nothing bounds a shader name on the way in either, since /remap does not check its
-		// arguments. The width now matches the buffers. The two follow-up reads were also unchecked,
-		// so a file ending mid-record re-used whatever the previous iteration had left in the
-		// buffers and registered a remap built from it; a short record now ends the read instead.
-		while (fscanf(remap_file, "%127s", old_shader) == 1)
-		{
-			if (fscanf(remap_file, "%127s", new_shader) != 1)
-				break;
-
-			if (fscanf(remap_file, "%127s", time_offset) != 1)
-				break;
-
-			AddRemap(G_NewString(old_shader), G_NewString(new_shader), atof(time_offset));
-		}
-		
-		fclose(remap_file);
-
-		trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
-
 		trap->SendServerCommand( ent-g_entities, va("print \"Remaps loaded from %s file\n\"", arg1) );
 	}
 	else
