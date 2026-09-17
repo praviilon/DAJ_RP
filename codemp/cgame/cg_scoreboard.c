@@ -61,6 +61,18 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define SB_PING_X			(SB_SCORELINE_X + .70 * SB_SCORELINE_WIDTH)
 #define SB_TIME_X			(SB_SCORELINE_X + .85 * SB_SCORELINE_WIDTH)
 
+// GalaxyRP fix: [Death System] every column heading is painted at this one scale, so they stay the
+// same size as each other by construction -- there is no way to adjust one and silently leave the
+// others behind. Note SB_SCORE_X has TWO headings (W/L in duel/powerduel, Level everywhere else);
+// both read this, which is the pair a hand-edit would most easily miss.
+//
+// It is below 1.0 because the last three columns are only 66px apart and "Downs/Deaths" at full
+// size does not fit in that. CG_Text_Paint is called with limit 0 here, so a heading that is too
+// wide does not clip -- it runs into its neighbour. Lowering this can therefore never break the
+// layout, only raising it can; the headings are left-aligned at fixed x, so changing the scale
+// moves nothing.
+#define SB_HEADER_SCALE		0.7f
+
 // The new and improved score board
 //
 // In cases where the number of clients is high, the score board heads are interleaved
@@ -484,26 +496,20 @@ qboolean CG_DrawOldScoreboard( void ) {
 
 	CG_DrawPic ( SB_SCORELINE_X - 40, y - 5, SB_SCORELINE_WIDTH + 80, 40, trap->R_RegisterShaderNoMip ( "gfx/menus/menu_buttonback.tga" ) );
 
-	CG_Text_Paint ( SB_NAME_X, y, 1.0f, colorWhite, CG_GetStringEdString("MP_INGAME", "NAME"),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+	CG_Text_Paint ( SB_NAME_X, y, SB_HEADER_SCALE, colorWhite, CG_GetStringEdString("MP_INGAME", "NAME"),0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	if (cgs.gametype == GT_DUEL || cgs.gametype == GT_POWERDUEL)
 	{
 		char sWL[100];
 		trap->SE_GetStringTextString("MP_INGAME_W_L", sWL,	sizeof(sWL));
 
-		CG_Text_Paint ( SB_SCORE_X, y, 1.0f, colorWhite, sWL, 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+		CG_Text_Paint ( SB_SCORE_X, y, SB_HEADER_SCALE, colorWhite, sWL, 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	}
 	else
 	{
-		CG_Text_Paint ( SB_SCORE_X, y, 1.0f, colorWhite, "Level", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+		CG_Text_Paint ( SB_SCORE_X, y, SB_HEADER_SCALE, colorWhite, "Level", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 	}
-	// GalaxyRP fix: [Death System] two numbers under one heading now. Painted smaller than the 1.0
-	// its neighbours use because the columns are 66px apart and "Deaths" alone already roughly
-	// filled that -- CG_Text_Paint is called with limit 0, so an oversized header does not clip, it
-	// runs into "Ping". Scaling this one label is what keeps the other three columns and the name
-	// field exactly where they were. 0.8 after looking at 0.7 in game; it is the only number that
-	// needs to move if it wants adjusting again.
-	CG_Text_Paint ( SB_PING_X, y, 0.8f, colorWhite, "Downs/Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
-	CG_Text_Paint ( SB_TIME_X, y, 1.0f, colorWhite, CG_GetStringEdString("MP_INGAME", "PING"), 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+	CG_Text_Paint ( SB_PING_X, y, SB_HEADER_SCALE, colorWhite, "Downs/Deaths", 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
+	CG_Text_Paint ( SB_TIME_X, y, SB_HEADER_SCALE, colorWhite, CG_GetStringEdString("MP_INGAME", "PING"), 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM );
 
 	y = SB_TOP;
 
