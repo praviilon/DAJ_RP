@@ -14,27 +14,46 @@ name: build
 # (BuildMPEngine/BuildMPRdVanilla/BuildMPDed all explicitly OFF below). That also means none of
 # these jobs need OpenGL/X11/SDL2 development packages -- the mod modules don't link against them.
 #
-# Each job publishes TWO artifacts from that one build:
+# Each job publishes TWO packages from that one build:
 #
 #   GalaxyRP-<os>-<arch>-Release-Full    the whole assembled GalaxyRP/ folder, as before
 #   GalaxyRP-<os>-<arch>-Release-Client  cgame + ui + pk3 + description.txt + galaxyrp_play
 #
-# so 14 artifacts per run rather than 7. The Client package is for players joining someone else's
-# server: it leaves out jampgame (the server-side module) and everything an operator needs, so it
-# is not a smaller DOWNLOAD -- the pk3 is ~75% of either package -- it is a package with no server
-# files in it. See the "Stage client package" step in any job for the full reasoning.
+# so 14 per run rather than 7. The Client package is for players joining someone else's server: it
+# leaves out jampgame (the server-side module) and everything an operator needs, so it is not a
+# smaller DOWNLOAD -- the pk3 is ~75% of either package -- it is a package with no server files in
+# it. See the "Stage client package" step in any job for the full reasoning.
+#
+# Each package is a real archive built by the job itself (.zip on Windows, .tar.gz on Linux and
+# macOS) rather than a directory handed to upload-artifact, which would strip the execute bit off
+# galaxyrp_play. See the "Package" step for why that matters and what it would break.
+#
+# On a pushed v* tag, the release job at the bottom collects all 14 and attaches them to a DRAFT
+# GitHub release for review. Nothing publishes itself.
 
 on:
   workflow_dispatch:
   push:
     branches:
       - develop
+      - main
+    # GalaxyRP addition: [releases] a pushed v* tag builds everything and then runs the release
+    # job at the bottom. Releases are cut from main; the tag is what triggers them, and nothing is
+    # published automatically -- the release job produces a DRAFT for you to review and publish.
+    #
+    # Caveat worth knowing: GitHub does not document whether paths-ignore is evaluated for tag
+    # pushes. If it is, tagging a commit whose only changes are markdown could skip this workflow
+    # entirely. A release tag essentially always sits on a commit with real changes, and
+    # workflow_dispatch above is the escape hatch if it ever bites.
+    tags:
+      - "v*"
     paths-ignore:
       - "**.md"
       - ".gitignore"
   pull_request:
     branches:
       - develop
+      - main
     paths-ignore:
       - "**.md"
       - ".gitignore"
@@ -132,25 +151,38 @@ jobs:
             exit 1
           fi
 
+      # GalaxyRP addition: [releases] see the matching comment in the ubuntu job for why the archive
+      # is built here rather than left to upload-artifact. Windows is the one platform where the
+      # permission argument does not apply -- cmd.exe decides what is runnable from the extension,
+      # so galaxyrp_play.bat needs no execute bit -- but the packages are built here anyway so that
+      # every release asset is a real archive produced by the build, and .zip because that is what a
+      # Windows player can open without installing anything.
+      #
+      # Compress-Archive rather than tar/7z because it ships with Windows PowerShell itself, so it
+      # cannot go missing from a runner image. Pointing -Path at the directory (no trailing \*)
+      # keeps GalaxyRP/ as the archive's single top-level folder, matching the other two jobs.
+      - name: Package
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          $base = "GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/bin/JediAcademy/GalaxyRP -DestinationPath "dist/$base-Full.zip"
+          Compress-Archive -Path client-package/GalaxyRP        -DestinationPath "dist/$base-Client.zip"
+          Get-ChildItem dist
+
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}-Full
-          # GalaxyRP fix: [CI packaging] upload-artifact zips the CONTENTS of `path` at the zip's
-          # root, not the directory itself -- pointing straight at .../GalaxyRP produced a zip
-          # whose root was the mod's files directly, with no wrapping folder. JediAcademy/ only
-          # ever contains GalaxyRP/ for this build (BuildMPEngine/MPRdVanilla/MPDed are OFF, so
-          # nothing else installs under JediAcademy), so pointing one level up gives a zip with a
-          # single top-level "GalaxyRP" folder containing everything, matching how it's organized
-          # on disk.
-          path: ${{ github.workspace }}/build/bin/JediAcademy
+          # The asset itself, built by the Package step above -- not a directory for
+          # upload-artifact to zip, which is what used to strip the execute bit.
+          path: dist/GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}-Full.zip
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}-Client
-          # Same one-level-up reasoning as the Full upload above: client-package/ holds nothing but
-          # GalaxyRP/, so the zip gets a single top-level GalaxyRP folder to drop into a JKA install.
-          path: ${{ github.workspace }}/client-package
+          path: dist/GalaxyRP-windows-${{ matrix.arch }}-${{ matrix.build_type }}-Client.zip
           if-no-files-found: error
 
   ubuntu:
@@ -261,22 +293,56 @@ jobs:
             exit 1
           fi
 
+      # GalaxyRP addition: [releases] build the archive HERE rather than letting upload-artifact zip
+      # loose files. upload-artifact documents that "File permissions are not maintained during
+      # zipped artifact upload. All directories will have 755 and all files will have 644", which
+      # silently strips the 0755 that assets/CMakeLists.txt forces onto galaxyrp_play -- and a
+      # .command that is not executable cannot be double-clicked at all, which is its only purpose.
+      #
+      # Its re-zipping cannot reach inside an archive we made, though, so a tarball built here
+      # carries the mode all the way to the player: through the artifact, through the release job,
+      # into the release asset (GitHub never re-archives release assets) and out the far end.
+      # tar rather than zip because tar's handling of Unix modes is unambiguous on both Linux and
+      # macOS, and extracting a .tar.gz from Terminal also avoids macOS propagating the
+      # com.apple.quarantine flag onto the scripts the way Archive Utility does.
+      - name: Package
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          BASE="GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}"
+          mkdir -p dist
+          tar czf "dist/$BASE-Full.tar.gz"   -C install/JediAcademy GalaxyRP
+          tar czf "dist/$BASE-Client.tar.gz" -C client-package GalaxyRP
+          ls -l dist
+          # Assert the bit actually survived. This is the entire reason these are archives rather
+          # than loose files, so it should fail the build rather than be assumed.
+          #
+          # Note the shape of the check: the listing is captured first and grep is used WITHOUT -q.
+          # With `set -o pipefail`, `tar tvzf ... | grep -q` fails the whole pipeline even on a
+          # match -- grep -q exits at the first hit, tar dies of SIGPIPE with 141, and pipefail
+          # reports that. This exact guard reported a false failure until it was written this way.
+          for a in dist/*.tar.gz; do
+            listing="$(tar tvzf "$a")"
+            if ! printf '%s\n' "$listing" | grep -E '^-rwx.*galaxyrp_play' > /dev/null; then
+              echo "::error::$a has no executable galaxyrp_play -- the launcher would not run"
+              printf '%s\n' "$listing" | grep galaxyrp_play || true
+              exit 1
+            fi
+          done
+
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}-Full
-          # GalaxyRP fix: [CI packaging] see the matching comment in the msvc job -- pointing one
-          # level up (at JediAcademy, whose only content here is GalaxyRP/) makes upload-artifact
-          # zip a single top-level "GalaxyRP" folder instead of the mod's files sitting at the zip
-          # root.
-          path: ${{ github.workspace }}/install/JediAcademy
+          # The asset itself, built by the Package step above -- not a directory for
+          # upload-artifact to zip, which is what used to strip the execute bit.
+          path: dist/GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}-Full.tar.gz
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}-Client
-          # Same one-level-up reasoning as the Full upload above: client-package/ holds nothing but
-          # GalaxyRP/, so the zip gets a single top-level GalaxyRP folder to drop into a JKA install.
-          path: ${{ github.workspace }}/client-package
+          path: dist/GalaxyRP-linux-${{ matrix.arch }}-${{ matrix.build_type }}-Client.tar.gz
           if-no-files-found: error
 
   macos:
@@ -369,20 +435,116 @@ jobs:
             exit 1
           fi
 
+      # GalaxyRP addition: [releases] build the archive HERE rather than letting upload-artifact zip
+      # loose files. upload-artifact documents that "File permissions are not maintained during
+      # zipped artifact upload. All directories will have 755 and all files will have 644", which
+      # silently strips the 0755 that assets/CMakeLists.txt forces onto galaxyrp_play -- and a
+      # .command that is not executable cannot be double-clicked at all, which is its only purpose.
+      #
+      # Its re-zipping cannot reach inside an archive we made, though, so a tarball built here
+      # carries the mode all the way to the player: through the artifact, through the release job,
+      # into the release asset (GitHub never re-archives release assets) and out the far end.
+      # tar rather than zip because tar's handling of Unix modes is unambiguous on both Linux and
+      # macOS, and extracting a .tar.gz from Terminal also avoids macOS propagating the
+      # com.apple.quarantine flag onto the scripts the way Archive Utility does.
+      - name: Package
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          BASE="GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}"
+          mkdir -p dist
+          tar czf "dist/$BASE-Full.tar.gz"   -C install/JediAcademy GalaxyRP
+          tar czf "dist/$BASE-Client.tar.gz" -C client-package GalaxyRP
+          ls -l dist
+          # Assert the bit actually survived. This is the entire reason these are archives rather
+          # than loose files, so it should fail the build rather than be assumed.
+          for a in dist/*.tar.gz; do
+            if ! tar tvzf "$a" | grep -Eq '^-rwx.*galaxyrp_play'; then
+              echo "::error::$a has no executable galaxyrp_play -- the launcher would not run"
+              tar tvzf "$a" | grep galaxyrp_play || true
+              exit 1
+            fi
+          done
+
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}-Full
-          # GalaxyRP fix: [CI packaging] see the matching comment in the msvc job -- pointing one
-          # level up (at JediAcademy, whose only content here is GalaxyRP/) makes upload-artifact
-          # zip a single top-level "GalaxyRP" folder instead of the mod's files sitting at the zip
-          # root.
-          path: ${{ github.workspace }}/install/JediAcademy
+          # The asset itself, built by the Package step above -- not a directory for
+          # upload-artifact to zip, which is what used to strip the execute bit.
+          path: dist/GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}-Full.tar.gz
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v7
         with:
           name: GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}-Client
-          # Same one-level-up reasoning as the Full upload above: client-package/ holds nothing but
-          # GalaxyRP/, so the zip gets a single top-level GalaxyRP folder to drop into a JKA install.
-          path: ${{ github.workspace }}/client-package
+          path: dist/GalaxyRP-macos-${{ matrix.arch }}-${{ matrix.build_type }}-Client.tar.gz
           if-no-files-found: error
+
+  # GalaxyRP addition: [releases] tag-only, and never automatic. Ordinary pushes to develop or main
+  # build and upload artifacts exactly as before and skip this job entirely; only a pushed v* tag
+  # reaches it, and what it produces is a DRAFT -- the 14 assets are attached and left for you to
+  # review in the UI and publish by hand.
+  #
+  # The point of routing releases through here rather than uploading by hand: a release asset is
+  # byte-exact (GitHub never re-archives one), so what a player downloads is precisely the archive
+  # the build produced, execute bits and all. Nothing is downloaded to a PC and re-uploaded, which
+  # would both break that chain and be impossible to do properly on Windows anyway -- neither
+  # Explorer nor 7-Zip can write Unix modes into a zip.
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [msvc, ubuntu, macos]
+    runs-on: ubuntu-24.04
+    # Needed to create the release; the default token is read-only for contents.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # The pk3's filename is derived from rp_version.h by assets/CMakeLists.txt, so a tag that
+      # disagrees with the header ships GalaxyRP_v3.8.0.pk3 inside an asset called v3.9.0 -- the
+      # kind of mismatch nobody spots until a player reports it. Cheaper to fail here.
+      - name: Check the tag matches rp_version.h
+        shell: bash
+        run: |
+          set -euo pipefail
+          field() {
+            sed -n "s/^#define[[:space:]]*VERSION_$1_RELEASE[[:space:]]*\([0-9][0-9]*\).*/\1/p" \
+              galaxyrp/game/rp_version.h
+          }
+          want="v$(field MAJOR).$(field MINOR).$(field BUGFIX)"
+          echo "tag=$GITHUB_REF_NAME  rp_version.h=$want"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match rp_version.h ($want). Bump the header or retag."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          # Flatten: without this each artifact lands in its own subdirectory named after itself,
+          # and the assets are already uniquely named.
+          merge-multiple: true
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -l dist
+          # 7 build jobs x 2 packages. If you change the matrix, change this number -- it is here so
+          # a job that silently failed to upload cannot produce a release that is quietly missing a
+          # platform.
+          found=$(ls -1 dist | wc -l | tr -d ' ')
+          if [ "$found" -ne 14 ]; then
+            echo "::error::expected 14 assets, found $found -- a build job did not upload"
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "GalaxyRP $GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/*
