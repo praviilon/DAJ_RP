@@ -2447,6 +2447,22 @@ saberMoveName_t PM_SaberAttackForMovement(saberMoveName_t curmove)
 	return newmove;
 }
 
+// GalaxyRP: [Saber Kick] "is the player asking for a directional kick?"
+//
+// This is the one question that decides, for a single alt-attack press, whether the player gets a
+// kick or a saber throw: a direction held means kick, standing still means throw. It reads exactly
+// the two command fields PM_KickMoveForConditions() below consumes, and lives next to it so the two
+// cannot drift -- if that function ever learns a new way to produce a kick, this has to learn it too
+// or the throw will start stealing presses the player meant as kicks.
+//
+// cmd.upmove is deliberately NOT part of it. PM_KickMoveForConditions() ignores upmove entirely (its
+// only reader is the disabled "fancy kicks" branch), so including it here would make jump+alt-attack
+// produce neither a kick nor a throw.
+qboolean PM_KickDirectionHeld( void )
+{
+	return (pm->cmd.forwardmove || pm->cmd.rightmove) ? qtrue : qfalse;
+}
+
 int PM_KickMoveForConditions(void)
 {
 	int kickMove = -1;
@@ -2904,7 +2920,23 @@ void PM_WeaponLightsaber(void)
 				}
 			}
 		}
-		else if ( pm->ps->weaponTime < 1&&
+		// GalaxyRP fix: [Saber Throw] a direction held means the player wants a KICK, so the throw
+		// stands aside and the press falls through to the kick block further down (which 35bcdc75
+		// opened to every saber style). Standing still still throws. Without this, one button meant
+		// two things and which one you got depended on your force bar: the throw wins whenever it can
+		// afford itself, so a player with the Saber Throw skill threw while they had force and kicked
+		// when they ran dry, mid-fight, with no way to ask for either.
+		//
+		// This does NOT stop you guiding a thrown saber while running. The saber's lifetime is owned
+		// by the server, which recalls it when the raw BUTTON_ALT_ATTACK is released (w_saber.c) --
+		// the assignment further down here only keeps the predicted flag in step, so skipping this
+		// block on a frame where the player is moving changes nothing about a saber already in flight.
+		//
+		// First in the chain on purpose: PM_SaberPowerCheck() reaches BG_EnoughForcePowerForMove(),
+		// which fires EV_NOAMMO. Tested last, a moving player with an empty force bar would get that
+		// beep every single frame of every kick.
+		else if ( !PM_KickDirectionHeld() &&
+				pm->ps->weaponTime < 1&&
 				pm->ps->saberCanThrow &&
 				//pm->ps->fd.forcePower >= forcePowerNeeded[pm->ps->fd.forcePowerLevel[FP_SABERTHROW]][FP_SABERTHROW] &&
 				!BG_HasYsalamiri(pm->gametype, pm->ps) &&

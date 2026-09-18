@@ -7175,6 +7175,30 @@ qboolean canAltFireWeapon(gentity_t* ent) {
 		return qtrue;
 	}
 
+	// GalaxyRP fix: [Saber Throw] the saber needs the same carve-out, and for the same two reasons --
+	// the melee one above was written for exactly this failure mode and only covered one of the two
+	// weapons that has it.
+	//
+	// The saber's alt-attack is not a purchasable fire mode. It is the saber throw, which already has
+	// its own gates in PM_WeaponLightsaber (saberCanThrow, FP_SABERTHROW's level and force cost,
+	// ysalamiri, BG_CanUseFPNow), and the kick, which is a movement move. Neither is the kind of thing
+	// the switch below exists to unlock, which is why WP_SABER has no case in it -- a logged-in player
+	// already reaches "default: return qtrue".
+	//
+	// And the strip this gates is server-only (#ifdef _GAME at the call site in PM_Weapon), so for a
+	// logged-out saber user the server deleted BUTTON_ALT_ATTACK before PM_WeaponLightsaber ever ran
+	// while cgame, which never runs this, predicted the whole path. The result was the reported bug:
+	// the saber throw did not work AT ALL when logged out, the kick that appeared instead was a pure
+	// client-side prediction that dealt no damage (G_KickSomeMofos reads the SERVER's ps.legsAnim,
+	// which was never set), and the animation it started had nothing on the server to reconcile
+	// against -- so it stuck, for every saber style, and only when logged out.
+	//
+	// Kept as its own block rather than folded in with WP_MELEE above: the two carve-outs are the same
+	// mechanism but different arguments, and each is worth being able to remove without the other.
+	if (ent->client->ps.weapon == WP_SABER) {
+		return qtrue;
+	}
+
 	if (ent->client->sess.loggedin == 0) {
 		return qfalse;
 	}
