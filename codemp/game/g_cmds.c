@@ -10557,21 +10557,53 @@ void Cmd_FlipCoinAll_f(gentity_t *ent) {
 // which is itself fully unreachable now that quest_get_new_player's sole gate is permanently disabled
 // (see the GalaxyRP fix comment further down in this file). Deleted outright along with their callers.
 
-// GalaxyRP fix: [Jetpack] shared gate for rp_allow_jetpack_command, used by both the RPG-mode
-// auto-grant below (initialize_rpg_skills) and the /jetpack command handler (Cmd_Jetpack_f) so the
-// two stay in sync. 0 disables the jetpack command entirely, 1 enables it for everyone, and 2
-// enables it only for players currently logged into an account (sess.loggedin -- set qtrue by
-// Cmd_Login_f/Cmd_Register_f/Cmd_GalaxyRpUi_f, cleared qfalse by Cmd_Logout_f). Formerly
-// zyk_allow_jetpack_command -- renamed to the rp_ prefix used by GalaxyRP's own cvars.
+// GalaxyRP fix: [Jetpack] the WHOLE rp_allow_jetpack_command rule, in one place. Both consumers --
+// the RPG-mode auto-grant below (initialize_rpg_skills) and the /jetpack command handler
+// (Cmd_Jetpack_f) -- ask this and nothing else. Formerly zyk_allow_jetpack_command, renamed to the
+// rp_ prefix used by GalaxyRP's own cvars.
+//
+//   0 (or less) - the /jetpack command is disabled for everybody.
+//   1           - logged-out players may take a jetpack; logged-in players need the Jetpack skill.
+//   2 (default) - only logged-in players with the Jetpack skill. Logged-out players are refused.
+//
+// GalaxyRP fix: [Jetpack] this used to be only half the rule. The login half lived here and tested
+// sess.loggedin; the skill half lived in the two call sites and tested sess.amrpgmode ("amrpgmode
+// < 2 || skill_levels[34] > 0"). One concept, two fields. They agree today -- every setter of one
+// is next to a setter of the other -- but this file has already had that exact bug once, in the
+// /login path (see the long comment in select_account_and_default_character_data() on the block
+// that forced amrpgmode to 2 while loggedin stayed qfalse). Had it reopened, a player with
+// loggedin qtrue and amrpgmode 0 would have passed the login gate here AND had the skill check
+// waived by "amrpgmode < 2" -- a free jetpack in both modes. Folding the skill test in here means
+// the rule names one field, once, and that state is no longer expressible.
+//
+// sess.loggedin rather than sess.amrpgmode on purpose. amrpgmode is written into the session
+// string (g_session.c) and survives a map change; loggedin is not, and ClientBegin() re-derives it.
+// So there IS a window -- between ClientConnect()'s memset and ClientBegin() -- where amrpgmode is
+// 2 and loggedin is still qfalse. No consumer of this rule can run inside it: ClientCommand()
+// refuses anything but CON_CONNECTED and /jetpack is CMD_ALIVE (health > 0), which needs
+// ClientSpawn(); and every caller of initialize_rpg_skills() is past the loggedin assignment --
+// ClientBegin() sets it 25 lines before calling it, ClientSpawn()'s callers are all respawn/team
+// paths for an already-begun client, select_player_character() returns early unless it is qtrue,
+// account creation sets it before calling that, and quest_power_events() runs per-frame on a live
+// player. loggedin is also the safer of the two to gate on: when in doubt it denies.
+//
+// GalaxyRP fix: [Jetpack] the logged-out branch tests "== 1", not "!= 2". It used to be the latter
+// by omission -- anything that was not 0 and not 2 fell through to "allowed" -- so
+// rp_allow_jetpack_command 3, a plausible typo for something STRICTER, silently gave the loosest
+// setting there is. Any value above 2 now reads as 2 instead. Values below 1 already meant
+// "disabled" and still do.
 qboolean jetpack_command_allowed(gentity_t *ent)
 {
+	if (!ent || !ent->client)
+		return qfalse;
+
 	if (rp_allow_jetpack_command.integer <= 0)
 		return qfalse;
 
-	if (rp_allow_jetpack_command.integer == 2 && ent->client->sess.loggedin == qfalse)
-		return qfalse;
+	if (ent->client->sess.loggedin == qtrue)
+		return (ent->client->pers.skill_levels[34] > 0) ? qtrue : qfalse;
 
-	return qtrue;
+	return (rp_allow_jetpack_command.integer == 1) ? qtrue : qfalse;
 }
 
 // zyk: initialize RPG skills of this player
@@ -10922,9 +10954,14 @@ void initialize_rpg_skills(gentity_t *ent)
 		// GalaxyRP fix: [Jetpack] zyk_allow_jetpack_in_siege has been removed -- jetpack is now never
 		// allowed in Siege, full stop (this is exactly the cvar's old default, "0"/never-allow, just no
 		// longer configurable).
+		// GalaxyRP fix: [Jetpack] the "(amrpgmode == 2 && skill_levels[34] > 0)" clause that used to
+		// close this condition has moved into jetpack_command_allowed() along with Cmd_Jetpack_f's copy
+		// of the same test -- see the comment there. Dropping it here changes nothing: this whole
+		// function body is already inside "if (sess.amrpgmode == 2)", so that half was a tautology, and
+		// for a logged-in player the helper now returns exactly "cvar > 0 && skill_levels[34] > 0",
+		// which is what the two clauses together used to evaluate to for every value of the cvar.
 		if (jetpack_command_allowed(ent) &&
-			level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER &&
-			(ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[34] > 0))
+			level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER)
 			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
 
 		// zyk: loading initial health of the player
@@ -13305,7 +13342,18 @@ Cmd_Jetpack_f
 ==================
 */
 void Cmd_Jetpack_f( gentity_t *ent ) {
-	if (level.melee_mode > 1 && level.melee_players[ent->s.number] != -1)//<-
+	// GalaxyRP fix: [Melee Battle] this tested "melee_mode > 1", the only guard in the codebase that
+	// scoped a Melee Battle to "has been prepared" rather than "is signed up" -- /logout, /login,
+	// /new, /char and /give all use > 0, and zyk_minigame_name() is written that way too. So a
+	// signed-up player could still take a jetpack during the sign-up phase (mode 1). Harmless as it
+	// stands, because melee_battle_prepare() snapshots the loadout and then strips holdables down to
+	// binoculars at the bell, and the restore hands the jetpack back afterwards -- but it was the odd
+	// one out, and the bare "//<-" marker left on the line suggests it had already been questioned.
+	// Matched to the rest at > 0. The Duel Tournament is deliberately NOT added here: nothing about
+	// it is broken today (ItemUse_Jetpack refuses to switch a jetpack on for a duelist in a live
+	// match, and duel_tournament_prepare() strips and restores the same way), and refusing /jetpack
+	// across sign-up and the gaps between matches would cost participants ordinary play for no gain.
+	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
 	{ // zyk: cannot get jetpack in Melee Battle
 		return;
 	}
@@ -13313,8 +13361,10 @@ void Cmd_Jetpack_f( gentity_t *ent ) {
 	// GalaxyRP fix: [Jetpack] zyk_allow_jetpack_in_siege has been removed -- jetpack is now never
 	// allowed in Siege, full stop (this is exactly the cvar's old default, "0"/never-allow, just no
 	// longer configurable).
+	// GalaxyRP fix: [Jetpack] the "(amrpgmode < 2 || skill_levels[34] > 0)" clause that used to sit
+	// in this condition has moved into jetpack_command_allowed(), which now answers the whole
+	// question -- see the long comment there for why the rule may not be spread across two fields.
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_JETPACK)) && jetpack_command_allowed(ent) &&
-		(ent->client->sess.amrpgmode < 2 || ent->client->pers.skill_levels[34] > 0) &&
 		level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER &&
 		!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ADM_GIVE_FORCE)))
 	{ // zyk: gets jetpack if player does not have it. RPG players need jetpack skill to get it

@@ -422,7 +422,7 @@ XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaSc
 // is the only one left. trackChange qfalse for the same reason as the two allow cvars above.
 XCVAR_DEF( zyk_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_duel_tournament_min_players, "2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( rp_allow_jetpack_command,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_allow_jetpack_command,		"2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue ) // GalaxyRP: logged-in players with the Jetpack skill only; see jetpack_command_allowed() in g_cmds.c
 XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
