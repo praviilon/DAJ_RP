@@ -3353,20 +3353,45 @@ void zyk_apply_character_loadout( gentity_t *ent )
 //
 // /login, /new, /char new, /char use and /logout have always applied the new state synchronously and
 // then forced a respawn, the respawn being belt-and-braces rather than load-bearing: the account
-// paths restore the character's saved ammo inline, and zyk_apply_character_loadout() above finishes
-// the jetpack and the held weapon, so nothing is left for ClientSpawn() to do that has not already
-// been done. What the respawn really buys is the anti-exploit half -- it stops a player rerolling
-// their character mid-fight and walking away from it unscathed.
+// paths restore the character's saved ammo inline, and zyk_apply_character_loadout() finishes the
+// jetpack and the held weapon (/logout reaches the same end state through zyk_remove_guns()), so
+// nothing is left for ClientSpawn() to do that has not already been done. What the respawn really
+// bought was the anti-exploit half -- it stopped a player rerolling their character mid-fight and
+// walking away from it unscathed.
 //
-// rp_seamlesslogin lets a server keep that guarantee only where it matters. At 0 (the default) every
-// one of those commands forces the respawn exactly as before. At 1 they apply in place, and the
-// respawn is forced only while the player is duelling, using the same two tests saber_switch_allowed()
-// and force_switch_allowed() already apply to /updatesaber and /updateforce: a private duel, or a live
-// Duel Tournament match.
+// rp_seamlesslogin: at 1 (the default) those commands apply in place and nobody is respawned. At 0
+// every one of them forces the respawn, exactly as the mod always did. Anything that is not a
+// positive number means 0, so a mistyped cvar fails safe to the old behaviour.
 //
-// Spectators are excluded either way -- G_Kill() on a spectator does nothing useful, and the existing
-// call sites already gated on it.
-extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+// Spectators are excluded either way -- G_Kill() on a spectator does nothing useful, and the call
+// sites already gated on it.
+//
+// GalaxyRP fix: [Account] this used to force the respawn at rp_seamlesslogin 1 as well, for a
+// player in a private duel or a live Duel Tournament match, mirroring the two tests
+// saber_switch_allowed() and force_switch_allowed() apply to /updatesaber and /updateforce. Both of
+// those branches are gone, because neither could be reached any more and neither was worth much
+// when it could:
+//
+//   - Unreachable. All five commands that schedule this now refuse a duellist outright before they
+//     get here. /new, /login and /char go through zyk_account_change_blocked(), which tests
+//     ps.duelInProgress and, via zyk_minigame_name(), duel_tournament_mode > 0 with a roster slot;
+//     /logout writes the same two checks out by hand. The three zyk_schedule_relog_kill() call
+//     sites are all dominated by one of those guards, every guard returns unconditionally, and
+//     ps.duelInProgress cannot change inside a command -- Cmd_Duel_f() is the only thing that sets
+//     it. A live tournament duelist is likewise always on the roster that zyk_minigame_name()
+//     tests: duelist_1_id/duelist_2_id are only ever assigned from level.duel_matches, and the only
+//     things that clear a duel_players[] slot are level init, duel_tournament_end() (which clears
+//     the ids and the mode in the same breath), ClientBegin() and ClientDisconnect().
+//
+//   - And not worth much. See the comment on the private-duel test in zyk_account_change_blocked()
+//     below: this respawn lands 300ms after the command plus another 1700ms of respawnTime, long
+//     after the swapped-in loadout has already been used, and it ends the duel in the opponent's
+//     favour rather than undoing the swap. It was the weaker mechanism those guards were written to
+//     replace, not a second line of defence behind them.
+//
+// So the guards are now the only thing standing between a duellist and a mid-fight character swap.
+// That is what unpar/test_relogguards.py exists to pin: if one of them is ever relaxed, this
+// function is no longer quietly covering for it.
 qboolean zyk_relog_kill_required( gentity_t *ent )
 {
 	if (!ent || !ent->client)
@@ -3376,16 +3401,7 @@ qboolean zyk_relog_kill_required( gentity_t *ent )
 		return qfalse;
 
 	// anything but a positive value means "always respawn", so a mistyped cvar fails safe
-	if (rp_seamlesslogin.integer <= 0)
-		return qtrue;
-
-	if (ent->client->ps.duelInProgress == qtrue)
-		return qtrue;
-
-	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
-		return qtrue;
-
-	return qfalse;
+	return (rp_seamlesslogin.integer <= 0) ? qtrue : qfalse;
 }
 
 // GalaxyRP: [Account] schedule the respawn zyk_relog_kill_required() asks for. Deferred rather than
@@ -5278,10 +5294,13 @@ static qboolean zyk_account_change_blocked( gentity_t *ent, const char *verb )
 	// GalaxyRP fix: [Account] a private duel blocks an account or character change for the same
 	// reason the two mini-games above do -- the player's loadout is not their own right now. /new,
 	// /login and /char all re-apply an account's skills and loadout on the spot, which handed a
-	// duellist a different kit in the middle of a fight. zyk_relog_kill_required() does force a
-	// respawn for a duellist regardless of rp_seamlesslogin, but that ends the duel in the
-	// opponent's favour rather than undoing the swap, and it lands far too late to prevent it: the
-	// kill is deferred 300ms (pending_relog_kill_time) and respawnTime adds 1700ms on top.
+	// duellist a different kit in the middle of a fight. zyk_relog_kill_required() used to force a
+	// respawn for a duellist regardless of rp_seamlesslogin, but that ended the duel in the
+	// opponent's favour rather than undoing the swap, and it landed far too late to prevent it: the
+	// kill is deferred 300ms (pending_relog_kill_time) and respawnTime adds 1700ms on top. That
+	// branch has since been removed as unreachable -- this guard is what made it unreachable -- so
+	// this test is now the whole of the protection rather than the better half of it. Do not relax
+	// it without putting something else in its place; unpar/test_relogguards.py pins it.
 	//
 	// It also closes the one remaining window in which update_saber() stores a saber hilt the client
 	// is never told about. saber_switch_allowed() refuses the instant apply during a private duel,

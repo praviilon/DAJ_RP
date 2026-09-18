@@ -476,7 +476,7 @@ XCVAR_DEF( rp_loginRequired,					"0",	NULL,					CVAR_ARCHIVE | CVAR_SERVERINFO,	
 // respawn when the player is in a private duel or a live Duel Tournament match, which is the same
 // restriction /updatesaber and /updateforce already use. Any value above 0 counts as on; a
 // negative value behaves like 0, so no validator is needed.
-XCVAR_DEF( rp_seamlesslogin,					"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_seamlesslogin,					"1",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Death System] rp_downed_timer decides whether the downed system runs at all, so it
 // is CVAR_LATCH: a change waits for the next map. Without that, an admin flipping it to 0 mid-round
 // would leave whoever was lying on the floor in a state that no longer exists -- /getup and /helpup

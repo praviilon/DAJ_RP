@@ -2603,10 +2603,11 @@ void ClientThink_real( gentity_t *ent ) {
 	//
 	// The test below is the one from the spectator split further down, so "not in the world" means
 	// the same thing in both places. Deliberately NOT a full re-ask of zyk_relog_kill_required():
-	// that would also re-read rp_seamlesslogin and the duel state, and a duel ending inside those
-	// 300ms would then let a player keep a character swapped mid-duel without the respawn that is
-	// supposed to pay for it. Only the "did they leave the world" half can go stale in a way that
-	// makes the kill wrong, so only that half is re-checked.
+	// that would also re-read rp_seamlesslogin, and a server flipping it inside those 300ms would
+	// retroactively cancel a respawn the command had already promised. Only the "did they leave the
+	// world" half can go stale in a way that makes the kill wrong, so only that half is re-checked.
+	// (This used to say "and the duel state" too -- zyk_relog_kill_required() no longer looks at a
+	// duel at all, because the account commands refuse a duellist before they ever reach it.)
 	//
 	// The timer is cleared either way, so a skipped kill cannot sit pending and fire later when the
 	// player rejoins a team, which would kill them on the spawn they just asked for.
