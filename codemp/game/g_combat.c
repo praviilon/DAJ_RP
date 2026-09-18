@@ -6381,7 +6381,44 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				&& !zyk_minigame_forces_death(targ)
 				&& ((RP_DownedSystemEnabled() && attacker && attacker->client) || G_PlayerIsDowned(targ))) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
-				if (targ->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED)) {
+				//
+				// GalaxyRP fix: [Death System] ...or if a rancor has them in its fist, which ends in
+				// death no matter what and has no business going through a knockdown first.
+				//
+				// The rancor eats in two stages 1350ms apart (NPC_AI_Rancor.c): "cut in half" on the
+				// attack_dmg timer, then "swallow victim" on attack_dmg2. Both deal enemy->health+5000
+				// and both attack as the rancor NPC -- which has a client, exactly like the Seeker
+				// drones named in the comment above -- so the AND chain admitted them and the first
+				// stage downed the player instead of killing them. The second stage then found
+				// health > 0 (a downed player sits on RP_DOWNED_HEALTH), dismembered them a SECOND
+				// time, and killed them. The net effect was 1.35 seconds face-down inside a rancor's
+				// mouth, charged a knockdown and a death for one event.
+				//
+				// The three seconds of EF_INVULNERABLE the knockdown grants never came into it: both
+				// stages pass DAMAGE_NO_PROTECTION, and the whole godmode/invulnerability block is
+				// inside "if (!(dflags & DAMAGE_NO_PROTECTION))" further up this function.
+				//
+				// Deliberately HERE and not in the AND chain above, which is the tempting spelling.
+				// A player can be downed and held at once -- Rancor_Swing's grab is a radius sweep
+				// around the hand bolt that checks distance, "has a client", "not already held" and a
+				// list of NPC classes, and looks at neither health, nor FL_NOTARGET, nor the downed
+				// bit -- so anyone knocked down beside the rancor's real target gets picked up off the
+				// floor. Excluding held players from the block would send that one to the plain
+				// targ->die() in the else and leave the downed bits set on a corpse, which is the
+				// residue the note on the enclosing condition exists to prevent. As an extra || here,
+				// a player who is both simply satisfies both halves and lands in the same arm.
+				//
+				// RP_ClearDownedState() is safe on a player who was never downed: its FL_NOTARGET
+				// release and admin-invulnerability clear are each gated on the state being set, and
+				// the rest are idempotent bit clears.
+				//
+				// Nothing downstream changes. The rancor's swallow stage guards only its damage and
+				// dismemberment on health > 0; EF_NODRAW, count = 2 and the 2600ms "clearGrabbed"
+				// timer that ends in Rancor_DropVictim() all sit outside that guard, so the animation
+				// finishes and the body is released on schedule. That is the path stock JKA always
+				// took, where the first stage killed outright.
+				if (G_PlayerIsDowned(targ)
+					|| (targ->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used
 					// to zero that one bit and leave pers.downedTime and bit 26 to player_die() --
 					// which returns early, above its own cleanup, on an intermission or a NULL
