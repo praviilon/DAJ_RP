@@ -3247,6 +3247,117 @@ void zyk_stop_active_force_powers( gentity_t *ent )
 	}
 }
 
+// GalaxyRP fix: [Account] stop every HOLDABLE this player currently has running, for the same
+// reason and at the same point as zyk_stop_active_force_powers() above.
+//
+// None of this was ever the account commands' job, because the forced respawn did it for them.
+// ClientSpawn() memsets the whole client and restores only a hand-picked set of fields, one of
+// which is "client->ps.eFlags = flags" where flags is ps.eFlags & EF_TELEPORT_BIT -- so everything
+// in the playerState that is not explicitly put back dies there. player_die() adds its own
+// "zoomMode = 0; // Turn off zooming when we die". rp_seamlesslogin 1 removed that respawn, which
+// left four things running for a character that no longer owns them:
+//
+//   Remote. ItemUse_Seeker() sets EF_SEEKERDRONE with a 60-second droneExistTime, and only the
+//   eFlags wipe or that timer ever clears it, so the drone kept orbiting and shooting.
+//
+//   E-Web. The worst of the four, because it is not merely cosmetic. EWeb_Create() stores the
+//   owner's STAT_WEAPONS in the e-web's genericValue11 and EWebThink() then overwrites
+//   ps.stats[STAT_WEAPONS] with WP_EMPLACED_GUN on EVERY FRAME while they are mounted; dismounting
+//   restores that stored mask. So logging in while manning one meant the freshly-loaded weapon set
+//   was clobbered on the next frame and then, on dismount, replaced by the PREVIOUS character's --
+//   silent cross-character loadout corruption. EWebThink() self-destructs on owner health < 1,
+//   which is why a respawn hid it.
+//
+//   Binoculars and the disruptor scope. Both live in ps.zoomMode (2 and 1). It is cleared on a
+//   pmove weapon change (PM_BeginWeaponChange) and on death, and neither happens here: the account
+//   paths assign ps.weapon directly. Worse, once the incoming character no longer owns the
+//   disruptor there is no way back -- the whole alt-fire toggle block in bg_pmove.c is gated on
+//   ps.weapon == WP_DISRUPTOR, so a player left holding a saber stays scoped until they cycle
+//   weapons by hand.
+//
+// Unconditional, on all four, exactly like the two clears this replaces: PM_BeginWeaponChange
+// drops any zoom on every weapon switch without asking who owns what, and player_die() does the
+// same. The cost is that a character switch between two characters who BOTH own the binoculars
+// still un-zooms, which is one keypress to undo; the alternative -- only clearing what the player
+// can no longer toggle off themselves -- is two different tests (the disruptor needs the WEAPON in
+// hand, the binoculars need the ITEM selected, not merely owned) and neither of them is "is it in
+// my inventory".
+//
+// Call this BEFORE the incoming character's skills are loaded, which is why it sits beside
+// zyk_stop_active_force_powers() rather than in zyk_apply_character_loadout(). That ordering is
+// load-bearing for the e-web: by the time the loadout pass runs, STAT_WEAPONS already holds the new
+// character's weapons, and anything that restores the e-web's saved mask at that point would undo
+// them. Freeing the e-web outright rather than calling EWebDisattach() means no mask is restored at
+// all, so the fix cannot cause the corruption it exists to prevent.
+//
+// Deliberately NOT EWebDie(): besides the radius explosion, it strips HI_EWEB from the owner
+// permanently ("take it away from him, it is gone forever"). Correct for an e-web that was
+// destroyed, wrong for one its owner simply walked away from.
+//
+// The sentry gun and the placed shield are deliberately left alone. Both are placed objects that
+// already outlive their owner's death by design -- pas_think() only frees a sentry when its owner
+// disconnects or changes team -- so a character switch is not the moment to start removing them.
+void zyk_stop_active_holdables( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	// 1. the seeker drone. Wound down rather than cleared outright: this is the idiom
+	// duel_tournament_prepare() and melee_battle_prepare() already use, and ForceSeeker() treats the
+	// last 5 seconds as a death spiral -- it beeps a warning and returns BEFORE the targeting and
+	// firing code, then sparks out. So the drone stops shooting at once and leaves visibly instead
+	// of popping out of existence.
+	//
+	// The 4999 is not a typo and is the one place this deliberately differs from those two. That
+	// window is "droneExistTime < level.time + 5000", strictly less, so clamping to exactly
+	// level.time + 5000 leaves the drone OUTSIDE it for the current frame -- it only falls in once
+	// level.time advances. One frame is enough for a drone to take a shot on behalf of a character
+	// its owner no longer has, which is the whole thing being fixed here. A millisecond inside the
+	// boundary closes it. The two prepares carry the same one-frame gap; it matters less there
+	// because both immediately teleport and freeze the player anyway.
+	if (ent->client->ps.droneExistTime > (level.time + 4999))
+	{
+		ent->client->ps.droneExistTime = level.time + 4999;
+	}
+
+	// 2. the e-web, freed outright -- see the note above on why not EWebDisattach()/EWebDie()
+	if (ent->client->ewebIndex)
+	{
+		gentity_t *eweb = &g_entities[ent->client->ewebIndex];
+
+		ent->client->ps.emplacedIndex = 0;
+		ent->client->ewebIndex = 0;
+		// zeroed, not left as-is: EWeb_Create() resumes the previous deployment's health from this,
+		// and the incoming character should not inherit the damage the outgoing one took.
+		ent->client->ewebHealth = 0;
+
+		// ownerNum as well as inuse: ewebIndex is only ever set to this player's own e-web and every
+		// path that frees one clears it (EWebDie routes through EWebDisattach), so a stale index
+		// should not be possible -- but entity slots are recycled, and freeing a stranger's entity
+		// because of a index nobody cleared is not a failure worth risking for one comparison.
+		if (eweb->inuse && eweb->r.ownerNum == ent->s.number)
+		{
+			G_FreeEntity(eweb);
+		}
+	}
+
+	// 3. binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together
+	if (ent->client->ps.zoomMode)
+	{
+		ent->client->ps.zoomMode = 0;
+		// zoomTime is what cgame interpolates the zoom-OUT from (CG_CalcFov: f = (cg.time -
+		// ps.zoomTime) / ZOOM_OUT_TIME). Left stale, f is enormous, the interpolation is skipped and
+		// the view snaps out; set here, the player gets the same 100ms ease-out they would from
+		// pressing the key themselves.
+		ent->client->ps.zoomTime = level.time;
+		ent->client->ps.zoomLocked = qfalse;
+		ent->client->ps.zoomLockTime = 0;
+		// ps.zoomFov is deliberately NOT touched. That same interpolation runs FROM it, so the 0 that
+		// pm_cancelOutZoom writes would animate outward from maximum magnification -- worse than
+		// doing nothing. Do not "complete" this block by copying that line.
+	}
+}
+
 // GalaxyRP fix: [Account] load the incoming character's skills without resurrecting a corpse.
 //
 // initialize_rpg_skills() ends by restoring health and shield to the character's maximum, and it
@@ -4251,6 +4362,10 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// zyk_stop_active_force_powers(). It has to precede the line below, which overwrites the force
 	// levels WP_ForcePowerStop() reads to clean up properly.
 	zyk_stop_active_force_powers(ent);
+
+	// GalaxyRP fix: [Account] and the outgoing character's running HOLDABLES, for the same reason
+	// and with the same ordering requirement -- see zyk_stop_active_holdables().
+	zyk_stop_active_holdables(ent);
 
 	// GalaxyRP fix: [Account] through the wrapper, so switching character while dead no longer
 	// stands the corpse back up -- see zyk_apply_character_skills().
@@ -5608,6 +5723,10 @@ void Cmd_Login_F(gentity_t * ent)
 	// running before the incoming character's force levels replace the ones WP_ForcePowerStop()
 	// needs to read. See zyk_stop_active_force_powers().
 	zyk_stop_active_force_powers(ent);
+
+	// GalaxyRP fix: [Account] same for the outgoing character's running holdables, and before the
+	// skills load for the same reason -- see zyk_stop_active_holdables().
+	zyk_stop_active_holdables(ent);
 
 	// GalaxyRP fix: [Account] through the wrapper, so /login while dead no longer resurrects the
 	// player where they fell -- see zyk_apply_character_skills().
@@ -11326,6 +11445,12 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// them). Logging out left Speed, Protect and the rest running exactly as a character switch did.
 	// See zyk_stop_active_force_powers().
 	zyk_stop_active_force_powers(ent);
+
+	// GalaxyRP fix: [Account] and the running holdables. /logout takes every one of them away, so
+	// this is the path where leaving them running is least defensible -- see
+	// zyk_stop_active_holdables(). Above zyk_remove_guns() to match the other two commands; that
+	// call assigns STAT_WEAPONS wholesale, so the e-web could not corrupt it from here either way.
+	zyk_stop_active_holdables(ent);
 
 	zyk_remove_guns(ent);
 
