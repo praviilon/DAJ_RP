@@ -3009,6 +3009,23 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 
 		initialize_rpg_skills(ent);
 	}
+	else
+	{
+		// GalaxyRP fix: [Force Enlightenment] the push above only ever sends a "1", so a client that
+		// begins a map *without* an account session was never told so. ui_loggedin is CVAR_ROM|
+		// CVAR_INTERNAL and cgame never resets it (Cvar_Register does not clobber an existing value),
+		// so a player who was logged in on the previous map or server arrives here still holding a
+		// stale "1" -- and cgame would then both un-grey and, worse, *predict* a pickup of the
+		// wrong-side Force Enlightenment that Touch_Item() is going to refuse, mispredicting the
+		// pickup sound and hiding the item until the next snapshot corrects it. Send the real value
+		// on this path too, so ui_loggedin is authoritative for every client from ClientBegin onward.
+		//
+		// Deliberately an else rather than a single unconditional push below the block: the block has
+		// its own early return on RP_DB_Open() failure (which must still leave the client holding the
+		// "1" the server already set), and on the normal path select_account_and_default_character_data()
+		// pushes again itself, so hoisting the call would both lose a push and duplicate one.
+		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
+	}
 
 	if ( (level.gametype == GT_POWERDUEL && client->sess.sessionTeam != TEAM_SPECTATOR && client->sess.duelTeam == DUELTEAM_FREE) ||
 		level.load_entities_timer != 0)

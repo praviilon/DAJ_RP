@@ -660,23 +660,22 @@ static void CG_TouchItem( centity_t *cent ) {
 			return;
 	}
 
-	if (item->giType == IT_POWERUP &&
-		(item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || item->giTag == PW_FORCE_ENLIGHTENED_DARK))
+	// GalaxyRP fix: [Force Enlightenment] this used to be its own hand-written copy of the Force
+	// Enlightenment side rule, and it never got the "logged-in players can take either color"
+	// carve-out that was added to Touch_Item() on the server and to CG_GreyItem() for the rendering.
+	// The result was that a logged-in player could pick up the color that didn't match their Force
+	// side -- the server granted it -- but got no pickup sound for it, because this refused to
+	// predict the pickup and nothing else plays that sound (IT_POWERUP is sent unpredicted, and the
+	// server's EV_ITEM_PICKUP travels in ps.externalEventParm, only 8 bits, too narrow for the item's
+	// entity number). Defer to the shared predicate instead, so this and the grey-out can no longer
+	// disagree with each other or with the server.
+	//
+	// cg.predictedPlayerState is the right playerstate to ask here (prediction runs ahead of the last
+	// snapshot, which is what the rendering callers pass); fd.forceSide is server-authoritative and
+	// never changes during prediction, so the two agree in practice as well as in principle.
+	if ( CG_GreyItem( item->giType, item->giTag, cg.predictedPlayerState.fd.forceSide ) )
 	{
-		if (item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
-		{
-			if (cg.predictedPlayerState.fd.forceSide != FORCE_LIGHTSIDE)
-			{
-				return;
-			}
-		}
-		else
-		{
-			if (cg.predictedPlayerState.fd.forceSide != FORCE_DARKSIDE)
-			{
-				return;
-			}
-		}
+		return;
 	}
 
 

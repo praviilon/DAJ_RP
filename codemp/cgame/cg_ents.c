@@ -1857,29 +1857,48 @@ static void CG_Speaker( centity_t *cent ) {
 	cent->miscTime = cg.time + cent->currentState.frame * 100 + cent->currentState.clientNum * 100 * Q_flrand(-1.0f, 1.0f);
 }
 
+// GalaxyRP: [Force Enlightenment] the single client-side copy of the Enlightenment pickup rule that
+// Touch_Item() enforces on the server (g_items.c). Answers "would the server refuse this item to a
+// player on plSide?", and is used for both jobs that need that answer: the greyed-out/unhighlighted
+// rendering of the item (CG_Item and friends below, which pass cg.snap->ps.fd.forceSide) and the
+// client-side pickup prediction in CG_TouchItem (cg_predict.c, which passes the predicted
+// playerstate's copy of the same field). Those two used to carry separate hand-written copies of the
+// rule, and they drifted: the logged-in carve-out was added here and to the server but not to the
+// prediction, so a logged-in player got no pickup sound for the color that didn't match their side --
+// prediction refused the item, and the server's own EV_ITEM_PICKUP cannot substitute for it because
+// IT_POWERUP is sent unpredicted and ps.externalEventParm is only 8 bits wide, too narrow to carry
+// the item's entity number. One function, one rule.
+//
+// The side test is written in the server's exact "!=" form rather than an "if LIGHTSIDE / else if
+// DARKSIDE" chain so that the two agree for *every* value of plSide, not merely every value that is
+// currently reachable. (fd.forceSide is in practice always FORCE_LIGHTSIDE or FORCE_DARKSIDE -- its
+// only two writers are in WP_InitForcePowers(), and BG_LegalizedForcePowers() has already clamped
+// anything else to FORCE_DARKSIDE in the string it re-parses -- but a predicate that has to be read
+// alongside that proof is a predicate waiting to be got wrong.)
 qboolean CG_GreyItem(int type, int tag, int plSide)
 {
 	if (type == IT_POWERUP &&
 		(tag == PW_FORCE_ENLIGHTENED_LIGHT || tag == PW_FORCE_ENLIGHTENED_DARK))
 	{
 		// GalaxyRP: [Force Enlightenment] logged-in players can pick up either Enlightenment color
-		// now (see Touch_Item in g_items.c), so don't grey out the one that doesn't match their
-		// current Force side -- it's not actually unavailable to them.
+		// now (see Touch_Item in g_items.c), so neither one is unavailable to them. ui_loggedin is
+		// kept in step with sess.loggedin by the "supdateloggedin" server command, which the server
+		// now sends on every login/logout transition and unconditionally from ClientBegin().
 		if (ui_loggedin.integer)
 		{
 			return qfalse;
 		}
 
-		if (plSide == FORCE_LIGHTSIDE)
+		if (tag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{
-			if (tag == PW_FORCE_ENLIGHTENED_DARK)
+			if (plSide != FORCE_LIGHTSIDE)
 			{
 				return qtrue;
 			}
 		}
-		else if (plSide == FORCE_DARKSIDE)
+		else
 		{
-			if (tag == PW_FORCE_ENLIGHTENED_LIGHT)
+			if (plSide != FORCE_DARKSIDE)
 			{
 				return qtrue;
 			}

@@ -1934,6 +1934,9 @@ void CG_S_UpdateLoopingSounds(int entityNum);
 
 void CG_SetEntitySoundPosition( centity_t *cent );
 void CG_AddPacketEntities( qboolean isPortal );
+// GalaxyRP: [Force Enlightenment] declared here because CG_TouchItem (cg_predict.c) shares this
+// predicate with the item rendering in cg_ents.c -- see the comment on the definition.
+qboolean CG_GreyItem( int type, int tag, int plSide );
 void CG_ManualEntityRender(centity_t *cent);
 void CG_Beam( centity_t *cent );
 void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int toTime, vec3_t out );
