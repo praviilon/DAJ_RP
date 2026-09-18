@@ -8678,6 +8678,35 @@ void PM_AdjustAttackStates( pmove_t *pmove )
 {
 	int amount;
 
+	// GalaxyRP fix: [Vehicles] no zoom while riding anything, and drop one that is already running.
+	//
+	// The zoom narrows fov_x in CG_CalcFov(), but the camera does not follow it: CG_DrawActiveFrame()
+	// picks third person for a vehicle rider and its "always force first person when zoomed" case is
+	// an else-if BELOW that one, so on a vehicle it never runs. The result is a narrow-FOV third
+	// person camera sitting behind the player -- you zoom into your own back and the vehicle.
+	//
+	// Clearing here as well as refusing to engage below (see the m_iVehicleNum term on the disruptor
+	// block) is not belt-and-braces: a zoom started on foot survives mounting, and no entry check can
+	// catch that. That is also why this sits ABOVE the walker/fighter early return rather than after
+	// it -- a rider who boards an AT-ST while zoomed needs clearing just as much as a swoop rider,
+	// even though the return below stops them firing.
+	//
+	// Binoculars cannot be STARTED on a vehicle (PM_ItemUsable and G_ItemUsable both refuse a
+	// holdable while m_iVehicleNum is set, the cloak excepted), so in practice this is the disruptor
+	// scope -- but it is written for ps.zoomMode rather than for mode 1, because the mount case
+	// reaches both and there is nothing to be gained by letting one of them through.
+	//
+	// ps.zoomFov is deliberately left alone: CG_CalcFov() eases the view back out FROM that value, so
+	// zeroing it would animate outward from maximum magnification. Deliberately silent, too -- the
+	// manual toggle plays EV_DISRUPTOR_ZOOMSOUND, but this is not the player toggling anything.
+	if ( pmove->ps->m_iVehicleNum && pmove->ps->zoomMode )
+	{
+		pmove->ps->zoomMode = 0;
+		pmove->ps->zoomTime = pmove->ps->commandTime;
+		pmove->ps->zoomLocked = qfalse;
+		pmove->ps->zoomLockTime = 0;
+	}
+
 	if (pm_entSelf->s.NPC_class!=CLASS_VEHICLE
 		&&pmove->ps->m_iVehicleNum)
 	{ //riding a vehicle
@@ -8701,7 +8730,12 @@ void PM_AdjustAttackStates( pmove_t *pmove )
 	}
 
 	// disruptor alt-fire should toggle the zoom mode, but only bother doing this for the player?
-	if ( pmove->ps->weapon == WP_DISRUPTOR && pmove->ps->weaponstate == WEAPON_READY )
+	// GalaxyRP fix: [Vehicles] ...and not while riding one. VH_SPEEDER and VH_ANIMAL riders fall
+	// through the guard at the top of this function on purpose, because they are meant to keep
+	// firing -- but the zoom rode along on that exemption, and a zoomed rider gets a narrow-FOV
+	// THIRD person camera pointed at their own back. See the clear at the top for the full reasoning.
+	if ( pmove->ps->weapon == WP_DISRUPTOR && pmove->ps->weaponstate == WEAPON_READY
+		&& !pmove->ps->m_iVehicleNum )
 	{
 		if ( !(pmove->ps->eFlags & EF_ALT_FIRING) && (pmove->cmd.buttons & BUTTON_ALT_ATTACK) /*&&
 			pmove->cmd.upmove <= 0 && !pmove->cmd.forwardmove && !pmove->cmd.rightmove*/)
