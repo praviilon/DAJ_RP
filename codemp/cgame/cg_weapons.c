@@ -848,8 +848,38 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 
 	if ( cg_fovViewmodel.integer )
 	{
-		float fracDistFOV = tanf( cg.refdef.fov_x * ( M_PI/180 ) * 0.5f );
-		float fracWeapFOV = ( 1.0f / fracDistFOV ) * tanf( cgFov * ( M_PI/180 ) * 0.5f );
+		float fracDistFOV, fracWeapFOV;
+
+		// GalaxyRP fix: [UI] the scale below is a RATIO of two field-of-view values, so both have
+		// to be measured the same way. cg.refdef.fov_x is aspect-corrected by CG_CalcFov() whenever
+		// cg_fovAspectAdjust is set -- which is now the default -- while cgFov is the player's raw
+		// number, so the ratio was mixing a corrected value with an uncorrected one and the gun came
+		// out wrong by exactly the correction factor, 1 / (baseAspect * aspect):
+		//
+		//   4:3   1.00   16:10  0.83   16:9  0.75   21:9  0.57   32:9  0.38
+		//
+		// i.e. a player on an ordinary 16:9 display saw the gun at three quarters of the size they
+		// asked for, and worse on ultrawide. 4:3 was unaffected, baseAspect being 3/4.
+		//
+		// Same formula as CG_CalcFov() and CG_DrawSkyBoxPortal, deliberately -- three copies of one
+		// calculation, and the suite compares them.
+		//
+		// Note this corrects the CLAMPED cgFov. TaystJK, which has this fix, captures its
+		// desiredFov before clamping, so a large cg_fovViewmodel slips past its own limit; we do not
+		// copy that. Nor do we copy its "if (!cg.zoomed)" guard: we return earlier on
+		// ps.zoomMode, so the gun is not drawn at all while zoomed.
+		if ( cg_fovAspectAdjust.integer ) {
+			// Based on LordHavoc's code for Darkplaces
+			// http://www.quakeworld.nu/forum/topic/53/what-does-your-qw-look-like/page/30
+			const float baseAspect = 0.75f; // 3/4
+			const float aspect = (float)cgs.glconfig.vidWidth/(float)cgs.glconfig.vidHeight;
+			const float desiredFov = cgFov;
+
+			cgFov = atan( tan( desiredFov*M_PI / 360.0f ) * baseAspect*aspect )*360.0f / M_PI;
+		}
+
+		fracDistFOV = tanf( cg.refdef.fov_x * ( M_PI/180 ) * 0.5f );
+		fracWeapFOV = ( 1.0f / fracDistFOV ) * tanf( cgFov * ( M_PI/180 ) * 0.5f );
 		VectorScale( hand.axis[0], fracWeapFOV, hand.axis[0] );
 	}
 
