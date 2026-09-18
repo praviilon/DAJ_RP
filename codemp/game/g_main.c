@@ -7197,6 +7197,7 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 
 // zyk: controls the quest powers stuff
 extern void initialize_rpg_skills(gentity_t *ent);
+extern void zyk_wind_down_seeker_drone(gentity_t *ent);
 // GalaxyRP: [Sniper Battle] the zyk_apply_character_loadout() declaration that sat here went with
 // the removal -- sniper_battle_end() was this file's only caller.
 void quest_power_events(gentity_t *ent)
@@ -7907,10 +7908,13 @@ void duel_tournament_prepare(gentity_t *ent)
 	ent->client->ps.stats[STAT_HOLDABLE_ITEM] = 0;
 
 	// zyk: removing the seeker drone in case if is activated
-	if (ent->client->ps.droneExistTime > (level.time + 5000))
-	{
-		ent->client->ps.droneExistTime = level.time + 5000;
-	}
+	// GalaxyRP fix: [Items] through the shared helper, which clamps one millisecond further. The
+	// clamp that used to sit here landed on the far EDGE of SeekerDroneUpdate()'s wind-down window,
+	// whose upper bound is strict -- so the drone stayed armed for the rest of this frame, and
+	// WP_ForcePowersUpdate() runs later in this same G_RunFrame() call. The duelists are teleported
+	// into the arena a few lines after this returns, so that frame is precisely the one in which a
+	// stray seeker bolt lands in a saber duel. See zyk_wind_down_seeker_drone() in g_cmds.c.
+	zyk_wind_down_seeker_drone(ent);
 
 	// GalaxyRP fix: [Cloak Item] pair-aware, like every other decloak trigger -- a duelist prepped
 	// while paired-cloaked used to leave the vehicle cloaked behind them.
@@ -8555,10 +8559,11 @@ void melee_battle_prepare()
 			}
 
 			// zyk: removing the seeker drone in case if is activated
-			if (ent->client->ps.droneExistTime > (level.time + 5000))
-			{
-				ent->client->ps.droneExistTime = level.time + 5000;
-			}
+			// GalaxyRP fix: [Items] same one-frame edge case as duel_tournament_prepare() above, and
+			// worse here: a Melee Battle is punch-only, so a drone still armed as its owner is
+			// teleported onto the platform is the one ranged attack in the arena. See
+			// zyk_wind_down_seeker_drone() in g_cmds.c.
+			zyk_wind_down_seeker_drone(ent);
 
 			// GalaxyRP fix: [Melee Battle] same as the loadout backup above, placed against the
 			// force strip that follows it exactly as duel_tournament_prepare() places its own.

@@ -3247,6 +3247,49 @@ void zyk_stop_active_force_powers( gentity_t *ent )
 	}
 }
 
+// GalaxyRP fix: [Items] send a deployed seeker drone into its death spiral.
+//
+// SeekerDroneUpdate() (w_force.c) treats the last stretch of a drone's life as a wind-down: inside
+// the window it beeps a warning and returns BEFORE the targeting and firing code, and past the end
+// of it the drone sparks out and EF_SEEKERDRONE is cleared. Pulling droneExistTime into that window
+// therefore stops the drone shooting at once and lets it leave visibly, instead of popping out of
+// existence the way clearing the flag by hand would.
+//
+// The window is
+//
+//     droneExistTime >= level.time && droneExistTime < (level.time + SEEKER_WINDDOWN_MS)
+//
+// and that upper bound is STRICT, which is the whole reason this is a function rather than three
+// copies of two lines. duel_tournament_prepare() and melee_battle_prepare() both clamped to exactly
+// level.time + 5000, which is the first value NOT in the window -- so the drone stayed armed for the
+// current frame and only fell into the wind-down once level.time advanced. That frame is not
+// theoretical: WP_ForcePowersUpdate(), which drives SeekerDroneUpdate(), runs later in the very same
+// G_RunFrame() call that runs those prepares, so it is always evaluated once with the drone still
+// live. And it is the worst possible frame for it -- both prepares teleport the player into an arena
+// next to their opponent immediately afterwards, having just stripped every ranged weapon out of the
+// fight. It only actually fires when droneFireTime happens to have elapsed (it refires every
+// Q_irand(400, 700) ms), so roughly one frame in ten, which is rare enough to never be reproduced
+// on purpose and silent when it happens.
+//
+// Subtracting one lands inside the window instead of on its edge. Verified frame by frame: at
+// +SEEKER_WINDDOWN_MS the drone is armed for exactly one frame, at the value below it for none, and
+// in both cases it still expires on time.
+#define SEEKER_WINDDOWN_MS 5000
+void zyk_wind_down_seeker_drone( gentity_t *ent )
+{
+	const int windDownAt = level.time + SEEKER_WINDDOWN_MS - 1;
+
+	if (!ent || !ent->client)
+		return;
+
+	// conditional, not an assignment: a drone already closer to death than this must not have its
+	// life EXTENDED to the full window by being "wound down".
+	if (ent->client->ps.droneExistTime > windDownAt)
+	{
+		ent->client->ps.droneExistTime = windDownAt;
+	}
+}
+
 // GalaxyRP fix: [Account] stop every HOLDABLE this player currently has running, for the same
 // reason and at the same point as zyk_stop_active_force_powers() above.
 //
@@ -3258,7 +3301,8 @@ void zyk_stop_active_force_powers( gentity_t *ent )
 // left four things running for a character that no longer owns them:
 //
 //   Remote. ItemUse_Seeker() sets EF_SEEKERDRONE with a 60-second droneExistTime, and only the
-//   eFlags wipe or that timer ever clears it, so the drone kept orbiting and shooting.
+//   eFlags wipe or that timer ever clears it, so the drone kept orbiting and shooting. Wound down
+//   through zyk_wind_down_seeker_drone() above, which the two mini-game prepares share.
 //
 //   E-Web. The worst of the four, because it is not merely cosmetic. EWeb_Create() stores the
 //   owner's STAT_WEAPONS in the e-web's genericValue11 and EWebThink() then overwrites
@@ -3302,23 +3346,8 @@ void zyk_stop_active_holdables( gentity_t *ent )
 	if (!ent || !ent->client)
 		return;
 
-	// 1. the seeker drone. Wound down rather than cleared outright: this is the idiom
-	// duel_tournament_prepare() and melee_battle_prepare() already use, and ForceSeeker() treats the
-	// last 5 seconds as a death spiral -- it beeps a warning and returns BEFORE the targeting and
-	// firing code, then sparks out. So the drone stops shooting at once and leaves visibly instead
-	// of popping out of existence.
-	//
-	// The 4999 is not a typo and is the one place this deliberately differs from those two. That
-	// window is "droneExistTime < level.time + 5000", strictly less, so clamping to exactly
-	// level.time + 5000 leaves the drone OUTSIDE it for the current frame -- it only falls in once
-	// level.time advances. One frame is enough for a drone to take a shot on behalf of a character
-	// its owner no longer has, which is the whole thing being fixed here. A millisecond inside the
-	// boundary closes it. The two prepares carry the same one-frame gap; it matters less there
-	// because both immediately teleport and freeze the player anyway.
-	if (ent->client->ps.droneExistTime > (level.time + 4999))
-	{
-		ent->client->ps.droneExistTime = level.time + 4999;
-	}
+	// 1. the seeker drone
+	zyk_wind_down_seeker_drone(ent);
 
 	// 2. the e-web, freed outright -- see the note above on why not EWebDisattach()/EWebDie()
 	if (ent->client->ewebIndex)
