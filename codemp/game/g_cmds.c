@@ -2288,7 +2288,7 @@ void insert_inv_table_row(gentity_t* ent, char* item_to_add, sqlite3* db, char* 
 	// straight into the INSERT text via va("...%s..."). Currently unreachable (no command calls this
 	// function today), but fixed for consistency/safety with the rest of the DB layer in case it's
 	// wired up later.
-	rc = sqlite3_prepare(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2324,7 +2324,7 @@ qboolean select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, 
 	// (the SQL string delimiter) could break out of the literal and inject arbitrary SQL, executed
 	// with this game server's full database privileges -- reachable via /new (Cmd_Register_F). Bind
 	// the value as a parameter instead, so it can never be interpreted as SQL syntax.
-	rc = sqlite3_prepare(db, "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2382,7 +2382,7 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 	// had no callers at all, which is how it survived; it has one now (the duplicate-session drop in
 	// select_account_and_default_character_data), and that caller runs a further query afterwards.
 	// Report and return the sentinel; let whoever opened the connection close it.
-	rc = sqlite3_prepare(db, "SELECT AccountID FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT AccountID FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2448,7 +2448,7 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	// never have turned Admin Protect on for itself anyway (that now requires the "Give Admin" admin
 	// command). Setting bit 13 here makes the stored default match that: Admin Protect OFF until an
 	// admin senior enough to grant admin commands turns it on for themselves.
-	rc = sqlite3_prepare(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, ?, ?)", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES(?, ?, ?, ?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2493,7 +2493,7 @@ int select_number_of_accounts_with_username(gentity_t* ent, char* username, sqli
 	// first query both /login and /new run against attacker-supplied input, so it's reachable
 	// unauthenticated. Bind the value as a parameter instead, so it can never be interpreted as SQL
 	// syntax regardless of content.
-	rc = sqlite3_prepare(db, "SELECT count(Username) FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(Username) FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2550,7 +2550,7 @@ void update_accounts_table_row_with_current_values(gentity_t* ent) {
 	// commands ultimately save through (via save_account(ent, qfalse)), every settings change was
 	// silently reset back to 0 in the DB on the very next save, and came back off on the player's
 	// next login. Bind the player's actual in-memory bitmask instead.
-	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=?, Password=? WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=?, Password=? WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2581,7 +2581,7 @@ void update_accounts_table_row_with_default_char(gentity_t* ent, char* character
 	// update_accounts_table_row_with_current_values() above -- bind character_name instead. Reachable
 	// via /new (Cmd_Register_F -> select_player_character -> here) with the new account's own
 	// username used as the character name.
-	rc = sqlite3_prepare(db, "UPDATE Accounts SET DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Accounts SET DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2605,7 +2605,7 @@ qboolean is_password_correct(gentity_t* ent, char* username, char* password, sql
 	// select_number_of_accounts_with_username() above -- bind username instead. Reachable via /login
 	// with the account's own password compared afterward in C via strcmp(), never itself placed into
 	// SQL text here.
-	rc = sqlite3_prepare(db, "SELECT Password FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT Password FROM Accounts WHERE Username=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2692,7 +2692,7 @@ qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* d
 	// character (this is the /new registration path) came up dual-wielding, with both slots falling
 	// back to the default saber because 'saber_1' is not a real hilt, without the player ever
 	// choosing it.
-	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2725,7 +2725,7 @@ int select_number_of_characters_with_name(gentity_t* ent, char* character_name, 
 	// -- splicing the raw character name straight into the SQL string. Reachable via /new
 	// (Cmd_Register_F, using the new account's own username as its first character's name) and via
 	// /char new <name>. Bind the value as a parameter instead.
-	rc = sqlite3_prepare(db, "SELECT count(CharID) FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(CharID) FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2769,7 +2769,7 @@ int select_number_of_characters_with_name(gentity_t* ent, char* character_name, 
 // check below.
 int select_number_of_characters(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
-	rc = sqlite3_prepare(db, "SELECT count(CharID) FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(CharID) FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2805,7 +2805,7 @@ int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3
 	// GalaxyRP fix: [security] this used to build the query text via va("...Name='%s'", character_name)
 	// -- splicing the raw character name straight into the SQL string. Reachable via /char remove
 	// <name>. Bind the value as a parameter instead.
-	rc = sqlite3_prepare(db, "SELECT CharID FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT CharID FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2857,7 +2857,7 @@ saber_db_info_t select_saber_info_using_char_id(gentity_t* ent, sqlite3* db, cha
 	// ent->client->pers.CharID is always a server-derived int, never attacker-controlled text, so this
 	// was never actually exploitable, but it was inconsistent with the bound-parameter style the rest of
 	// this file's queries were hardened to. Bound here too for consistency.
-	rc = sqlite3_prepare(db, "SELECT saberOneModel, saberTwoModel FROM Characters WHERE CharID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT saberOneModel, saberTwoModel FROM Characters WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2944,7 +2944,7 @@ void update_chars_table_row_with_current_values(gentity_t* ent) {
 	// UPDATE text via va("...\"%s\"..."). This function is called on every credits/level/skillpoint
 	// change (5 call sites), so it's a frequently-reachable, unauthenticated injection point. Bind
 	// every value as a parameter instead.
-	rc = sqlite3_prepare(db, "UPDATE Characters SET Credits=?, Level=?, ModelScale=?, Skillpoints=?, Description=?, NetName=?, ModelName=?, xp=? WHERE CharID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Characters SET Credits=?, Level=?, ModelScale=?, Skillpoints=?, Description=?, NetName=?, ModelName=?, xp=? WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2991,7 +2991,7 @@ void delete_chars_table_row_with_name(gentity_t* ent, char* charName, sqlite3* d
 	// calls this function today -- /char remove goes through remove_character() instead, which
 	// deletes by CharID), but fixed for consistency/safety with the rest of the DB layer in case
 	// it's wired up later.
-	rc = sqlite3_prepare(db, "DELETE FROM Characters WHERE Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "DELETE FROM Characters WHERE Name=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3162,7 +3162,7 @@ qboolean insert_weapons_table_row(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 
 // GalaxyRP (Alex): [Database] SELECT This method grabs all the values from a weapons table row (ASSUMES THE PLAYERS IS ALREADY LOGGED IN), and assigns them to the entity.
 void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	rc = sqlite3_prepare(db, va("SELECT * FROM Weapons WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, va("SELECT * FROM Weapons WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3552,7 +3552,7 @@ static int news_channel_exists(const char *channel, sqlite3 *db, sqlite3_stmt *s
 {
 	int found = -1;
 
-	if (sqlite3_prepare(db, "SELECT count(*) FROM News WHERE channel = ? COLLATE NOCASE", -1, &stmt, NULL) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, "SELECT count(*) FROM News WHERE channel = ? COLLATE NOCASE", -1, &stmt, NULL) != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
@@ -3582,7 +3582,7 @@ static int news_channel_count(sqlite3 *db, sqlite3_stmt *stmt)
 {
 	int count = -1;
 
-	if (sqlite3_prepare(db, "SELECT count(*) FROM (SELECT DISTINCT channel COLLATE NOCASE FROM News)", -1, &stmt, NULL) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, "SELECT count(*) FROM (SELECT DISTINCT channel COLLATE NOCASE FROM News)", -1, &stmt, NULL) != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
@@ -3659,7 +3659,7 @@ qboolean insert_news_table_row(gentity_t* ent, char* channel, char* news_text) {
 	// (admin-gated, but a quote in either value would still let a malicious or compromised admin
 	// account run arbitrary SQL against the database, well beyond what the news feature is meant to
 	// allow). Prepare/bind/step directly instead.
-	rc = sqlite3_prepare(db, "INSERT INTO News(channel, text) VALUES (?, ?)", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO News(channel, text) VALUES (?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3708,7 +3708,7 @@ void select_news_channels(gentity_t* ent) {
 		from News\
 		ORDER BY channel COLLATE NOCASE";
 
-	rc = sqlite3_prepare(db, select_channels_query, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, select_channels_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3782,7 +3782,7 @@ void select_news_from_channel(gentity_t* ent, char* channel, int numberOfEntries
 		from(SELECT newsID, text, date from News WHERE channel = ? COLLATE NOCASE ORDER BY newsID DESC LIMIT ?) \
 		ORDER BY newsID ASC";
 
-	rc = sqlite3_prepare(db, select_news_query, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, select_news_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3846,7 +3846,7 @@ qboolean delete_news_table_row_with_id(gentity_t* ent, int newsID) {
 		return qfalse;
 	}
 
-	rc = sqlite3_prepare(db, "DELETE FROM News WHERE newsID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "DELETE FROM News WHERE newsID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3914,7 +3914,7 @@ void update_current_character_name_and_model(gentity_t* ent, sqlite3* db, char* 
 	// never be mistaken for the legacy schema default (bare 1, no mode/RGB bits set at all) these
 	// columns still hold on every pre-existing character row -- that legacy default decodes to mode
 	// 0 (SABER_RED) with no RGB payload, a reasonable default for a row this feature predates.
-	rc = sqlite3_prepare(db, "UPDATE Characters SET ModelScale=?, NetName=?, ModelName=?, saberOneModel=?, saberTwoModel=?, saberOneColor=?, saberTwoColor=? WHERE CharID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Characters SET ModelScale=?, NetName=?, ModelName=?, saberOneModel=?, saberTwoModel=?, saberOneColor=?, saberTwoColor=? WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -3949,7 +3949,7 @@ void update_current_character_scale(gentity_t* ent, sqlite3* db) {
 	int rc;
 	sqlite3_stmt* stmt = 0;
 
-	rc = sqlite3_prepare(db, "UPDATE Characters SET ModelScale=? WHERE CharID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Characters SET ModelScale=? WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4015,7 +4015,7 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		ON Weapons.CharID = Characters.CharID\
 		WHERE Characters.Name = ? AND Characters.AccountID = ?";
 
-	rc = sqlite3_prepare(db, select_character_query, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, select_character_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4281,7 +4281,7 @@ void select_character_list(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, s
 	int charLevel;
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
-	rc = sqlite3_prepare(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4336,7 +4336,7 @@ void select_character_list_for_ui(gentity_t* ent, sqlite3* db, char* zErrMsg, in
 	int charCount = 0;
 
 	// GalaxyRP (Alex): [Database] Get list of char names.
-	rc = sqlite3_prepare(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT Name, Level FROM Characters WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4515,7 +4515,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 				WHERE Accounts.Username = ?))\
 			)";
 
-	rc = sqlite3_prepare(db, select_account_table_row, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, select_account_table_row, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4870,7 +4870,7 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	// then wrote that result straight back to the row, making it permanent. Set the second slot to the
 	// "none" this system uses everywhere else for "no second saber". saberOneModel is deliberately left
 	// to its existing default so the first slot keeps resolving exactly as it does today.
-	rc = sqlite3_prepare(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp, saberTwoModel) VALUES(?, '100', '1', '100', ?, '1', 'Nothing to show.', 'DefaultName', 'kyle', 0, 'none')", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4935,7 +4935,7 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 	{
 		const char *query = (i == 0) ? insert_skills_query : insert_weapons_query;
 
-		rc = sqlite3_prepare(db, query, -1, &stmt, NULL);
+		rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5002,7 +5002,7 @@ void remove_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3*
 	// select_char_id_using_char_name()'s return value (its -1 "not found" sentinel is already
 	// rejected above), so it was never actually attacker-controlled text and this was never
 	// exploitable -- but it was the last query in this file's /char path still built that way instead
-	// of bound, after the rest of the database layer was hardened. sqlite3_prepare() (unlike
+	// of bound, after the rest of the database layer was hardened. sqlite3_prepare_v2() (unlike
 	// sqlite3_exec(), which run_db_query() wraps) only ever prepares a single statement, so the three
 	// DELETEs run as three separate bound statements here instead of one combined multi-statement
 	// text blob.
@@ -5013,7 +5013,7 @@ void remove_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3*
 	};
 
 	for (int i = 0; i < 3; i++) {
-		rc = sqlite3_prepare(db, remove_character_queries[i], -1, &stmt, NULL);
+		rc = sqlite3_prepare_v2(db, remove_character_queries[i], -1, &stmt, NULL);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5077,7 +5077,7 @@ void update_current_character_and_account(gentity_t* ent) {
 	// the Characters and Accounts UPDATEs (the two with string values) are split out and each
 	// prepared/bound/stepped on their own; the Skills and Weapons UPDATEs are all-integer and
 	// unaffected, so they stay combined via run_db_query() below, unchanged.
-	rc = sqlite3_prepare(db, "UPDATE Characters SET Credits=?, Level=?, ModelScale=?, Skillpoints=?, Description=?, NetName=?, ModelName=?, xp=? WHERE CharID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Characters SET Credits=?, Level=?, ModelScale=?, Skillpoints=?, Description=?, NetName=?, ModelName=?, xp=? WHERE CharID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5105,7 +5105,7 @@ void update_current_character_and_account(gentity_t* ent) {
 	// update_accounts_table_row_with_current_values() above -- this is the other write site
 	// (save_account(ent, qtrue), the RPG-char save path) that was silently resetting a logged-in
 	// player's /settings toggles back to 0 in the DB. Bind the real value instead.
-	rc = sqlite3_prepare(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "UPDATE Accounts SET PlayerSettings=?, AdminLevel=?, DefaultChar=? WHERE AccountID=?", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5759,7 +5759,7 @@ static int inventory_item_count(int charID, sqlite3 *db, sqlite3_stmt *stmt)
 {
 	int count = -1;
 
-	if (sqlite3_prepare(db, va("SELECT count(ItemID) FROM Items WHERE CharID='%i'", charID), -1, &stmt, NULL) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, va("SELECT count(ItemID) FROM Items WHERE CharID='%i'", charID), -1, &stmt, NULL) != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
@@ -5782,7 +5782,7 @@ static int inventory_item_count(int charID, sqlite3 *db, sqlite3_stmt *stmt)
 
 qboolean inventory_does_player_own_item(gentity_t *ent, int itemID, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt)
 {
-	rc = sqlite3_prepare(db, va("SELECT count(ItemID) FROM Items WHERE ItemID='%i' AND CharID='%i'", itemID, ent->client->pers.CharID), -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, va("SELECT count(ItemID) FROM Items WHERE ItemID='%i' AND CharID='%i'", itemID, ent->client->pers.CharID), -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5851,7 +5851,7 @@ qboolean inventory_add_item(gentity_t *ent, char item_to_add[MAX_STRING_CHARS], 
 		return qfalse;
 	}
 
-	rc = sqlite3_prepare(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5925,7 +5925,7 @@ void inventory_add_create_item_log(gentity_t *ent, char created_item_name[MAX_ST
 void inventory_display_items(gentity_t *ent, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt)
 {
 	//trap->Print(va("SELECT Count(ItemID) FROM Items WHERE CharID='%i'", ent->client->pers.CharID));
-	rc = sqlite3_prepare(db, va("SELECT Count(ItemID) FROM Items WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, va("SELECT Count(ItemID) FROM Items WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -5953,7 +5953,7 @@ void inventory_display_items(gentity_t *ent, sqlite3 *db, char *zErrMsg, int rc,
 	sqlite3_finalize(stmt);
 
 	//trap->Print(va("SELECT ItemID, ItemName FROM Items WHERE CharID='%i'", ent->client->pers.CharID));
-	rc = sqlite3_prepare(db, va("SELECT ItemID, ItemName FROM Items WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, va("SELECT ItemID, ItemName FROM Items WHERE CharID='%i'", ent->client->pers.CharID), -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));

@@ -181,12 +181,53 @@ void RP_CVU_pluginRequired(void)
 	}
 }
 
+// GalaxyRP fix: [Database] every prepare in the game module is sqlite3_prepare_v2(), not the
+// legacy sqlite3_prepare(). They take identical arguments; what differs is how sqlite3_step()
+// behaves afterwards, and both differences cost us something real:
+//
+//   1. Error detail. With the legacy interface a failing step() returns a bare SQLITE_ERROR and
+//      sqlite3_errmsg() says "SQL logic error" -- the actual reason is only available from
+//      sqlite3_finalize()'s return value, which nothing in this codebase reads. So every one of
+//      the ~107 trap->Print("SQL error: %s", sqlite3_errmsg(db)) lines in the database layer
+//      reported "SQL logic error" for any constraint failure. Measured against our own bundled
+//      amalgamation, the same duplicate-username INSERT reports:
+//
+//          legacy : rc=1  "SQL logic error"
+//          _v2    : rc=19 "UNIQUE constraint failed: Accounts.Username"
+//
+//      That matters here specifically because Accounts.Username now HAS a UNIQUE index (see
+//      statement_username_unique_index in InitializeGalaxyRpTables below), so a duplicate
+//      registration is a reachable failure that insert_accounts_table_row() was fixed to report --
+//      and it was reporting it uselessly.
+//
+//   2. Schema changes. If the schema changes between prepare() and step(), the legacy interface
+//      fails the query outright; _v2 recompiles the statement and runs it. This is reachable for
+//      us: DB_PATH resolves against fs_homepath, so two server instances on one machine share the
+//      database file, and InitializeGalaxyRpTables() runs its ALTER TABLE batch on every map load.
+//      One instance migrating while the other has a statement prepared silently loses that other
+//      query -- a character load, typically. WAL (which RP_DB_Open sets) widens the window rather
+//      than narrowing it, because a writer is no longer blocked by a reader.
+//
+// The third documented _v2 difference -- recompiling when a bound value could change the query
+// plan -- needs LIKE/GLOB or SQLITE_ENABLE_STAT4, and we have neither. It does not apply.
+//
+// Nothing else changes. No call site in this codebase tests a specific failure code (every one
+// checks != SQLITE_OK, != SQLITE_DONE, or != SQLITE_ROW && != SQLITE_DONE), so a step that now
+// returns SQLITE_CONSTRAINT instead of SQLITE_ERROR takes the identical branch; only the logged
+// text differs. SQLITE_BUSY was already passed through unchanged by both interfaces, so none of
+// the "database is locked" handling in RP_DB_Open() is affected. The sqlite3_exec() sites needed
+// nothing -- exec has always used prepare_v2 internally, which is why exec failures in this file
+// already reported properly while prepare failures did not.
+//
+// Note this is not something the 3.53.4 bump forced: _v2 has existed since 2007, the old 3.8.8.3
+// amalgamation behaved identically, and sqlite3_prepare() carries no SQLITE_DEPRECATED attribute
+// and is not behind SQLITE_OMIT_DEPRECATED. It is not going away. This is a diagnostics fix.
 //alex: checks if an admin account exists
 qboolean admin_account_exists(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
 	int count = 0;
 
-	rc = sqlite3_prepare(db, "SELECT count(AccountID) FROM Accounts WHERE Username='admin'", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(AccountID) FROM Accounts WHERE Username='admin'", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -270,7 +311,7 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	}
 
 	//alex: Get AccountID for later so we know which account the char is tied to
-	rc = sqlite3_prepare(db, statement_account_id_select, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, statement_account_id_select, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
