@@ -2217,7 +2217,21 @@ qboolean BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 		return qtrue;
 
 	case IT_ARMOR:
-		if ( ps->stats[STAT_ARMOR] >= ps->stats[STAT_MAX_HEALTH]/* * item->giTag*/ ) {
+		// GalaxyRP fix: [Shield] against the SHIELD ceiling, not the health one. This compared
+		// stats[STAT_MAX_HEALTH], which for an RPG player is pers.max_rpg_health -- but their shield
+		// cap is pers.max_rpg_shield, a different number, and zero for a character with no Max Shield
+		// skill. Both sides computed the same wrong answer, so nothing mispredicted: Touch_Item really
+		// took the item, Pickup_Armor's else-arm gave nothing, and adjustRespawnTime(1, ...) -- whose
+		// floor is one second -- put it straight back. STAT_MAX_ARMOR (bg_public.h) carries the right
+		// ceiling, published every frame in ClientEndFrame(), and for non-RPG players and NPCs it is
+		// STAT_MAX_HEALTH, so this line means exactly what it used to for them.
+		//
+		// The giTag multiply stays commented, as it was. Both shield items carry giTag 1 (see the
+		// bg_itemlist entries above -- the large shield was changed from 2 to 1), so it is a no-op
+		// today, and a per-player stat could not carry a per-item factor anyway. If a shield ever gets
+		// giTag 2 again, this and Pickup_Armor's non-RPG arm would part company, which is why the
+		// static suite pins both.
+		if ( ps->stats[STAT_ARMOR] >= ps->stats[STAT_MAX_ARMOR]/* * item->giTag*/ ) {
 			return qfalse;
 		}
 		return qtrue;

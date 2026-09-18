@@ -589,7 +589,22 @@ typedef enum {
 	// 0-5 without trouble, it is private to its owner rather than broadcast, and slot 10 was free.
 	// The server publishes it in ClientEndFrame() and CG_PredictPlayerState() restores the real level
 	// before Pmove runs. See cg_predict.c for why the restore only ever corrects upward.
-	STAT_FORCE_JUMP_LEVEL
+	STAT_FORCE_JUMP_LEVEL,
+	// GalaxyRP fix: [Shield] the shield ceiling, published so the client can decide what the server
+	// decides. BG_CanItemBeGrabbed() is shared code and its IT_ARMOR case used to compare against
+	// STAT_MAX_HEALTH, but that is the HEALTH ceiling: an RPG player's real shield cap is
+	// pers.max_rpg_shield (set_max_shield(), g_cmds.c), which lives in pers, is server-only and is
+	// ZERO for a character with no Max Shield skill. So both sides agreed a shield was grabbable,
+	// Touch_Item took it, Pickup_Armor's else-arm gave nothing, and adjustRespawnTime(1, ...) put it
+	// back one second later -- over and over, for a player who could never use it. Health never had
+	// this because its ceiling already lived in the playerState.
+	//
+	// Slot 11 was free, and this is the same trick as STAT_USE_HINT and STAT_FORCE_JUMP_LEVEL above:
+	// stats[] is networked as a MAX_STATS-wide changed-mask plus a 16-bit short per changed slot, so
+	// it needs no protocol or engine change, stays private to its owner rather than being broadcast,
+	// and costs nothing on the frames where it does not move. The largest value it can hold is
+	// pers.max_rpg_health (100 + level*2), nowhere near a short.
+	STAT_MAX_ARMOR
 } statIndex_t;
 
 
