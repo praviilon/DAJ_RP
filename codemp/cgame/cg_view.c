@@ -1780,6 +1780,22 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 		}
 	}
 
+	// GalaxyRP fix: [UI] the main view applies this correction in CG_CalcFov() but the skyportal
+	// computed its own fov and did not, so with cg_fovAspectAdjust on the world was corrected and
+	// the sky behind it was not -- the two stopped lining up. Same formula, deliberately, so they
+	// cannot drift: a copy that merely looks equivalent would reintroduce exactly this bug.
+	// Matches OpenJK 97cbf1e7; TaystJK carries the same correction here and its cvar comment calls
+	// it the "skyportal issue".
+	if ( cg_fovAspectAdjust.integer ) {
+		// Based on LordHavoc's code for Darkplaces
+		// http://www.quakeworld.nu/forum/topic/53/what-does-your-qw-look-like/page/30
+		const float baseAspect = 0.75f; // 3/4
+		const float aspect = (float)cgs.glconfig.vidWidth/(float)cgs.glconfig.vidHeight;
+		const float desiredFov = fov_x;
+
+		fov_x = atan( tan( desiredFov*M_PI / 360.0f ) * baseAspect*aspect )*360.0f / M_PI;
+	}
+
 	x = cg.refdef.width / tan( fov_x / 360 * M_PI );
 	fov_y = atan2( cg.refdef.height, x );
 	fov_y = fov_y * 360 / M_PI;
@@ -2655,7 +2671,6 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	if ( !cg.hyperspace ) {
 		CG_AddPacketEntities(qfalse);			// adter calcViewValues, so predicted player state is correct
 		CG_AddMarks();
-		CG_AddLocalEntities();
 	}
 	CG_AddViewWeapon( &cg.predictedPlayerState );
 
@@ -2671,6 +2686,25 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	if ( cg.testModelEntity.hModel ) {
 		CG_AddTestModel();
 	}
+
+	// GalaxyRP fix: [UI] local entities are added LAST on purpose -- this is a priority decision,
+	// not a timing one, so please do not tidy it back up with the other render-list calls above.
+	//
+	// The renderer caps the scene at MAX_REFENTITIES (2047, and REFENTITYNUM_BITS is commented
+	// "can't be increased without changing drawsurf bit packing", so it is the same on TaystJK) and
+	// RE_AddRefEntityToScene silently returns once that is hit -- its only complaint is a
+	// PRINT_DEVELOPER line nobody sees. Whatever is queued last is what disappears.
+	//
+	// Adding localents third, as this used to, spent those slots on force-push sparks and debris
+	// and let the view weapon, scheduled effects and map geometry fall off the end instead. The
+	// upstream report is light poles vanishing on mp/ffa5. Adding them here means a scene that
+	// overflows drops the effects rather than the map, which is the right way round; the trade is
+	// that some force effects can go missing in exactly those scenes. Matches OpenJK 2d618a5c,
+	// which TaystJK has also taken.
+	if ( !cg.hyperspace ) {
+		CG_AddLocalEntities();
+	}
+
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );
 
