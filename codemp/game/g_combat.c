@@ -2116,8 +2116,6 @@ extern qboolean g_noPDuelCheck;
 // GalaxyRP fix: [Death System] see g_local.h for what this is and which calls set it. Defined here
 // because player_die() below is its only reader.
 qboolean g_bookkeepingDeath = qfalse;
-extern void saberReactivate(gentity_t *saberent, gentity_t *saberOwner);
-extern void saberBackToOwner(gentity_t *saberent);
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
 extern void remove_credits(gentity_t *ent, int credits);
 extern void zyk_NPC_Kill_f( char *name );
@@ -2412,17 +2410,45 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	G_BreakArm(self, 0); //unbreak anything we have broken
 	self->client->ps.saberEntityNum = self->client->saberStoredIndex; //in case we died while our saber was knocked away.
 
-	if (self->client->ps.weapon == WP_SABER && self->client->saberKnockedTime)
-	{
-		gentity_t *saberEnt = &g_entities[self->client->ps.saberEntityNum];
-		//trap->Print("DEBUG: Running saber cleanup for %s\n", self->client->pers.netname);
-		self->client->saberKnockedTime = 0;
-		saberReactivate(saberEnt, self);
-		saberEnt->r.contents = CONTENTS_LIGHTSABER;
-		saberEnt->think = saberBackToOwner;
-		saberEnt->nextthink = level.time;
-		G_RunObject(saberEnt);
-	}
+	// GalaxyRP fix: [Death System] a block used to sit here that reactivated a knocked-away saber
+	// and ran its physics by hand -- saberReactivate(), r.contents = CONTENTS_LIGHTSABER,
+	// think = saberBackToOwner, then G_RunObject(saberEnt). Removed; matches OpenJK c2095bb4, whose
+	// author calls it a 2006 regression that stood until 2022. The line above is the part that
+	// mattered and stays: it restores ps.saberEntityNum, which saberKnockDown() had zeroed.
+	//
+	// It re-entered death processing. The guard at the top of this function is
+	// "if ( ps.pm_type == PM_DEAD ) return;", but pm_type is not SET to PM_DEAD until roughly 260
+	// lines below here, so everything in between runs on a player the guard cannot recognise as
+	// already dying -- and this block was the only thing in that window that handed control to
+	// physics and touch code:
+	//
+	//   saberReactivate()  sets saberent->touch = thrownSaberTouch
+	//   G_RunObject()      ends with an unconditional ent->touch( ent, &g_entities[...], &tr )
+	//   thrownSaberTouch() ends with CheckThrownSaberDamaged(), which carries four G_Damage calls
+	//
+	// so a dying player's own death dealt saber damage mid-death, which could kill someone else and
+	// run their player_die() nested inside this one. That is the "same-frame mutual kills" case.
+	// Note the difference from the re-entry we already tolerate: a rocket's direct hit and its
+	// splash arrive SEQUENTIALLY, the first call having reached pm_type = PM_DEAD, so the second
+	// bounces off the guard (see the death-counter note further up). Nesting is the shape the guard
+	// cannot catch.
+	//
+	// Nothing is lost by removing it, because it was applying the wrong branch anyway.
+	// DownedSaberThink() in w_saber.c has an explicit dead-owner case --
+	// "if (notDisowned || saberOwn->health < 1 || ...) { //He's dead, just go back to our normal
+	// saber status" -- which calls MakeDeadSaber(), sets think = SaberUpdateSelf and SVF_NOCLIENT,
+	// and also sets touch, speed and genericValue5 that this block never did. This block instead
+	// did the pullBack (living-owner) behaviour: a live, solid lightsaber flown back to a corpse.
+	// The saber now stays where it fell and becomes a dead saber, which is what every other death
+	// path already produces.
+	//
+	// saberKnockedTime is no longer cleared anywhere -- this block was its only reset. Harmless:
+	// its only remaining readers are two time comparisons in DownedSaberThink, which read a stale
+	// past value as "long enough ago" and pull the saber back for a living owner, which is what is
+	// wanted. Worth knowing that it is also never reset on respawn, which is what let this block
+	// fire on a saber that had never been knocked away at all: get disarmed, switch to a blaster,
+	// die (this block skipped it, weapon was not WP_SABER, so the flag survived), respawn, then die
+	// holding a saber.
 
 	self->client->bodyGrabIndex = ENTITYNUM_NONE;
 	self->client->bodyGrabTime = 0;
