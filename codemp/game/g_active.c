@@ -4286,7 +4286,17 @@ void ClientThink_real( gentity_t *ent ) {
 				{//decloak (self, plus the vehicle too if paired)
 					Jedi_DecloakPair( ent );
 				}
-				else
+				// GalaxyRP fix: [Dueling] holdables are refused inside a private duel again, and this
+				// command is the one that has to ask for itself: it deliberately does not go through
+				// G_ItemUsable() (see the note above), so the guard added there does not cover it.
+				//
+				// Gated on the CLOAKING direction only, exactly like the downed test in this same
+				// condition and like ItemUse_Jetpack's Jetpack_Off/Jetpack_On split. A guard on the
+				// whole toggle would leave a player who entered the duel already cloaked stuck
+				// invisible until it ended -- nothing else clears PW_CLOAKED, and with the duel over
+				// they would have been invisible for the whole fight. Cmd_EngageDuel_f() decloaks both
+				// players when the duel starts, so this is the backstop rather than the fix.
+				else if ( !BG_HoldablesBlocked( &ent->client->ps ) )
 				{//cloak (self only, regardless of mount state)
 					Jedi_Cloak( ent );
 				}

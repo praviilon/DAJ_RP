@@ -9131,6 +9131,17 @@ int G_ItemUsable(playerState_t *ps, int forcedUse)
 		return 0;
 	}
 
+	// GalaxyRP fix: [Dueling] holdables are refused inside a private duel -- through the same shared
+	// predicate PM_ItemUsable() uses, so the two answer alike. This function had NO duel guard at all,
+	// not even in zyk upstream or vanilla, which is why restoring the one PM_ItemUsable() lost would
+	// not have been enough by itself: every GENCMD_USE_* case in g_active.c (the use_seeker,
+	// use_sentry, use_bacta, use_eweb... binds) reaches the item through here and never touches
+	// PM_ItemUsable at all. See BG_HoldablesBlocked() in bg_misc.c.
+	if (BG_HoldablesBlocked(ps))
+	{
+		return 0;
+	}
+
 	if (!forcedUse)
 	{
 		forcedUse = bg_itemlist[ps->stats[STAT_HOLDABLE_ITEM]].giTag;
@@ -9780,6 +9791,41 @@ void Cmd_EngageDuel_f(gentity_t *ent, int duel_type)
 			// zyk: disable jetpack of both players
 			Jetpack_Off(ent);
 			Jetpack_Off(challenged);
+
+			// GalaxyRP fix: [Dueling] a seeker drone already in the air when the duel starts used to
+			// stay there. It cannot help its owner -- FindGenericEnemyIndex() skips players who are
+			// duelling, so it never picks the opponent -- it picks BYSTANDERS, and fires at them for
+			// up to a minute. G_Damage() throws that damage away, but Jedi_DecloakPair() runs above
+			// the duel gate there, so each blank shot still strips a cloaked bystander's cloak and
+			// locks them out of re-cloaking for 3-10 seconds, with no damage to explain it.
+			//
+			// Through the shared helper, which is the same call duel_tournament_prepare() and the
+			// Melee Battle prepare make for the same reason: it clamps one millisecond inside
+			// SeekerDroneUpdate()'s wind-down window, whose upper bound is strict, so the drone beeps
+			// and returns BEFORE its fire block from this frame onward. That matters here too --
+			// Cmd_EngageDuel_f() runs from ClientThink(), which the engine may dispatch either side of
+			// G_RunFrame(), so a drone with milliseconds left could otherwise still get a shot away in
+			// the same frame the duel begins.
+			zyk_wind_down_seeker_drone(ent);
+			zyk_wind_down_seeker_drone(challenged);
+
+			// GalaxyRP fix: [Dueling] and neither player starts the duel invisible. Holdables are
+			// refused inside a duel now (BG_HoldablesBlocked, bg_misc.c), but that only stops a cloak
+			// being switched ON -- a player already cloaked when the duel began would have stayed that
+			// way, and invisibility is not damage, so nothing else in the duel would have touched it.
+			// Pair-aware, and the same call duel_tournament_prepare() makes -- but guarded on actually
+			// being cloaked, the way FireWeapon() and G_Damage() guard theirs. Jedi_Decloak() clears
+			// FL_NOTARGET unconditionally, as the other half of what Jedi_Cloak() sets, so calling it
+			// on an uncloaked player would silently switch off an admin's /notarget. (A downed player,
+			// the other FL_NOTARGET holder, cannot reach here -- Cmd_EngageDuel_f refuses above.)
+			if (Jedi_PairIsCloaked(ent))
+			{
+				Jedi_DecloakPair(ent);
+			}
+			if (Jedi_PairIsCloaked(challenged))
+			{
+				Jedi_DecloakPair(challenged);
+			}
 
 			ent->client->ps.duelTime = level.time + 2000;
 			challenged->client->ps.duelTime = level.time + 2000;

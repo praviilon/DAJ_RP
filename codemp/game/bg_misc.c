@@ -2008,6 +2008,48 @@ int BG_GetItemIndexByTag(int tag, int type)
 }
 
 //yeah..
+// GalaxyRP fix: [Dueling] holdables are refused inside a private duel again.
+//
+// Vanilla JKA sealed a private duel off from the rest of the map on three fronts: force powers could
+// not be activated (BG_CanUseFPNow), could not be aimed at anyone (ForcePowerUsableOn), and holdables
+// could not be used at all (PM_ItemUsable). Commit 3f65a601 "Dueling changes Force powers and items
+// now allowed." commented out all three. The first two are already live again (see the GalaxyRP fix
+// comments on each, which restore them with a carve-out for a full force duel against your own
+// opponent); this is the third and last.
+//
+// The reason is the same one that brought the other two back: G_Damage() blocks the DAMAGE in both
+// directions, so it looks like a duel is sealed, but the items do their real work through effects
+// that never reach G_Damage. A seeker drone deployed mid-duel cannot target the opponent at all
+// (FindGenericEnemyIndex skips duellists) -- it picks bystanders instead and fires blanks at them,
+// and every blank still runs Jedi_DecloakPair() on the target, which sits ABOVE the duel gate in
+// G_Damage(). So the one thing a duellist's drone reliably does is strip the cloak off uninvolved
+// players, with a 3-10 second re-cloak lockout and no damage to explain it. The Cloak Item is worse
+// still: invisibility is not damage, so nothing gates it, and an opponent who cannot leave the duel,
+// cannot switch weapons and cannot shoot has no answer to it.
+//
+// Restored as a shared predicate rather than three copies of "if (ps->duelInProgress)" because there
+// are three independent ways into the holdable system and 3f65a601 only ever disabled one of them:
+// PM_ItemUsable covers the inventory key (and is compiled into cgame, so the prediction agrees with
+// the server), G_ItemUsable covers the use_seeker/use_sentry/use_bacta style binds -- which never had
+// a duel guard at all, not even upstream -- and use_cloak deliberately bypasses G_ItemUsable and has
+// to ask separately.
+//
+// Note for the use_cloak caller: this answers "may a holdable be USED", which for a toggle means the
+// switching-ON direction only. Switching a cloak off must stay reachable, or a player who entered the
+// duel already cloaked would be stuck invisible for the whole fight with nothing able to clear
+// PW_CLOAKED. ItemUse_Jetpack() has exactly this shape already -- Jetpack_Off unconditional,
+// Jetpack_On gated -- and Cmd_EngageDuel_f() now decloaks both players at the start anyway, so the
+// case should not arise in the first place.
+qboolean BG_HoldablesBlocked(playerState_t *ps)
+{
+	if (!ps)
+	{
+		return qfalse;
+	}
+
+	return ps->duelInProgress ? qtrue : qfalse;
+}
+
 qboolean BG_IsItemSelectable(playerState_t *ps, int item)
 {
 	if (item == HI_HEALTHDISP || item == HI_AMMODISP ||

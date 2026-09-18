@@ -6515,11 +6515,15 @@ int PM_ItemUsable(playerState_t *ps, int forcedUse)
 		return 0;
 	}
 
-	// GalaxyRP (Alex): [Dueling] Characters should be able to use holdables while dueling
-	/*if (ps->duelInProgress)
+	// GalaxyRP fix: [Dueling] the vanilla restriction, live again -- through the shared predicate, so
+	// this (which cgame also runs, predicting the refusal) and G_ItemUsable() and the use_cloak
+	// command cannot drift apart. It had been commented out here by 3f65a601 along with the two force
+	// power restrictions, both of which are already restored; see BG_HoldablesBlocked() in bg_misc.c
+	// for why all three had to come back and why one guard here was never enough on its own.
+	if (BG_HoldablesBlocked(ps))
 	{ //not allowed to use holdables while in a private duel.
 		return 0;
-	}*/
+	}
 
 	if (!forcedUse)
 	{

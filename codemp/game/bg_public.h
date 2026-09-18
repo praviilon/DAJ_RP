@@ -1804,6 +1804,10 @@ int		BG_PickAnim( int animIndex, int minAnim, int maxAnim );
 int BG_GetItemIndexByTag(int tag, int type);
 
 qboolean BG_IsItemSelectable(playerState_t *ps, int item);
+// GalaxyRP: [Dueling] the one rule for "may this player use a holdable right now" as far as
+// the private duel is concerned -- shared by PM_ItemUsable() (bg_pmove.c, predicted in cgame),
+// G_ItemUsable() (g_cmds.c) and the use_cloak command (g_active.c). See the definition.
+qboolean BG_HoldablesBlocked(playerState_t *ps);
 
 qboolean BG_HasYsalamiri(int gametype, playerState_t *ps);
 qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t power);

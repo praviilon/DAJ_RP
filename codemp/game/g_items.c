@@ -653,6 +653,16 @@ static qboolean pas_find_enemies( gentity_t *self )
 		}
 	}
 
+	// GalaxyRP fix: [Dueling] a sentry whose owner is in a private duel acquires nothing at all. It
+	// could only ever pick a target outside the duel, and G_Damage() throws that damage away -- but
+	// Jedi_DecloakPair() runs above the duel gate there, so every blank shot still strips a cloaked
+	// bystander's cloak and locks them out of re-cloaking for 3-10 seconds. Same reasoning as the
+	// seeker drone wind-down in Cmd_EngageDuel_f(). self->parent is the owner (ItemUse_Sentry).
+	if (self->parent && self->parent->client && self->parent->client->ps.duelInProgress)
+	{
+		return qfalse;
+	}
+
 	VectorCopy(self->s.pos.trBase, org2);
 
 	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade detection-range
@@ -679,6 +689,18 @@ static qboolean pas_find_enemies( gentity_t *self )
 		{
 			continue;
 		}
+
+		// GalaxyRP fix: [Dueling] never acquire a player who is in a private duel. The seeker drone's
+		// own target search has had this test all along (FindGenericEnemyIndex, w_force.c); the sentry
+		// never got it, and zyk_can_hit_target() below covers the Duel Tournament and the Melee Battle
+		// but not the private duel. The result was a sentry that locked onto a duellist, wound up, and
+		// fired at them for the rest of its life for nothing -- G_Damage() gates the damage -- while
+		// ignoring every legitimate target, because ent->enemy is only ever dropped on death.
+		if (target->client->ps.duelInProgress)
+		{
+			continue;
+		}
+
 		if ( !trap->InPVS( org2, target->r.currentOrigin ))
 		{
 			continue;
@@ -936,6 +958,21 @@ void pas_think( gentity_t *ent )
 		}
 		else if (ent->enemy->health < 1)
 		{
+			ent->enemy = NULL;
+		}
+		// GalaxyRP fix: [Dueling] ...and let go of the target when a private duel starts, in either
+		// direction. The two filters added to pas_find_enemies() only stop the sentry ACQUIRING while
+		// a duel is on; a lock that already existed when the duel began would otherwise have survived
+		// for the sentry's whole remaining lifetime, which is the same blank-fire-and-decloak problem
+		// those filters exist to prevent. Deliberately here rather than in pas_adjust_enemy() just
+		// above, which defers its drop behind the bounceCount anti-ping-pong delay -- this one should
+		// take effect on the frame the duel starts, like the other three tests it sits with.
+		else if (ent->enemy->client->ps.duelInProgress)
+		{ // the target has entered a duel and is now off limits
+			ent->enemy = NULL;
+		}
+		else if (ent->parent && ent->parent->client && ent->parent->client->ps.duelInProgress)
+		{ // the OWNER has entered a duel, so this sentry stands down entirely
 			ent->enemy = NULL;
 		}
 	}
