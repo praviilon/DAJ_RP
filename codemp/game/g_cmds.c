@@ -14529,6 +14529,15 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			// lives in the buffer so it is written once, ahead of any flush
 			strcpy(content, "\n");
 
+			// GalaxyRP: [Logical Entities] say which region the entity lives in, so an admin looking
+			// at an id from /entlist knows why it is at or above MAX_GENTITIES and what an edit may
+			// not do to it.
+			if (this_ent->inuse)
+			{
+				Q_strcat(content, sizeof(content), va("^3region: ^7%s\n",
+					this_ent->isLogical ? "logical (not networked; classname cannot be changed to a networked class in place)" : "networked"));
+			}
+
 			if (this_ent->inuse)
 			{ 
 				// GalaxyRP fix: [overflow] each pair was appended with strcpy(content, va("%s...",
@@ -17088,18 +17097,20 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 		return;
 	}
 
-	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
+	// GalaxyRP: [Logical Entities] three messages rather than two: the /entlist and /entremove lines
+	// grew to explain the logical ids, and one server command carries at most 1022 characters.
+	trap->SendServerCommand( ent-g_entities, va("print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
 ^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^3/entlist <page number>: ^7Lists all entities present on the map.\n\
+^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
-^3/entundo: ^7Removes last added entity. Only works once.\n\
-^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
+^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
+	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given.\n\"");
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
-^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
+^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids).\n\
+^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\"" );
+	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
 ^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/remapload <file name>: ^7Loads remaps from preset file.\n\
