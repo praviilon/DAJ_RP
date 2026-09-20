@@ -7151,6 +7151,13 @@ backAgain:
 	}
 }
 #ifdef _GAME
+// GalaxyRP fix: [Weapons] this is the alt-fire policy, and it is server-only because it reads
+// sess.loggedin and pers.skill_levels[]. It is no longer called from PM_Weapon() below: the server
+// evaluates it once per frame in ClientEndFrame() (g_active.c) and publishes the answer in
+// ps.stats[STAT_ALT_FIRE_OK], which PM_Weapon() then reads on both the server and the client. The
+// two comments inside about "the call site is #ifdef _GAME" describe the arrangement this replaced;
+// their carve-outs stay, and PM_Weapon() repeats the NPC/melee/saber ones so that they never wait on
+// the stat. Nothing about who may alt-fire what has changed.
 qboolean canAltFireWeapon(gentity_t* ent) {
 	if (ent->NPC) {
 		return qtrue;
@@ -7311,23 +7318,46 @@ static void PM_Weapon( void )
 			return;
 		}
 	}
-	gentity_t* test_ent = &g_entities[pm->ps->clientNum];
-	if (pm->cmd.buttons & BUTTON_ALT_ATTACK) {
-		if (!canAltFireWeapon(test_ent)) {
-			// GalaxyRP fix: [Weapons] this used to be `pm->cmd.buttons |= ~BUTTON_ATTACK;` -- OR-ing in
-			// the bitwise complement of BUTTON_ATTACK (1) sets every other bit in the mask unconditionally,
-			// including BUTTON_ALT_ATTACK itself (undoing the clear on the line above, so a real alt-fire
-			// still went through despite failing the skill/login check just above) and BUTTON_USE_HOLDABLE
-			// (which made the "check for item using" block further down in this function fire the
-			// player's currently-selected holdable every time this branch ran, cloaking them if that
-			// happened to be the Cloak Item -- unrelated to actually wanting to use it). Changed to AND
-			// with the complement so this only clears BUTTON_ATTACK, symmetric with the line above, and
-			// touches nothing else in the mask.
-			pm->cmd.buttons &= ~BUTTON_ALT_ATTACK;
-			pm->cmd.buttons &= ~BUTTON_ATTACK;
-		}
-	}
 #endif
+
+	// GalaxyRP fix: [Weapons] the alt-fire gate, on BOTH sides now. This used to be
+	//
+	//     #ifdef _GAME
+	//         if (!canAltFireWeapon(&g_entities[pm->ps->clientNum])) strip
+	//     #endif
+	//
+	// because canAltFireWeapon() reads sess.loggedin and pers.skill_levels[], which cgame does not
+	// have. So the server refused the shot and the client, running this same function without the
+	// block, predicted it in full: EV_ALT_FIRE with its muzzle flash, sound and recoil, the ammo dip,
+	// weaponTime set to the alt-fire delay, WEAPON_CHARGING_ALT for the bowcaster and DEMP2, the
+	// zoomed disruptor shot -- and then the snapshot took it all back. The server now publishes its
+	// answer in ps.stats[STAT_ALT_FIRE_OK] (ClientEndFrame(), g_active.c) and this reads it, so the
+	// two sides strip the same buttons on the same frame. See the stat's comment in bg_public.h for
+	// the one-snapshot lag after a weapon switch and why it cannot matter.
+	//
+	// The three early answers canAltFireWeapon() gives are repeated here rather than trusted to the
+	// stat. NPCs have no ClientEndFrame() and so no stat; melee's alt is the kick and the grapple, the
+	// saber's is the throw and the kick, and none of those should ever wait a snapshot on a value that
+	// describes the previous weapon. For every other weapon the stat IS the decision; nothing here
+	// re-derives it, so the policy still lives in one place.
+	//
+	// The strip itself is unchanged. It used to be `pm->cmd.buttons |= ~BUTTON_ATTACK;` -- OR-ing in
+	// the bitwise complement of BUTTON_ATTACK (1) sets every other bit in the mask unconditionally,
+	// including BUTTON_ALT_ATTACK itself (undoing the clear on the line above, so a real alt-fire still
+	// went through despite failing the skill/login check just above) and BUTTON_USE_HOLDABLE (which
+	// made the "check for item using" block further down in this function fire the player's
+	// currently-selected holdable every time this branch ran, cloaking them if that happened to be the
+	// Cloak Item -- unrelated to actually wanting to use it). It ANDs with the complement, so it only
+	// clears the two attack buttons and touches nothing else in the mask.
+	if ((pm->cmd.buttons & BUTTON_ALT_ATTACK) &&
+		pm->ps->clientNum < MAX_CLIENTS &&
+		pm->ps->weapon != WP_MELEE &&
+		pm->ps->weapon != WP_SABER &&
+		!pm->ps->stats[STAT_ALT_FIRE_OK])
+	{
+		pm->cmd.buttons &= ~BUTTON_ALT_ATTACK;
+		pm->cmd.buttons &= ~BUTTON_ATTACK;
+	}
 
 	if (!pm->ps->emplacedIndex &&
 		pm->ps->weapon == WP_EMPLACED_GUN)

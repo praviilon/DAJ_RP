@@ -604,7 +604,23 @@ typedef enum {
 	// it needs no protocol or engine change, stays private to its owner rather than being broadcast,
 	// and costs nothing on the frames where it does not move. The largest value it can hold is
 	// pers.max_rpg_health (100 + level*2), nowhere near a short.
-	STAT_MAX_ARMOR
+	STAT_MAX_ARMOR,
+	// GalaxyRP fix: [Weapons] 1 when the server would let this player alt-fire the weapon they are
+	// holding, 0 when it would not. The decision itself is canAltFireWeapon() (bg_pmove.c, server
+	// only): NPCs, melee and the saber always may; everyone else needs to be logged in, and for the
+	// thirteen ranged guns needs that weapon's skill above level 1. It reads sess.loggedin and
+	// pers.skill_levels[], which only the server has -- so the button strip that enforces it in
+	// PM_Weapon() used to sit inside "#ifdef _GAME", and cgame, running the same PM_Weapon() without
+	// it, predicted the whole alt-fire: muzzle flash, sound, recoil, the ammo dip and the weaponTime
+	// lock, for a shot the server refused. The server publishes the answer here in ClientEndFrame()
+	// and PM_Weapon() reads it on both sides, which is the same arrangement as STAT_MAX_ARMOR above.
+	//
+	// It describes the weapon the server saw at the end of its last frame. After a weapon switch the
+	// client's predicted ps.weapon runs ahead of that by a snapshot, but no shot is possible in that
+	// window -- the change costs 200ms of weaponTime and the raise another 250ms -- and the melee and
+	// saber carve-outs are repeated in PM_Weapon() itself so a kick or a throw never waits on it.
+	// Slot 12 was free.
+	STAT_ALT_FIRE_OK
 } statIndex_t;
 
 

@@ -4819,6 +4819,24 @@ void ClientEndFrame( gentity_t *ent ) {
 		}
 	}
 
+	// GalaxyRP fix: [Weapons] publish whether this player may alt-fire what they are holding, so the
+	// button strip in PM_Weapon() -- which cgame runs too -- refuses the same shot the server refuses.
+	// canAltFireWeapon() is the policy and stays server-only; this is its one caller now. See
+	// STAT_ALT_FIRE_OK in bg_public.h for the mispredict this closes.
+	//
+	// Placed beside the STAT_MAX_ARMOR block above and for the same reasons: every client every frame,
+	// above the spectator early-return so a follower's copied playerState carries it, and written
+	// unconditionally because 0 is a real answer, not a "not yet published" sentinel. Its own block
+	// rather than a line inside the shield one, so each publish can be read -- and lifted -- alone. A
+	// change mid-frame -- login, logout, a skill bought -- is seen one frame late; a weapon switch is
+	// covered by the change and raise times, see the stat's comment. NPCs, if they reach here, get
+	// canAltFireWeapon()'s unconditional qtrue, and PM_Weapon() does not consult the stat for them in
+	// any case.
+	if ( ent->client )
+	{
+		ent->client->ps.stats[STAT_ALT_FIRE_OK] = canAltFireWeapon( ent ) ? 1 : 0;
+	}
+
 	// GalaxyRP fix: [Death System] serve a downed player's countdown, here for the same structural
 	// reason the block above is here: this runs for every client every server frame, and it runs
 	// ABOVE the spectator split below. ClientTimerActions() reaches neither a spectator nor a client

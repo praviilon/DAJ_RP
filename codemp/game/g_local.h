@@ -2551,6 +2551,14 @@ void ClientEndFrame			( gentity_t *ent );
 void G_RunClient			( gentity_t *ent );
 
 //
+// bg_pmove.c (server-only part)
+//
+// GalaxyRP fix: [Weapons] the alt-fire policy. Server-only because it reads sess.loggedin and
+// pers.skill_levels[]; ClientEndFrame() publishes its answer in ps.stats[STAT_ALT_FIRE_OK] and the
+// shared PM_Weapon() reads that on both sides. See the stat's comment in bg_public.h.
+qboolean canAltFireWeapon( gentity_t *ent );
+
+//
 // g_team.c
 //
 qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
