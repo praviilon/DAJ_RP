@@ -2627,6 +2627,10 @@ Ghoul2 Insert End
 
 	CG_RegisterCvars();
 
+	// GalaxyRP: [TaystJK] after the cvars, so rp_taystjk_writefolder exists; see bg_misc.c. This is
+	// the one place that reaches a player who joined from the server browser without the launcher.
+	RP_AdoptTaystJKWriteFolder();
+
 	CG_InitConsoleCommands();
 
 	cg.renderingThirdPerson = cg_thirdPerson.integer;
