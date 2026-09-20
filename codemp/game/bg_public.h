@@ -1764,6 +1764,7 @@ typedef struct saberInfo_s {
 
 bgEntity_t *PM_BGEntForNum( int num );
 qboolean BG_KnockDownable(playerState_t *ps);
+qboolean BG_FileListMayBeTruncated( const char *dir, const char *ext, int fileCnt, int used, int bufsize ); // GalaxyRP fix: [Vehicles] bg_vehicleLoad.c
 qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled);
 
 

@@ -372,7 +372,12 @@ typedef struct vehicleInfo_s {
 
 #define	VFOFS(x) offsetof(vehicleInfo_t, x)
 
-#define MAX_VEHICLES	128	//sigh... no more than 64 individual vehicles // zyk: default 16. Changed to 128
+// GalaxyRP fix: [Vehicles] 128 -> 256. This bounds distinct vehicle TYPES looked up by name since
+// the module loaded (VEH_VehicleIndexForName fills g_vehicleInfo lazily), not files installed and
+// not vehicles spawned. A vehicleInfo_t is ~950 bytes, so 256 is ~244 KB of static data in each
+// of game, cgame and ui. No index crosses the network: clients resolve the type by name from the
+// "$name" model config string, so this can change without any protocol concern.
+#define MAX_VEHICLES	256	//sigh... no more than 64 individual vehicles // zyk: default 16. Changed to 128
 #define VEHICLE_BASE	0
 #define VEHICLE_NONE	-1
 

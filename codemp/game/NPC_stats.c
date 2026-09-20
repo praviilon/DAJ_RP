@@ -3588,7 +3588,9 @@ void NPC_LoadParms( void )
 	char		/**buffer,*/ *holdChar, *marker;
 
 	// zyk: changed from 2048 to 8192
-	char		npcExtensionListBuf[8192];			//	The list of file names read in
+	// GalaxyRP fix: [Vehicles] 8192 -> 32768; see MAX_VEH_EXT_LIST_SIZE in bg_vehicleLoad.c. Every
+	// vehicle needs an .npc as well, and the engine drops names silently once this is full.
+	char		npcExtensionListBuf[32768];			//	The list of file names read in
 
 	fileHandle_t f;
 	len = 0;
@@ -3616,7 +3618,9 @@ void NPC_LoadParms( void )
 		}
 		else
 		{
-			if ( totallen + len >= MAX_NPC_DATA_SIZE ) {
+			// GalaxyRP fix: [Vehicles] "+ 1" for the "\n" appended below: with the file text alone
+			// filling the buffer to the last byte, that newline's terminator landed one past the end.
+			if ( totallen + len + 1 >= MAX_NPC_DATA_SIZE ) {
 				trap->FS_Close( f );
 				trap->Error( ERR_DROP, "NPC extensions (*.npc) are too large" );
 			}
@@ -3636,4 +3640,7 @@ void NPC_LoadParms( void )
 			//rww  12/19/02-actually the probelm was npcParseBuffer not being nul-term'd, which could cause issues in the strcat too
 		}
 	}
+
+	// GalaxyRP fix: [Vehicles] holdChar has walked exactly the bytes the names occupied.
+	BG_FileListMayBeTruncated( "ext_data/NPCs", ".npc", fileCnt, (int)(holdChar - npcExtensionListBuf), sizeof( npcExtensionListBuf ) );
 }

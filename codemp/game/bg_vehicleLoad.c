@@ -42,6 +42,17 @@ extern stringID_table_t animTable [MAX_ANIMATIONS+1];
 #define MAX_VEH_WEAPON_DATA_SIZE 0x40000 // 0x4000
 #define MAX_VEHICLE_DATA_SIZE 0x100000 // 0x10000
 
+// GalaxyRP fix: [Vehicles] the buffers FS_GetFileList packs the file names into, NUL-separated.
+// The engine stops listing the moment the next name would not fit (files.cpp: nTotal + nLen + 1 <
+// bufsize) and returns only the count it copied -- no error, no hint -- so with the old 2048 bytes
+// roughly the 80th to 130th .veh, depending on name length, was the last one ever read, and the
+// rest surfaced later as "Could not find Vehicle". 16384 lists ~1000 names, more text than
+// MAX_VEHICLE_DATA_SIZE holds, so the text limit -- which is loud -- is always the one that binds.
+// The engine's own per-listing cap is 4096 files. BG_FileListMayBeTruncated below turns the
+// silent case into a console warning should either ever fill again.
+#define MAX_VEH_EXT_LIST_SIZE			16384
+#define MAX_VEH_WEAPON_EXT_LIST_SIZE	8192
+
 char	VehWeaponParms[MAX_VEH_WEAPON_DATA_SIZE];
 char	VehicleParms[MAX_VEHICLE_DATA_SIZE];
 
@@ -50,6 +61,30 @@ void BG_ClearVehicleParseParms(void)
 	//You can't strcat to these forever without clearing them!
 	VehWeaponParms[0] = 0;
 	VehicleParms[0] = 0;
+}
+
+/*
+============
+BG_FileListMayBeTruncated
+GalaxyRP fix: [Vehicles] FS_GetFileList cannot report that it ran out of room: it returns the
+count it copied, and a list of N files that fit looks the same as N files copied out of many. What
+the caller can tell is how close to the end of the buffer the list stopped. A truncated list
+always stops within one file name (MAX_QPATH, plus the separator) of the end -- that is the
+condition the engine stopped on -- while a complete list rarely does, so this warns on "within
+one name" and says "may". "used" is the bytes the names occupied, NUL separators included.
+============
+*/
+qboolean BG_FileListMayBeTruncated( const char *dir, const char *ext, int fileCnt, int used, int bufsize )
+{
+	if ( bufsize - used > MAX_QPATH + 1 )
+	{
+		return qfalse;
+	}
+
+	Com_Printf( S_COLOR_YELLOW "WARNING: the %s file list under %s/ stopped %d bytes short of its %d-byte buffer after %d files. "
+		"The engine stops listing silently when the buffer is full, so files past that point may not have been loaded.\n",
+		ext, dir, bufsize - used, bufsize, fileCnt );
+	return qtrue;
 }
 
 #if defined(_GAME) || defined(_CGAME)
@@ -367,7 +402,7 @@ int VEH_VehWeaponIndexForName( const char *vehWeaponName )
 	//haven't loaded it yet
 	if ( vw >= MAX_VEH_WEAPONS )
 	{//no more room!
-		Com_Printf( S_COLOR_RED"ERROR: Too many Vehicle Weapons (max 16), aborting load on %s!\n", vehWeaponName );
+		Com_Printf( S_COLOR_RED"ERROR: Too many Vehicle Weapons (max %d), aborting load on %s!\n", MAX_VEH_WEAPONS, vehWeaponName ); // GalaxyRP fix: [Vehicles] said "max 16" whatever the constant
 		return VEH_WEAPON_NONE;
 	}
 	//we have room for another one, load it up and return the index
@@ -1272,9 +1307,8 @@ void BG_VehWeaponLoadParms( void )
 {
 	int			len, totallen, vehExtFNLen, fileCnt, i;
 	char		*holdChar, *marker;
-	char		vehWeaponExtensionListBuf[2048];			//	The list of file names read in
+	char		vehWeaponExtensionListBuf[MAX_VEH_WEAPON_EXT_LIST_SIZE];	//	The list of file names read in
 	fileHandle_t	f;
-	char		*tempReadBuffer;
 
 	len = 0;
 
@@ -1287,12 +1321,6 @@ void BG_VehWeaponLoadParms( void )
 	fileCnt = trap->FS_GetFileList("ext_data/vehicles/weapons", ".vwp", vehWeaponExtensionListBuf, sizeof(vehWeaponExtensionListBuf) );
 
 	holdChar = vehWeaponExtensionListBuf;
-
-	tempReadBuffer = (char *)BG_TempAlloc(MAX_VEH_WEAPON_DATA_SIZE);
-
-	// NOTE: Not use TempAlloc anymore...
-	//Make ABSOLUTELY CERTAIN that BG_Alloc/etc. is not used before
-	//the subsequent BG_TempFree or the pool will be screwed.
 
 	for ( i = 0; i < fileCnt; i++, holdChar += vehExtFNLen + 1 )
 	{
@@ -1308,22 +1336,25 @@ void BG_VehWeaponLoadParms( void )
 		}
 		else
 		{
-			trap->FS_Read(tempReadBuffer, len, f);
-			tempReadBuffer[len] = 0;
+			// GalaxyRP fix: [Vehicles] the room test comes first and counts the separator that
+			// may be added below. It used to run after the whole file had been read into a
+			// BG_TempAlloc buffer of exactly MAX_VEH_WEAPON_DATA_SIZE bytes, so one file that
+			// large overran the buffer before the test ever ran. Reading straight into the
+			// parse buffer removes that copy and the pool allocation of this size with it.
+			if ( totallen + len + 1 >= MAX_VEH_WEAPON_DATA_SIZE ) {
+				trap->FS_Close( f );
+				Com_Error(ERR_DROP, "Vehicle Weapon extensions (*.vwp) are too large" );
+			}
 
 			// Don't let it end on a } because that should be a stand-alone token.
 			if ( totallen && *(marker-1) == '}' )
 			{
-				strcat( marker, " " );
+				*marker++ = ' ';
 				totallen++;
-				marker++;
 			}
 
-			if ( totallen + len >= MAX_VEH_WEAPON_DATA_SIZE ) {
-				trap->FS_Close( f );
-				Com_Error(ERR_DROP, "Vehicle Weapon extensions (*.vwp) are too large" );
-			}
-			strcat( marker, tempReadBuffer );
+			trap->FS_Read(marker, len, f);
+			marker[len] = 0;
 			trap->FS_Close( f );
 
 			totallen += len;
@@ -1331,7 +1362,7 @@ void BG_VehWeaponLoadParms( void )
 		}
 	}
 
-	BG_TempFree(MAX_VEH_WEAPON_DATA_SIZE);
+	BG_FileListMayBeTruncated( "ext_data/vehicles/weapons", ".vwp", fileCnt, (int)(holdChar - vehWeaponExtensionListBuf), sizeof( vehWeaponExtensionListBuf ) );
 }
 
 void BG_VehicleLoadParms( void )
@@ -1339,9 +1370,8 @@ void BG_VehicleLoadParms( void )
 	int			len, totallen, vehExtFNLen, fileCnt, i;
 //	const char	*filename = "ext_data/vehicles.dat";
 	char		*holdChar, *marker;
-	char		vehExtensionListBuf[2048];			//	The list of file names read in
+	char		vehExtensionListBuf[MAX_VEH_EXT_LIST_SIZE];		//	The list of file names read in
 	fileHandle_t	f;
-	char		*tempReadBuffer;
 
 	len = 0;
 
@@ -1354,12 +1384,6 @@ void BG_VehicleLoadParms( void )
 	fileCnt = trap->FS_GetFileList("ext_data/vehicles", ".veh", vehExtensionListBuf, sizeof(vehExtensionListBuf) );
 
 	holdChar = vehExtensionListBuf;
-
-	tempReadBuffer = (char *)BG_TempAlloc(MAX_VEHICLE_DATA_SIZE);
-
-	// NOTE: Not use TempAlloc anymore...
-	//Make ABSOLUTELY CERTAIN that BG_Alloc/etc. is not used before
-	//the subsequent BG_TempFree or the pool will be screwed.
 
 	for ( i = 0; i < fileCnt; i++, holdChar += vehExtFNLen + 1 )
 	{
@@ -1375,22 +1399,22 @@ void BG_VehicleLoadParms( void )
 		}
 		else
 		{
-			trap->FS_Read(tempReadBuffer, len, f);
-			tempReadBuffer[len] = 0;
+			// GalaxyRP fix: [Vehicles] see BG_VehWeaponLoadParms: test before read, separator
+			// counted, no BG_TempAlloc copy.
+			if ( totallen + len + 1 >= MAX_VEHICLE_DATA_SIZE ) {
+				trap->FS_Close( f );
+				Com_Error(ERR_DROP, "Vehicle extensions (*.veh) are too large" );
+			}
 
 			// Don't let it end on a } because that should be a stand-alone token.
 			if ( totallen && *(marker-1) == '}' )
 			{
-				strcat( marker, " " );
+				*marker++ = ' ';
 				totallen++;
-				marker++;
 			}
 
-			if ( totallen + len >= MAX_VEHICLE_DATA_SIZE ) {
-				trap->FS_Close( f );
-				Com_Error(ERR_DROP, "Vehicle extensions (*.veh) are too large" );
-			}
-			strcat( marker, tempReadBuffer );
+			trap->FS_Read(marker, len, f);
+			marker[len] = 0;
 			trap->FS_Close( f );
 
 			totallen += len;
@@ -1398,7 +1422,7 @@ void BG_VehicleLoadParms( void )
 		}
 	}
 
-	BG_TempFree(MAX_VEHICLE_DATA_SIZE);
+	BG_FileListMayBeTruncated( "ext_data/vehicles", ".veh", fileCnt, (int)(holdChar - vehExtensionListBuf), sizeof( vehExtensionListBuf ) );
 
 	numVehicles = 1;//first one is null/default
 	//set the first vehicle to default data
