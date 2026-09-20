@@ -2822,11 +2822,13 @@
 			decoration
 		}
 
+		// GalaxyRP: [Grapple Hook] skill index 55 (label [56], the former Improvements placeholder) is
+		// the Grapple Hook skill; it sits above FlameThrower (58) so the panel keeps counting upward; FlameThrower moves down one row.
 		itemDef 
 		{
-			name				flameThrowerSkillButton
+			name				grappleHookSkillButton
 			group				itemsSkillsControls
-			text				"[58] FlameThrower"
+			text				"[56] Grapple Hook"
 			descText			""
 			type				1
 			font				3
@@ -2839,13 +2841,11 @@
 			decoration
 		}
 
-		// GalaxyRP: [Grapple Hook] skill index 55 (label [56], the former Improvements placeholder) is
-		// the Grapple Hook skill; it takes the next 20px row of the Items panel, below FlameThrower.
 		itemDef 
 		{
-			name				grappleHookSkillButton
+			name				flameThrowerSkillButton
 			group				itemsSkillsControls
-			text				"[56] Grapple Hook"
+			text				"[58] FlameThrower"
 			descText			""
 			type				1
 			font				3
@@ -3445,15 +3445,16 @@
 			decoration
 		}
 
+		// GalaxyRP: [Grapple Hook] the level field for the [56] Grapple Hook row above.
 		itemDef 
 		{
-			name				flameThrowerSkillValue
+			name				grappleHookSkillValue
 			group				levelitem
 			rect				400 280 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
-			cvar				"ui_rp_skill_58_level" 
+			cvar				"ui_zyk_skill_56_level" 
 			textalign			ITEM_ALIGN_LEFT
 			font				3
 			textscale			.5
@@ -3462,16 +3463,15 @@
 			decoration
 		}
 
-		// GalaxyRP: [Grapple Hook] the level field for the [56] Grapple Hook row above.
 		itemDef 
 		{
-			name				grappleHookSkillValue
+			name				flameThrowerSkillValue
 			group				levelitem
 			rect				400 300 30 30
 			style				WINDOW_STYLE_EMPTY
 			type				ITEM_TYPE_EDITFIELD
 			text				""
-			cvar				"ui_zyk_skill_56_level" 
+			cvar				"ui_rp_skill_58_level" 
 			textalign			ITEM_ALIGN_LEFT
 			font				3
 			textscale			.5

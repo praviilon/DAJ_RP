@@ -4472,9 +4472,16 @@ void ClientThink_real( gentity_t *ent ) {
 
 	SendPendingPredictableEvents( &ent->client->ps );
 
-	if ( !( ent->client->ps.eFlags & EF_FIRING ) ) {
-		client->fireHeld = qfalse;		// for grapple
-	}
+	// GalaxyRP fix: [Grapple Hook] the Quake 3 line that used to be here --
+	//
+	//     if ( !( ent->client->ps.eFlags & EF_FIRING ) ) client->fireHeld = qfalse;  // for grapple
+	//
+	// -- is gone. Q3's offhand hook fired with the ATTACK button, so "not firing" meant "let go". Ours
+	// fires with BUTTON_GRAPPLE, and fireHeld is the latch the release block above reads; with this
+	// line still here every ClientThink_real that saw attack up cleared the latch, the next usercmd
+	// freed the hook, and g_hookFloodProtect later the still-held button fired a fresh one: a hook
+	// that lived for one frame and a fire sound every 600ms. TaystJK removed the line too. fireHeld
+	// is now written only by Weapon_HookFire(), Weapon_HookFree() and G_FreeEntity()'s detach net.
 
 	// use the snapped origin for linking so it matches client predicted versions
 	VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
