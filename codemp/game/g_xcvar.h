@@ -473,7 +473,17 @@ XCVAR_DEF( zyk_allow_duel_saber_touch_damage, "0",		NULL,				CVAR_ARCHIVE|CVAR_N
 XCVAR_DEF( zyk_duel_saberDmgDelay_Idle,		"350",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_saberDamageScale,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_radius,					"1024",		RP_CVU_duelRadius,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaScale,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Duel Tournament] CVAR_LATCH, for the same reason as zyk_duel_tournament_duel_time
+// below. The globe is spawned once, when the tournament starts, with "zykmodelscale" set from this
+// cvar's value at that moment (Cmd_DuelMode_f) -- but every boundary test afterwards reads the LIVE
+// cvar: duelists are killed for leaving the arena and everyone else for entering it (G_RunFrame),
+// NPCs are killed and missiles, mines, detpacks and placed items removed inside it (g_main.c,
+// g_missile.c, g_weapon.c, g_items.c, g_object.c). Change it mid-tournament and the visible globe no
+// longer matches the invisible boundary: shrink it and a duelist standing inside the globe dies
+// for "leaving", grow it and a spectator standing outside the globe dies for "entering". The
+// clamp in RP_CVU_duelTournamentArenaScale() only bounds the value; the latch removes the mid-event
+// route. trackChange qfalse for the reason given on the allow cvars above.
+XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaScale,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 // GalaxyRP fix: [Duel Tournament] CVAR_LATCH, because lowering this mid-match freezes the duelists
 // for the rest of it. The arena-entry freeze in bg_pmove.c asks
 // "(level.duel_tournament_timer - level.time) > (zyk_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME)",
@@ -521,7 +531,13 @@ XCVAR_DEF( rp_allow_playsound_command, "1",				NULL,				CVAR_ARCHIVE|CVAR_NOREST
 // already made. Moved here from beside zyk_allow_duel_tournament for the same reason: the name and
 // the block it sits in should agree.
 XCVAR_DEF( rp_allow_force_duel,			"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Private Duel] CVAR_LATCH. This is read every frame (ClientThink_real sets the
+// pmove tracemask from it), and at 1 duellists pass through other players, so two of them are
+// often overlapping. Flip it 1 -> 0 at that moment and both start their next move inside a body
+// that is solid again; PM's slide move never ejects from an all-solid start, so they stay stuck
+// until the duel ends by death or distance. 0 -> 1 is harmless, but a setting that is only ever
+// a server-style choice gains nothing from applying mid-map. trackChange qfalse as above.
+XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_duel_tournament_time_to_start, "12000", RP_CVU_duelTournamentTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_buying_selling_cooldown to rp_buying_cooldown -- there has
