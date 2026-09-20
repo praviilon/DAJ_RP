@@ -499,7 +499,24 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 		return;
 	}
 
+	// GalaxyRP fix: [Drop] the stun baton is on this list now. It is the only weapon that reaches
+	// this function with ammoIndex == AMMO_NONE, and AMMO_NONE is 0 -- which is not a spare slot,
+	// it is where a vehicle's own weapon keeps its ammo (bg_pmove.c fires from ps.ammo[0], cg_draw.c
+	// draws it). Every ammo read below would therefore have been reading the speeder out from under
+	// a mounted victim, and "ammo[ammoIndex] -= quantity" would have taken 100 rounds of it.
+	//
+	// On foot this changes nothing: ps.ammo[0] is 0 there, so ammoSub came out at -100, ammoQuan at
+	// 100 - 100 = 0, and the function already returned without tossing. The baton has never been
+	// disarmable by a force push and still is not. What is closed is the mounted case, where slot 0
+	// holds a real number and the early return therefore did not fire.
+	//
+	// Deliberately an early return rather than Cmd_Drop_f's has_ammo_type gate. That gate would
+	// make the arithmetic safe and thereby START letting a push knock the baton out of someone's
+	// hands on foot, which is a gameplay change nobody asked for. With the baton out, every weapon
+	// below is guaranteed a real ammo index, which is also why the det-pack test further down needs
+	// no such gate.
 	if (weapon == WP_NONE ||
+		weapon == WP_STUN_BATON ||
 		weapon == WP_MELEE ||
 		weapon == WP_SABER ||
 		weapon == WP_EMPLACED_GUN ||
@@ -545,7 +562,14 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 		self->client->ps.ammo[weaponData[weapon].ammoIndex] = 0;
 	}
 
-	if ((self->client->ps.ammo[weaponData[weapon].ammoIndex] < 1 && weapon != WP_DET_PACK) ||
+	// GalaxyRP fix: [Drop] the first clause used to carry "&& weapon != WP_DET_PACK", and the second
+	// excludes the det pack as well, so for that one weapon the whole test could never be true and it
+	// was never taken off the victim. This is the same defect Cmd_Drop_f had, where it was an entity
+	// fountain; here it is only an inconsistency, because the ammoQuan check above refuses the toss
+	// once the charges are gone, so a det pack at zero simply sat in STAT_WEAPONS doing nothing while
+	// a thermal or a trip mine in the same state left properly. It leaves with its last charge now,
+	// like the other two.
+	if ((self->client->ps.ammo[weaponData[weapon].ammoIndex] < 1) ||
 		(weapon != WP_THERMAL && weapon != WP_DET_PACK && weapon != WP_TRIP_MINE))
 	{
 		int i = 0;
@@ -624,7 +648,9 @@ void TossClientItems( gentity_t *self ) {
 		(self->client->ps.ammo[ weaponData[weapon].ammoIndex ] ||
 		weapon == WP_STUN_BATON
 		) ) {
-		gentity_t *te;
+		gentity_t	*te;
+		gentity_t	*dropped;
+		int			packGive, carried, give;
 
 		// find the item type for this weapon
 		item = BG_FindItemForWeapon( weapon );
@@ -634,8 +660,50 @@ void TossClientItems( gentity_t *self ) {
 		te->r.svFlags |= SVF_BROADCAST;
 		te->s.eventParm = self->s.number;
 
-		// spawn the item
-		Drop_Item( self, item, 0 );
+		// GalaxyRP fix: [Drop] the dropped weapon carries what the victim was actually holding.
+		//
+		// Drop_Item() returns the entity and this used to throw the return value away, so count
+		// stayed at the 0 that G_Spawn() left it at -- and Pickup_Weapon() (g_items.c) reads count
+		// as "0 means give the item's DEFAULT quantity". FL_DROPPED_ITEM then skips the halving
+		// rules below that, so every corpse handed out a full pack no matter what it had died
+		// holding: a repeater with two bolts left dropped fifty. Nothing was deducted from the
+		// victim either, so the ammo came out of nowhere. Every armed NPC does this too -- they
+		// spawn with 100 rounds (NPC_spawn.c, NPC_stats.c) -- which on a busy map is a steady
+		// fountain rather than an occasional windfall.
+		//
+		// The ceiling is Cmd_Drop_f's: at most ceil(quantity * zyk_add_ammo_scale), and never more
+		// than the victim had. TossClientWeapon() below caps at the unscaled quantity instead;
+		// matching the command rather than the force-push disarm keeps the two drops a player can
+		// actually compare -- "I threw it" and "they killed me for it" -- worth the same.
+		//
+		// count is stored in PRE-scale units, because Pickup_Weapon() multiplies by the scale
+		// again on the way out. That is the same round trip Cmd_Drop_f does (it divides for
+		// exactly this reason) and the opposite convention to the raw quantity TossClientWeapon
+		// stores -- which is consistent, since that one is capped pre-scale.
+		//
+		// Not deducted from the victim, unlike the other two. Both are drops by a player who keeps
+		// playing; this one is only reached from player_die(), ClientDisconnect() and the rancor,
+		// and in all three the ammo stops mattering inside the same frame -- ClientSpawn() memsets
+		// the client, disconnect frees it. The character's saved ammo is already written by then
+		// too: update_weapons_table_row_with_current_values() runs far above this in player_die().
+		//
+		// AMMO_NONE weapons carry nothing. Of the ones that reach here that is only the stun baton
+		// (the test above lets it through explicitly), and AMMO_NONE is slot 0 -- the VEHICLE's own
+		// weapon ammo, not a spare. Reading it for a mounted victim would have handed a dropped
+		// baton a share of the speeder's ammo. It makes no difference at the far end either way,
+		// since Add_Ammo() has no AMMO_NONE branch, but the arithmetic should not depend on that.
+		dropped = Drop_Item( self, item, 0 );
+
+		packGive = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity
+							 * zyk_add_ammo_scale.value);
+		carried = (weaponData[weapon].ammoIndex != AMMO_NONE)
+					? self->client->ps.ammo[weaponData[weapon].ammoIndex] : 0;
+		give = (carried < packGive) ? carried : packGive;
+
+		if ( zyk_add_ammo_scale.value > 0 && give > 0 )
+			dropped->count = (int)(give / zyk_add_ammo_scale.value);
+		else
+			dropped->count = -1;	// carries nothing -- the same -1 Cmd_Drop_f uses
 	}
 
 	// drop all the powerups if not in teamplay

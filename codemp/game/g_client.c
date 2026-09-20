@@ -4570,7 +4570,32 @@ void ClientDisconnect( int clientNum ) {
 
 		// They don't get to take powerups with them!
 		// Especially important for stuff like CTF flags
-		TossClientItems( ent );
+		//
+		// GalaxyRP fix: [Drop] ...but a corpse has already given them up, and this block tested only
+		// "connected" and "not a spectator", so a player who died and disconnected before respawning
+		// ran TossClientItems() a second time.
+		//
+		// Stated honestly: that second run drops NOTHING today, and this guard is belt and braces
+		// rather than a repair. It is safe only by two side effects of where player_die() happens to
+		// put things, both of them BELOW its own call to the same function -- s.weapon becomes
+		// WP_NONE, which fails the weapon test at the top of the toss, and the powerups array is
+		// memset to zero, which empties the loop underneath it. Neither line is there for this
+		// reason, and either could move. The guard says the invariant out loud instead of leaving it
+		// resting on that, and costs one comparison on a path that runs once per disconnect.
+		//
+		// ps.pm_type rather than health: player_die() sets PM_DEAD itself, so this is true for every
+		// corpse however it got there, including the direct player->die() calls in NPC_spawn.c that
+		// never pass through G_Damage and can leave health above zero. A DOWNED player is explicitly
+		// not PM_DEAD -- ClientThink_real()'s pm_type ladder suppresses it while bit 6 is set -- so
+		// one who disconnects still drops, which is what we want. Spectators are already excluded
+		// above.
+		//
+		// The test could not live inside TossClientItems() in any case: player_die() sets PM_DEAD
+		// well before it calls that function, so a guard there would cancel the ordinary death drop.
+		if ( ent->client->ps.pm_type != PM_DEAD )
+		{
+			TossClientItems( ent );
+		}
 	}
 
 	G_LogPrintf( "ClientDisconnect: %i [%s] (%s) \"%s^7\"\n", clientNum, ent->client->sess.IP, ent->client->pers.guid, ent->client->pers.netname );
