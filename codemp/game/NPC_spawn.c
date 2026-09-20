@@ -4404,7 +4404,10 @@ gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboo
 		return NULL;
 	}
 
-	NPCspawner = G_Spawn();
+	// GalaxyRP: [Logical Entities] this spawner lives one frame and only exists so NPC_Spawn_Do
+	// has an origin, angles and an NPC_type to read; it is an npc_spawner in all but name, so it
+	// takes a logical slot when those are on (as TaystJK does) and never a networked one.
+	NPCspawner = RP_SpawnForClassname( "npc_spawner", qfalse, qfalse );
 
 	NPCspawner->think = G_FreeEntity;
 	NPCspawner->nextthink = level.time + FRAMETIME;
@@ -4442,7 +4445,12 @@ gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboo
 	//set the yaw so that they face away from player
 	NPCspawner->s.angles[1] = ent->client->ps.viewangles[1];
 
-	trap->LinkEntity((sharedEntity_t *)NPCspawner);
+	// GalaxyRP: [Logical Entities] see above -- a logical spawner is never linked. Nothing reads
+	// the link: NPC_Spawn_Do takes the origin from the struct.
+	if (!NPCspawner->isLogical)
+	{
+		trap->LinkEntity((sharedEntity_t *)NPCspawner);
+	}
 
 	NPCspawner->NPC_type = G_NewString( npc_type );
 

@@ -75,7 +75,13 @@ void G_VehicleSpawn( gentity_t *self )
 
 	VectorCopy( self->r.currentOrigin, self->s.origin );
 
-	trap->LinkEntity( (sharedEntity_t *)self );
+	// GalaxyRP: [Logical Entities] "self" is the npc_vehicle SPAWNER, a logical class; the vehicle
+	// it produces below is spawned and linked by NPC_Spawn_Do as a networked NPC. The spawner
+	// itself must not be handed to the engine.
+	if ( !self->isLogical )
+	{
+		trap->LinkEntity( (sharedEntity_t *)self );
+	}
 
 	if ( !self->count )
 	{

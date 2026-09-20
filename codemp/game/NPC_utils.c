@@ -880,6 +880,16 @@ qboolean G_ActivateBehavior (gentity_t *self, int bset )
 		return qfalse;
 	}
 
+	// GalaxyRP: [Logical Entities] ICARUS_RunScript below is indexed by entity number in the
+	// engine, which was never told the logical region exists. An entity with a behaviour set is
+	// allocated networked for exactly that reason (see RP_SpawnRouteNoteKey), so this only fires
+	// for a script set on a logical entity after it was spawned -- and then refusing is the safe
+	// answer.
+	if ( self->isLogical )
+	{
+		return qfalse;
+	}
+
 	bs_name = self->behaviorSet[bset];
 
 	if( !(VALIDSTRING( bs_name )) )

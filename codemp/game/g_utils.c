@@ -815,12 +815,12 @@ gentity_t *G_Find (gentity_t *from, int fieldofs, const char *match)
 {
 	char	*s;
 
-	if (!from)
-		from = g_entities;
-	else
-		from++;
-
-	for ( ; from < &g_entities[level.num_entities] ; from++)
+	// GalaxyRP: [Logical Entities] the networked region first, then the logical one, so every
+	// caller -- G_UseTargets, G_PickTarget, spawn-point selection, the quest code -- finds a
+	// target_relay or an info_player_deathmatch wherever it was allocated. Resuming from a
+	// logical entity continues in the logical region; resuming from the last networked one
+	// crosses over. RP_NextEntityInAnyRegion() encodes that walk.
+	for ( from = RP_NextEntityInAnyRegion( from ); from; from = RP_NextEntityInAnyRegion( from ) )
 	{
 		if (!from->inuse)
 			continue;
@@ -1275,13 +1275,22 @@ void G_InitGentity( gentity_t *e ) {
 	e->inuse = qtrue;
 	e->classname = "noclass";
 	e->s.number = e - g_entities;
+	// GalaxyRP: [Logical Entities] the region is a property of the slot, decided here and nowhere
+	// else. (TaystJK tests "< 1023" -- the world slot -- which happens never to matter; the constant
+	// it means is MAX_GENTITIES.)
+	e->isLogical = (e->s.number >= MAX_GENTITIES) ? qtrue : qfalse;
 	e->r.ownerNum = ENTITYNUM_NONE;
 	e->s.modelGhoul2 = 0; //assume not
 
 	// zyk: setting default count
 	level.zyk_spawn_strings_values_count[e->s.number] = 0;
 
-	trap->ICARUS_FreeEnt( (sharedEntity_t *)e );	//ICARUS information must be added after this point
+	// GalaxyRP: [Logical Entities] the engine indexes its ICARUS bookkeeping by entity number and
+	// was never told the logical region exists, so a logical slot must not be passed to it.
+	if ( !e->isLogical )
+	{
+		trap->ICARUS_FreeEnt( (sharedEntity_t *)e );	//ICARUS information must be added after this point
+	}
 }
 
 //give us some decent info on all the active ents -rww
@@ -1460,6 +1469,7 @@ gentity_t *G_Spawn( void ) {
 
 			// reuse this slot
 			G_InitGentity( e );
+			RP_LegacySlotAssign( e );
 			return e;
 		}
 		// GalaxyRP fix: [Entity System] this was "i != MAX_GENTITIES", and that is a typo with a
@@ -1532,7 +1542,159 @@ gentity_t *G_Spawn( void ) {
 		&level.clients[0].ps, sizeof( level.clients[0] ) );
 
 	G_InitGentity( e );
+	RP_LegacySlotAssign( e );
 	return e;
+}
+
+/*
+=================
+G_SpawnLogical
+
+GalaxyRP: [Logical Entities] the upper-region counterpart of G_Spawn(): a slot at or above
+MAX_GENTITIES that the engine never hears about. Same search as G_Spawn -- reuse a free slot,
+preferring one not freed in the last second, then open a new one -- over
+[MAX_GENTITIES, MAX_GENTITIES + level.num_logicalents). No LocateGameData: there is nothing to tell
+the server. Two things are deliberately unlike TaystJK's version: the second (force) pass really
+runs when the region is full of recently-freed slots (their "i != MAX_ENTITIESTOTAL" break made it
+unreachable, the same typo G_Spawn had), and the exhaustion test is ">=" rather than their
+"== MAX_ENTITIESTOTAL - 1", which is one short and let them return the slot past the array.
+Exhausting 3072 logical slots is a map that is broken, not a server that must stay up, so this
+one keeps the ERR_DROP -- but says why in the log first, as G_Spawn does.
+=================
+*/
+gentity_t *G_SpawnLogical( void ) {
+	int			i, force;
+	gentity_t	*e;
+
+	e = NULL;
+	i = 0;
+	for ( force = 0; force < 2; force++ ) {
+		e = g_logicalents;
+		for ( i = MAX_GENTITIES; i < MAX_GENTITIES + level.num_logicalents; i++, e++ ) {
+			if ( e->inuse ) {
+				continue;
+			}
+
+			// the first couple seconds of server time can involve a lot of
+			// freeing and allocating, so relax the replacement policy
+			if ( !force && e->freetime > level.startTime + 2000 && level.time - e->freetime < 1000 )
+			{
+				continue;
+			}
+
+			// reuse this slot
+			G_InitGentity( e );
+			RP_LegacySlotAssign( e );
+			return e;
+		}
+		if ( i < MAX_ENTITIESTOTAL ) {
+			break;	// there is still room to open a new slot; no need to force-reuse one
+		}
+	}
+	if ( i >= MAX_ENTITIESTOTAL ) {
+		G_LogPrintf( "logical entity region exhausted at %d slots: no free logical entities and "
+			"nothing recently freed to recycle.\n", level.num_logicalents );
+		trap->Error( ERR_DROP, "G_SpawnLogical: no free logical entities" );
+		return NULL;
+	}
+
+	// open up a new slot
+	level.num_logicalents++;
+
+	G_InitGentity( e );
+	RP_LegacySlotAssign( e );
+	return e;
+}
+
+// GalaxyRP: [Logical Entities] the legacy-allocator simulation, see gentity_t::legacySlot in
+// g_local.h. The old G_Spawn, during a map's spawn pass, always took the lowest slot at or above
+// MAX_CLIENTS that was not in use, and opened a new one only when there was none -- the "do not
+// reuse a slot freed less than a second ago" rule never applied then, because every free during
+// the pass carries freetime == level.startTime. That is the whole algorithm, so it is cheap to
+// run beside the real allocator: every allocation during the pass, in either region, takes the
+// next legacy slot, and every free during the pass gives its legacy slot back. Outside the pass
+// nothing here runs and legacySlot stays 0. With rp_logical_entities 0 the simulation and the
+// real allocator agree slot for slot, which is what the harness checks.
+void RP_LegacySlotsBegin( void ) {
+	int i;
+
+	memset( level.legacy_slot_inuse, 0, sizeof( level.legacy_slot_inuse ) );
+	for ( i = 0; i < level.num_entities && i < MAX_GENTITIES; i++ ) {
+		// the client slots are never handed out whatever their state; above them, the table as it
+		// stands (the body queue, in practice)
+		level.legacy_slot_inuse[i] = ( i < MAX_CLIENTS || g_entities[i].inuse ) ? 1 : 0;
+	}
+	level.legacy_slot_next = level.num_entities;
+}
+
+void RP_LegacySlotAssign( gentity_t *e ) {
+	int i;
+
+	if ( !level.spawning || !e ) {
+		return;
+	}
+
+	for ( i = MAX_CLIENTS; i < level.legacy_slot_next; i++ ) {
+		if ( !level.legacy_slot_inuse[i] ) {
+			level.legacy_slot_inuse[i] = 1;
+			e->legacySlot = i;
+			return;
+		}
+	}
+
+	if ( level.legacy_slot_next >= ENTITYNUM_MAX_NORMAL ) {
+		// the old allocator would have dropped the server here; there is no legacy number to give
+		e->legacySlot = 0;
+		return;
+	}
+
+	level.legacy_slot_inuse[level.legacy_slot_next] = 1;
+	e->legacySlot = level.legacy_slot_next++;
+}
+
+void RP_LegacySlotRelease( gentity_t *e ) {
+	if ( !level.spawning || !e || e->legacySlot <= 0 || e->legacySlot >= MAX_GENTITIES ) {
+		return;
+	}
+
+	level.legacy_slot_inuse[e->legacySlot] = 0;
+}
+
+// GalaxyRP: [Logical Entities] see g_local.h. Informational only.
+int G_FreeLogicalEntityCount( void ) {
+	int			i, count = 0;
+	gentity_t	*e;
+
+	e = g_logicalents;
+	for ( i = 0; i < level.num_logicalents; i++, e++ ) {
+		if ( !e->inuse ) {
+			count++;
+		}
+	}
+
+	return count + (MAX_LOGICENTITIES - level.num_logicalents);
+}
+
+// GalaxyRP: [Logical Entities] see RP_FOR_EACH_ENTITY in g_local.h: the networked slots
+// [0, num_entities), then the logical ones [MAX_GENTITIES, MAX_GENTITIES + num_logicalents).
+gentity_t *RP_NextEntityInAnyRegion( gentity_t *from ) {
+	int next;
+
+	if ( !from ) {
+		next = 0;
+	} else {
+		next = (from - g_entities) + 1;
+	}
+
+	if ( next < MAX_GENTITIES && next >= level.num_entities ) {
+		next = MAX_GENTITIES;	// the end of the networked region: jump to the logical one
+	}
+
+	if ( next >= MAX_GENTITIES + level.num_logicalents ) {
+		return NULL;
+	}
+
+	return &g_entities[next];
 }
 
 /*
@@ -1678,9 +1840,15 @@ void G_FreeEntity( gentity_t *ed ) {
 		level.melee_model_id = -1;
 	}
 
-	trap->UnlinkEntity ((sharedEntity_t *)ed);		// unlink from world
+	// GalaxyRP: [Logical Entities] a logical entity was never linked and never given to ICARUS,
+	// and the engine would fatal-error on its number; everything else in this function acts on
+	// the struct itself and applies to both regions.
+	if ( !ed->isLogical )
+	{
+		trap->UnlinkEntity ((sharedEntity_t *)ed);		// unlink from world
 
-	trap->ICARUS_FreeEnt( (sharedEntity_t *)ed );	//ICARUS information must be added after this point
+		trap->ICARUS_FreeEnt( (sharedEntity_t *)ed );	//ICARUS information must be added after this point
+	}
 
 	if ( ed->neverFree ) {
 		return;
@@ -1727,7 +1895,10 @@ void G_FreeEntity( gentity_t *ed ) {
 	//to anything ghoul2-related on the server and thus must send a message
 	//to let the client know he needs to clean up all the g2 stuff for this
 	//now-removed entity
-	if (ed->s.modelGhoul2)
+	// GalaxyRP: [Logical Entities] the two broadcasts below carry the entity NUMBER to every client,
+	// which indexes cg_entities[MAX_GENTITIES] with it. No logical class sets either flag, but a
+	// number from the upper region must never go out in them, so both are gated on the region.
+	if (ed->s.modelGhoul2 && !ed->isLogical)
 	{ //force all clients to accept an event to destroy this instance, right now
 		/*
 		te = G_TempEntity( vec3_origin, EV_DESTROY_GHOUL2_INSTANCE );
@@ -1780,7 +1951,7 @@ void G_FreeEntity( gentity_t *ed ) {
 		G_FreeFakeClient(&ed->client);
 	}
 
-	if (ed->s.eFlags & EF_SOUNDTRACKER)
+	if ((ed->s.eFlags & EF_SOUNDTRACKER) && !ed->isLogical)
 	{
 		int i = 0;
 		gentity_t *ent;
@@ -1811,10 +1982,37 @@ void G_FreeEntity( gentity_t *ed ) {
 		trap->SendServerCommand(-1, va("kls %i %i", ed->s.trickedentindex, ed->s.number));
 	}
 
+	// GalaxyRP: [Logical Entities] a free during the spawn pass frees a legacy slot too; no-op
+	// at any other time. Before the memset, which clears the field.
+	RP_LegacySlotRelease( ed );
+
 	memset (ed, 0, sizeof(*ed));
 	ed->classname = "freed";
 	ed->freetime = level.time;
 	ed->inuse = qfalse;
+
+	// GalaxyRP: [Logical Entities] if this was the highest logical slot ever opened, give the
+	// slots above the last in-use one back, so the region's high-water mark tracks what is really
+	// there and G_SpawnLogical's search stays short. Decided from the slot's position rather than
+	// from isLogical, because the memset above has just cleared that -- which is exactly the
+	// mistake TaystJK's copy makes (it tests the flag after the memset, so its roll-back never
+	// runs). The networked region is not rolled back: level.num_entities is what the engine was
+	// told in LocateGameData, and stock OpenJK never shrinks it either.
+	{
+		int entnum = ed - g_entities;
+
+		if ( entnum >= MAX_GENTITIES && entnum == MAX_GENTITIES + level.num_logicalents - 1 )
+		{
+			int i;
+
+			for ( i = entnum; i >= MAX_GENTITIES; i-- ) {
+				if ( g_entities[i].inuse ) {
+					break;
+				}
+			}
+			level.num_logicalents = i + 1 - MAX_GENTITIES;
+		}
+	}
 }
 
 /*
@@ -3061,7 +3259,13 @@ qboolean G_CheckInSolid (gentity_t *self, qboolean fix)
 			VectorCopy(trace.endpos, neworg);
 			neworg[2] -= self->r.mins[2];
 			G_SetOrigin(self, neworg);
-			trap->LinkEntity((sharedEntity_t *)self);
+			// GalaxyRP: [Logical Entities] waypoints and point_combats reach this with "fix" set;
+			// a logical one must not be linked (the engine does not know its number), and does
+			// not need to be -- the trace below reads only the struct.
+			if (!self->isLogical)
+			{
+				trap->LinkEntity((sharedEntity_t *)self);
+			}
 
 			return G_CheckInSolid(self, qfalse);
 		}

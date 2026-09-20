@@ -3237,10 +3237,9 @@ void BeginAutoPathRoutine(void)
 
 	CreateNewWP(vec3_origin, 0); //create a dummy waypoint to insert under
 
-	while (i < level.num_entities)
+	// GalaxyRP: [Logical Entities] both regions -- spawn points are logical entities now.
+	RP_FOR_EACH_ENTITY( ent )
 	{
-		ent = &g_entities[i];
-
 		if (ent && ent->inuse && ent->classname && ent->classname[0] && !Q_stricmp(ent->classname, "info_player_deathmatch"))
 		{
 			if (ent->s.origin[2] < 1280)
@@ -3255,8 +3254,6 @@ void BeginAutoPathRoutine(void)
 			gSpawnPoints[gSpawnPointNum] = ent;
 			gSpawnPointNum++;
 		}
-
-		i++;
 	}
 
 	if (gSpawnPointNum < 1)
@@ -3363,14 +3360,11 @@ gentity_t *GetClosestSpawn(gentity_t *ent)
 	gentity_t	*spawn;
 	gentity_t	*closestSpawn = NULL;
 	float		closestDist = -1;
-	int			i = MAX_CLIENTS;
 
-	spawn = NULL;
-
-	while (i < level.num_entities)
+	// GalaxyRP: [Logical Entities] both regions -- spawn points are logical entities now. The
+	// client slots the old loop skipped never carry these classnames, so nothing is added.
+	RP_FOR_EACH_ENTITY( spawn )
 	{
-		spawn = &g_entities[i];
-
 		if (spawn && spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(spawn->classname, "info_player_deathmatch")) )
 		{
 			float checkDist;
@@ -3385,8 +3379,6 @@ gentity_t *GetClosestSpawn(gentity_t *ent)
 				closestDist = checkDist;
 			}
 		}
-
-		i++;
 	}
 
 	return closestSpawn;
@@ -3396,38 +3388,27 @@ gentity_t *GetNextSpawnInIndex(gentity_t *currentSpawn)
 {
 	gentity_t	*spawn;
 	gentity_t	*nextSpawn = NULL;
-	int			i = currentSpawn->s.number+1;
 
-	spawn = NULL;
-
-	while (i < level.num_entities)
+	// GalaxyRP: [Logical Entities] "the next one after currentSpawn, in table order, wrapping to
+	// the start" -- now in the order both regions are walked, since spawn points are logical.
+	for (spawn = RP_NextEntityInAnyRegion(currentSpawn); spawn; spawn = RP_NextEntityInAnyRegion(spawn))
 	{
-		spawn = &g_entities[i];
-
-		if (spawn && spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(spawn->classname, "info_player_deathmatch")) )
+		if (spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(spawn->classname, "info_player_deathmatch")) )
 		{
 			nextSpawn = spawn;
 			break;
 		}
-
-		i++;
 	}
 
 	if (!nextSpawn)
 	{ //loop back around to 0
-		i = MAX_CLIENTS;
-
-		while (i < level.num_entities)
+		RP_FOR_EACH_ENTITY( spawn )
 		{
-			spawn = &g_entities[i];
-
-			if (spawn && spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(spawn->classname, "info_player_deathmatch")) )
+			if (spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(spawn->classname, "info_player_deathmatch")) )
 			{
 				nextSpawn = spawn;
 				break;
 			}
-
-			i++;
 		}
 	}
 

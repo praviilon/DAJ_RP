@@ -376,6 +376,22 @@ struct gentity_s {
 	qboolean	neverFree;			// if true, FreeEntity will only unlink
 									// bodyque uses this
 
+	// GalaxyRP: [Logical Entities] true for a slot at or above MAX_GENTITIES. Set once by
+	// G_InitGentity() from the slot number and read wherever the entity would otherwise be handed
+	// to the engine -- LinkEntity/UnlinkEntity, ICARUS, the areaportal macro -- because the engine
+	// was never told those slots exist and SV_SvEntityForGentity() fatal-errors on a number that
+	// high. See MAX_LOGICENTITIES in q_shared.h and G_SpawnLogical() in g_utils.c.
+	qboolean	isLogical;
+
+	// GalaxyRP: [Logical Entities] the slot number this entity would have been given had every
+	// map entity been networked -- what its number WAS before this feature. Assigned only to
+	// entities allocated while the map is spawning (level.spawning), by a small simulation of the
+	// old allocator that runs beside the real one (RP_LegacySlotAssign/Release in g_utils.c).
+	// Exists for the two SP-map fix-ups in G_InitGame that identify entities by their number
+	// (hoth3's 232/233, kor1's 418-422): those numbers were read off the old layout and stay
+	// valid against this field. 0 for anything spawned later.
+	int			legacySlot;
+
 	int			flags;				// FL_* variables
 
 	char		*model;
@@ -1642,6 +1658,25 @@ typedef struct level_locals_s {
 	int			gentitySize;
 	int			num_entities;		// current number, <= MAX_GENTITIES
 
+	// GalaxyRP: [Logical Entities] high-water mark of the logical region, counted from
+	// MAX_GENTITIES: slots MAX_GENTITIES .. MAX_GENTITIES+num_logicalents-1 have been handed out at
+	// least once this map. Never reported to the engine (trap->LocateGameData only ever gets
+	// num_entities). Grown by G_SpawnLogical(), rolled back by G_FreeEntity().
+	int			num_logicalents;	// <= MAX_LOGICENTITIES
+
+	// GalaxyRP: [Logical Entities] the legacy-allocator simulation behind gentity_t::legacySlot.
+	// legacy_slot_inuse mirrors "inuse" as the old, all-networked allocator would have seen it
+	// during the map's spawn pass; legacy_slot_next is its num_entities. Started by
+	// RP_LegacySlotsBegin() at the top of the spawn pass, consulted by G_Spawn/G_SpawnLogical and
+	// G_FreeEntity only while level.spawning is set.
+	byte		legacy_slot_inuse[MAX_GENTITIES];
+	int			legacy_slot_next;
+
+	// GalaxyRP: [Logical Entities] rp_logical_entities, read once at G_InitGame. The cvar is
+	// latched, but this is the value the map actually started with, so a mid-map change to the
+	// cvar can never move an entity between regions while it is alive.
+	qboolean	logical_entities_enabled;
+
 	int			warmupTime;			// restart match at this time
 
 	fileHandle_t	logFile;
@@ -1872,10 +1907,12 @@ typedef struct level_locals_s {
 	// selection logic too, which is out of scope for this pass.
 
 	// zyk: each index has the effect id. The value is the owner of the effect used in Special Powers
-	int special_power_effects[ENTITYNUM_MAX_NORMAL];
+	// GalaxyRP: [Logical Entities] sized for both regions. G_Damage() reads this at
+	// attacker->s.number, and a logical target_kill passes itself as the attacker.
+	int special_power_effects[MAX_ENTITIESTOTAL];
 
 	// zyk: timer to remove each effect used in Special Powers
-	int special_power_effects_timer[ENTITYNUM_MAX_NORMAL];
+	int special_power_effects_timer[MAX_ENTITIESTOTAL];
 
 	// GalaxyRP: [Race Mode] race_mode_vehicle[MAX_RACERS] used to be declared here, holding the swoop
 	// entity ids used to validate racers. Removed with Race Mode, along with MAX_RACERS itself.
@@ -1921,10 +1958,13 @@ typedef struct level_locals_s {
 	// copies one pair per slot into level.spawnVars[MAX_SPAWN_VARS], so the two limits are the same
 	// limit and must move together.
 #define ZYK_MAX_SPAWN_STRING_SLOTS (MAX_SPAWN_VARS * 2)
-	char *zyk_spawn_strings[ENTITYNUM_MAX_NORMAL][ZYK_MAX_SPAWN_STRING_SLOTS];
+	// GalaxyRP: [Logical Entities] both tables are indexed by ent->s.number for every entity the
+	// map loader or the Entity System spawns, and a logical entity's number is >= MAX_GENTITIES,
+	// so they cover both regions.
+	char *zyk_spawn_strings[MAX_ENTITIESTOTAL][ZYK_MAX_SPAWN_STRING_SLOTS];
 
 	// zyk: amount of keys and values stored in this entity
-	int zyk_spawn_strings_values_count[ENTITYNUM_MAX_NORMAL];
+	int zyk_spawn_strings_values_count[MAX_ENTITIESTOTAL];
 
 	// GalaxyRP: [Weather] /admweather state. The block is claimed lazily, on the first use of the
 	// command in a map, and that timing is deliberate: claiming it in G_InitGame would put it below
@@ -2263,6 +2303,41 @@ void	G_SetAngles( gentity_t *ent, vec3_t angles );
 
 void	G_InitGentity( gentity_t *e );
 gentity_t	*G_Spawn (void);
+// GalaxyRP: [Logical Entities] a slot in the upper, engine-invisible region. Only for entities
+// whose class never links, never networks and is never referenced by number from a networked
+// entity -- callers should go through RP_SpawnForClassname() (g_spawn.c), which knows which
+// classes those are, rather than call this directly.
+gentity_t	*G_SpawnLogical( void );
+// GalaxyRP: [Logical Entities] free slots left in the logical region. Informational only (the
+// /entadd message and the entityinfo command); nothing gates on it, because exhausting that region
+// cannot drop the server the way the networked one can -- G_SpawnLogical() refuses instead.
+int		G_FreeLogicalEntityCount( void );
+// GalaxyRP: [Logical Entities] see gentity_t::legacySlot.
+void	RP_LegacySlotsBegin( void );
+void	RP_LegacySlotAssign( gentity_t *e );
+void	RP_LegacySlotRelease( gentity_t *e );
+// GalaxyRP: [Logical Entities] the one allocator every key/value spawn path uses -- the map
+// loader, /entadd, the entity-file loader and zyk_spawn_entity()'s callers -- so that the same
+// classname always lands in the same region. Logical when rp_logical_entities was on at map
+// start, the spawn table marks the class logical, the entity does not carry "nological 1" and it
+// has no script_targetname (ICARUS needs an engine-side entity); G_Spawn() otherwise.
+gentity_t	*RP_SpawnForClassname( const char *classname, qboolean nological, qboolean hasScriptTargetname );
+qboolean	G_IsLogicalEntity( const char *classname );
+// GalaxyRP: [Logical Entities] the same decision for a caller that holds its key/value pairs as
+// strings rather than in level.spawnVars (/entadd, the entity-file loader): note every pair, then
+// spawn. Only classname, nological and script_targetname are looked at.
+typedef struct rpSpawnRoute_s {
+	char		classname[MAX_TOKEN_CHARS];
+	qboolean	nological;
+	qboolean	hasScriptTargetname;	// script_targetname, or any *script behaviour-set key: ICARUS needs a networked entity
+} rpSpawnRoute_t;
+void		RP_SpawnRouteInit( rpSpawnRoute_t *route );
+void		RP_SpawnRouteNoteKey( rpSpawnRoute_t *route, const char *key, const char *value );
+gentity_t	*RP_SpawnForRoute( const rpSpawnRoute_t *route );
+// GalaxyRP: [Logical Entities] the decision without the allocation, for /entedit to check that an
+// edit does not move an entity across the region boundary (a slot cannot change region in place).
+qboolean	RP_ClassnameWantsLogical( const char *classname, qboolean nological, qboolean hasScriptTargetname );
+qboolean	RP_SpawnRouteIsLogical( const rpSpawnRoute_t *route );
 gentity_t *G_TempEntity( vec3_t origin, int event );
 gentity_t	*G_PlayEffect(int fxID, vec3_t org, vec3_t ang);
 gentity_t	*G_PlayEffectID(const int fxID, vec3_t org, vec3_t ang);
@@ -2736,7 +2811,20 @@ int BotAIStartFrame( int time );
 
 
 extern	level_locals_t	level;
-extern	gentity_t		g_entities[MAX_GENTITIES];
+// GalaxyRP: [Logical Entities] one array, two regions: [0, MAX_GENTITIES) is the networked table
+// the engine knows about, [MAX_GENTITIES, MAX_ENTITIESTOTAL) the logical region it does not.
+// g_logicalents aliases the start of the upper region so a loop over it reads as one.
+extern	gentity_t		g_entities[MAX_ENTITIESTOTAL];
+extern	gentity_t		*g_logicalents;
+
+// GalaxyRP: [Logical Entities] walk every allocated slot in both regions, in use or not, exactly as
+// "for (i = 0; i < level.num_entities; i++)" walks the networked one -- the loop body keeps its
+// own inuse test. For a loop that looks for map entities by classname/targetname and cannot be
+// written on G_Find(); the plain form only sees the networked region and would miss a logical
+// spawn point or target. RP_NextEntityInAnyRegion(NULL) is the first slot, NULL is the end.
+gentity_t	*RP_NextEntityInAnyRegion( gentity_t *from );
+#define RP_FOR_EACH_ENTITY(ent) \
+	for ( ent = RP_NextEntityInAnyRegion( NULL ); ent; ent = RP_NextEntityInAnyRegion( ent ) )
 
 #define	FOFS(x) offsetof(gentity_t, x)
 

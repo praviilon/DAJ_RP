@@ -224,6 +224,14 @@ field_t fields[] = {
 typedef struct spawn_s {
 	const char	*name;
 	void		(*spawn)(gentity_t *ent);
+	// GalaxyRP: [Logical Entities] qtrue for a class that never links, never networks, has no
+	// ICARUS and is never referenced by entity number from a networked entity -- it may then live
+	// in the logical region above MAX_GENTITIES (see q_shared.h). Last on purpose so a row that
+	// does not mention it is networked, which is the safe default; the rows that say qtrue are
+	// the ones that were checked. Whether a given entity actually goes there is
+	// RP_SpawnForClassname()'s decision, which also honours the cvar, "nological 1" and
+	// script_targetname.
+	qboolean	logical;
 } spawn_t;
 
 void SP_info_player_start (gentity_t *ent);
@@ -546,32 +554,32 @@ spawn_t	spawns[] = {
 	{ "func_train",							SP_func_train },
 	{ "func_usable",						SP_func_usable },
 	{ "func_wall",							SP_func_wall },
-	{ "fx_rain",							SP_CreateRain },
+	{ "fx_rain",							SP_CreateRain, qtrue },
 	{ "fx_runner",							SP_fx_runner },
-	{ "fx_snow",							SP_CreateSnow },
-	{ "fx_spacedust",						SP_CreateSpaceDust },
+	{ "fx_snow",							SP_CreateSnow, qtrue },
+	{ "fx_spacedust",						SP_CreateSpaceDust, qtrue },
 	{ "fx_wind",							SP_CreateWind },
 	{ "gametype_item",						SP_gametype_item },
-	{ "info_camp",							SP_info_camp },
+	{ "info_camp",							SP_info_camp, qtrue },
 	{ "info_jedimaster_start",				SP_info_jedimaster_start },
-	{ "info_notnull",						SP_info_notnull }, // use target_position instead
-	{ "info_null",							SP_info_null },
-	{ "info_player_deathmatch",				SP_info_player_deathmatch },
-	{ "info_player_duel",					SP_info_player_duel },
-	{ "info_player_duel1",					SP_info_player_duel1 },
-	{ "info_player_duel2",					SP_info_player_duel2 },
-	{ "info_player_intermission",			SP_info_player_intermission },
-	{ "info_player_intermission_blue",		SP_info_player_intermission_blue },
-	{ "info_player_intermission_red",		SP_info_player_intermission_red },
-	{ "info_player_siegeteam1",				SP_info_player_siegeteam1 },
-	{ "info_player_siegeteam2",				SP_info_player_siegeteam2 },
-	{ "info_player_start",					SP_info_player_start },
-	{ "info_player_start_blue",				SP_info_player_start_blue },
-	{ "info_player_start_red",				SP_info_player_start_red },
-	{ "info_siege_decomplete",				SP_info_siege_decomplete },
+	{ "info_notnull",						SP_info_notnull, qtrue }, // use target_position instead
+	{ "info_null",							SP_info_null, qtrue },
+	{ "info_player_deathmatch",				SP_info_player_deathmatch, qtrue },
+	{ "info_player_duel",					SP_info_player_duel, qtrue },
+	{ "info_player_duel1",					SP_info_player_duel1, qtrue },
+	{ "info_player_duel2",					SP_info_player_duel2, qtrue },
+	{ "info_player_intermission",			SP_info_player_intermission, qtrue },
+	{ "info_player_intermission_blue",		SP_info_player_intermission_blue, qtrue },
+	{ "info_player_intermission_red",		SP_info_player_intermission_red, qtrue },
+	{ "info_player_siegeteam1",				SP_info_player_siegeteam1, qtrue },
+	{ "info_player_siegeteam2",				SP_info_player_siegeteam2, qtrue },
+	{ "info_player_start",					SP_info_player_start, qtrue },
+	{ "info_player_start_blue",				SP_info_player_start_blue, qtrue },
+	{ "info_player_start_red",				SP_info_player_start_red, qtrue },
+	{ "info_siege_decomplete",				SP_info_siege_decomplete, qtrue },
 	{ "info_siege_objective",				SP_info_siege_objective },
 	{ "info_siege_radaricon",				SP_info_siege_radaricon },
-	{ "item_botroam",						SP_item_botroam },
+	{ "item_botroam",						SP_item_botroam, qtrue },
 	{ "light",								SP_light },
 	{ "misc_ammo_floor_unit",				SP_misc_ammo_floor_unit },
 	{ "misc_bsp",							SP_misc_bsp },
@@ -589,138 +597,138 @@ spawn_t	spawns[] = {
 	{ "misc_model_gun_rack",				SP_misc_model_gun_rack}, // zyk: added this code
 	{ "misc_model_health_power_converter",	SP_misc_model_health_power_converter },
 	{ "misc_model_shield_power_converter",	SP_misc_model_shield_power_converter },
-	{ "misc_model_static",					SP_misc_model_static },
+	{ "misc_model_static",					SP_misc_model_static, qtrue },
 	{ "misc_portal_camera",					SP_misc_portal_camera },
 	{ "misc_portal_surface",				SP_misc_portal_surface },
 	{ "misc_shield_floor_unit",				SP_misc_shield_floor_unit },
 	{ "misc_siege_item",					SP_misc_siege_item },
 	{ "misc_skyportal",						SP_misc_skyportal },
 	{ "misc_skyportal_orient",				SP_misc_skyportal_orient },
-	{ "misc_teleporter_dest",				SP_misc_teleporter_dest },
+	{ "misc_teleporter_dest",				SP_misc_teleporter_dest, qtrue },
 	{ "misc_turret",						SP_misc_turret },
 	{ "misc_turretG2",						SP_misc_turretG2 },
 	{ "misc_weapon_shooter",				SP_misc_weapon_shooter },
 	{ "misc_weather_zone",					SP_misc_weather_zone },
-	{ "npc_alora",							SP_NPC_Alora },
-	{ "npc_bartender",						SP_NPC_Bartender },
-	{ "npc_bespincop",						SP_NPC_BespinCop },
-	{ "npc_bobafett",						SP_NPC_BobaFett }, // zyk: added this function
-	{ "npc_chewbacca",						SP_NPC_Chewbacca }, // zyk: added this function
-	{ "npc_colombian_emplacedgunner",		SP_NPC_ShadowTrooper },
-	{ "npc_colombian_rebel",				SP_NPC_Reborn },
-	{ "npc_colombian_soldier",				SP_NPC_Reborn },
-	{ "npc_cultist",						SP_NPC_Cultist },
-	{ "npc_cultist_commando",				SP_NPC_Cultist_Commando },
-	{ "npc_cultist_destroyer",				SP_NPC_Cultist_Destroyer },
-	{ "npc_cultist_saber",					SP_NPC_Cultist_Saber },
-	{ "npc_cultist_saber_powers",			SP_NPC_Cultist_Saber_Powers },
-	{ "npc_desann",							SP_NPC_Desann },
-	{ "npc_droid_assassin",					SP_NPC_Droid_Assassin }, // zyk: added this function
-	{ "npc_droid_atst",						SP_NPC_Droid_ATST },
-	{ "npc_droid_gonk",						SP_NPC_Droid_Gonk },
-	{ "npc_droid_interrogator",				SP_NPC_Droid_Interrogator },
-	{ "npc_droid_mark1",					SP_NPC_Droid_Mark1 },
-	{ "npc_droid_mark2",					SP_NPC_Droid_Mark2 },
-	{ "npc_droid_mouse",					SP_NPC_Droid_Mouse },
-	{ "npc_droid_probe",					SP_NPC_Droid_Probe },
-	{ "npc_droid_protocol",					SP_NPC_Droid_Protocol },
-	{ "npc_droid_r2d2",						SP_NPC_Droid_R2D2 },
-	{ "npc_droid_r5d2",						SP_NPC_Droid_R5D2 },
-	{ "npc_droid_remote",					SP_NPC_Droid_Remote },
-	{ "npc_droid_saber",					SP_NPC_Droid_Saber }, // zyk: added this function
-	{ "npc_droid_seeker",					SP_NPC_Droid_Seeker },
-	{ "npc_droid_sentry",					SP_NPC_Droid_Sentry },
-	{ "npc_galak",							SP_NPC_Galak },
-	{ "npc_gran",							SP_NPC_Gran },
-	{ "npc_hazardtrooper",					SP_NPC_HazardTrooper }, // zyk: added this function
-	{ "npc_human_merc",						SP_NPC_Human_Merc },
-	{ "npc_imperial",						SP_NPC_Imperial },
-	{ "npc_impworker",						SP_NPC_ImpWorker },
-	{ "npc_jan",							SP_NPC_Jan },
-	{ "npc_jawa",							SP_NPC_Jawa },
-	{ "npc_jedi",							SP_NPC_Jedi },
-	{ "npc_kothos",							SP_NPC_Kothos }, // zyk: added this function
-	{ "npc_kyle",							SP_NPC_Kyle },
-	{ "npc_lando",							SP_NPC_Lando },
-	{ "npc_lannik_racto",					SP_NPC_Lannik_Racto }, // zyk: added this function
-	{ "npc_luke",							SP_NPC_Luke },
-	{ "npc_manuel_vergara_rmg",				SP_NPC_Desann },
-	{ "npc_merchant",						SP_NPC_Merchant }, // zyk: added this function
-	{ "npc_minemonster",					SP_NPC_MineMonster },
-	{ "npc_monmothma",						SP_NPC_MonMothma },
-	{ "npc_monster_claw",					SP_NPC_Monster_Claw },
-	{ "npc_monster_fish",					SP_NPC_Monster_Fish },
-	{ "npc_monster_flier2",					SP_NPC_Monster_Flier2 },
-	{ "npc_monster_glider",					SP_NPC_Monster_Glider },
-	{ "npc_monster_howler",					SP_NPC_Monster_Howler },
-	{ "npc_monster_lizard",					SP_NPC_Monster_Lizard },
-	{ "npc_monster_murjj",					SP_NPC_Monster_Murjj },
-	{ "npc_monster_mutant_rancor",			SP_NPC_Monster_Mutant_Rancor }, // zyk: added this function
-	{ "npc_monster_rancor",					SP_NPC_Monster_Rancor },
-	{ "npc_monster_sand_creature",			SP_NPC_Monster_Sand_Creature }, // zyk: added this function
-	{ "npc_monster_swamp",					SP_NPC_Monster_Swamp },
-	{ "npc_monster_wampa",					SP_NPC_Monster_Wampa },
-	{ "npc_morgankatarn",					SP_NPC_MorganKatarn },
-	{ "npc_noghri",							SP_NPC_Noghri },
-	{ "npc_player",							SP_NPC_Player }, // zyk: added this function
-	{ "npc_prisoner",						SP_NPC_Prisoner },
-	{ "npc_ragnos",							SP_NPC_Ragnos }, // zyk: added this function
-	{ "npc_rax",							SP_NPC_Rax }, // zyk: added this function
-	{ "npc_rebel",							SP_NPC_Rebel },
-	{ "npc_reborn",							SP_NPC_Reborn },
-	{ "npc_reborn_new",						SP_NPC_Reborn_New },
-	{ "npc_reelo",							SP_NPC_Reelo },
-	{ "npc_rockettrooper",					SP_NPC_RocketTrooper }, // zyk: added this function
-	{ "npc_rodian",							SP_NPC_Rodian },
-	{ "npc_rosh_penin",						SP_NPC_Rosh_Penin }, // zyk: added this function
-	{ "npc_saboteur",						SP_NPC_Saboteur }, // zyk: added this function
-	{ "npc_shadowtrooper",					SP_NPC_ShadowTrooper },
-	{ "npc_snowtrooper",					SP_NPC_Snowtrooper },
-	{ "npc_spawner",						SP_NPC_spawner },
-	{ "npc_stormtrooper",					SP_NPC_Stormtrooper },
-	{ "npc_stormtrooperofficer",			SP_NPC_StormtrooperOfficer },
-	{ "npc_swamptrooper",					SP_NPC_SwampTrooper },
-	{ "npc_tavion",							SP_NPC_Tavion },
-	{ "npc_tavion_new",						SP_NPC_Tavion_New },
-	{ "npc_tie_pilot",						SP_NPC_Tie_Pilot },
-	{ "npc_trandoshan",						SP_NPC_Trandoshan },
-	{ "npc_tusken",							SP_NPC_Tusken },
-	{ "npc_ugnaught",						SP_NPC_Ugnaught },
-	{ "npc_vehicle",						SP_NPC_Vehicle },
-	{ "npc_weequay",						SP_NPC_Weequay },
-	{ "path_corner",						SP_path_corner },
-	{ "point_combat",						SP_point_combat },
-	{ "ref_tag",							SP_reference_tag },
-	{ "ref_tag_huge",						SP_reference_tag },
+	{ "npc_alora",							SP_NPC_Alora, qtrue },
+	{ "npc_bartender",						SP_NPC_Bartender, qtrue },
+	{ "npc_bespincop",						SP_NPC_BespinCop, qtrue },
+	{ "npc_bobafett",						SP_NPC_BobaFett, qtrue }, // zyk: added this function
+	{ "npc_chewbacca",						SP_NPC_Chewbacca, qtrue }, // zyk: added this function
+	{ "npc_colombian_emplacedgunner",		SP_NPC_ShadowTrooper, qtrue },
+	{ "npc_colombian_rebel",				SP_NPC_Reborn, qtrue },
+	{ "npc_colombian_soldier",				SP_NPC_Reborn, qtrue },
+	{ "npc_cultist",						SP_NPC_Cultist, qtrue },
+	{ "npc_cultist_commando",				SP_NPC_Cultist_Commando, qtrue },
+	{ "npc_cultist_destroyer",				SP_NPC_Cultist_Destroyer, qtrue },
+	{ "npc_cultist_saber",					SP_NPC_Cultist_Saber, qtrue },
+	{ "npc_cultist_saber_powers",			SP_NPC_Cultist_Saber_Powers, qtrue },
+	{ "npc_desann",							SP_NPC_Desann, qtrue },
+	{ "npc_droid_assassin",					SP_NPC_Droid_Assassin, qtrue }, // zyk: added this function
+	{ "npc_droid_atst",						SP_NPC_Droid_ATST, qtrue },
+	{ "npc_droid_gonk",						SP_NPC_Droid_Gonk, qtrue },
+	{ "npc_droid_interrogator",				SP_NPC_Droid_Interrogator, qtrue },
+	{ "npc_droid_mark1",					SP_NPC_Droid_Mark1, qtrue },
+	{ "npc_droid_mark2",					SP_NPC_Droid_Mark2, qtrue },
+	{ "npc_droid_mouse",					SP_NPC_Droid_Mouse, qtrue },
+	{ "npc_droid_probe",					SP_NPC_Droid_Probe, qtrue },
+	{ "npc_droid_protocol",					SP_NPC_Droid_Protocol, qtrue },
+	{ "npc_droid_r2d2",						SP_NPC_Droid_R2D2, qtrue },
+	{ "npc_droid_r5d2",						SP_NPC_Droid_R5D2, qtrue },
+	{ "npc_droid_remote",					SP_NPC_Droid_Remote, qtrue },
+	{ "npc_droid_saber",					SP_NPC_Droid_Saber, qtrue }, // zyk: added this function
+	{ "npc_droid_seeker",					SP_NPC_Droid_Seeker, qtrue },
+	{ "npc_droid_sentry",					SP_NPC_Droid_Sentry, qtrue },
+	{ "npc_galak",							SP_NPC_Galak, qtrue },
+	{ "npc_gran",							SP_NPC_Gran, qtrue },
+	{ "npc_hazardtrooper",					SP_NPC_HazardTrooper, qtrue }, // zyk: added this function
+	{ "npc_human_merc",						SP_NPC_Human_Merc, qtrue },
+	{ "npc_imperial",						SP_NPC_Imperial, qtrue },
+	{ "npc_impworker",						SP_NPC_ImpWorker, qtrue },
+	{ "npc_jan",							SP_NPC_Jan, qtrue },
+	{ "npc_jawa",							SP_NPC_Jawa, qtrue },
+	{ "npc_jedi",							SP_NPC_Jedi, qtrue },
+	{ "npc_kothos",							SP_NPC_Kothos, qtrue }, // zyk: added this function
+	{ "npc_kyle",							SP_NPC_Kyle, qtrue },
+	{ "npc_lando",							SP_NPC_Lando, qtrue },
+	{ "npc_lannik_racto",					SP_NPC_Lannik_Racto, qtrue }, // zyk: added this function
+	{ "npc_luke",							SP_NPC_Luke, qtrue },
+	{ "npc_manuel_vergara_rmg",				SP_NPC_Desann, qtrue },
+	{ "npc_merchant",						SP_NPC_Merchant, qtrue }, // zyk: added this function
+	{ "npc_minemonster",					SP_NPC_MineMonster, qtrue },
+	{ "npc_monmothma",						SP_NPC_MonMothma, qtrue },
+	{ "npc_monster_claw",					SP_NPC_Monster_Claw, qtrue },
+	{ "npc_monster_fish",					SP_NPC_Monster_Fish, qtrue },
+	{ "npc_monster_flier2",					SP_NPC_Monster_Flier2, qtrue },
+	{ "npc_monster_glider",					SP_NPC_Monster_Glider, qtrue },
+	{ "npc_monster_howler",					SP_NPC_Monster_Howler, qtrue },
+	{ "npc_monster_lizard",					SP_NPC_Monster_Lizard, qtrue },
+	{ "npc_monster_murjj",					SP_NPC_Monster_Murjj, qtrue },
+	{ "npc_monster_mutant_rancor",			SP_NPC_Monster_Mutant_Rancor, qtrue }, // zyk: added this function
+	{ "npc_monster_rancor",					SP_NPC_Monster_Rancor, qtrue },
+	{ "npc_monster_sand_creature",			SP_NPC_Monster_Sand_Creature, qtrue }, // zyk: added this function
+	{ "npc_monster_swamp",					SP_NPC_Monster_Swamp, qtrue },
+	{ "npc_monster_wampa",					SP_NPC_Monster_Wampa, qtrue },
+	{ "npc_morgankatarn",					SP_NPC_MorganKatarn, qtrue },
+	{ "npc_noghri",							SP_NPC_Noghri, qtrue },
+	{ "npc_player",							SP_NPC_Player, qtrue }, // zyk: added this function
+	{ "npc_prisoner",						SP_NPC_Prisoner, qtrue },
+	{ "npc_ragnos",							SP_NPC_Ragnos, qtrue }, // zyk: added this function
+	{ "npc_rax",							SP_NPC_Rax, qtrue }, // zyk: added this function
+	{ "npc_rebel",							SP_NPC_Rebel, qtrue },
+	{ "npc_reborn",							SP_NPC_Reborn, qtrue },
+	{ "npc_reborn_new",						SP_NPC_Reborn_New, qtrue },
+	{ "npc_reelo",							SP_NPC_Reelo, qtrue },
+	{ "npc_rockettrooper",					SP_NPC_RocketTrooper, qtrue }, // zyk: added this function
+	{ "npc_rodian",							SP_NPC_Rodian, qtrue },
+	{ "npc_rosh_penin",						SP_NPC_Rosh_Penin, qtrue }, // zyk: added this function
+	{ "npc_saboteur",						SP_NPC_Saboteur, qtrue }, // zyk: added this function
+	{ "npc_shadowtrooper",					SP_NPC_ShadowTrooper, qtrue },
+	{ "npc_snowtrooper",					SP_NPC_Snowtrooper, qtrue },
+	{ "npc_spawner",						SP_NPC_spawner, qtrue },
+	{ "npc_stormtrooper",					SP_NPC_Stormtrooper, qtrue },
+	{ "npc_stormtrooperofficer",			SP_NPC_StormtrooperOfficer, qtrue },
+	{ "npc_swamptrooper",					SP_NPC_SwampTrooper, qtrue },
+	{ "npc_tavion",							SP_NPC_Tavion, qtrue },
+	{ "npc_tavion_new",						SP_NPC_Tavion_New, qtrue },
+	{ "npc_tie_pilot",						SP_NPC_Tie_Pilot, qtrue },
+	{ "npc_trandoshan",						SP_NPC_Trandoshan, qtrue },
+	{ "npc_tusken",							SP_NPC_Tusken, qtrue },
+	{ "npc_ugnaught",						SP_NPC_Ugnaught, qtrue },
+	{ "npc_vehicle",						SP_NPC_Vehicle, qtrue },
+	{ "npc_weequay",						SP_NPC_Weequay, qtrue },
+	{ "path_corner",						SP_path_corner, qtrue },
+	{ "point_combat",						SP_point_combat, qtrue },
+	{ "ref_tag",							SP_reference_tag, qtrue },
+	{ "ref_tag_huge",						SP_reference_tag, qtrue },
 	{ "shooter_blaster",					SP_shooter_blaster },
-	{ "target_activate",					SP_target_activate },
-	{ "target_counter",						SP_target_counter },
-	{ "target_deactivate",					SP_target_deactivate },
-	{ "target_delay",						SP_target_delay },
-	{ "target_escapetrig",					SP_target_escapetrig },
-	{ "target_give",						SP_target_give },
-	{ "target_interest",					SP_target_interest },
-	{ "target_kill",						SP_target_kill },
+	{ "target_activate",					SP_target_activate, qtrue },
+	{ "target_counter",						SP_target_counter, qtrue },
+	{ "target_deactivate",					SP_target_deactivate, qtrue },
+	{ "target_delay",						SP_target_delay, qtrue },
+	{ "target_escapetrig",					SP_target_escapetrig, qtrue },
+	{ "target_give",						SP_target_give, qtrue },
+	{ "target_interest",					SP_target_interest, qtrue },
+	{ "target_kill",						SP_target_kill, qtrue },
 	{ "target_laser",						SP_target_laser },
-	{ "target_level_change",				SP_target_level_change },
-	{ "target_location",					SP_target_location },
-	{ "target_play_music",					SP_target_play_music },
-	{ "target_position",					SP_target_position },
-	{ "target_print",						SP_target_print },
-	{ "target_push",						SP_target_push },
-	{ "target_random",						SP_target_random },
-	{ "target_relay",						SP_target_relay },
-	{ "target_remove_powerups",				SP_target_remove_powerups },
-	{ "target_score",						SP_target_score },
-	{ "target_screenshake",					SP_target_screenshake },
+	{ "target_level_change",				SP_target_level_change, qtrue },
+	{ "target_location",					SP_target_location, qtrue },
+	{ "target_play_music",					SP_target_play_music, qtrue },
+	{ "target_position",					SP_target_position, qtrue },
+	{ "target_print",						SP_target_print, qtrue },
+	{ "target_push",						SP_target_push, qtrue },
+	{ "target_random",						SP_target_random, qtrue },
+	{ "target_relay",						SP_target_relay, qtrue },
+	{ "target_remove_powerups",				SP_target_remove_powerups, qtrue },
+	{ "target_score",						SP_target_score, qtrue },
+	{ "target_screenshake",					SP_target_screenshake, qtrue },
 	{ "target_scriptrunner",				SP_target_scriptrunner },
 	{ "target_siege_end",					SP_target_siege_end },
 	{ "target_speaker",						SP_target_speaker },
-	{ "target_teleporter",					SP_target_teleporter },
-	{ "team_CTF_blueplayer",				SP_team_CTF_blueplayer },
-	{ "team_CTF_bluespawn",					SP_team_CTF_bluespawn },
-	{ "team_CTF_redplayer",					SP_team_CTF_redplayer },
-	{ "team_CTF_redspawn",					SP_team_CTF_redspawn },
+	{ "target_teleporter",					SP_target_teleporter, qtrue },
+	{ "team_CTF_blueplayer",				SP_team_CTF_blueplayer, qtrue },
+	{ "team_CTF_bluespawn",					SP_team_CTF_bluespawn, qtrue },
+	{ "team_CTF_redplayer",					SP_team_CTF_redplayer, qtrue },
+	{ "team_CTF_redspawn",					SP_team_CTF_redspawn, qtrue },
 	{ "terrain",							SP_terrain },
 	{ "trigger_always",						SP_trigger_always },
 	{ "trigger_asteroid_field",				SP_trigger_asteroid_field },
@@ -733,17 +741,17 @@ spawn_t	spawns[] = {
 	{ "trigger_shipboundary",				SP_trigger_shipboundary },
 	{ "trigger_space",						SP_trigger_space },
 	{ "trigger_teleport",					SP_trigger_teleport },
-	{ "waypoint",							SP_waypoint },
-	{ "waypoint_navgoal",					SP_waypoint_navgoal },
-	{ "waypoint_navgoal_1",					SP_waypoint_navgoal_1 },
-	{ "waypoint_navgoal_2",					SP_waypoint_navgoal_2 },
-	{ "waypoint_navgoal_4",					SP_waypoint_navgoal_4 },
-	{ "waypoint_navgoal_8",					SP_waypoint_navgoal_8 },
-	{ "waypoint_small",						SP_waypoint_small },
+	{ "waypoint",							SP_waypoint, qtrue },
+	{ "waypoint_navgoal",					SP_waypoint_navgoal, qtrue },
+	{ "waypoint_navgoal_1",					SP_waypoint_navgoal_1, qtrue },
+	{ "waypoint_navgoal_2",					SP_waypoint_navgoal_2, qtrue },
+	{ "waypoint_navgoal_4",					SP_waypoint_navgoal_4, qtrue },
+	{ "waypoint_navgoal_8",					SP_waypoint_navgoal_8, qtrue },
+	{ "waypoint_small",						SP_waypoint_small, qtrue },
 	{ "zyk_mini_game_joiner",				SP_ZykMiniGameJoiner }, // zyk: added this code
 	{ "zyk_regen_unit",						SP_ZykRegenUnit }, // zyk: added this code
 	{ "zyk_training_pole",					SP_ZykTrainingPole }, // zyk: added this code
-	{ "zyk_weather",						SP_CreateWeather }, // zyk: added this code
+	{ "zyk_weather",						SP_CreateWeather, qtrue }, // zyk: added this code
 };
 
 /*
@@ -756,6 +764,93 @@ returning qfalse if not found
 */
 static int spawncmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((spawn_t*)b)->name );
+}
+
+// GalaxyRP: [Logical Entities] the table's answer alone. Item classes (bg_itemlist) are not in the
+// table and so are never logical: they are pickups, linked and networked.
+qboolean G_IsLogicalEntity( const char *classname ) {
+	spawn_t	*s;
+
+	if ( !classname || !classname[0] ) {
+		return qfalse;
+	}
+
+	s = (spawn_t *)Q_LinearSearch( classname, spawns, ARRAY_LEN( spawns ), sizeof( spawn_t ), spawncmp );
+	if ( s && s->logical ) {
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+// GalaxyRP: [Logical Entities] see g_local.h. The four spawn paths that build an entity from
+// key/value pairs all allocate through here, so the region a classname lands in is decided once:
+//
+//   - rp_logical_entities was 0 at map start   -> networked (the feature is off)
+//   - the class is not marked logical          -> networked
+//   - the entity carries "nological 1"         -> networked (a mapper's or admin's escape hatch,
+//                                                 TaystJK's key, kept for preset compatibility)
+//   - the entity has a script_targetname       -> networked (ICARUS keeps its state in the engine,
+//                                                 indexed by entity number, so it needs a real one)
+//   - otherwise                                -> logical
+//
+// Returns exactly what G_Spawn() / G_SpawnLogical() return; the caller sets the classname on it
+// afterwards as it always did.
+qboolean RP_ClassnameWantsLogical( const char *classname, qboolean nological, qboolean hasScriptTargetname ) {
+	if ( level.logical_entities_enabled && !nological && !hasScriptTargetname && G_IsLogicalEntity( classname ) ) {
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+gentity_t *RP_SpawnForClassname( const char *classname, qboolean nological, qboolean hasScriptTargetname ) {
+	if ( RP_ClassnameWantsLogical( classname, nological, hasScriptTargetname ) ) {
+		return G_SpawnLogical();
+	}
+
+	return G_Spawn();
+}
+
+// GalaxyRP: [Logical Entities] see g_local.h.
+void RP_SpawnRouteInit( rpSpawnRoute_t *route ) {
+	memset( route, 0, sizeof( *route ) );
+}
+
+void RP_SpawnRouteNoteKey( rpSpawnRoute_t *route, const char *key, const char *value ) {
+	if ( !route || !key || !value ) {
+		return;
+	}
+
+	if ( !Q_stricmp( key, "classname" ) ) {
+		Q_strncpyz( route->classname, value, sizeof( route->classname ) );
+	} else if ( !Q_stricmp( key, "nological" ) ) {
+		route->nological = atoi( value ) ? qtrue : qfalse;
+	} else if ( !Q_stricmp( key, "script_targetname" ) ) {
+		if ( value[0] ) {
+			route->hasScriptTargetname = qtrue;
+		}
+	} else {
+		// any behaviour-set key -- spawnscript, usescript, deathscript, ... -- ends in "script".
+		// An entity that carries one will be handed to ICARUS_RunScript by G_ActivateBehavior,
+		// which the engine indexes by entity number, so it needs a networked slot just as a
+		// script_targetname does. (TaystJK only tests script_targetname; a logical target_relay
+		// with a usescript would reach the engine's per-entity ICARUS tables with a number they
+		// were never sized for.)
+		size_t klen = strlen( key );
+
+		if ( klen > 6 && !Q_stricmp( key + klen - 6, "script" ) && value[0] ) {
+			route->hasScriptTargetname = qtrue;
+		}
+	}
+}
+
+gentity_t *RP_SpawnForRoute( const rpSpawnRoute_t *route ) {
+	return RP_SpawnForClassname( route->classname, route->nological, route->hasScriptTargetname );
+}
+
+qboolean RP_SpawnRouteIsLogical( const rpSpawnRoute_t *route ) {
+	return RP_ClassnameWantsLogical( route->classname, route->nological, route->hasScriptTargetname );
 }
 
 qboolean G_CallSpawn( gentity_t *ent ) {
@@ -1068,8 +1163,10 @@ void G_ParseField( const char *key, const char *value, gentity_t *ent )
 	}
 }
 
+// GalaxyRP: [Logical Entities] a logical entity is never a mover (every mover class is networked),
+// but the macro hands the entity to the engine, so it tests the flag rather than rely on that.
 #define ADJUST_AREAPORTAL() \
-	if(ent->s.eType == ET_MOVER) \
+	if(ent->s.eType == ET_MOVER && !ent->isLogical) \
 	{ \
 		trap->LinkEntity((sharedEntity_t *)ent); \
 		trap->AdjustAreaPortalState((sharedEntity_t *)ent, qtrue); \
@@ -1091,7 +1188,17 @@ void G_SpawnGEntityFromSpawnVars( qboolean inSubBSP ) {
 	static char *gametypeNames[GT_MAX_GAME_TYPE] = {"ffa", "holocron", "jedimaster", "duel", "powerduel", "single", "team", "siege", "ctf", "cty"};
 
 	// get the next free entity
-	ent = G_Spawn();
+	// GalaxyRP: [Logical Entities] in the region the classname belongs to. The keys the decision
+	// needs are read straight from the spawn vars, before any field is parsed.
+	{
+		rpSpawnRoute_t route;
+
+		RP_SpawnRouteInit( &route );
+		for ( i = 0; i < level.numSpawnVars; i++ ) {
+			RP_SpawnRouteNoteKey( &route, level.spawnVars[i][0], level.spawnVars[i][1] );
+		}
+		ent = RP_SpawnForRoute( &route );
+	}
 
 	for ( i = 0 ; i < level.numSpawnVars ; i++ ) {
 		// zyk: saving the spawnstring in the spawn string array, so it can be used by entity system
@@ -1161,8 +1268,10 @@ void G_SpawnGEntityFromSpawnVars( qboolean inSubBSP ) {
 		G_FreeEntity( ent );
 	}
 
+	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in
+	// the engine, indexed by entity number, and the engine does not know this number exists.
 	//Tag on the ICARUS scripting information only to valid recipients
-	if ( trap->ICARUS_ValidEnt( (sharedEntity_t *)ent ) )
+	if ( !ent->isLogical && trap->ICARUS_ValidEnt( (sharedEntity_t *)ent ) )
 	{
 		trap->ICARUS_InitEnt( (sharedEntity_t *)ent );
 
@@ -1212,8 +1321,10 @@ void zyk_spawn_entity(gentity_t *ent) {
 		G_FreeEntity( ent );
 	}
 
+	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in
+	// the engine, indexed by entity number, and the engine does not know this number exists.
 	//Tag on the ICARUS scripting information only to valid recipients
-	if ( trap->ICARUS_ValidEnt( (sharedEntity_t *)ent ) )
+	if ( !ent->isLogical && trap->ICARUS_ValidEnt( (sharedEntity_t *)ent ) )
 	{
 		trap->ICARUS_InitEnt( (sharedEntity_t *)ent );
 
@@ -1524,8 +1635,10 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 		G_FreeEntity(ent);
 	}
 
+	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in
+	// the engine, indexed by entity number, and the engine does not know this number exists.
 	//Tag on the ICARUS scripting information only to valid recipients
-	if (trap->ICARUS_ValidEnt((sharedEntity_t *)ent))
+	if ( !ent->isLogical && trap->ICARUS_ValidEnt((sharedEntity_t *)ent))
 	{
 		trap->ICARUS_InitEnt((sharedEntity_t *)ent);
 
@@ -2152,6 +2265,13 @@ Parses textual entity definitions out of an entstring and spawns gentities.
 ==============
 */
 void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
+	// GalaxyRP: [Logical Entities] start the legacy-slot simulation with the table as it stands
+	// (clients and body queue). A sub-BSP spawns nested inside the main pass and must not restart it.
+	if (!inSubBSP)
+	{
+		RP_LegacySlotsBegin();
+	}
+
 	// allow calls to G_Spawn*()
 	level.spawning = qtrue;
 	level.numSpawnVars = 0;

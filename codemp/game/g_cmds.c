@@ -14361,8 +14361,24 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 		return;
 	}
 
-	// zyk: spawns the new entity
-	new_ent = G_Spawn();
+	// GalaxyRP: [Logical Entities] the region depends on the classname and on two of the keys, so
+	// read the pairs once for that before an entity is taken; the loop below reads them again to
+	// apply them, exactly as before.
+	{
+		rpSpawnRoute_t route;
+
+		RP_SpawnRouteInit(&route);
+		RP_SpawnRouteNoteKey(&route, "classname", arg1);
+		for (i = 2; i + 1 < number_of_args; i += 2)
+		{
+			trap->Argv( i, key, sizeof( key ) );
+			trap->Argv( i + 1, arg2, sizeof( arg2 ) );
+			RP_SpawnRouteNoteKey(&route, key, arg2);
+		}
+
+		// zyk: spawns the new entity
+		new_ent = RP_SpawnForRoute(&route);
+	}
 
 	if (new_ent)
 	{
@@ -14445,7 +14461,10 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 			level.last_spawned_entity = new_ent;
 		}
 
-		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned\n\"", new_ent->s.number) );
+		// GalaxyRP: [Logical Entities] say which region it went to; an id at or above
+		// MAX_GENTITIES is a logical entity and the admin will see those ids in /entlist too.
+		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned%s\n\"", new_ent->s.number,
+			new_ent->isLogical ? " (logical, not networked)" : "") );
 	}
 	else
 	{
@@ -14486,7 +14505,10 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 	entity_id = atoi(arg1);
 
-	if (entity_id < 0 || entity_id >= level.num_entities)
+	// GalaxyRP: [Logical Entities] an id is valid in either region: below level.num_entities, or
+	// from MAX_GENTITIES up to the logical high-water mark. The gap between them is never valid.
+	if (entity_id < 0 || entity_id >= MAX_GENTITIES + level.num_logicalents ||
+		(entity_id >= level.num_entities && entity_id < MAX_GENTITIES))
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"Invalid Entity ID.\n\"") );
 		return;
@@ -14609,6 +14631,49 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
+		// GalaxyRP: [Logical Entities] this command respawns the entity IN PLACE, in the slot it
+		// already has, and a slot cannot change region: a networked class written into a logical
+		// slot would be linked into the world under a number the engine does not know, which is a
+		// fatal error. So work out what region the entity would want after the edit -- its stored
+		// pairs overlaid with the ones given -- and refuse if that is not the region it is in.
+		// Only classname, nological and script_targetname can change the answer, so any other edit
+		// passes untouched. The escape is the obvious one: /entremove it and /entadd it again.
+		{
+			rpSpawnRoute_t route;
+			int j = 0;
+
+			RP_SpawnRouteInit(&route);
+			while (j + 1 < level.zyk_spawn_strings_values_count[entity_id])
+			{
+				RP_SpawnRouteNoteKey(&route, level.zyk_spawn_strings[entity_id][j], level.zyk_spawn_strings[entity_id][j + 1]);
+				j += 2;
+			}
+			for (i = 2; i + 1 < number_of_args; i += 2)
+			{
+				trap->Argv(i, key, sizeof(key));
+				trap->Argv(i + 1, arg2, sizeof(arg2));
+				// zyk: "zykremovekey" removes the key, so for the decision it is as if it were absent
+				if (Q_stricmp(arg2, "zykremovekey") == 0)
+				{
+					if (Q_stricmp(key, "classname") == 0)
+						route.classname[0] = '\0';
+					else if (Q_stricmp(key, "nological") == 0)
+						route.nological = qfalse;
+					else if (Q_stricmp(key, "script_targetname") == 0)
+						route.hasScriptTargetname = qfalse;
+					continue;
+				}
+				RP_SpawnRouteNoteKey(&route, key, arg2);
+			}
+
+			if (RP_SpawnRouteIsLogical(&route) != this_ent->isLogical)
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is %s and this edit would make it %s. An entity cannot change between the networked and logical regions in place: /entremove it and /entadd it again instead.\n\"",
+					entity_id, this_ent->isLogical ? "logical" : "networked", this_ent->isLogical ? "networked" : "logical") );
+				return;
+			}
+		}
+
 		strcpy(key,"");
 
 		for(i = 2; i < number_of_args; i++)
@@ -14666,6 +14731,7 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	char arg1[MAX_STRING_CHARS];
 	int i = 0;
 	int j = 0;
+	gentity_t *this_ent = NULL;
 	char serverinfo[MAX_INFO_STRING] = {0};
 	char zyk_mapname[128] = {0};
 	FILE *this_file = NULL;
@@ -14725,9 +14791,14 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 		return;
 	}
 
-	for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
+	// GalaxyRP: [Logical Entities] both regions, the reserved client and body slots skipped as
+	// before. The file stores classnames and keys, never ids, so a preset written with logical
+	// entities loads unchanged on a server that has them switched off, and vice versa.
+	RP_FOR_EACH_ENTITY( this_ent )
 	{
-		gentity_t *this_ent = &g_entities[i];
+		i = this_ent - g_entities;
+		if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+			continue;
 
 		if (this_ent && this_ent->inuse)
 		{ // zyk: freed entities will not be saved
@@ -14856,6 +14927,7 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 	char zyk_mapname[128] = {0};
 	int i = 0;
 	FILE *this_file = NULL;
+	gentity_t *target_ent = NULL;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -14904,9 +14976,14 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 		fclose(this_file);
 
 		// zyk: cleaning entities. Only the ones from the file will be in the map
-		for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- a preset saved before this feature holds the
+		// map's spawn points and targets, and they must go before it is read back or the map
+		// would end up with two of each.
+		RP_FOR_EACH_ENTITY( target_ent )
 		{
-			gentity_t *target_ent = &g_entities[i];
+			i = target_ent - g_entities;
+			if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+				continue;
 
 			// GalaxyRP fix: [Entity System] the test was "if (target_ent)", which is the address of
 			// a fixed array element and so can never be NULL -- every slot in the range was freed
@@ -15065,12 +15142,16 @@ void Cmd_EntNear_f( gentity_t *ent ) {
 	}
 
 	// zyk: if there are still enough room to list, use old method to get some entities not listed with EntitiesInBox
-	for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
+	// GalaxyRP: [Logical Entities] both regions. EntitiesInBox above is an engine call and cannot
+	// see a logical entity; this distance scan is what lists a nearby zyk_weather or spawn point.
+	RP_FOR_EACH_ENTITY( this_ent )
 	{
 		int j = 0;
 		qboolean already_found = qfalse;
 
-		this_ent = &g_entities[i];
+		i = this_ent - g_entities;
+		if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+			continue;
 
 		for (j = 0; j < numListedEntities; j++)
 		{
@@ -15121,7 +15202,10 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 {
 	char row[RP_LIST_FLUSH_AT];
 
-	Com_sprintf(row, sizeof(row), "\n%d - %s - %s - %s", id,
+	// GalaxyRP: [Logical Entities] a logical entity's id carries an L so the admin can tell the
+	// two regions apart; the number itself (>= MAX_GENTITIES) is what every other command takes.
+	Com_sprintf(row, sizeof(row), "\n%d%s - %s - %s - %s", id,
+		(target_ent && target_ent->isLogical) ? "L" : "",
 		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
 		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
 		(target_ent && target_ent->target) ? target_ent->target : "<none>");
@@ -15168,13 +15252,19 @@ void Cmd_EntList_f( gentity_t *ent ) {
 
 	if (page_number > 0)
 	{
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] pages run through the networked region and then straight on
+		// into the logical one, so page N is the Nth ten slots in the order both regions are
+		// walked; the ids printed are the real ones, with a gap where the region changes.
+		int row = 0;
+
+		RP_FOR_EACH_ENTITY( target_ent )
 		{
-			if (i >= ((page_number - 1) * 10) && i < (page_number * 10))
+			if (row >= ((page_number - 1) * 10) && row < (page_number * 10))
 			{ // zyk: this command lists 10 entities per page
-				target_ent = &g_entities[i];
+				i = target_ent - g_entities;
 				zyk_entlist_append(ent, message, sizeof(message), &len, i, target_ent);
 			}
+			row++;
 		}
 	}
 	else
@@ -15190,9 +15280,10 @@ void Cmd_EntList_f( gentity_t *ent ) {
 		// linefeed, and that is what the search term has always meant.
 		char *search_term = G_NewString(arg1);
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions.
+		RP_FOR_EACH_ENTITY( target_ent )
 		{
-			target_ent = &g_entities[i];
+			i = target_ent - g_entities;
 
 			if (target_ent && 
 				((target_ent->classname && strstr(target_ent->classname, search_term)) ||
@@ -15262,9 +15353,10 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			return;
 		}
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions.
+		RP_FOR_EACH_ENTITY( target_ent )
 		{
-			target_ent = &g_entities[i];
+			i = target_ent - g_entities;
 			// GalaxyRP fix: [Entity System] skip a slot that is already free, the same test
 			// /entload's clearing loop was given. Freeing a freed entity is mostly wasted work --
 			// the ghoul2, NPC and sound-tracker branches of G_FreeEntity() are all gated on fields
@@ -15338,9 +15430,18 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			return;
 		}
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] a range must stay inside one region. Straddling the
+		// boundary would sweep ENTITYNUM_WORLD/ENTITYNUM_NONE and read as "everything from here on"
+		// -- if that is what is wanted, two commands say it explicitly.
+		if (entity_id < MAX_GENTITIES && entity_id2 >= MAX_GENTITIES)
 		{
-			target_ent = &g_entities[i];
+			trap->SendServerCommand( ent-g_entities, va("print \"A range cannot cross from the networked entities (below %d) into the logical ones (from %d): remove the two ranges separately.\n\"", MAX_GENTITIES, MAX_GENTITIES) );
+			return;
+		}
+
+		// GalaxyRP: [Logical Entities] both regions.
+		RP_FOR_EACH_ENTITY( target_ent )
+		{
 			// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of a
 			// few hundred slots is mostly free slots, and each one was being freed again.
 			if ((target_ent-g_entities) >= entity_id && (target_ent-g_entities) <= entity_id2

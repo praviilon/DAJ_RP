@@ -933,6 +933,16 @@ typedef enum {
 #define	GENTITYNUM_BITS	10		// don't need to send any more
 #define	MAX_GENTITIES	(1<<GENTITYNUM_BITS)
 
+// GalaxyRP: [Logical Entities] the game module keeps a second region of entity slots ABOVE
+// MAX_GENTITIES for entities that never need to reach the engine or a client -- spawn points,
+// target_* relays, NPC spawners, path corners, weather markers. They are never linked, never
+// networked and never handed to ICARUS, so they do not count against the 10-bit entity number
+// the protocol sends; the engine is only ever told about the first MAX_GENTITIES slots. Ported
+// from TaystJK (which took it from Jedi Knight Galaxies); see G_SpawnLogical() in g_utils.c.
+// Only the game module allocates the upper region; cgame and ui keep MAX_GENTITIES everywhere.
+#define	MAX_LOGICENTITIES	3072
+#define	MAX_ENTITIESTOTAL	(MAX_GENTITIES+MAX_LOGICENTITIES)
+
 //I am reverting. I guess. For now.
 /*
 #define	GENTITYNUM_BITS		11

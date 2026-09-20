@@ -493,6 +493,12 @@ XCVAR_DEF( rp_allow_jetpack_command,		"2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART
 // players with the skill only. Clamped to that range by RP_CVU_allowGrappleHook() (g_cvar.c). See
 // RP_GrappleAllowed() in g_cmds.c; the mode the hook pulls in is g_allowGrapple.
 XCVAR_DEF( rp_allow_grapple_hook,		"2",		RP_CVU_allowGrappleHook,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [Logical Entities] whether the map loader and the Entity System may put spawn points,
+// target_* relays, NPC spawners and the other never-networked classes into the logical entity
+// region above MAX_GENTITIES (see q_shared.h). Latched and read ONCE at G_InitGame into
+// level.logical_entities_enabled, so a change takes effect at the next map and never moves a live
+// entity between regions. 0 puts everything in the networked table, exactly as before the feature.
+XCVAR_DEF( rp_logical_entities,			"1",		NULL,				CVAR_ARCHIVE|CVAR_LATCH,						qfalse )
 XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

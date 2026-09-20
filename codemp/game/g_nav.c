@@ -1307,7 +1307,15 @@ void SP_waypoint ( gentity_t *ent )
 		ent->r.contents = CONTENTS_TRIGGER;
 		ent->clipmask = MASK_DEADSOLID;
 
-		trap->LinkEntity( (sharedEntity_t *)ent );
+		// GalaxyRP: [Logical Entities] the waypoint classes are logical; the link is only there so
+		// the in-solid trace below has a linked body to skip. An unlinked entity is not in the
+		// engine's touch list to begin with, so nothing is lost. (The trace still receives the
+		// entity number as passEntityNum; the engine turns that into a pointer into the same
+		// contiguous g_entities array without a bounds test, so a logical number is safe there.)
+		if ( !ent->isLogical )
+		{
+			trap->LinkEntity( (sharedEntity_t *)ent );
+		}
 
 		ent->count = -1;
 		ent->classname = "waypoint";
@@ -1348,7 +1356,15 @@ void SP_waypoint_small (gentity_t *ent)
 		ent->r.contents = CONTENTS_TRIGGER;
 		ent->clipmask = MASK_DEADSOLID;
 
-		trap->LinkEntity( (sharedEntity_t *)ent );
+		// GalaxyRP: [Logical Entities] the waypoint classes are logical; the link is only there so
+		// the in-solid trace below has a linked body to skip. An unlinked entity is not in the
+		// engine's touch list to begin with, so nothing is lost. (The trace still receives the
+		// entity number as passEntityNum; the engine turns that into a pointer into the same
+		// contiguous g_entities array without a bounds test, so a logical number is safe there.)
+		if ( !ent->isLogical )
+		{
+			trap->LinkEntity( (sharedEntity_t *)ent );
+		}
 
 		ent->count = -1;
 		ent->classname = "waypoint";

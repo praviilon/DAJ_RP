@@ -42,7 +42,10 @@ extern int fatalErrors;
 
 int killPlayerTimer = 0;
 
-gentity_t		g_entities[MAX_GENTITIES];
+// GalaxyRP: [Logical Entities] the array holds both regions; see g_local.h. g_logicalents is the
+// first slot of the upper, engine-invisible region.
+gentity_t		g_entities[MAX_ENTITIESTOTAL];
+gentity_t		*g_logicalents = &g_entities[MAX_GENTITIES];
 gclient_t		g_clients[MAX_CLIENTS];
 
 qboolean gDuelExit = qfalse;
@@ -805,22 +808,16 @@ void zyk_create_info_player_deathmatch(int x, int y, int z, int yaw)
 {
 	gentity_t *spawn_ent = NULL;
 
-	spawn_ent = G_Spawn();
+	// GalaxyRP: [Logical Entities] a spawn point is a logical class; allocate it where the map
+	// loader would, so an SP map's added spawn points do not take networked slots either.
+	spawn_ent = RP_SpawnForClassname("info_player_deathmatch", qfalse, qfalse);
 	if (spawn_ent)
 	{
-		int i = 0;
-		gentity_t *this_ent;
 		gentity_t *spawn_point_ent = NULL;
 
-		for (i = 0; i < level.num_entities; i++)
-		{
-			this_ent = &g_entities[i];
-			if (Q_stricmp( this_ent->classname, "info_player_deathmatch") == 0)
-			{ // zyk: found the original SP map spawn point
-				spawn_point_ent = this_ent;
-				break;
-			}
-		}
+		// GalaxyRP: [Logical Entities] G_Find covers both regions; the plain index loop this used
+		// to be only saw the networked one, and the map's own spawn points are logical now.
+		spawn_point_ent = G_Find(NULL, FOFS(classname), "info_player_deathmatch");
 
 		zyk_set_entity_field(spawn_ent,"classname","info_player_deathmatch");
 		zyk_set_entity_field(spawn_ent,"origin",va("%d %d %d",x,y,z));
@@ -839,7 +836,9 @@ void zyk_create_ctf_flag_spawn(int x, int y, int z, qboolean redteam)
 {
 	gentity_t *spawn_ent = NULL;
 
-	spawn_ent = G_Spawn();
+	// GalaxyRP: [Logical Entities] a flag is an item and so always networked, but every code
+	// spawn goes through the one allocator so the rule lives in one place.
+	spawn_ent = RP_SpawnForClassname(redteam ? "team_CTF_redflag" : "team_CTF_blueflag", qfalse, qfalse);
 	if (spawn_ent)
 	{
 		if (redteam == qtrue)
@@ -856,8 +855,15 @@ void zyk_create_ctf_flag_spawn(int x, int y, int z, qboolean redteam)
 void zyk_create_ctf_player_spawn(int x, int y, int z, int yaw, qboolean redteam, qboolean team_begin_spawn_point)
 {
 	gentity_t *spawn_ent = NULL;
+	const char *classname;
 
-	spawn_ent = G_Spawn();
+	if (redteam == qtrue)
+		classname = team_begin_spawn_point ? "team_CTF_redplayer" : "team_CTF_redspawn";
+	else
+		classname = team_begin_spawn_point ? "team_CTF_blueplayer" : "team_CTF_bluespawn";
+
+	// GalaxyRP: [Logical Entities] the four CTF spawn-point classes are logical; see above.
+	spawn_ent = RP_SpawnForClassname(classname, qfalse, qfalse);
 	if (spawn_ent)
 	{
 		if (redteam == qtrue)
@@ -1031,8 +1037,14 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_InitWorldSession();
 
 	// initialize all entities for this game
-	memset( g_entities, 0, MAX_GENTITIES * sizeof(g_entities[0]) );
+	// GalaxyRP: [Logical Entities] both regions -- the engine only ever hears about the first
+	// MAX_GENTITIES of them, but the logical region is reused from map to map just the same.
+	memset( g_entities, 0, MAX_ENTITIESTOTAL * sizeof(g_entities[0]) );
 	level.gentities = g_entities;
+	level.num_logicalents = 0;
+	// GalaxyRP: [Logical Entities] the cvar is latched, but this copy is what the allocator reads,
+	// so nothing can move between regions while a map is running.
+	level.logical_entities_enabled = rp_logical_entities.integer ? qtrue : qfalse;
 
 	// initialize all clients for this game
 	level.maxclients = sv_maxclients.integer;
@@ -1499,12 +1511,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "yavin1") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "end_level") == 0)
 			{ // zyk: remove the map change entity
 				G_FreeEntity( ent );
@@ -1515,16 +1526,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "yavin1b") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "yavin1b", 8) == 0)
 			level.quest_map = 1;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "door1") == 0)
 			{
 				fix_sp_func_door(ent);
@@ -1539,16 +1549,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "yavin2") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "yavin2", 7) == 0)
 			level.quest_map = 10;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "t530") == 0 || Q_stricmp( ent->targetname, "Putz_door") == 0 || Q_stricmp( ent->targetname, "afterdroid_door") == 0 || Q_stricmp( ent->targetname, "pit_door") == 0 || Q_stricmp( ent->targetname, "door1") == 0)
 			{
 				fix_sp_func_door(ent);
@@ -1563,16 +1572,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "hoth2") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "hoth2", 6) == 0)
 			level.quest_map = 5;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "end_level") == 0)
 			{ // zyk: remove the map change entity
 				G_FreeEntity( ent );
@@ -1584,21 +1592,20 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "hoth3") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "hoth3", 6) == 0)
 			level.quest_map = 20;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "end_level") == 0)
 			{ // zyk: remove the map change entity
 				G_FreeEntity( ent );
 			}
-			if (i == 232 || i == 233)
+			if (ent->legacySlot == 232 || ent->legacySlot == 233)
 			{ // zyk: fixing the final door
 				ent->targetname = NULL;
 				zyk_main_set_entity_field(ent, "targetname", "zykremovekey");
@@ -1612,16 +1619,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t1_danger") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t1_danger", 10) == 0)
 			level.quest_map = 18;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->classname, "NPC_Monster_Sand_Creature") == 0)
 			{ // zyk: remove the map change entity
 				G_FreeEntity( ent );
@@ -1633,16 +1639,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t1_fatal") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t1_fatal", 9) == 0)
 			level.quest_map = 13;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 
 			if (Q_stricmp(ent->targetname, "door_trap") == 0)
 			{ // zyk: fixing this door so it will not lock
@@ -1655,7 +1660,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				GlobalUse(ent, ent, ent);
 			}
 
-			if (i == 443)
+			if (ent->legacySlot == 443)
 			{ // zyk: trigger_hurt at the spawn area
 				G_FreeEntity( ent );
 			}
@@ -1723,7 +1728,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t1_surprise") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 		qboolean found_bugged_switch = qfalse;
 
@@ -1731,9 +1735,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		if (Q_strncmp(zyk_mapname, "t1_surprise", 12) == 0)
 			level.quest_map = 3;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 
 			if (Q_stricmp( ent->targetname, "fire_hurt") == 0)
 			{
@@ -1756,7 +1760,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{ // zyk: elevator inside sand crawler near the wall fire
 				G_FreeEntity( ent );
 			}
-			if (Q_stricmp( ent->classname, "func_door") == 0 && i > 200 && Q_stricmp( ent->model, "*63") == 0)
+			if (Q_stricmp( ent->classname, "func_door") == 0 && ent->legacySlot > 200 && Q_stricmp( ent->model, "*63") == 0)
 			{ // zyk: tube door in which the droid goes in SP
 				G_FreeEntity( ent );
 			}
@@ -1785,12 +1789,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t2_rancor") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			
 			if (Q_stricmp( ent->targetname, "t857") == 0)
 			{
@@ -1806,16 +1809,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t2_rogue") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t2_rogue", 9) == 0)
 			level.quest_map = 7;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "t475") == 0)
 			{ // zyk: remove the invisible wall at the end of the bridge at start
 				G_FreeEntity( ent );
@@ -1840,11 +1842,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{ // zyk: remove office door
 				G_FreeEntity(ent);
 			}
-			if (i == 142)
+			if (ent->legacySlot == 142)
 			{ // zyk: remove the elevator
 				G_FreeEntity(ent);
 			}
-			if (i == 166)
+			if (ent->legacySlot == 166)
 			{ // zyk: remove the elevator button
 				G_FreeEntity(ent);
 			}
@@ -1896,16 +1898,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t2_trip") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t2_trip", 8) == 0)
 			level.quest_map = 17;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "t546") == 0)
 			{
 				G_FreeEntity( ent );
@@ -1930,7 +1931,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			else if (Q_stricmp( ent->classname, "func_door") == 0 && i > 200)
+			else if (Q_stricmp( ent->classname, "func_door") == 0 && ent->legacySlot > 200)
 			{ // zyk: door in the far end of the map, past the teleports the old Race Mode used
 				G_FreeEntity( ent );
 			}
@@ -1972,12 +1973,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t2_dpred") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "prisonshield1") == 0)
 			{
 				G_FreeEntity( ent );
@@ -2024,12 +2024,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "vjun1") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
-			if (i == 123 || i == 124)
+			if (ent->legacySlot == 123 || ent->legacySlot == 124)
 			{ // zyk: removing tie fighter misc_model_breakable entities to prevent client crashes
 				G_FreeEntity( ent );
 			}
@@ -2044,12 +2043,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "vjun3") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "end_level") == 0)
 			{
 				G_FreeEntity( ent );
@@ -2061,17 +2059,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t3_hevil") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t3_hevil", 9) == 0)
 			level.quest_map = 8;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
-			if (i == 42)
+			if (ent->legacySlot == 42)
 			{
 				G_FreeEntity( ent );
 			}
@@ -2109,12 +2106,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t3_byss") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			
 			if (Q_stricmp( ent->targetname, "wall_door1") == 0)
 			{
@@ -2154,16 +2150,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t3_rift") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "t3_rift", 8) == 0)
 			level.quest_map = 4;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "fakewall1") == 0)
 			{
 				G_FreeEntity( ent );
@@ -2188,16 +2183,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "taspir1") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "taspir1", 8) == 0)
 			level.quest_map = 25;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp(ent->targetname, "t278") == 0)
 			{
 				G_FreeEntity(ent);
@@ -2216,12 +2210,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "taspir2") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp(ent->targetname, "force_field") == 0)
 			{
 				G_FreeEntity(ent);
@@ -2237,17 +2230,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "kor1") == 0)
 	{
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "kor1", 5) == 0)
 			level.quest_map = 9;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
-			if (i >= 418 && i <= 422)
+			if (ent->legacySlot >= 418 && ent->legacySlot <= 422)
 			{ // zyk: remove part of the door on the floor on the first puzzle
 				G_FreeEntity( ent );
 			}
@@ -2284,21 +2276,20 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "mp/siege_korriban") == 0 && g_gametype.integer == GT_FFA)
 	{ // zyk: if its a FFA game, then remove some entities
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "mp/siege_korriban", 18) == 0)
 			level.quest_map = 12;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "cyrstalsinplace") == 0)
 			{
 				G_FreeEntity( ent );
 			}
-			if (i >= 236 && i <= 238)
+			if (ent->legacySlot >= 236 && ent->legacySlot <= 238)
 			{ // zyk: removing the trigger_hurt from the lava in Guardian of Universe arena
 				G_FreeEntity( ent );
 			}
@@ -2306,16 +2297,15 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "mp/siege_desert") == 0 && g_gametype.integer == GT_FFA)
 	{ // zyk: if its a FFA game, then remove the shield in the final part
-		int i = 0;
 		gentity_t *ent;
 
 		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
 		if (Q_strncmp(zyk_mapname, "mp/siege_desert", 16) == 0)
 			level.quest_map = 24;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "rebel_obj_2_doors") == 0)
 			{
 				fix_sp_func_door(ent);
@@ -2328,7 +2318,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			if (i >= 153 && i <= 160)
+			if (ent->legacySlot >= 153 && ent->legacySlot <= 160)
 			{
 				G_FreeEntity( ent );
 			}
@@ -2336,12 +2326,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "mp/siege_destroyer") == 0 && g_gametype.integer == GT_FFA)
 	{ // zyk: if its a FFA game, then remove the shield at the destroyer
-		int i = 0;
 		gentity_t *ent;
 
-		for (i = 0; i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
+		RP_FOR_EACH_ENTITY( ent )
 		{
-			ent = &g_entities[i];
 			if (Q_stricmp( ent->targetname, "ubershield") == 0)
 			{
 				G_FreeEntity( ent );
@@ -2410,12 +2399,19 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		//
 		// Test what was actually meant, and first, so the two classname compares only ever see a live
 		// entity rather than the "freed" placeholder.
-		for (i = (MAX_CLIENTS + BODY_QUEUE_SIZE); i < level.num_entities; i++)
+		// GalaxyRP: [Logical Entities] both regions, as in Cmd_EntLoad_f.
 		{
-			gentity_t *target_ent = &g_entities[i];
+			gentity_t *target_ent;
 
-			if (target_ent->inuse && Q_stricmp(target_ent->classname, "team_CTF_redflag") != 0 && Q_stricmp(target_ent->classname, "team_CTF_blueflag") != 0)
-				G_FreeEntity( target_ent );
+			RP_FOR_EACH_ENTITY( target_ent )
+			{
+				i = target_ent - g_entities;
+				if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+					continue;
+
+				if (target_ent->inuse && Q_stricmp(target_ent->classname, "team_CTF_redflag") != 0 && Q_stricmp(target_ent->classname, "team_CTF_blueflag") != 0)
+					G_FreeEntity( target_ent );
+			}
 		}
 
 		strcpy(level.load_entities_file, va("GalaxyRP/entities/%s/default.txt",zyk_mapname));
@@ -5007,7 +5003,10 @@ void G_RunThink (gentity_t *ent) {
 	ent->think (ent);
 
 runicarus:
-	if ( ent->inuse )
+	// GalaxyRP: [Logical Entities] a logical entity has no ICARUS task manager (it was never
+	// ICARUS_InitEnt'ed -- the engine does not know its number) and never an NPC, so there is
+	// nothing to maintain and the number must not be handed over.
+	if ( ent->inuse && !ent->isLogical )
 	{
 		SaveNPCGlobals();
 		if(NPCS.NPCInfo == NULL && ent->NPC != NULL)
@@ -9877,7 +9876,19 @@ void G_RunFrame( int levelTime ) {
 				}
 
 				// zyk: the line is good, so now take an entity for it
-				new_ent = G_Spawn();
+				// GalaxyRP: [Logical Entities] in the region its classname belongs to, decided from
+				// the pairs already parsed above -- the same rule the map loader and /entadd use.
+				{
+					rpSpawnRoute_t route;
+					int m;
+
+					RP_SpawnRouteInit(&route);
+					for (m = 0; m < j; m += 2)
+					{
+						RP_SpawnRouteNoteKey(&route, zyk_keys[m / 2], zyk_values[m / 2]);
+					}
+					new_ent = RP_SpawnForRoute(&route);
+				}
 
 				if (new_ent)
 				{
@@ -10635,6 +10646,18 @@ void G_RunFrame( int levelTime ) {
 		{
 			ClearNPCGlobals();
 		}
+	}
+
+	// GalaxyRP: [Logical Entities] the upper region. A logical entity is never a client, missile,
+	// mover, item or NPC and is never linked, so the only thing the loop above would do for it is
+	// G_RunThink() -- and that is all it gets. Runs after the networked loop so a logical relay
+	// fired by a networked trigger this frame thinks this frame, as it did when it was networked.
+	ent = g_logicalents;
+	for ( i = 0; i < level.num_logicalents; i++, ent++ ) {
+		if ( !ent->inuse ) {
+			continue;
+		}
+		G_RunThink( ent );
 	}
 #ifdef _G_FRAME_PERFANAL
 	iTimer_ItemRun = trap->PrecisionTimer_End(timer_ItemRun);
