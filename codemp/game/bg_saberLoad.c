@@ -2523,7 +2523,10 @@ void WP_SaberLoadParms( void )
 {
 	int				len, totallen, saberExtFNLen, fileCnt, i;
 	char			*holdChar, *marker;
-	char			saberExtensionListBuf[2048];			//	The list of file names read in
+	// GalaxyRP fix: [Vehicles] 2048 -> 16384; see MAX_VEH_EXT_LIST_SIZE in bg_vehicleLoad.c. The
+	// engine drops names silently once the list is full, and saber packs are the most numerous
+	// extension files of all.
+	char			saberExtensionListBuf[16384];			//	The list of file names read in
 	fileHandle_t	f;
 
 	len = 0;
@@ -2572,6 +2575,9 @@ void WP_SaberLoadParms( void )
 		totallen += len;
 		marker = saberParms+totallen;
 	}
+
+	// GalaxyRP fix: [Vehicles] holdChar has walked exactly the bytes the names occupied.
+	BG_FileListMayBeTruncated( "ext_data/sabers", ".sab", fileCnt, (int)(holdChar - saberExtensionListBuf), sizeof( saberExtensionListBuf ) );
 }
 
 #ifdef UI_BUILD
