@@ -6666,7 +6666,15 @@ static void UI_RunMenuScript(char **args)
 				// quote-injection issue, same fix.
 				UI_SanitizeAccountArg(zyk_char);
 
-				trap->Cmd_ExecuteText(EXEC_APPEND, va("char delete \"%s\"\n", zyk_char));
+				// GalaxyRP fix: [Char] this sent "char delete", and Cmd_Char_f (g_cmds.c) has never had a
+				// "delete" subcommand -- only new, use and remove. So the menu's delete button printed the
+				// usage tip on the server and removed nothing, while the Cvar_Set below cleared the slot
+				// anyway, so the character looked deleted until the next list refresh put it back. The
+				// server's spelling is the one that exists; use it. The optimistic clear is fine now that
+				// the command lands: Cmd_Char_f sends a fresh "zykchars" list after every remove, which
+				// rewrites all fifteen slots (CG_ZykChars, cg_servercmds.c), so a refused remove -- the
+				// active character -- restores its slot on its own.
+				trap->Cmd_ExecuteText(EXEC_APPEND, va("char remove \"%s\"\n", zyk_char));
 				trap->Cvar_Set(va("ui_zyk_rpg_char_%s", arg), "");
 			}
 		}

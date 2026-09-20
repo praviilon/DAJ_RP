@@ -2324,7 +2324,7 @@ qboolean select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, 
 	// (the SQL string delimiter) could break out of the literal and inject arbitrary SQL, executed
 	// with this game server's full database privileges -- reachable via /new (Cmd_Register_F). Bind
 	// the value as a parameter instead, so it can never be interpreted as SQL syntax.
-	rc = sqlite3_prepare_v2(db, "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT AccountID, PlayerSettings, AdminLevel FROM Accounts WHERE Username = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2382,7 +2382,7 @@ int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db,
 	// had no callers at all, which is how it survived; it has one now (the duplicate-session drop in
 	// select_account_and_default_character_data), and that caller runs a further query afterwards.
 	// Report and return the sentinel; let whoever opened the connection close it.
-	rc = sqlite3_prepare_v2(db, "SELECT AccountID FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT AccountID FROM Accounts WHERE Username = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2493,7 +2493,7 @@ int select_number_of_accounts_with_username(gentity_t* ent, char* username, sqli
 	// first query both /login and /new run against attacker-supplied input, so it's reachable
 	// unauthenticated. Bind the value as a parameter instead, so it can never be interpreted as SQL
 	// syntax regardless of content.
-	rc = sqlite3_prepare_v2(db, "SELECT count(Username) FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(Username) FROM Accounts WHERE Username = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2605,7 +2605,7 @@ qboolean is_password_correct(gentity_t* ent, char* username, char* password, sql
 	// select_number_of_accounts_with_username() above -- bind username instead. Reachable via /login
 	// with the account's own password compared afterward in C via strcmp(), never itself placed into
 	// SQL text here.
-	rc = sqlite3_prepare_v2(db, "SELECT Password FROM Accounts WHERE Username=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT Password FROM Accounts WHERE Username = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2719,13 +2719,36 @@ qboolean insert_chars_table_row(gentity_t* ent, char* character_name, sqlite3* d
 }
 
 // GalaxyRP (Alex): [Database] SELECT This method returns the number of characters that exist with one name. (Useful for preventing duplicates)
+// GalaxyRP fix: [Account] character names and account usernames are compared case-insensitively
+// everywhere -- every WHERE on Characters.Name or Accounts.Username in this file and in g_main.c
+// carries COLLATE NOCASE, and the two UNIQUE indexes that back them (g_main.c) are built on the
+// same collation.
+//
+// The database compared bytes, so "Admin" and "admin" were two characters and two accounts. For
+// accounts that was merely confusing. For characters it was a trap, because the two "is this the
+// one I already have loaded?" guards in this file -- Cmd_Char_f's /char use branch and
+// remove_character() -- were written with Q_stricmp: with "Admin" active, "/char use admin" and
+// "/char remove admin" were both refused as the active character, so a player who had created the
+// pair could neither switch to nor delete the other one. Logging out did not help either, since
+// Accounts.DefaultChar is rewritten from the active name on every save. The guards were right and
+// the storage was wrong; this brings the storage into line with them.
+//
+// Per comparison rather than on the column: CREATE TABLE IF NOT EXISTS never alters a table that
+// already exists, so a column-level COLLATE would only apply to databases created after this change.
+// Written into the query it applies to every database, migrated or not. NOCASE folds only ASCII A-Z,
+// which is exactly enough -- zyk_check_user_input() restricts both kinds of name to ASCII letters
+// and digits before they can reach any of this.
+//
+// One consequence: a name a player TYPES may differ in case from the one STORED, so anywhere the
+// stored spelling matters it is now read back from the row rather than echoed from the argument --
+// see the sess.rpgchar copy in select_player_character(). The login path already did this.
 int select_number_of_characters_with_name(gentity_t* ent, char* character_name, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 
 	// GalaxyRP fix: [security] this used to build the query text via va("...Name='%s'", character_name)
 	// -- splicing the raw character name straight into the SQL string. Reachable via /new
 	// (Cmd_Register_F, using the new account's own username as its first character's name) and via
 	// /char new <name>. Bind the value as a parameter instead.
-	rc = sqlite3_prepare_v2(db, "SELECT count(CharID) FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(CharID) FROM Characters WHERE AccountID=? AND Name = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2805,7 +2828,7 @@ int select_char_id_using_char_name(gentity_t* ent, char* character_name, sqlite3
 	// GalaxyRP fix: [security] this used to build the query text via va("...Name='%s'", character_name)
 	// -- splicing the raw character name straight into the SQL string. Reachable via /char remove
 	// <name>. Bind the value as a parameter instead.
-	rc = sqlite3_prepare_v2(db, "SELECT CharID FROM Characters WHERE AccountID=? AND Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT CharID FROM Characters WHERE AccountID=? AND Name = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -2991,7 +3014,7 @@ void delete_chars_table_row_with_name(gentity_t* ent, char* charName, sqlite3* d
 	// calls this function today -- /char remove goes through remove_character() instead, which
 	// deletes by CharID), but fixed for consistency/safety with the rest of the DB layer in case
 	// it's wired up later.
-	rc = sqlite3_prepare_v2(db, "DELETE FROM Characters WHERE Name=?", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "DELETE FROM Characters WHERE Name = ? COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -4169,7 +4192,7 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		ON Skills.CharID = Characters.CharID\
 		INNER JOIN Weapons\
 		ON Weapons.CharID = Characters.CharID\
-		WHERE Characters.Name = ? AND Characters.AccountID = ?";
+		WHERE Characters.Name = ? COLLATE NOCASE AND Characters.AccountID = ?";
 
 	rc = sqlite3_prepare_v2(db, select_character_query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
@@ -4219,15 +4242,20 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		ent->client->pers.credits = sqlite3_column_int(stmt, 2);
 		ent->client->pers.level = sqlite3_column_int(stmt, 3);
 		do_scale(ent, sqlite3_column_int(stmt, 4));
-		// GalaxyRP fix: [security] sess.rpgchar is a fixed 32-byte buffer (g_local.h); character_name
-		// here is the raw argument /char use <name> was typed with, only bounded by MAX_STRING_CHARS
-		// (1024). create_new_character() now rejects any new character name that wouldn't fit this
-		// buffer, so no character created from this point on can trigger this -- but a pre-existing
-		// row created before that guard existed (or added directly to the database) could still match
-		// this query and reach this strcpy() with an oversized name. Q_strncpyz() bounds the copy
-		// instead of trusting the match, matching the same defense-in-depth already applied to
-		// saber1Model/saber2Model just below.
-		Q_strncpyz(ent->client->sess.rpgchar, character_name, sizeof(ent->client->sess.rpgchar));
+		// GalaxyRP fix: [security] sess.rpgchar is a fixed 32-byte buffer (g_local.h). This used to copy
+		// character_name -- the raw argument /char use <name> was typed with, only bounded by
+		// MAX_STRING_CHARS (1024). create_new_character() rejects any new name that wouldn't fit, but a
+		// row that predates that guard (or was added to the database directly) can still match this
+		// query with an oversized name. Q_strncpyz() bounds the copy instead of trusting the match,
+		// the same defense-in-depth applied to saber1Model/saber2Model just below.
+		//
+		// GalaxyRP fix: [Account] ...and it copies the row's own Name (column 5) rather than the typed
+		// argument. Now that the lookup above folds case, "/char use ADMIN" loads the character stored
+		// as "Admin", and it is the stored spelling that has to end up here: sess.rpgchar is written
+		// back to Accounts.DefaultChar on every save, is what /list shows, and is what the "switched
+		// to" broadcast below prints. select_account_and_default_character_data() -- the login path --
+		// already reads its copy from the row; this brings the /char use path into line with it.
+		Q_strncpyz(ent->client->sess.rpgchar, (const char *)sqlite3_column_text(stmt, 5), sizeof(ent->client->sess.rpgchar));
 		ent->client->pers.skillpoints = sqlite3_column_int(stmt, 6);
 		strcpy(ent->client->pers.description, sqlite3_column_text(stmt, 7));
 		strcpy(displayName, sqlite3_column_text(stmt, 8));
@@ -4422,7 +4450,9 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	trap->SendServerCommand(ent - g_entities, "print \"^2Character loaded sucessfully!\n\"");
 	trap->SendServerCommand(ent - g_entities, "cp \"^2Character loaded sucessfully!\n\"");
 	if (announce_switch) {
-		trap->SendServerCommand(-1, va("chat \"%s switched to: %s\n\"", ent->client->pers.netname, character_name));
+		// GalaxyRP fix: [Account] announces the stored spelling (sess.rpgchar, read from the row above)
+		// rather than whatever was typed, now that "/char use ADMIN" resolves to "Admin".
+		trap->SendServerCommand(-1, va("chat \"%s switched to: %s\n\"", ent->client->pers.netname, ent->client->sess.rpgchar));
 	}
 
 	return qtrue;
@@ -4663,7 +4693,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ON Skills.CharID = Characters.CharID\
 		INNER JOIN Weapons\
 		ON Weapons.CharID = Characters.CharID\
-		WHERE Accounts.Username = ?\
+		WHERE Accounts.Username = ? COLLATE NOCASE\
 		AND Characters.AccountID = Accounts.AccountID\
 		AND Characters.CharID = (\
 			SELECT CharID\
@@ -4672,7 +4702,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 			AND Characters.Name = COALESCE(NULLIF(?, ''), (\
 				SELECT DefaultChar\
 				FROM Accounts\
-				WHERE Accounts.Username = ?))\
+				WHERE Accounts.Username = ? COLLATE NOCASE)) COLLATE NOCASE\
 			)";
 
 	rc = sqlite3_prepare_v2(db, select_account_table_row, -1, &stmt, NULL);

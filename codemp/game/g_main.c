@@ -227,7 +227,7 @@ qboolean admin_account_exists(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* 
 
 	int count = 0;
 
-	rc = sqlite3_prepare_v2(db, "SELECT count(AccountID) FROM Accounts WHERE Username='admin'", -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, "SELECT count(AccountID) FROM Accounts WHERE Username = 'admin' COLLATE NOCASE", -1, &stmt, NULL);
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
@@ -285,7 +285,7 @@ void create_admin_account(sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt
 	// account with no gentity_t/pers.player_settings to bind at all, so 0 (no custom settings) is
 	// simply the correct starting value, not an instance of the same bug.
 	char statement_account_entry_creation[] = "INSERT INTO Accounts(Username, Password, AdminLevel, PlayerSettings, DefaultChar) VALUES('admin','admin','-1','0','admin')";
-	char statement_account_id_select[] = "SELECT AccountID FROM Accounts WHERE Username='admin'";
+	char statement_account_id_select[] = "SELECT AccountID FROM Accounts WHERE Username = 'admin' COLLATE NOCASE";
 	char statement_character_entry_creation[] = "INSERT INTO Characters(AccountID, Credits, Level, ModelScale, Name, SkillPoints, Description, NetName, ModelName, xp) VALUES('%i', '100', '1', '100', '%s', '1', 'Nothing to show.', 'DefaultName', 'kyle', 0)";
 	char statement_skill_entry_creation[] = "INSERT INTO Skills(CharID, Jump, Push, Pull, Speed, Sense, SaberAttack, SaberDefense, SaberThrow, Absorb, Heal, Protect, MindTrick, TeamHeal, Lightning, Grip, Drain, Rage, TeamEnergize, StunBaton, BlasterPistol, BlasterRifle, Disruptor, Bowcaster, Repeater, DEMP2, Flechette, RocketLauncher, ConcussionRifle, BryarPistol, Melee, MaxShield, ShieldStrength, HealthStrength, DrainShield, Jetpack, SenseHealth, ShieldHeal, TeamShieldHeal, UniqueSkill, BlasterPack, PowerCell, MetalBolts, Rockets, Thermals, TripMines, Detpacks, Binoculars, BactaCanister, SentryGun, SeekerDrone, Eweb, BigBacta, ForceField, CloakItem, ForcePower, Improvements, Armor, Flamethrower, ShieldRegen, HealthRegen) VALUES('%i', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0')";
 	char statement_weapon_entry_creation[] = "INSERT INTO Weapons(CharID, AmmoBlaster, AmmoPowercell, AmmoMetalBolts, AmmoRockets, AmmoThermal, AmmoTripmine, AmmoDetpack) VALUES('%i', '0', '0', '0', '0', '0', '0', '0')";
@@ -515,7 +515,27 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	// SQLite has no ALTER TABLE support for adding to an existing table) closes this at the storage layer
 	// itself: insert_accounts_table_row() now checks its own INSERT's result and reports failure to
 	// Cmd_Register_F instead of silently ignoring a constraint violation this index can now raise.
-	char statement_username_unique_index[] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_accounts_username_unique' ON 'Accounts' ('Username')";
+	//
+	// GalaxyRP fix: [Account] the index is case-insensitive now, to match every Username comparison in
+	// g_cmds.c (all of them carry COLLATE NOCASE -- see the note above
+	// select_number_of_characters_with_name() there for why). A binary index would keep letting "Bob"
+	// and "bob" coexist at the storage layer while the application refused them, which is the wrong
+	// way round for a backstop. Since CREATE INDEX IF NOT EXISTS never touches an index that already
+	// exists, the collated one is created under a NEW name, and the old binary one is dropped only
+	// once that has succeeded -- so a database that already holds a case-variant pair (the one thing
+	// that makes the NOCASE build fail) keeps the binary index it had, logs the same warning as before,
+	// and is never left with no uniqueness guarantee at all.
+	char statement_username_unique_index[] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_accounts_username_nocase' ON 'Accounts' ('Username' COLLATE NOCASE)";
+	char statement_username_old_index_drop[] = "DROP INDEX IF EXISTS 'idx_accounts_username_unique'";
+
+	// GalaxyRP fix: [Account] and the same backstop for character names, which never had one. The
+	// duplicate check in create_new_character() is the same check-then-insert the account index exists
+	// to close, with the same window between the two. Keyed on (AccountID, Name) because uniqueness is
+	// per account: two players may each have a character called Jedi. Built on the collation the
+	// lookups use, so the database rather than the C code is what says two characters cannot share a
+	// name. Same warn-and-continue handling as the account index -- a database that already holds an
+	// "Admin"/"admin" pair logs it and keeps running.
+	char statement_character_unique_index[] = "CREATE UNIQUE INDEX IF NOT EXISTS 'idx_characters_account_name_nocase' ON 'Characters' ('AccountID', 'Name' COLLATE NOCASE)";
 
 	//Alex: Create Account Table
 	trap->Print("Initializing Account table.\n");
@@ -728,13 +748,38 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	if (rc != SQLITE_OK)
 	{
 		trap->Print("WARNING: could not create a UNIQUE index on Accounts.Username: %s\n", zErrMsg);
-		trap->Print("WARNING: this usually means two or more existing accounts already share a Username. "
+		trap->Print("WARNING: this usually means two or more existing accounts already share a Username "
+			"(the comparison is case-insensitive, so \"Bob\" and \"bob\" count as the same name). "
 			"Find and rename/merge the duplicate account(s) in the database, then restart the server to "
 			"finish enabling this protection. Until then, duplicate usernames can still be created.\n");
 		sqlite3_free(zErrMsg);
 	}
 	else {
+		// GalaxyRP fix: [Account] only now, with the collated index in place, retire the binary one it
+		// replaces. On a database that never had it this is a no-op.
+		rc = sqlite3_exec(db, statement_username_old_index_drop, 0, 0, &zErrMsg);
+		if (rc != SQLITE_OK)
+		{
+			trap->Print("WARNING: could not drop the superseded index idx_accounts_username_unique: %s\n", zErrMsg);
+			sqlite3_free(zErrMsg);
+		}
 		trap->Print("Done with unique index on Accounts.Username.\n");
+	}
+
+	trap->Print("Initializing unique index on Characters.(AccountID, Name).\n");
+
+	rc = sqlite3_exec(db, statement_character_unique_index, 0, 0, &zErrMsg);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("WARNING: could not create a UNIQUE index on Characters.(AccountID, Name): %s\n", zErrMsg);
+		trap->Print("WARNING: this usually means an account already has two characters whose names differ "
+			"only in case. Rename or remove one of them in the database, then restart the server to "
+			"finish enabling this protection. Until then, the application-level check in "
+			"create_new_character() is the only thing refusing a duplicate name.\n");
+		sqlite3_free(zErrMsg);
+	}
+	else {
+		trap->Print("Done with unique index on Characters.(AccountID, Name).\n");
 	}
 
 	if (with_admin_account == qtrue) {
