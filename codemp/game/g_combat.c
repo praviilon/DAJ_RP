@@ -2204,6 +2204,14 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	int			sPMType = 0;
 	char		buf[512] = {0};
 
+	// GalaxyRP: [Grapple Hook] the dead let go, and they let go before either early return below --
+	// TaystJK frees the hook further down, under its intermission return, so a hook there outlived a
+	// death during intermission and went on writing into its owner's playerState.
+	if ( self->client && self->client->hook )
+	{
+		Weapon_HookFree( self->client->hook );
+	}
+
 	if ( self->client->ps.pm_type == PM_DEAD ) {
 		return;
 	}

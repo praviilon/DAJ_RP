@@ -205,6 +205,13 @@ void TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 
 	noAngles = (angles[0] > 999999.0) ? qtrue : qfalse;
 
+	// GalaxyRP: [Grapple Hook] a teleport leaves the rope behind; the pull toward the old anchor
+	// would otherwise drag the player straight back out of the destination.
+	if ( player->client->hook )
+	{
+		Weapon_HookFree( player->client->hook );
+	}
+
 	// use temp events at source and destination to prevent the effect
 	// from getting dropped by a second player event
 	if ( player->client->sess.sessionTeam != TEAM_SPECTATOR ) {

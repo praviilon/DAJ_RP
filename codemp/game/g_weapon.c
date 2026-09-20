@@ -5651,3 +5651,105 @@ void SP_emplaced_gun( gentity_t *ent )
 
 	trap->LinkEntity((sharedEntity_t *)ent);
 }
+
+/*
+========================================================================================================
+GalaxyRP: [Grapple Hook] -- the hook's own lifecycle: fire, park, free.
+
+Ported from TaystJK (g_weapon.c: Weapon_GrapplingHook_Fire, Weapon_HookFree, Weapon_HookThink), which
+carries JA+'s hook. fire_grapple() and the impact branch live in g_missile.c beside the other missiles;
+the fire/release button logic is in ClientThink_real() (g_active.c); the pull itself is shared code in
+bg_pmove.c. Racemode and Tribes are gone. See the block comment on these in g_local.h for the shape.
+========================================================================================================
+*/
+
+// Fires one hook, if none is out. The muzzle is the stock JA+ one: 4 forward, 4 right of the player's
+// origin, at eye height plus 4. fireHeld is set either way -- it is the "button is still down" latch
+// that ClientThink_real() uses to decide when to let go.
+void Weapon_HookFire( gentity_t *ent )
+{
+	if ( !ent->client->fireHeld && !ent->client->hook )
+	{
+		vec3_t muzzlePoint;
+
+		AngleVectors( ent->client->ps.viewangles, forward, vright, up );
+
+		VectorCopy( ent->s.pos.trBase, muzzlePoint );
+		VectorMA( muzzlePoint, 4, forward, muzzlePoint );
+		VectorMA( muzzlePoint, 4, vright, muzzlePoint );
+		muzzlePoint[2] += ent->client->ps.viewheight + 4;
+
+		SnapVector( muzzlePoint );
+
+		fire_grapple( ent, muzzlePoint, forward );
+	}
+
+	ent->client->fireHeld = qtrue;
+}
+
+// The one way a hook goes away. Clears everything the owner holds about it -- the pointer, the pull
+// flag, both button latches -- and frees the entity. Safe on a hook whose owner is gone, and safe to
+// call on an owner whose hook pointer is already something else (a stale entity found by its own
+// think, see Weapon_HookThink): the owner's fields are only touched when this really is their hook.
+void Weapon_HookFree( gentity_t *ent )
+{
+	if ( !ent )
+	{
+		return;
+	}
+
+	if ( ent->parent && ent->parent->client && ent->parent->client->hook == ent )
+	{
+		ent->parent->client->hook = NULL;
+		ent->parent->client->ps.pm_flags &= ~PMF_GRAPPLE;
+		ent->parent->client->hookHasBeenFired = qfalse;
+		ent->parent->client->fireHeld = qfalse;
+	}
+
+	G_FreeEntity( ent );
+}
+
+// Runs every server frame once the hook has landed. Publishes the anchor into the owner's playerState
+// (ps.lastHitLoc is networked, and it is what both PM_Grapple* moves pull toward), follows a hooked
+// player, and lets go when the rope would be longer than 2048 units, the hooked player dies, or the
+// owner is no longer the owner.
+//
+// That last test is the one TaystJK lacks. ClientSpawn() memsets the client, so on a respawn the
+// owner forgot the hook while the hook still remembered the owner, and for the rest of its 30-second
+// lifetime it wrote its anchor into the respawned player's lastHitLoc every frame. ClientSpawn() now
+// frees the hook before the memset, and this is the belt to that brace.
+void Weapon_HookThink( gentity_t *ent )
+{
+	if ( !ent->parent || !ent->parent->client || ent->parent->client->hook != ent )
+	{
+		Weapon_HookFree( ent );
+		return;
+	}
+
+	if ( DistanceSquared( ent->r.currentOrigin, ent->parent->client->ps.origin ) > 2048 * 2048 )
+	{
+		Weapon_HookFree( ent );
+		return;
+	}
+
+	if ( ent->enemy && ent->enemy->client )
+	{
+		vec3_t v;
+
+		if ( ( ent->enemy->s.eFlags & EF_DEAD ) || !ent->enemy->inuse )
+		{
+			Weapon_HookFree( ent );
+			return;
+		}
+
+		VectorCopy( ent->enemy->r.currentOrigin, v );
+		SnapVectorTowards( v, ent->s.pos.trBase );
+
+		G_SetOrigin( ent, v );
+		VectorCopy( ent->enemy->s.pos.trDelta, ent->s.pos.trDelta );
+		SnapVector( ent->s.pos.trDelta );
+	}
+
+	VectorCopy( ent->r.currentOrigin, ent->parent->client->ps.lastHitLoc );
+	ent->nextthink = level.time + FRAMETIME;
+}

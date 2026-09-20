@@ -68,6 +68,13 @@ XCVAR_DEF( duel_fraglimit,				"10",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR
 XCVAR_DEF( fraglimit,					"20",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( g_adaptRespawn,				"1",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_allowDuelSuicide,			"1",			NULL,				CVAR_ARCHIVE,									qtrue )
+// GalaxyRP: [Grapple Hook] the MODE switch, not the permission: 1 is the swing (TaystJK's "Tarzan"),
+// 2 the JA+ winch. Who may use the hook at all is rp_allow_grapple_hook below. Anything but 1 or 2 --
+// including the 0 that means "off" in TaystJK -- is put back to 2 by RP_CVU_allowGrapple() (g_cvar.c)
+// with a console note saying which cvar to use instead. SERVERINFO so our cgame can predict the same
+// mode (cgs.grappleMode, cg_servercmds.c); the four g_hook* numbers below that the pull reads are
+// published for the same reason. TaystJK reads none of them on a server it does not recognise.
+XCVAR_DEF( g_allowGrapple,				"2",			RP_CVU_allowGrapple,	CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( g_allowHighPingDuelist,		"1",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_allowNPC,					"1",			NULL,				CVAR_CHEAT,										qtrue )
 XCVAR_DEF( g_allowTeamVote,				"1",			NULL,				CVAR_ARCHIVE,									qfalse )
@@ -121,6 +128,18 @@ XCVAR_DEF( g_friendlySaber,				"0",			NULL,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_g2TraceLod,				"3",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_gametype,					"0",			NULL,				CVAR_SERVERINFO|CVAR_LATCH,						qfalse )
 XCVAR_DEF( g_gravity,					"800",			NULL,				CVAR_NONE,										qtrue )
+// GalaxyRP: [Grapple Hook] TaystJK's tuning cvars, same names and defaults, so a config written for
+// its hook carries over. Speed and inheritance shape the projectile (fire_grapple, g_missile.c);
+// strength is the winch's reel speed and the swing's target speed; strength1/2 are the swing's
+// acceleration far from / near the anchor (PM_GrappleMoveTarzan, bg_pmove.c); floodProtect is the
+// minimum ms between shots (ClientThink_real, g_active.c). The three the pull reads are SERVERINFO
+// because the client predicts the pull with them -- see g_allowGrapple above.
+XCVAR_DEF( g_hookFloodProtect,			"600",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( g_hookInheritance,			"0.5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( g_hookSpeed,					"2400",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( g_hookStrength,				"800",			NULL,				CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NORESTART,	qtrue )
+XCVAR_DEF( g_hookStrength1,				"20",			NULL,				CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NORESTART,	qtrue )
+XCVAR_DEF( g_hookStrength2,				"40",			NULL,				CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( g_inactivity,				"0",			NULL,				CVAR_NONE,										qtrue )
 // GalaxyRP fix: [Jedi vs Merc] g_jediVmerc is pinned OFF. Stock JKA's "Jedi vs Mercenaries" mode
 // splits every player at ClientSpawn (g_client.c) by WP_HasForcePowers() -- which reads the force
@@ -245,18 +264,28 @@ XCVAR_DEF( sv_maxclients,				"8",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARC
 // The value is a bitmask; TaystJK's own names for the bits (bg_public.h in its tree) are:
 //     1<<0 RGBSABERS   1<<1 BLACKSABERS   1<<2 FLIPKICK   1<<3 GRAPPLE
 //     1<<4 FIXROLL_1   1<<5 FIXROLL_2     1<<6 FIXROLL_3
-// We advertise 3 -- RGBSABERS|BLACKSABERS -- and deliberately stop there. Those two are read only
-// in cg_players.c, i.e. they are purely about how a blade is drawn. Every bit from 1<<2 up is read
-// in bg_pmove.c instead: they tell the client to PREDICT MOVEMENT under rules the server is
-// promising to implement. Our pmove implements none of them, so setting any of those bits would
-// desync client prediction from the server and produce rubber-banding. Do not widen this value
-// without making our bg_pmove.c actually match the behaviour the added bit claims.
+// We advertise 11 -- RGBSABERS|BLACKSABERS|GRAPPLE -- and deliberately stop there. The first two
+// are read only in cg_players.c, i.e. they are purely about how a blade is drawn. Every bit from
+// 1<<2 up is read in bg_pmove.c instead: they tell the client to PREDICT MOVEMENT under rules the
+// server is promising to implement. GRAPPLE is the one of those our pmove now does implement (the
+// grapple hook, PMF_GRAPPLE, same pull code as TaystJK's), so the promise holds; FLIPKICK and the
+// three FIXROLLs it does not, so setting any of those would desync client prediction from the
+// server and produce rubber-banding. Do not widen this value without making our bg_pmove.c actually
+// match the behaviour the added bit claims.
+//
+// [Grapple Hook] Stated honestly, the GRAPPLE bit buys nothing from the TaystJK client as it is
+// today: its rope drawing and asset loading are keyed on the server being JA+/JAPro (cg_ents.c,
+// cg_main.c), and its pmove dispatch reaches the branch that tests this bit only after a branch
+// that a server it files as basejka always takes. A TaystJK client on this server therefore fires
+// and is pulled (the server does both), but predicts no pull and draws no rope. The bit is set
+// anyway, and our hook wears the JAPro wire signature (WP_BRYAR_PISTOL + saberInFlight), so that a
+// TaystJK build which honours the bit needs nothing more from us.
 //
 // CVAR_ROM for the same reason gamename above is: this states what the mod IS, not a knob, and a
 // well-meaning "taystJKinfo 127" in a server config would break movement for every TaystJK player.
 // Black is included because our palette really does offer it (/sabercolor black, the UI palette,
 // and its own shaders in ui_saber.c/cg_main.c) and TaystJK gates it on the same mechanism.
-XCVAR_DEF( taystJKinfo,					"3",			NULL,				CVAR_SERVERINFO|CVAR_ROM,						qfalse )
+XCVAR_DEF( taystJKinfo,					"11",			NULL,				CVAR_SERVERINFO|CVAR_ROM,						qfalse )
 XCVAR_DEF( timelimit,					"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( zyk_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -459,6 +488,11 @@ XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaSc
 XCVAR_DEF( zyk_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_duel_tournament_min_players, "2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_allow_jetpack_command,		"2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue ) // GalaxyRP: logged-in players with the Jetpack skill only; see jetpack_command_allowed() in g_cmds.c
+// GalaxyRP: [Grapple Hook] who may fire the hook, with rp_allow_jetpack_command's tiers: 0 nobody,
+// 1 logged-out players and logged-in players with the Grapple Hook skill, 2 (default) logged-in
+// players with the skill only. Clamped to that range by RP_CVU_allowGrappleHook() (g_cvar.c). See
+// RP_GrappleAllowed() in g_cmds.c; the mode the hook pulls in is g_allowGrapple.
+XCVAR_DEF( rp_allow_grapple_hook,		"2",		RP_CVU_allowGrappleHook,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

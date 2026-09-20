@@ -2839,6 +2839,25 @@
 			decoration
 		}
 
+		// GalaxyRP: [Grapple Hook] skill index 55 (label [56], the former Improvements placeholder) is
+		// the Grapple Hook skill; it takes the next 20px row of the Items panel, below FlameThrower.
+		itemDef 
+		{
+			name				grappleHookSkillButton
+			group				itemsSkillsControls
+			text				"[56] Grapple Hook"
+			descText			""
+			type				1
+			font				3
+			textscale			.5
+			style				WINDOW_STYLE_FILLED
+			rect				270 300 130 15
+			textalign			ITEM_ALIGN_LEFT
+			forecolor			1 .682 0 1
+			visible				0
+			decoration
+		}
+
 
 		itemDef 
 		{
@@ -3435,6 +3454,24 @@
 			type				ITEM_TYPE_EDITFIELD
 			text				""
 			cvar				"ui_rp_skill_58_level" 
+			textalign			ITEM_ALIGN_LEFT
+			font				3
+			textscale			.5
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		// GalaxyRP: [Grapple Hook] the level field for the [56] Grapple Hook row above.
+		itemDef 
+		{
+			name				grappleHookSkillValue
+			group				levelitem
+			rect				400 300 30 30
+			style				WINDOW_STYLE_EMPTY
+			type				ITEM_TYPE_EDITFIELD
+			text				""
+			cvar				"ui_zyk_skill_56_level" 
 			textalign			ITEM_ALIGN_LEFT
 			font				3
 			textscale			.5

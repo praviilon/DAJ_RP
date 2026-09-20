@@ -5076,6 +5076,12 @@ void zyk_TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 		isNPC = qtrue;
 	}
 
+	// GalaxyRP: [Grapple Hook] same as TeleportPlayer() in g_misc.c: the rope stays behind.
+	if ( player->client && player->client->hook )
+	{
+		Weapon_HookFree( player->client->hook );
+	}
+
 	// use temp events at source and destination to prevent the effect
 	// from getting dropped by a second player event
 	if ( player->client->sess.sessionTeam != TEAM_SPECTATOR ) {

@@ -148,6 +148,17 @@ void CG_ParseServerinfo( void ) {
 	cgs.debugMelee = atoi( Info_ValueForKey( info, "g_debugMelee" ) ); //trap->Cvar_GetHiddenVarValue("g_iknowkungfu");
 	cgs.stepSlideFix = atoi( Info_ValueForKey( info, "g_stepSlideFix" ) );
 
+	// GalaxyRP: [Grapple Hook] the mode and the three pull numbers, published by the server for
+	// exactly this read (g_xcvar.h). A missing key is the cvar's own default, not zero -- a zero
+	// strength would leave the client predicting no pull at all while the server pulls.
+	{
+		const char *v;
+		v = Info_ValueForKey( info, "g_allowGrapple" );		cgs.grappleMode   = v[0] ? atoi( v ) : 2;
+		v = Info_ValueForKey( info, "g_hookStrength" );		cgs.hookStrength  = v[0] ? atoi( v ) : 800;
+		v = Info_ValueForKey( info, "g_hookStrength1" );	cgs.hookStrength1 = v[0] ? atoi( v ) : 20;
+		v = Info_ValueForKey( info, "g_hookStrength2" );	cgs.hookStrength2 = v[0] ? atoi( v ) : 40;
+	}
+
 	cgs.noSpecMove = atoi( Info_ValueForKey( info, "g_noSpecMove" ) );
 
 	cgs.siegeTeamSwitch = atoi( Info_ValueForKey( info, "g_siegeTeamSwitch" ) );

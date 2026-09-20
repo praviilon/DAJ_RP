@@ -435,6 +435,13 @@ qboolean Board( Vehicle_t *pVeh, bgEntity_t *pEnt )
 	ent->client->ps.m_iVehicleNum = parent->s.number;
 	ent->r.ownerNum = parent->s.number;
 	ent->s.owner = ent->r.ownerNum; //for prediction
+
+	// GalaxyRP: [Grapple Hook] boarding lets go of the rope; a rider cannot fire one either
+	// (RP_HookMayStayOut, g_active.c).
+	if ( ent->client->hook )
+	{
+		Weapon_HookFree( ent->client->hook );
+	}
 	if (pVeh->m_pPilot == (bgEntity_t *)ent)
 	{
 		parent->client->ps.m_iVehicleNum = ent->s.number+1; //always gonna be under MAX_CLIENTS so no worries about 1 byte overflow

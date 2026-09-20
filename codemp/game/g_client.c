@@ -3722,6 +3722,15 @@ void ClientSpawn(gentity_t *ent) {
 	for ( i=0; i<HL_MAX; i++ )
 		ent->locationDamage[i] = 0;
 
+	// GalaxyRP: [Grapple Hook] before the memset below wipes client->hook: a hook that survives a
+	// respawn keeps its parent pointer and would spend the rest of its lifetime writing an anchor
+	// into the new spawn's lastHitLoc. Weapon_HookThink() also refuses a hook its owner has
+	// forgotten, but this is the place the forgetting happens, so this is where it is prevented.
+	if ( client->hook )
+	{
+		Weapon_HookFree( client->hook );
+	}
+
 	memset( client, 0, sizeof( *client ) ); // bk FIXME: Com_Memset?
 	client->bodyGrabIndex = ENTITYNUM_NONE;
 
@@ -4542,6 +4551,12 @@ void ClientDisconnect( int clientNum ) {
 	i = 0;
 
 	G_LeaveVehicle( ent, qtrue );
+
+	// GalaxyRP: [Grapple Hook] the slot is about to be recycled; the hook must not outlive its owner.
+	if ( ent->client->hook )
+	{
+		Weapon_HookFree( ent->client->hook );
+	}
 
 	if ( ent->client->ewebIndex )
 	{

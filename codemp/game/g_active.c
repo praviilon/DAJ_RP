@@ -2560,6 +2560,74 @@ extern qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, 
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
 // GalaxyRP fix: [Guardian] removed zyk_can_hit_boss_battle_target() extern here — function removed
 // as dead (see g_main.c); it was a stub always returning qtrue.
+/*
+========================================================================================================
+GalaxyRP: [Grapple Hook] -- the gates and the per-frame bookkeeping.
+
+Ported from TaystJK (g_active.c: CanGrapple, CanFireGrapple, and the two "CHUNK" blocks in
+ClientThink_real). Their racemode/movement-style/Tribes tests are gone; ours are added. Three
+questions, asked in this order every frame:
+
+  RP_HookMayStayOut  -- may this player have a hook out AT ALL right now? No: it is freed. This is
+                        where the account (RP_GrappleAllowed), death, spectating, downed, private
+                        duels, mini-games, vehicles and emplaced guns are. Each of those also has
+                        its own call to Weapon_HookFree() where the state is entered, so a hook
+                        never survives even one frame into them; this is the net under those.
+  RP_CanKeepHook     -- given it may stay out, may it PULL this frame? No: PMF_GRAPPLE is lowered
+                        but the hook stays parked. Rolls and special jumps, as in TaystJK: the pull
+                        pauses through them and resumes.
+  RP_CanFireHook     -- may a new hook be fired? RP_CanKeepHook plus the jetpack being off and the
+                        saber idle, as in TaystJK (a hook fired mid-swing is a hook fired into your
+                        own blade).
+========================================================================================================
+*/
+extern qboolean duel_tournament_is_duelist( gentity_t *ent );	// g_main.c
+
+qboolean RP_HookMayStayOut( gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+		return qfalse;
+	if ( !RP_GrappleAllowed( ent ) )
+		return qfalse;
+	if ( ent->client->ps.pm_type == PM_DEAD || ent->health <= 0 )
+		return qfalse;
+	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->tempSpectate >= level.time )
+		return qfalse;
+	if ( ent->client->ps.duelInProgress )
+		return qfalse;
+	if ( G_PlayerIsDowned( ent ) )
+		return qfalse;
+	if ( ent->client->ps.m_iVehicleNum || ent->client->ps.emplacedIndex )
+		return qfalse;
+	if ( level.duel_tournament_mode == 4 && duel_tournament_is_duelist( ent ) )
+		return qfalse;
+	if ( level.melee_mode > 0 && level.melee_players[ent->s.number] != -1 )
+		return qfalse;
+	return qtrue;
+}
+
+qboolean RP_CanKeepHook( gentity_t *ent )
+{
+	if ( !RP_HookMayStayOut( ent ) )
+		return qfalse;
+	if ( BG_InRoll( &ent->client->ps, ent->client->ps.legsAnim ) )
+		return qfalse;
+	if ( BG_InSpecialJump( ent->client->ps.legsAnim ) )
+		return qfalse;
+	return qtrue;
+}
+
+qboolean RP_CanFireHook( gentity_t *ent )
+{
+	if ( !RP_CanKeepHook( ent ) )
+		return qfalse;
+	if ( ent->client->jetPackOn )
+		return qfalse;
+	if ( !BG_SaberInIdle( ent->client->ps.saberMove ) )
+		return qfalse;
+	return qtrue;
+}
+
 void ClientThink_real( gentity_t *ent ) {
 	gclient_t	*client;
 	pmove_t		pmove;
@@ -3619,6 +3687,28 @@ void ClientThink_real( gentity_t *ent ) {
 		ent->client->ps.heldByClient = 0;
 	}
 
+	// GalaxyRP: [Grapple Hook] the pull flag, decided fresh every frame from three facts: a hook is
+	// out, it has landed (its think is Weapon_HookThink, not the in-flight Weapon_HookFree timer),
+	// and the owner still qualifies. pm_flags is networked, so this one line is what the client's
+	// prediction runs the pull from. A hook whose owner may no longer have one out at all is freed
+	// here as well -- see RP_HookMayStayOut() above. Real players only: NPCs never fire one.
+	if ( ent->s.number < MAX_CLIENTS && ent->client )
+	{
+		if ( ent->client->hook && !RP_HookMayStayOut( ent ) )
+		{
+			Weapon_HookFree( ent->client->hook );
+		}
+
+		if ( ent->client->hook && ent->client->hook->think == Weapon_HookThink && RP_CanKeepHook( ent ) )
+		{
+			ent->client->ps.pm_flags |= PMF_GRAPPLE;
+		}
+		else
+		{
+			ent->client->ps.pm_flags &= ~PMF_GRAPPLE;
+		}
+	}
+
 	/*
 	if ( client->ps.powerups[PW_HASTE] ) {
 		client->ps.speed *= 1.3;
@@ -3967,6 +4057,39 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 		}
 #endif
+	}
+
+	// GalaxyRP: [Grapple Hook] fire and release, from the usercmd bit a +button12 (or +grapple) bind
+	// produces. Edge-triggered: one hook per press, hookHasBeenFired being the latch, with
+	// g_hookFloodProtect ms between shots. Letting go of the button clears the latches and lowers
+	// the pull flag; the third test then frees the hook, which is what "release" means. The hook
+	// itself is not predicted -- the client sees it as an ordinary missile in the snapshot -- so
+	// none of this needs to be shared code. Real players only, like the flag above.
+	if ( ent->s.number < MAX_CLIENTS && ent->client )
+	{
+		if ( ( pmove.cmd.buttons & BUTTON_GRAPPLE ) &&
+			!ent->client->hookHasBeenFired &&
+			ent->client->hookFireTime < level.time - g_hookFloodProtect.integer &&
+			RP_CanFireHook( ent ) )
+		{
+			Weapon_HookFire( ent );
+			ent->client->hookHasBeenFired = qtrue;
+			ent->client->hookFireTime = level.time;
+		}
+
+		if ( !( pmove.cmd.buttons & BUTTON_GRAPPLE ) &&
+			ent->client->hookHasBeenFired &&
+			ent->client->fireHeld )
+		{
+			ent->client->fireHeld = qfalse;
+			ent->client->hookHasBeenFired = qfalse;
+			ent->client->ps.pm_flags &= ~PMF_GRAPPLE;
+		}
+
+		if ( ent->client->hook && !ent->client->fireHeld )
+		{
+			Weapon_HookFree( ent->client->hook );
+		}
 	}
 
 	if (ent->client->pers.no_attack_timer > level.time)

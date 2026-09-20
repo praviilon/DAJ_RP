@@ -3138,6 +3138,155 @@ static void PM_FlyMove( void ) {
 
 /*
 ===================
+GalaxyRP: [Grapple Hook]
+
+Ported from TaystJK (bg_pmove.c: PM_GetGrappleAnim, PM_GrappleMove, PM_GrappleMoveTarzan), which in
+turn carries JA+'s and JAPro's grapple. The racemode, movement-style and Tribes branches are gone; so
+is the JAPro-only viewheight adjustment in the winch, which TaystJK applied on the client and not on
+the server -- here both sides run one text.
+
+The server decides whether a player is being pulled (PMF_GRAPPLE, raised in ClientThink_real) and
+where the anchor is (ps.lastHitLoc, written by Weapon_HookThink every server frame). Both are
+networked, so the client predicts the pull from the same two facts. The three numbers the pull needs
+are cvars on the server and, on the client, the same cvars read out of serverinfo (cg_servercmds.c),
+which is why every one of them is CVAR_SERVERINFO in g_xcvar.h.
+===================
+*/
+static int PM_GrappleMode( void )
+{
+#ifdef _GAME
+	return g_allowGrapple.integer;
+#else
+	return cgs.grappleMode;
+#endif
+}
+
+static int PM_GrapplePullSpeed( void )
+{
+#ifdef _GAME
+	return g_hookStrength.integer;
+#else
+	return cgs.hookStrength;
+#endif
+}
+
+static int PM_GrapplePullStrength1( void )
+{
+#ifdef _GAME
+	return g_hookStrength1.integer;
+#else
+	return cgs.hookStrength1;
+#endif
+}
+
+static int PM_GrapplePullStrength2( void )
+{
+#ifdef _GAME
+	return g_hookStrength2.integer;
+#else
+	return cgs.hookStrength2;
+#endif
+}
+
+// Picks a force-jump animation from the direction the player is actually travelling relative to
+// where they face, so a sideways swing reads as a sideways leap. Legs only while a weapon is busy.
+static void PM_GetGrappleAnim( void )
+{
+	vec3_t	facingFwd, facingRight, facingAngles;
+	int		anim = -1;
+	float	dotR, dotF;
+
+	VectorSet( facingAngles, 0, pm->ps->viewangles[YAW], 0 );
+
+	AngleVectors( facingAngles, facingFwd, facingRight, NULL );
+	dotR = DotProduct( facingRight, pm->ps->velocity );
+	dotF = DotProduct( facingFwd, pm->ps->velocity );
+
+	if ( fabsf( dotR ) > fabsf( dotF ) * 1.5f )
+	{
+		if ( dotR > 150 )
+			anim = BOTH_FORCEJUMPRIGHT1;
+		else if ( dotR < -150 )
+			anim = BOTH_FORCEJUMPLEFT1;
+	}
+	else
+	{
+		if ( dotF > 150 )
+			anim = BOTH_FORCEJUMP1;
+		else if ( dotF < -150 )
+			anim = BOTH_FORCEJUMPBACK1;
+	}
+
+	if ( anim != -1 )
+	{
+		int parts = SETANIM_BOTH;
+
+		if ( pm->ps->weaponTime )
+			parts = SETANIM_LEGS;
+
+		PM_SetAnim( parts, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD );
+	}
+}
+
+// g_allowGrapple 2: the JA+ winch. Velocity is REPLACED with a constant-speed reel-in along the rope,
+// stopping 16 units short of the anchor and easing off inside the last 100. No momentum, no swing.
+static void PM_GrappleMove( void )
+{
+	vec3_t	vel, v;
+	float	vlen;
+	int		pullSpeed = PM_GrapplePullSpeed();
+
+	VectorScale( pml.forward, -16, v );
+	VectorAdd( pm->ps->lastHitLoc, v, v );
+	VectorSubtract( v, pm->ps->origin, vel );
+
+	vlen = VectorLength( vel );
+	VectorNormalize( vel );
+
+	if ( vlen <= 100.0f )
+		VectorScale( vel, ( pullSpeed / 80.0f ) * vlen, vel );
+	else
+		VectorScale( vel, pullSpeed, vel );
+
+	VectorCopy( vel, pm->ps->velocity );
+
+	pml.groundPlane = qfalse;
+
+	PM_GetGrappleAnim();
+}
+
+// g_allowGrapple 1: the swing. ACCELERATES toward the anchor and leaves gravity and air control in
+// place, so the player pendulums, keeps momentum on release, and decelerates over the last
+// pullSpeed/2 units instead of slamming into the wall.
+static void PM_GrappleMoveTarzan( void )
+{
+	vec3_t	vel;
+	float	vlen;
+	int		pullSpeed = PM_GrapplePullSpeed();
+	int		pullStrength1 = PM_GrapplePullStrength1();
+	int		pullStrength2 = PM_GrapplePullStrength2();
+
+	VectorSubtract( pm->ps->lastHitLoc, pm->ps->origin, vel );
+	vlen = VectorLength( vel );
+	VectorNormalize( vel );
+
+	// the near branch divides by pullSpeed, but it is only reachable for a positive one: vlen is a
+	// length, so "vlen < pullSpeed / 2" is false whenever pullSpeed is zero or negative
+	if ( vlen < ( pullSpeed / 2 ) )
+		PM_Accelerate( vel, 2 * vlen, vlen * ( pullStrength2 / (float)pullSpeed ) );
+	else
+		PM_Accelerate( vel, pullSpeed, pullStrength1 );
+
+	if ( vel[2] > 0.5f && pml.walking )
+		pml.walking = qfalse;
+
+	pml.groundPlane = qfalse;
+
+	PM_GetGrappleAnim();
+}
+
+/*
+===================
 PM_AirMove
 
 ===================
@@ -11856,6 +12005,19 @@ void PmoveSingle (pmove_t *pmove) {
 		}
 		else
 		{
+			// GalaxyRP: [Grapple Hook] the pull runs BEFORE the ordinary move and does not replace it,
+			// exactly as in TaystJK: the walk/air move below still applies gravity and air control on
+			// top of whatever the pull did, which is what makes mode 1 a swing. Crouching pauses the
+			// pull without letting go, also as in TaystJK. Only the two modes this mod ships; 1 is the
+			// swing, anything else the winch (g_allowGrapple is clamped to 1 or 2 on the server).
+			if ( ( pm->ps->pm_flags & PMF_GRAPPLE ) && !( pm->ps->pm_flags & PMF_DUCKED ) )
+			{
+				if ( PM_GrappleMode() == 1 )
+					PM_GrappleMoveTarzan();
+				else
+					PM_GrappleMove();
+			}
+
 			if (pm->ps->pm_flags & PMF_TIME_WATERJUMP) {
 				PM_WaterJumpMove();
 			} else if ( pm->waterlevel > 1 ) {

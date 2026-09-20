@@ -637,6 +637,12 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.hackerIconShader			= trap->R_RegisterShaderNoMip("gfx/mp/c_icon_tech");
 
 	cgs.media.redSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/red_glow" );
+
+	// GalaxyRP: [Grapple Hook] the rope and its hook. The JA+/JAPro assets, shipped in our own pk3
+	// (assets/client/models/items/grapple.md3, gfx/effects/grapple_line). Registered unconditionally
+	// -- TaystJK only does so on a JA+/JAPro server, which is why its client draws nothing here.
+	cgs.media.grappleShader				= trap->R_RegisterShader( "gfx/effects/grapple_line" );
+	cgs.media.grappleModel				= trap->R_RegisterModel( "models/items/grapple.md3" );
 	cgs.media.redSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/red_line" );
 	cgs.media.orangeSaberGlowShader		= trap->R_RegisterShader( "gfx/effects/sabers/orange_glow" );
 	cgs.media.orangeSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/orange_line" );

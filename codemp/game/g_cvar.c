@@ -348,6 +348,42 @@ void RP_CVU_jediVmerc(void)
 	trap->Cvar_Update(&g_jediVmerc);
 }
 
+// GalaxyRP: [Grapple Hook] g_allowGrapple is the mode switch and only the mode switch. TaystJK reads
+// 0 as "off" and >1 as the winch; here who may use the hook is rp_allow_grapple_hook, so a 0 typed
+// here by habit would otherwise leave the hook ON and pulling in a mode nobody asked for (the winch
+// branch is the fallthrough). Anything but 1 or 2 is put back to the default with a note naming the
+// cvar the admin probably wanted. Guarded on the value, unlike the jediVmerc pin above, because this
+// cvar is not latched: a bad value is in .integer by the time we run, so there is nothing queued to
+// clear and a guard is enough.
+void RP_CVU_allowGrapple(void)
+{
+	if (g_allowGrapple.integer != 1 && g_allowGrapple.integer != 2)
+	{
+		trap->Print("g_allowGrapple: \"%s\" is not a mode (1 = swing, 2 = winch), reset to 2. "
+					"To control who may use the hook, set rp_allow_grapple_hook.\n", g_allowGrapple.string);
+		trap->Cvar_Set("g_allowGrapple", "2");
+		trap->Cvar_Update(&g_allowGrapple);
+	}
+}
+
+// GalaxyRP: [Grapple Hook] rp_allow_grapple_hook is a three-way tier (0 nobody, 1 logged-out too,
+// 2 skill holders only); below 0 is 0, above 2 is 2. RP_GrappleAllowed() (g_cmds.c) only ever tests
+// "<= 0" and "== 1", so an out-of-range value would silently behave like 2 anyway -- the clamp makes
+// /cvarlist tell the truth about it.
+void RP_CVU_allowGrappleHook(void)
+{
+	if (rp_allow_grapple_hook.integer < 0)
+	{
+		trap->Cvar_Set("rp_allow_grapple_hook", "0");
+		trap->Cvar_Update(&rp_allow_grapple_hook);
+	}
+	else if (rp_allow_grapple_hook.integer > 2)
+	{
+		trap->Cvar_Set("rp_allow_grapple_hook", "2");
+		trap->Cvar_Update(&rp_allow_grapple_hook);
+	}
+}
+
 
 //
 // Cvar table

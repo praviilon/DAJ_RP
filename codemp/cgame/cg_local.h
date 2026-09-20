@@ -1188,6 +1188,9 @@ typedef struct cgMedia_s {
 
 	qhandle_t	redSaberGlowShader;
 	qhandle_t	redSaberCoreShader;
+	// GalaxyRP: [Grapple Hook] the rope beam and the hook model at its end (CG_GrappleTrail, cg_ents.c).
+	qhandle_t	grappleShader;
+	qhandle_t	grappleModel;
 	qhandle_t	orangeSaberGlowShader;
 	qhandle_t	orangeSaberCoreShader;
 	qhandle_t	yellowSaberGlowShader;
@@ -1643,6 +1646,14 @@ typedef struct cgs_s {
 	int				debugMelee;
 	int				stepSlideFix;
 	int				noSpecMove;
+	// GalaxyRP: [Grapple Hook] the server's g_allowGrapple / g_hookStrength / g_hookStrength1 /
+	// g_hookStrength2, all CVAR_SERVERINFO, read in CG_ParseServerinfo(). The shared pull code in
+	// bg_pmove.c reads these on the client where the server reads the cvars, so prediction runs the
+	// same mode with the same numbers. Defaults match the cvars' in case a key is ever missing.
+	int				grappleMode;
+	int				hookStrength;
+	int				hookStrength1;
+	int				hookStrength2;
 	int				dmflags;
 	int				fraglimit;
 	int				duel_fraglimit;

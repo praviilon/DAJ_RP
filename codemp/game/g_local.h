@@ -1382,6 +1382,12 @@ struct gclient_s {
 
 	qboolean	fireHeld;			// used for hook
 	gentity_t	*hook;				// grapple hook if out
+	// GalaxyRP: [Grapple Hook] the two fields above are stock JKA leftovers (Q3's offhand hook) and are
+	// live again; these two come from TaystJK. hookHasBeenFired is the edge detector -- one hook per
+	// press of BUTTON_GRAPPLE -- and hookFireTime feeds g_hookFloodProtect. All four are owned by
+	// ClientThink_real()'s hook block (g_active.c) and Weapon_HookFree() (g_weapon.c).
+	qboolean	hookHasBeenFired;
+	int			hookFireTime;
 
 	int			switchTeamTime;		// time the player switched teams
 
@@ -2524,6 +2530,9 @@ void RP_CVU_rpgMaxLevel(void);
 void RP_CVU_startingShield(void);
 void RP_CVU_debugMelee(void);
 void RP_CVU_jediVmerc(void);
+// GalaxyRP: [Grapple Hook] g_allowGrapple back to 1 or 2, rp_allow_grapple_hook into 0..2.
+void RP_CVU_allowGrapple(void);
+void RP_CVU_allowGrappleHook(void);
 
 // GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.
@@ -2549,6 +2558,28 @@ void G_CheckClientTimeouts	( gentity_t *ent );
 void ClientThink			( int clientNum, usercmd_t *ucmd );
 void ClientEndFrame			( gentity_t *ent );
 void G_RunClient			( gentity_t *ent );
+
+//
+// GalaxyRP: [Grapple Hook] -- g_weapon.c, g_missile.c, g_active.c, g_cmds.c
+//
+// The hook is a server-authoritative missile: Weapon_HookFire() spawns it (fire_grapple), the impact
+// branch at the top of G_MissileImpact() parks it and hands its position to the owner's ps.lastHitLoc
+// every frame through Weapon_HookThink(), and ClientThink_real() raises PMF_GRAPPLE while it is
+// parked and the owner still qualifies. Weapon_HookFree() is the one way out and every state change
+// that should end a pull -- death, respawn, disconnect, teleport, logout, going down, a duel or a
+// mini-game starting, mounting a vehicle -- calls it. RP_GrappleAllowed() is the permission
+// (rp_allow_grapple_hook + the Grapple Hook skill); RP_HookMayStayOut()/RP_CanKeepHook()/
+// RP_CanFireHook() are the full release, pause and fire gates around it (g_active.c).
+//
+void Weapon_HookFire( gentity_t *ent );
+void Weapon_HookFree( gentity_t *ent );
+void Weapon_HookThink( gentity_t *ent );
+gentity_t *fire_grapple( gentity_t *self, vec3_t start, vec3_t dir );
+qboolean RP_GrappleAllowed( gentity_t *ent );
+qboolean RP_HookMayStayOut( gentity_t *ent );
+qboolean RP_CanKeepHook( gentity_t *ent );
+qboolean RP_CanFireHook( gentity_t *ent );
+#define RP_HOOK_CLASSNAME "rp_hook"
 
 //
 // bg_pmove.c (server-only part)

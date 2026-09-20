@@ -449,6 +449,11 @@ extern int bgForcePowerCost[NUM_FORCE_POWERS][NUM_FORCE_POWER_LEVELS];
 #define PMF_FOLLOW			4096	// spectate following another player
 #define PMF_SCOREBOARD		8192	// spectate as a scoreboard
 #define PMF_STUCK_TO_WALL	16384	// grabbing a wall
+// GalaxyRP: [Grapple Hook] raised by the server (ClientThink_real, g_active.c) while the player's hook
+// has landed and they still qualify to be pulled; both PM_Grapple* moves in bg_pmove.c run only while
+// it is set. pm_flags is networked as 16 bits (msg.cpp), so this is the last free bit. Same value and
+// meaning as TaystJK/JA+/JAPro, which is what a TaystJK client expects to find in it.
+#define PMF_GRAPPLE			32768
 
 #define	PMF_ALL_TIMES	(PMF_TIME_WATERJUMP|PMF_TIME_LAND|PMF_TIME_KNOCKBACK)
 

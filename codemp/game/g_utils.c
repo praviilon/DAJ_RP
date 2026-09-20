@@ -1642,6 +1642,22 @@ void G_FreeEntity( gentity_t *ed ) {
 		level.chaos_portal_id = -1;
 	}
 
+	// GalaxyRP: [Grapple Hook] the same idea as the three id fields around this: a hook's owner holds a
+	// bare pointer to it (client->hook), and G_Spawn() recycles a freed slot after a second. Any free
+	// that does not go through Weapon_HookFree() -- /entremove, the duel-tournament arena sweep in
+	// G_RunMissile(), a map change's mass free -- would otherwise leave that pointer aimed at whatever
+	// took the slot, and the owner's next button release would Weapon_HookFree() THAT. Detach here,
+	// whoever frees it and however: pointer, pull flag and both fire latches, exactly what
+	// Weapon_HookFree() clears, so that path stays the documented one and this the net under it.
+	if (ed->classname && ed->parent && ed->parent->client && ed->parent->client->hook == ed &&
+		!strcmp(ed->classname, RP_HOOK_CLASSNAME))
+	{
+		ed->parent->client->hook = NULL;
+		ed->parent->client->ps.pm_flags &= ~PMF_GRAPPLE;
+		ed->parent->client->hookHasBeenFired = qfalse;
+		ed->parent->client->fireHeld = qfalse;
+	}
+
 	// GalaxyRP fix: [Entity System] the same cleanup the chaos portal above has always had, now
 	// applied to the other two level fields that hold a bare entity number. Both store the id of a
 	// model spawned for a mini-game arena -- the Duel Tournament globe and the Melee Battle catwalk

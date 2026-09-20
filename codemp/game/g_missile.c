@@ -359,10 +359,116 @@ G_MissileImpact
 */
 void WP_SaberBlockNonRandom( gentity_t *self, vec3_t hitloc, qboolean missileBlock );
 void WP_flechette_alt_blow( gentity_t *ent );
+// GalaxyRP: [Grapple Hook] the hook's impact, split out so it can run FIRST. TaystJK's copy of this
+// sits two hundred lines further down, after the saber-block and deflection section -- so a hook
+// aimed at anyone holding a lit saber was reflected like a blaster bolt, never parked, and its
+// owner's button latches stayed set on a hook that had bounced away (the "grapples should probably
+// just not bounce off sabers" note in their Weapon_HookFree). Here it is the first thing
+// G_MissileImpact() does, so a hook never sees the bounce, saber-block, duel-passthrough or damage
+// code at all. Returns qtrue when the missile was a hook and has been dealt with.
+//
+// Three outcomes. A living client that is not a vehicle and not in a private duel: the hook parks on
+// them and Weapon_HookThink() follows them from then on (TaystJK's behaviour, minus the two
+// refusals; nobody gets dragged out of a duel and a swoop is not a hitching post). A brush entity:
+// parks at the impact point, except func_rotating and func_pendulum, whose movement the anchor
+// could not follow. Anything else -- the world -- parks at the impact point. Either way it becomes a
+// stationary entity at the anchor, its think turns into Weapon_HookThink(), and the anchor goes
+// straight into the owner's ps.lastHitLoc so the pull can start on the next frame rather than the
+// one after. The impact effects are the base tusken ones the server plays for everyone, so a
+// TaystJK client sees them too.
+static qboolean G_HookImpact( gentity_t *ent, trace_t *trace )
+{
+	gentity_t	*other;
+	vec3_t		v;
+
+	if ( !ent->classname || strcmp( ent->classname, RP_HOOK_CLASSNAME ) )
+	{
+		return qfalse;
+	}
+
+	other = &g_entities[trace->entityNum];
+
+	if ( !ent->parent || !ent->parent->client || ent->parent->client->hook != ent )
+	{ // orphaned -- the owner respawned or left while it was in flight
+		Weapon_HookFree( ent );
+		return qtrue;
+	}
+
+	if ( ent->think == Weapon_HookThink )
+	{ // already parked. A hook sitting inside the player it is attached to starts every frame's
+	  // trace in solid, and G_RunMissile() reports that as a fresh impact; there is nothing to do
+	  // with it. (TaystJK re-parks and re-links on each one, guarded only against replaying the
+	  // effect, through s.hasLookTarget.)
+		return qtrue;
+	}
+
+	ent->enemy = NULL;
+	ent->s.otherEntityNum = ENTITYNUM_NONE;
+	ent->s.groundEntityNum = ENTITYNUM_NONE;
+
+	if ( other->client && !( other->s.eFlags & EF_DEAD ) )
+	{
+		if ( other->s.NPC_class == CLASS_VEHICLE || other->client->ps.duelInProgress )
+		{
+			Weapon_HookFree( ent );
+			return qtrue;
+		}
+
+		G_PlayEffectID( G_EffectIndex( "tusken/hit" ), trace->endpos, trace->plane.normal );
+
+		ent->enemy = other;
+		ent->s.otherEntityNum = other->s.number;
+
+		VectorCopy( other->r.currentOrigin, v );
+		v[2] += ( other->r.mins[2] + other->r.maxs[2] ) * 0.5f;
+		SnapVectorTowards( v, ent->s.pos.trBase );
+	}
+	else if ( other->s.eType == ET_MOVER )
+	{
+		if ( other->classname && ( !strcmp( other->classname, "func_rotating" ) || !strcmp( other->classname, "func_pendulum" ) ) )
+		{
+			Weapon_HookFree( ent );
+			return qtrue;
+		}
+
+		G_PlayEffectID( G_EffectIndex( "tusken/hitwall" ), trace->endpos, trace->plane.normal );
+
+		ent->s.otherEntityNum = other->s.number;
+		ent->s.groundEntityNum = other->s.number;
+		VectorCopy( trace->endpos, v );
+	}
+	else
+	{
+		G_PlayEffectID( G_EffectIndex( "tusken/hitwall" ), trace->endpos, trace->plane.normal );
+		VectorCopy( trace->endpos, v );
+	}
+
+	VectorCopy( trace->plane.normal, ent->s.angles );
+	SnapVectorTowards( v, ent->s.pos.trBase );
+
+	G_SetOrigin( ent, v );
+
+	ent->think = Weapon_HookThink;
+	ent->nextthink = level.time + FRAMETIME;
+
+	VectorCopy( ent->r.currentOrigin, ent->parent->client->ps.lastHitLoc );
+
+	trap->LinkEntity( (sharedEntity_t *)ent );
+
+	return qtrue;
+}
+
 void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 	gentity_t		*other;
 	qboolean		hitClient = qfalse;
 	qboolean		isKnockedSaber = qfalse;
+
+	// GalaxyRP: [Grapple Hook] first, before anything that could bounce, block or damage -- see
+	// G_HookImpact() above for why the order matters.
+	if ( G_HookImpact( ent, trace ) )
+	{
+		return;
+	}
 
 	other = &g_entities[trace->entityNum];
 
@@ -1022,6 +1128,9 @@ void G_RunMissile( gentity_t *ent ) {
 	if (level.duel_tournament_mode == 4 && ent->s.weapon != WP_SABER && 
 		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
 	{
+		// GalaxyRP: [Grapple Hook] G_FreeEntity() knows to detach a hook from its owner (g_utils.c),
+		// so this plain free is safe for one too; a hook cannot reach into the arena any more than
+		// a rocket can.
 		G_FreeEntity(ent);
 		return;
 	}
@@ -1030,8 +1139,12 @@ void G_RunMissile( gentity_t *ent ) {
 		// never explode or bounce on sky
 		if ( tr.surfaceFlags & SURF_NOIMPACT ) {
 			// If grapple, reset owner
+			// GalaxyRP: [Grapple Hook] this stock Q3 line nulled the owner's pointer and fell through
+			// to the plain G_FreeEntity below, leaving the fire latches set. A hook shot into the sky
+			// now goes through the one teardown path like every other way a hook ends.
 			if (ent->parent && ent->parent->client && ent->parent->client->hook == ent) {
-				ent->parent->client->hook = NULL;
+				Weapon_HookFree( ent );
+				return;
 			}
 
 			if ((ent->s.weapon == WP_SABER && ent->isSaberEntity) || isKnockedSaber)
@@ -1098,6 +1211,12 @@ void G_RunMissile( gentity_t *ent ) {
 
 		G_MissileImpact( ent, &tr );
 
+		if ( !ent->inuse )
+		{ // GalaxyRP: [Grapple Hook] a hook refused by G_HookImpact() is freed inside the call; the
+		  // two writes below would land in a slot that is no longer this entity
+			return;
+		}
+
 		if (tr.entityNum == ent->s.otherEntityNum)
 		{ //if the impact event other and the trace ent match then it's ok to do the g2 mark
 			ent->s.trickedentindex = 1;
@@ -1148,3 +1267,68 @@ passthrough:
 
 
 
+
+/*
+=================
+GalaxyRP: [Grapple Hook] fire_grapple
+
+Ported from TaystJK's fire_grapple (g_missile.c). The projectile is a point missile with the JAPro
+wire signature -- ET_MISSILE, s.weapon WP_BRYAR_PISTOL, s.saberInFlight set -- which is what our
+cgame (and a TaystJK build that honours TAYSTJK_INFO_GRAPPLE) keys the rope drawing on. Its own
+classname rather than TaystJK's reused "laserTrap": that name is the trip mine's here, and the mine
+code (RemoveLaserTraps, the ten-mine cap) would otherwise count and free the hook as one of them.
+
+It never damages anything: G_HookImpact() takes it before the damage code, and ent->damage is left at
+zero besides. Speed inherits g_hookInheritance of the owner's velocity along the shot, floored at
+250 so a player running backwards cannot fire a hook that hangs in the air. Racemode, Tribes, haste
+and the unlagged prestep are TaystJK's and are not here.
+=================
+*/
+gentity_t *fire_grapple( gentity_t *self, vec3_t start, vec3_t dir )
+{
+	gentity_t	*hook;
+	float		vel = g_hookSpeed.integer;
+
+	VectorNormalize( dir );
+
+	vel = vel + DotProduct( dir, self->client->ps.velocity ) * g_hookInheritance.value;
+
+	if ( vel < 250 )
+	{
+		vel = 250;
+	}
+
+	hook = G_Spawn();
+	hook->classname = RP_HOOK_CLASSNAME;
+	hook->nextthink = level.time + 30000;
+	hook->think = Weapon_HookFree;
+	hook->s.eType = ET_MISSILE;
+	hook->s.clientNum = self->s.clientNum;
+	hook->r.svFlags = SVF_USE_CURRENT_ORIGIN;
+	hook->s.weapon = WP_BRYAR_PISTOL;
+	hook->r.ownerNum = self->s.number;
+	hook->s.owner = self->s.number;
+	hook->methodOfDeath = MOD_UNKNOWN;
+	hook->clipmask = MASK_SHOT;
+	hook->parent = self;
+
+	hook->s.pos.trType = TR_LINEAR;
+	hook->s.pos.trTime = level.time;
+
+	hook->s.otherEntityNum = ENTITYNUM_NONE;
+	hook->s.groundEntityNum = ENTITYNUM_NONE;
+
+	hook->s.saberInFlight = qtrue;
+
+	VectorCopy( start, hook->s.pos.trBase );
+	VectorScale( dir, vel, hook->s.pos.trDelta );
+	SnapVector( hook->s.pos.trDelta );
+	VectorCopy( start, hook->r.currentOrigin );
+
+	self->client->hook = hook;
+
+	G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/weapons/melee/swing2.wav" ) );
+	G_SetAnim( self, NULL, SETANIM_TORSO, BOTH_FORCEPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_HOLDLESS, 0 );
+
+	return hook;
+}

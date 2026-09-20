@@ -2454,6 +2454,103 @@ static void CG_DistortionTrail( centity_t *cent )
 CG_Missile
 ===============
 */
+/*
+===============
+GalaxyRP: [Grapple Hook] -- drawing the rope
+
+Ported from TaystJK's CG_GrappleTrail / CG_GrappleEndpoint / CG_GrappleStartpoint (cg_ents.c), which
+draw JAPro's hook. The hook arrives as an ordinary missile in the snapshot -- ET_MISSILE, weapon
+WP_BRYAR_PISTOL, saberInFlight set: the JAPro wire signature, chosen so a TaystJK client that learns
+to honour TAYSTJK_INFO_GRAPPLE draws it too -- and CG_Missile() hands it here before it could draw a
+blaster bolt. A beam from the owner's right hand to the hook, the hook model at the far end, and a
+small glow at the hand. Nothing here is predicted: the missile's position comes from the snapshot,
+the hand from the owner's model, so the rope is right for every viewer including the owner.
+===============
+*/
+static qboolean CG_IsGrappleHook( const entityState_t *es )
+{
+	return ( es->eType == ET_MISSILE && es->weapon == WP_BRYAR_PISTOL && es->saberInFlight ) ? qtrue : qfalse;
+}
+
+static void CG_GrappleTrail( centity_t *cent )
+{
+	entityState_t	*es = &cent->currentState;
+	centity_t		*owner;
+	refEntity_t		beam, model;
+	vec3_t			handPos, dir;
+
+	if ( es->clientNum < 0 || es->clientNum >= MAX_CLIENTS )
+	{
+		return;
+	}
+
+	owner = &cg_entities[es->clientNum];
+
+	// the near end: the owner's right hand, or their chest if the model is not there to ask
+	if ( owner->ghoul2 && cgs.clientinfo[es->clientNum].bolt_rhand )
+	{
+		mdxaBone_t	boltMatrix;
+		vec3_t		tAng;
+
+		VectorSet( tAng, owner->turAngles[PITCH], owner->turAngles[YAW], owner->turAngles[ROLL] );
+		trap->G2API_GetBoltMatrix( owner->ghoul2, 0, cgs.clientinfo[es->clientNum].bolt_rhand, &boltMatrix, tAng,
+			owner->lerpOrigin, cg.time, cgs.gameModels, owner->modelScale );
+
+		handPos[0] = boltMatrix.matrix[0][3];
+		handPos[1] = boltMatrix.matrix[1][3];
+		handPos[2] = boltMatrix.matrix[2][3];
+	}
+	else
+	{
+		VectorCopy( owner->lerpOrigin, handPos );
+		handPos[2] += 24;
+	}
+
+	// the rope
+	memset( &beam, 0, sizeof( beam ) );
+	beam.reType = RT_LINE;
+	beam.customShader = cgs.media.grappleShader;
+	beam.radius = 1;
+	VectorCopy( handPos, beam.origin );
+	VectorCopy( cent->lerpOrigin, beam.oldorigin );
+	beam.shaderRGBA[0] = 255;
+	beam.shaderRGBA[1] = 0;
+	beam.shaderRGBA[2] = 0;
+	beam.shaderRGBA[3] = 255;
+	trap->R_AddRefEntityToScene( &beam );
+
+	// the hook at the far end, nose along its travel while flying and into the surface once parked
+	memset( &model, 0, sizeof( model ) );
+	model.reType = RT_MODEL;
+	model.hModel = cgs.media.grappleModel;
+
+	if ( VectorNormalize2( es->pos.trDelta, dir ) == 0 )
+	{
+		VectorCopy( es->angles, dir );		// the impact normal, set by the server on impact
+		VectorInverse( dir );
+		if ( VectorNormalize( dir ) == 0 )
+		{
+			VectorSubtract( cent->lerpOrigin, handPos, dir );
+			VectorNormalize( dir );
+		}
+	}
+
+	VectorMA( cent->lerpOrigin, -4, dir, model.origin );
+	VectorCopy( model.origin, model.lightingOrigin );
+	VectorCopy( dir, model.axis[0] );
+	RotateAroundDirection( model.axis, ( es->pos.trType == TR_STATIONARY ) ? 0.0f : cg.time * 0.25f );
+	trap->R_AddRefEntityToScene( &model );
+
+	// a glow where the rope leaves the hand
+	memset( &model, 0, sizeof( model ) );
+	model.reType = RT_SABER_GLOW;
+	model.customShader = cgs.media.redSaberGlowShader;
+	VectorCopy( handPos, model.origin );
+	VectorCopy( handPos, model.lightingOrigin );
+	model.shaderRGBA[0] = model.shaderRGBA[1] = model.shaderRGBA[2] = model.shaderRGBA[3] = 255;
+	trap->R_AddRefEntityToScene( &model );
+}
+
 static void CG_Missile( centity_t *cent ) {
 	refEntity_t			ent;
 	entityState_t		*s1;
@@ -2461,6 +2558,14 @@ static void CG_Missile( centity_t *cent ) {
 //	int	col;
 
 	s1 = &cent->currentState;
+
+	// GalaxyRP: [Grapple Hook] before the weapon lookup below would draw it as a blaster bolt
+	if ( CG_IsGrappleHook( s1 ) )
+	{
+		CG_GrappleTrail( cent );
+		return;
+	}
+
 	if ( s1->weapon > WP_NUM_WEAPONS && s1->weapon != G2_MODEL_PART ) {
 		s1->weapon = 0;
 	}
