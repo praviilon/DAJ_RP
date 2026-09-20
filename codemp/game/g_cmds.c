@@ -919,6 +919,65 @@ qboolean zyk_check_user_input(char *user_input, int user_input_size) {
 	return qtrue;
 }
 
+// GalaxyRP fix: [Account] the one test an account password has to pass, shared by /new and
+// /changepassword. Neither command had a LOWER bound: both checked "strlen > 30" and nothing else, and
+// the engine's tokenizer hands a quoted empty string through as a real argument -- which is exactly
+// what the register and password-change menus send when their field is left blank (ui_main.c builds
+// new "%s" "%s" and changepassword "%s" from the cvar). So a blank field, or "/changepassword """ at
+// the console, silently turned the account into one with no password, and the success message printed.
+//
+// Empty and whitespace-only are the same case here: a password of three spaces is not distinguishable
+// from an empty one in a text field, and the tokenizer passes "   " through just as it passes "".
+// Spaces AROUND real characters are still accepted -- nothing that logs in today stops logging in.
+// Only space and tab count as whitespace; nothing else can arrive through the tokenizer.
+//
+// The length limit lives here too, as RP_PASSWORD_MAX (g_local.h), instead of as a literal in each
+// command. No character-set rule: passwords have always been free-form (only usernames go through
+// zyk_check_user_input()), every write path binds the value as a parameter, and the login comparison
+// is a plain strcmp, so there is nothing a symbol could break.
+//
+// /login deliberately does NOT call this. An empty submitted password can only match an empty stored
+// one, and once both writers refuse those no new ones can exist; refusing them at login would only
+// lock out any account that already has one, with no self-service way back. Such an account still
+// logs in, and the next /changepassword makes it pick a real password.
+//
+// Pure: no trap calls, no database. *reason is a string literal the caller prints as-is.
+qboolean RP_PasswordIsValid( const char *password, const char **reason )
+{
+	const char *s;
+	qboolean nonBlank = qfalse;
+
+	if ( !password )
+	{
+		*reason = "^1Password cannot be empty.";
+		return qfalse;
+	}
+
+	for ( s = password; *s; s++ )
+	{
+		if ( *s != ' ' && *s != '\t' )
+		{
+			nonBlank = qtrue;
+			break;
+		}
+	}
+
+	if ( !nonBlank )
+	{
+		*reason = "^1Password cannot be empty.";
+		return qfalse;
+	}
+
+	if ( strlen( password ) > RP_PASSWORD_MAX )
+	{
+		*reason = "^1Password can only have a maximum of " XSTRING( RP_PASSWORD_MAX ) " characters.";
+		return qfalse;
+	}
+
+	*reason = NULL;
+	return qtrue;
+}
+
 void show_animation_list(gentity_t* ent, int beginning_index, int end_index) {
 	for (int i = beginning_index; i < end_index; i++) {
 		print_header(ent, anim_headers[i]);
@@ -5553,19 +5612,25 @@ void Cmd_Register_F(gentity_t * ent)
 	// <password> overflowed sess.filename/pers.password directly, right below, on every single
 	// registration; the same oversized values were also persisted to the Accounts table and would go
 	// on to overflow those same two fields again on every future /login (see the matching
-	// Q_strncpyz() fixes in select_account_and_default_character_data() below). The password limit
-	// matches /changepassword's own existing "maximum of 30 characters" check exactly, so a password
-	// that's valid from one command is valid from the other.
+	// Q_strncpyz() fixes in select_account_and_default_character_data() below).
 	if (strlen(username) > sizeof(ent->client->sess.filename) - 1) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^1Username can only have a maximum of %i characters.\n\"", (int)sizeof(ent->client->sess.filename) - 1));
 		sqlite3_close(db);
 		return;
 	}
 
-	if (strlen(password) > 30) {
-		trap->SendServerCommand(ent - g_entities, "print \"^1Password can only have a maximum of 30 characters.\n\"");
-		sqlite3_close(db);
-		return;
+	// GalaxyRP fix: [Account] the password test is RP_PasswordIsValid() now, shared with /changepassword,
+	// so a password that is valid from one command is valid from the other by construction rather than
+	// by a comment. This used to be a bare "strlen > 30" -- an upper bound and nothing else -- so a blank
+	// field in the register menu (which sends new "<user>" "") created an account with no password.
+	{
+		const char *reason = NULL;
+
+		if (RP_PasswordIsValid(password, &reason) == qfalse) {
+			trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", reason));
+			sqlite3_close(db);
+			return;
+		}
 	}
 
 	// GalaxyRP: [security] sess.filename (this username, once accepted) used to be spliced raw into
@@ -12454,13 +12519,26 @@ void Cmd_ChangePassword_f( gentity_t *ent ) {
 	// zyk: gets the new password
 	trap->Argv(1, arg1, sizeof( arg1 ));
 
-	if (strlen(arg1) > 30)
+	// GalaxyRP fix: [Account] this was a bare "strlen > 30". It had no lower bound, so a /changepassword
+	// with an empty quoted argument -- which is what the password-change menu sends when its field is
+	// left blank -- set the account's password to nothing and printed the success message. The test is
+	// RP_PasswordIsValid() now, shared with /new, which refuses empty and whitespace-only values as well
+	// as over-long ones.
 	{
-		trap->SendServerCommand( ent-g_entities, "print \"The password can only have a maximum of 30 characters.\n\"" );
-		return;
+		const char *reason = NULL;
+
+		if (RP_PasswordIsValid(arg1, &reason) == qfalse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", reason) );
+			return;
+		}
 	}
 
-	strcpy(ent->client->pers.password,arg1);
+	// GalaxyRP fix: [Account] bounded copy, matching the two sibling copies into this buffer in
+	// Cmd_Register_F and select_account_and_default_character_data(). The validator already guarantees
+	// the value fits (RP_PASSWORD_MAX < sizeof(pers.password)); this just stops that being the only thing
+	// standing between a strcpy and the field after it.
+	Q_strncpyz(ent->client->pers.password, arg1, sizeof(ent->client->pers.password));
 
 	update_accounts_table_row_with_current_values(ent);
 

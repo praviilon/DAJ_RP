@@ -2037,6 +2037,17 @@ char *G_NewString( const char *string );
 // account usernames share that helper and have their own lengths.
 #define ZYK_PRESET_NAME_MAX 64
 
+// GalaxyRP fix: [Account] the one place an account password's length limit is stated. /new and
+// /changepassword used to carry the literal 30 each, in their own "> 30" tests, with a comment on one
+// promising it matched the other. RP_PasswordIsValid() (g_cmds.c) is the only reader now, and both
+// commands go through it. Must stay below the size of clientPersistant_t's password[] -- 32 --
+// because the commands copy the accepted value straight into that buffer.
+#define RP_PASSWORD_MAX 30
+
+// GalaxyRP fix: [Account] see the definition in g_cmds.c. Returns qtrue when the password may be
+// stored; otherwise qfalse with *reason pointing at the message to print to the player.
+qboolean RP_PasswordIsValid( const char *password, const char **reason );
+
 // GalaxyRP fix: [Entity System] the buffer one encoded token needs, in one place. Every character
 // of a token can escape to two, plus the terminator, so a token as long as a whole line needs
 // 2 * (ZYK_ENTITY_FILE_LINE_LENGTH - 1) + 1 bytes -- which this covers with one byte spare.
