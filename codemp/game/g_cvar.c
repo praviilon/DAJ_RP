@@ -322,6 +322,32 @@ void RP_CVU_debugMelee(void)
 	}
 }
 
+// GalaxyRP fix: [Jedi vs Merc] g_jediVmerc is pinned off -- see the long comment on its XCVAR_DEF in
+// g_xcvar.h for what it does and why it is pinned rather than removed. Like the melee pin above this
+// is not a range clamp: zero is the only supported value, so this snaps anything else back.
+//
+// Written WITHOUT the "if the value is wrong" guard that RP_CVU_debugMelee uses, and the difference
+// matters. An admin's "set g_jediVmerc 1" from the console or rcon goes through Cvar_Set2() with
+// force = qfalse, which for a CVAR_LATCH cvar leaves .integer at 0 and parks "1" in latchedString
+// for the next map -- while still bumping modificationCount, so G_UpdateCvars() does call us. A
+// guarded callback would look at .integer, see 0, and leave that "1" queued. The unconditional call
+// below takes Cvar_Set2()'s early-out for "the latched value is being superseded by the value
+// already in force", which frees latchedString and returns. So the queue is cleared at the moment
+// the admin types it, and /cvarlist tells them the truth for the rest of the map.
+//
+// It is cheap to call unconditionally: with no latch pending and the value already "0", Cvar_Set2()
+// returns on its own "not changed" test without touching cvar_modifiedFlags, so there is no
+// serverinfo churn.
+//
+// G_RegisterCvars() runs update callbacks at registration as well as on change, and runs at the top
+// of G_InitGame() -- before any client can spawn -- so a config line or an archived value saying 1
+// is corrected before the first frame rather than after somebody has already spawned under it.
+void RP_CVU_jediVmerc(void)
+{
+	trap->Cvar_Set("g_jediVmerc", "0");
+	trap->Cvar_Update(&g_jediVmerc);
+}
+
 
 //
 // Cvar table

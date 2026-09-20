@@ -122,7 +122,43 @@ XCVAR_DEF( g_g2TraceLod,				"3",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_gametype,					"0",			NULL,				CVAR_SERVERINFO|CVAR_LATCH,						qfalse )
 XCVAR_DEF( g_gravity,					"800",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_inactivity,				"0",			NULL,				CVAR_NONE,										qtrue )
-XCVAR_DEF( g_jediVmerc,					"0",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARCHIVE,		qtrue )
+// GalaxyRP fix: [Jedi vs Merc] g_jediVmerc is pinned OFF. Stock JKA's "Jedi vs Mercenaries" mode
+// splits every player at ClientSpawn (g_client.c) by WP_HasForcePowers() -- which reads the force
+// levels the CLIENT sent in its own "forcepowers" userinfo string -- and stamps one of two
+// playerState flags on them. Note what is NOT in that gate: it is not restricted to team gametypes,
+// so it applies in our FFA just as much as in CTF.
+//
+// The spawn loadout is the visible half. The lasting half is those flags, which are networked one
+// bit each (PSF(trueJedi)/PSF(trueNonJedi) in qcommon/msg.cpp) and are read by four pieces of
+// always-on code, none of them gametype-gated:
+//
+//   bg_pmove.c PM_Weapon   -- trueJedi has stats[STAT_WEAPONS] re-assigned to the saber alone, and
+//                             ps.weapon forced to WP_SABER, on EVERY frame
+//   bg_misc.c  BG_CanUseFPNow      -- trueNonJedi can never use any force power, tested before
+//                                    everything else
+//   bg_misc.c  BG_CanItemBeGrabbed -- trueJedi may pick up almost nothing; trueNonJedi may not pick
+//                                     up force powerups, the seeker or a saber
+//   g_combat.c G_Damage            -- trueJedi takes half splash damage, trueNonJedi takes
+//                                    multiplied saber damage
+//
+// Every one of those fights the RPG system. initialize_rpg_skills() runs LATER in ClientSpawn than
+// the jediVmerc block, so a "jedi" is granted their skill loadout and then stripped back to a bare
+// saber by the next pmove frame; a "merc" keeps the guns but loses every force skill, magic power
+// and unique ability that routes through BG_CanUseFPNow. Which side a player lands on is decided by
+// their client's force configuration, not by their account. There is no setting of this cvar that
+// an RP server wants.
+//
+// Deliberately left registered, and still CVAR_SERVERINFO, rather than removed -- the same reasoning
+// as g_debugMelee above. The key is read by cgs.jediVmerc (cg_servercmds.c), by UI_TrueJediEnabled()
+// (ui_main.c, which shows or hides the jedi/non-jedi selector in the ingame player menu) and by the
+// server browser's "truejedi" column (sv_main.cpp -> cl_main.cpp). Removing the key would make
+// Info_ValueForKey() return "" for all three; publishing an explicit "0" is honest and costs nothing.
+//
+// CVAR_LATCH is kept as stock. It does not get in the way: trap->Cvar_Set from the game module
+// reaches Cvar_Set2() with force = qtrue (Cvar_VM_Set, qcommon/cvar.cpp), which skips the latch
+// branch entirely and frees any pending latched string, so RP_CVU_jediVmerc (g_cvar.c) applies
+// immediately rather than "upon restarting".
+XCVAR_DEF( g_jediVmerc,					"0",			RP_CVU_jediVmerc,	CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARCHIVE,		qtrue )
 XCVAR_DEF( g_knockback,					"1000",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_locationBasedDamage,		"1",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_log,						"games.log",	NULL,				CVAR_ARCHIVE,									qfalse )
