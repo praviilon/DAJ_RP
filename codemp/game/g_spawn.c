@@ -2275,6 +2275,114 @@ void G_LinkLocations( void ) {
 	// All linked together now
 }
 
+// GalaxyRP fix: [Logical Entities] trigger_shipboundary hands its target's ENTITY NUMBER to the
+// engine -- trap->LinkEntity() on the target, then ps.vehTurnaroundIndex = target->s.number so the
+// client's PM_VehForcedTurning() can look it up in cg_entities[MAX_GENTITIES]. Both of those are
+// networked-region operations: SV_SvEntityForGentity() Com_Error(ERR_DROP)s on any s.number >=
+// MAX_GENTITIES, and on a dedicated server common.cpp promotes every ERR_DROP to ERR_FATAL, so the
+// process exits the instant a fighter reaches a map edge.
+//
+// The targets these triggers point at are markers -- info_notnull, info_null, target_position --
+// and all three are marked logical in spawns[] above, which is right for every other use of them:
+// a marker is found by name with G_Find() and read for its origin, and nothing hands it to the
+// engine. trigger_shipboundary is the one class that does, and it is the trigger, not the marker,
+// that knows it.
+//
+// So resolve that here, once, at the end of the spawn pass: for every trigger_shipboundary, find
+// the entity its "target" names and, if it landed in the logical region, re-spawn it as a
+// networked one. This runs while level.spawning is still qtrue, which matters twice -- G_Spawn()
+// is still legal, and RP_LegacySlotAssign()/RP_LegacySlotRelease() still track slots, so the
+// marker keeps the legacy number it would have had with rp_logical_entities 0.
+//
+// It has to be a post-pass rather than a decision at spawn time because the entity string may
+// name the target before it defines it: on the map this was found with, 4 of the 18 boundaries
+// have their marker later in the string than themselves.
+//
+// Only inert markers are promoted. Anything with a think, use, touch or die function, a model or
+// an existing link is not the point-in-space this trigger expects, and quietly moving it between
+// regions could change behaviour that has nothing to do with ship boundaries -- those are reported
+// and left alone, and shipboundary_touch's own guard catches them at the edge.
+//
+// Cost is one networked slot per distinct marker (5 on that map), taken from the 1022 the engine
+// allows. The de-duplication is free: once a marker is promoted, G_Find() -- which walks the
+// networked region first -- returns the networked copy for every later boundary naming it, and
+// the isLogical test below skips it.
+static void RP_PromoteShipboundaryTargets( void ) {
+	gentity_t	*bound;
+	int			promoted = 0;
+
+	if ( !level.logical_entities_enabled ) {
+		return;	// nothing is in the logical region to begin with
+	}
+
+	RP_FOR_EACH_ENTITY( bound ) {
+		gentity_t	*src, *dst;
+		int			number, spare;
+
+		if ( !bound->inuse || !bound->classname ||
+			Q_stricmp( bound->classname, "trigger_shipboundary" ) ) {
+			continue;
+		}
+
+		if ( !bound->target || !bound->target[0] ) {
+			continue;	// SP_trigger_shipboundary already refuses these
+		}
+
+		src = G_Find( NULL, FOFS(targetname), bound->target );
+		if ( !src || !src->inuse ) {
+			continue;	// missing target; shipboundary_touch reports it if it is ever hit
+		}
+
+		if ( !src->isLogical ) {
+			continue;	// already networked, or promoted by an earlier boundary naming it
+		}
+
+		if ( src->think || src->use || src->touch || src->die || src->model || src->r.linked ) {
+			G_LogPrintf( "trigger_shipboundary target '%s' (classname %s) is not an inert marker; "
+				"leaving it in the logical region.\n",
+				bound->target, src->classname ? src->classname : "?" );
+			continue;
+		}
+
+		dst = G_Spawn();
+		if ( !dst ) {
+			continue;	// G_Spawn logs and drops on its own if it truly cannot allocate
+		}
+
+		// The marker's legacy identity moves with it, and the slot G_Spawn just reserved for dst
+		// goes back on the free below -- swap them so RP_LegacySlotRelease() releases the spare
+		// rather than the number dst is about to keep.
+		spare = dst->legacySlot;
+
+		number = dst->s.number;
+		dst->s = src->s;
+		dst->s.number = number;
+
+		dst->classname		= src->classname;
+		dst->targetname		= src->targetname;
+		dst->target			= src->target;
+		dst->target2		= src->target2;
+		dst->spawnflags		= src->spawnflags;
+		dst->legacySlot		= src->legacySlot;
+		dst->isLogical		= qfalse;
+
+		// exactly what SP_info_notnull/SP_target_position did for it in the logical region:
+		// s.pos.trBase, TR_STATIONARY, r.currentOrigin. Still no link -- shipboundary_touch
+		// links the target itself on first touch, which is the stock behaviour.
+		G_SetOrigin( dst, dst->s.origin );
+
+		src->legacySlot = spare;
+		G_FreeEntity( src );
+
+		promoted++;
+	}
+
+	if ( promoted ) {
+		G_LogPrintf( "promoted %d trigger_shipboundary target%s from the logical region to the "
+			"networked one.\n", promoted, promoted == 1 ? "" : "s" );
+	}
+}
+
 /*
 ==============
 G_SpawnEntitiesFromString
@@ -2339,6 +2447,9 @@ void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
 
 	if (!inSubBSP)
 	{
+		// GalaxyRP fix: [Logical Entities] above the line, while G_Spawn() is still legal.
+		RP_PromoteShipboundaryTargets();
+
 		level.spawning = qfalse;			// any future calls to G_Spawn*() will be errors
 	}
 

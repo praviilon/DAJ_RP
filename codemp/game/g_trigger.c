@@ -1568,6 +1568,32 @@ void shipboundary_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 		return;
 	}
 
+	// GalaxyRP fix: [Logical Entities] belt-and-braces behind RP_PromoteShipboundaryTargets() in
+	// g_spawn.c, which moves these markers into the networked region at the end of the spawn pass.
+	// If one is still logical here -- it was not inert, or something spawned a boundary after the
+	// pass -- then both of the lines below would hand the engine an entity number it refuses:
+	// SV_SvEntityForGentity() Com_Error(ERR_DROP)s on s.number >= MAX_GENTITIES, which a dedicated
+	// server turns into ERR_FATAL and a process exit, and vehTurnaroundIndex is only GENTITYNUM_BITS
+	// wide on the wire, so the client would read a truncated number pointing at the wrong entity.
+	//
+	// Do neither. Blow the ship up instead, with the same call the "no pilot or missing parts"
+	// branch above uses: the fighter is at the map edge with no turnaround coming, so letting it
+	// fly on is not an option, and this is a fate the code already knows how to produce there.
+	if ( ent->isLogical )
+	{
+		if ( !level.rp_shipboundary_logical_warned )
+		{
+			level.rp_shipboundary_logical_warned = qtrue;
+			G_LogPrintf( "%s: trigger_shipboundary target '%s' (classname %s) is in the logical "
+				"region; cannot turn the ship around, destroying it instead.\n",
+				level.mapname, self->target ? self->target : "",
+				ent->classname ? ent->classname : "?" );
+		}
+
+		G_Damage(other, other, other, NULL, other->client->ps.origin, 99999, DAMAGE_NO_PROTECTION, MOD_SUICIDE);
+		return;
+	}
+
 	//make sure this sucker is linked so the prediction knows where to go
 	trap->LinkEntity((sharedEntity_t *)ent);
 

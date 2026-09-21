@@ -267,7 +267,27 @@ bgEntity_t *PM_BGEntForNum( int num )
 		return NULL;
 	}
 
-	assert(num >= 0 && num < MAX_GENTITIES);
+	// GalaxyRP fix: [Logical Entities] this was an assert alone, and an assert compiles out of a
+	// release build -- so out of every build a player ever runs. The three checks above it all
+	// return NULL on failure; this one did not, and fell straight through to the pointer
+	// arithmetic. pm->baseEnt is g_entities[MAX_GENTITIES] in the game and cg_entities
+	// [MAX_GENTITIES] in cgame (cg_predict.c), so an out-of-range number here reads past the end
+	// of a fixed array and returns a pointer into whatever follows it.
+	//
+	// Nothing reaches it today: every number that gets here comes from a trace's entityNum or from
+	// a playerState field that msg.cpp transmits in GENTITYNUM_BITS (clientNum, m_iVehicleNum,
+	// groundEntityNum, saberLockEnemy, vehTurnaroundIndex), and 10 bits cannot exceed 1023. That
+	// is what saved the logical-entity bug next door: the server wrote a number above MAX_GENTITIES
+	// into vehTurnaroundIndex and the wire truncated it, so the client read the wrong entity rather
+	// than off the end of its array -- in-range-but-wrong by accident, not by design.
+	//
+	// Make it a real check. The callers all handle NULL or are guarded here as part of the same
+	// change, so a future mistake of that kind becomes a no-op instead of an out-of-bounds read.
+	if ( num < 0 || num >= MAX_GENTITIES )
+	{
+		assert(!"PM_BGEntForNum: entity number out of range");
+		return NULL;
+	}
 
     ent = (bgEntity_t *)((byte *)pm->baseEnt + pm->entSize*(num));
 
@@ -6307,7 +6327,12 @@ void PM_RocketLock( float lockDist, qboolean vehicleLock )
 		{
 			trace_t camTrace;
 			vec3_t newEnd, shotDir;
-			if ( BG_VehTraceFromCamPos( &camTrace, PM_BGEntForNum(pm->ps->clientNum), pm->ps->origin, muzzlePoint, tr.endpos, newEnd, shotDir, (tr.fraction*lockDist) ) )
+			// GalaxyRP fix: [Logical Entities] BG_VehTraceFromCamPos() dereferences this entity's
+			// m_pVehicle without testing it, so a NULL from PM_BGEntForNum() -- which that function
+			// can now return -- has to be caught at the call site. Skipping the extra camera trace
+			// just means the main trace's result stands, which is what happens whenever it misses.
+			bgEntity_t *camEnt = PM_BGEntForNum(pm->ps->clientNum);
+			if ( camEnt && BG_VehTraceFromCamPos( &camTrace, camEnt, pm->ps->origin, muzzlePoint, tr.endpos, newEnd, shotDir, (tr.fraction*lockDist) ) )
 			{
 				memcpy( &tr, &camTrace, sizeof(tr) );
 			}

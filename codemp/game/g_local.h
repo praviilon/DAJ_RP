@@ -1984,6 +1984,7 @@ typedef struct level_locals_s {
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
 	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot
 	qboolean zyk_weather_late_effect_warned;		// a weather effect was refused for arriving after the block
+	qboolean rp_shipboundary_logical_warned;	// shipboundary_touch reports a logical target once per map
 
 	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
 	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts
