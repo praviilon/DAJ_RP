@@ -10152,40 +10152,10 @@ int zyk_max_magic_power(gentity_t *ent)
 // old dispatch logic below for the full explanation. Grepped the whole tree first to confirm neither
 // function has any other caller.
 
-extern void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance);
-extern void healing_water(gentity_t *ent, int heal_amount);
-extern void earthquake(gentity_t *ent, int stun_time, int strength, int distance);
-extern void blowing_wind(gentity_t *ent, int distance, int duration);
-extern void sleeping_flowers(gentity_t *ent, int stun_time, int distance);
-extern void time_power(gentity_t *ent, int distance, int duration);
-extern void chaos_power(gentity_t *ent, int distance, int duration);
-extern void water_splash(gentity_t *ent, int distance, int damage);
-extern void ultra_flame(gentity_t *ent, int distance, int damage);
-extern void rock_fall(gentity_t *ent, int distance, int damage);
-extern void dome_of_damage(gentity_t *ent, int distance, int damage);
-extern void ice_stalagmite(gentity_t *ent, int distance, int damage);
-extern void ice_boulder(gentity_t *ent, int distance, int damage);
-extern void hurricane(gentity_t *ent, int distance, int duration);
-extern void slow_motion(gentity_t *ent, int distance, int duration);
-extern void ultra_speed(gentity_t *ent, int duration);
-extern void ultra_strength(gentity_t *ent, int duration);
-extern void ultra_resistance(gentity_t *ent, int duration);
-extern void immunity_power(gentity_t *ent, int duration);
-extern void ultra_drain(gentity_t *ent, int radius, int damage, int duration);
-extern void magic_shield(gentity_t *ent, int duration);
-extern void healing_area(gentity_t *ent, int damage, int duration);
-extern void lightning_dome(gentity_t *ent, int damage);
-extern void magic_explosion(gentity_t *ent, int radius, int damage, int duration);
-extern void flame_burst(gentity_t *ent, int duration);
-extern void water_attack(gentity_t *ent, int distance, int damage);
-extern void shifting_sand(gentity_t *ent, int distance);
-extern void tree_of_life(gentity_t *ent);
-extern void magic_disable(gentity_t *ent, int distance);
-extern void fast_and_slow(gentity_t *ent, int distance, int duration);
-extern void flaming_area(gentity_t *ent, int damage);
-extern void reverse_wind(gentity_t *ent, int distance, int duration);
-extern void enemy_nerf(gentity_t *ent, int distance);
-extern void ice_block(gentity_t *ent, int duration);
+// GalaxyRP fix: [Magic] thirty-four "extern void <effect>(...)" declarations used to be here. They
+// existed only to feed the player-facing magic dispatch in TryGrapple() below, which was removed as
+// permanently unreachable; not one of them had a call anywhere in this file afterwards. Seven of the
+// thirty-four named functions have since been removed outright as well (see g_main.c).
 // GalaxyRP fix: [Magic] removed magic_master_has_this_power() extern here — this function was never
 // actually called from TryGrapple() below (or anywhere reachable), and has been removed as dead
 // along with the rest of the magic-power selection system it gated (see g_main.c).
@@ -10250,18 +10220,16 @@ qboolean TryGrapple(gentity_t *ent)
 				// whole dead dispatch outright, including the now-pointless use_this_power/
 				// universe_mp_cost_factor locals that existed solely to feed it. zyk_show_magic_in_chat() and
 				// zyk_set_magic_power_cooldown_time() lost their only callers here and have been removed too
-				// (see their old location above). The effect functions themselves (ultra_drain(), time_power(),
-				// etc. in g_main.c) are untouched -- they're still called by the NPC "custom quest npc" random-
-				// power block there, so they're left exactly as they were.
+				// (see their old location above). The effect functions in g_main.c were left alone at the time,
+				// because the NPC "custom quest npc" random-power block there still called them. That block has
+				// since been removed as unreachable in its own right, which orphaned twelve of them --
+				// ultra_drain() and time_power() among them -- and they went with it. The twenty-seven the
+				// quest_mage chain calls are still there and still live.
 
-				if (ent->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && ent->client->pers.universe_quest_counter & (1 << 1) && 
-					!(ent->client->sess.magic_more_disabled_powers & (1 << 1)))
-				{ // zyk: Magic Boost, reward for completing quests in Guardians Sequel. Decreases cooldown time of magic powers
-					// GalaxyRP fix: [Classes] the rpg_class==8 (Magic Master) shorter-cooldown branch used
-					// to be here. rpg_class is permanently 0 now that character classes are gone, so this
-					// was unreachable.
-					ent->client->pers.quest_power_usage_timer -= 3000;
-				}
+				// GalaxyRP fix: [Dead Code] the Magic Boost branch used to be here, shortening the magic
+				// cooldown by 3000ms. It needed pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ
+				// (22) and universe_quest_counter bit 1; neither field is ever written anywhere in the
+				// tree, so both are permanently 0 and the test could never pass.
 
 				display_yellow_bar(ent,(ent->client->pers.quest_power_usage_timer - level.time));
 			}

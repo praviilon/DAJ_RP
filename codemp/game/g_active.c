@@ -1156,42 +1156,15 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			}
 		}
 
-		if (client->sess.amrpgmode == 2 && !(client->pers.quest_power_status & (1 << 2)))
-		{ // zyk: auto-healing abilities will only work if player is not hit by Time Power
-			// GalaxyRP fix: [Dead Code] removed the Monk (rpg_class==4) and Armored Soldier
-			// (rpg_class==3) auto-heal branches here; pers.rpg_class is always 0 server-side,
-			// so neither branch could ever be taken.
-
-			if (client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ && client->pers.universe_quest_counter & (1 << 0) &&
-				client->pers.magic_power < zyk_max_magic_power(ent) && !(client->sess.magic_more_disabled_powers & (1 << 1)))
-			{ // zyk: Final Power of Sages Sequel. Magic Regen. Adds auto-healing of mp
-				client->pers.magic_power += 1;
-				send_rpg_events(1000);
-			}
-
-			if (client->pers.player_statuses & (1 << PLAYER_STATUS_HEALING_CRYSTAL))
-			{ // zyk: Healing Crystal
-				if (ent->health < client->pers.max_rpg_health)
-					ent->health += 1;
-
-				if (client->pers.magic_power < zyk_max_magic_power(ent))
-					client->pers.magic_power += 1;
-
-				if (client->ps.fd.forcePower < client->pers.max_force_power)
-					client->ps.fd.forcePower += 1;
-
-				send_rpg_events(1000);
-			}
-
-			if (client->pers.player_statuses & (1 << PLAYER_STATUS_ENERGY_CRYSTAL))
-			{ // zyk: Energy Crystal
-				if (client->ps.stats[STAT_ARMOR] < client->pers.max_rpg_shield)
-					client->ps.stats[STAT_ARMOR] += 1;
-
-				Add_Ammo(ent, AMMO_BLASTER, 1);
-				Add_Ammo(ent, AMMO_POWERCELL, 1);
-			}
-		}
+		// GalaxyRP fix: [Dead Code] the RPG auto-heal block used to be here -- "if (amrpgmode == 2 &&
+		// !(quest_power_status & (1 << 2)))" wrapping Magic Regen, Healing Crystal and Energy Crystal.
+		// The wrapper's own condition was reachable; all three things inside it were not. Magic Regen
+		// needed pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ (22, galaxyrp/game/rp_local.h)
+		// and universe_quest_counter bit 0, and neither field is written anywhere in the tree -- their
+		// only occurrences are their g_local.h declarations and a handful of reads, so both sit at 0 and
+		// 0 == 22 is false. Healing Crystal and Energy Crystal needed PLAYER_STATUS_HEALING_CRYSTAL and
+		// PLAYER_STATUS_ENERGY_CRYSTAL, two of the thirteen bits g_local.h marks as never set; each has
+		// zero "|=" sites in the tree. Nothing else lived in the block.
 
 		//GalaxyRP (Alex): [Stat Regen] Regen some stats every second. In certain animations the regen will be higher.
 		int health_regen_amount = 1 + ent->client->pers.skill_levels[59];

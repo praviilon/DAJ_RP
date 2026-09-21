@@ -5864,51 +5864,6 @@ void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
 	}
 }
 
-// zyk: Chaos Power
-void chaos_power(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-					
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_user1_id = ent->s.number;
-			player_ent->client->pers.quest_power_status |= (1 << 1);
-			player_ent->client->pers.quest_power_hit3_counter = duration/200;
-			player_ent->client->pers.quest_target1_timer = level.time + 200;
-
-			// zyk: removing emotes to prevent exploits
-			if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE))
-			{
-				player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_EMOTE);
-				player_ent->client->ps.forceHandExtendTime = level.time;
-			}
-
-			// zyk: if using Meditate taunt, remove it
-			if (player_ent->client->ps.legsAnim == BOTH_MEDITATE && player_ent->client->ps.torsoAnim == BOTH_MEDITATE)
-			{
-				player_ent->client->ps.legsAnim = player_ent->client->ps.torsoAnim = BOTH_MEDITATE_END;
-			}
-
-			if (player_ent->client->jetPackOn)
-			{
-				Jetpack_Off(player_ent);
-			}
-
-			// zyk:  setting anim
-			player_ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-			player_ent->client->ps.forceDodgeAnim = BOTH_SONICPAIN_END;
-			player_ent->client->ps.forceHandExtendTime = level.time + duration;
-			player_ent->client->ps.electrifyTime = level.time + duration;
-
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_chaos", "0", "ships/heavydmg", 0, 0, 0, 1000);
-		}
-	}
-}
 
 // GalaxyRP fix: [Magic] magic_sense() removed. The player-facing magic dispatch in
 // Cmd_ForceUse_f()/the grab-anim block in g_cmds.c was deleted earlier as permanently
@@ -5916,65 +5871,15 @@ void chaos_power(gentity_t *ent, int distance, int duration)
 // pers.universe_quest_progress, which nothing in the codebase ever writes -- they sit at the zero
 // ClientConnect's memset gives them. This note used to credit add_new_char() with writing them at
 // character creation; that function has since been removed as dead too, see g_cmds.c), and that
-// deletion took magic_sense()'s only call site with it. Its siblings magic_shield(),
-// magic_disable() and magic_explosion() survive because the custom-quest-NPC block further
-// down this file still calls them; nothing anywhere called magic_sense(). It also wrote
+// deletion took magic_sense()'s only call site with it. Its siblings magic_shield() and
+// magic_disable() survive because the quest_mage chain further down this file still calls them;
+// magic_explosion() has since gone the same way as magic_sense(), when the custom-quest-NPC block
+// that was its last caller was removed. Nothing anywhere called magic_sense(). It also wrote
 // pers.skill_levels[4] straight into forcePowerLevel[FP_SEE] with no amrpgmode guard while
 // activating the power, which would have left a logged-out player at Sense level 0 with Force
 // Sight switched on. Its two cvars (zyk_enable_magic_sense, zyk_magic_sense_mp_cost) are gone
 // from g_xcvar.h with it.
 
-// zyk: Lightning Dome
-extern void zyk_lightning_dome_detonate( gentity_t *ent );
-void lightning_dome(gentity_t *ent, int damage)
-{
-	gentity_t *missile;
-	vec3_t origin;
-	trace_t	tr;
-
-	VectorSet(origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] - 22);
-
-	trap->Trace( &tr, ent->client->ps.origin, NULL, NULL, origin, ent->s.number, MASK_SHOT, qfalse, 0, 0);
-
-	missile = G_Spawn();
-
-	G_SetOrigin(missile, origin);
-	//In SP the impact actually travels as a missile based on the trace fraction, but we're
-	//just going to be instant. -rww
-
-	VectorCopy( tr.plane.normal, missile->pos1 );
-
-	// GalaxyRP fix: [RPG Class] Armored Soldier reduced-radius count removed — rpg_class is permanently 0
-	missile->count = 9;
-
-	missile->classname = "demp2_alt_proj";
-	missile->s.weapon = WP_DEMP2;
-
-	missile->think = zyk_lightning_dome_detonate;
-	missile->nextthink = level.time;
-
-	// zyk: damage is level based
-	damage = (int)ceil(damage * (0.5 + ((ent->client->pers.level * 1.0) / 200.0)));
-
-	// GalaxyRP fix: [RPG Class] Magic Master Unique Skill damage bonus removed — rpg_class is permanently 0
-
-	missile->splashDamage = missile->damage = damage;
-	missile->splashMethodOfDeath = missile->methodOfDeath = MOD_DEMP2;
-
-	// GalaxyRP fix: [RPG Class] Armored Soldier reduced-radius splash removed — rpg_class is permanently 0
-	missile->splashRadius = 768;
-
-	missile->r.ownerNum = ent->s.number;
-
-	missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-	missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-
-	// we don't want it to ever bounce
-	missile->bounceCount = 0;
-
-	if (ent->s.number < level.maxclients)
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/ambience/thunder_close1.mp3"));
-}
 
 // zyk: Ultra Strength. Increases damage and resistance to damage
 void ultra_strength(gentity_t *ent, int duration)
@@ -5996,17 +5901,6 @@ void ultra_resistance(gentity_t *ent, int duration)
 		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/enlightenment.mp3"));
 }
 
-// zyk: Immunity Power. Becomes immune against other special powers
-void immunity_power(gentity_t *ent, int duration)
-{
-	ent->client->pers.quest_power_status |= (1 << 0);
-	ent->client->pers.quest_power1_timer = level.time + duration;
-
-	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_immunity", "0", "scepter/invincibility", 0, 0, 0, 300);
-
-	if (ent->s.number < level.maxclients)
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/boon.mp3"));
-}
 
 // zyk: Enemy Weakening
 void enemy_nerf(gentity_t *ent, int distance)
@@ -6193,157 +6087,11 @@ void zyk_spawn_ice_element(gentity_t *ent, gentity_t *player_ent)
 	}
 }
 
-// zyk: Elemental Attack
-void elemental_attack(gentity_t *ent)
-{
-	int i = 0;
-	int targets_hit = 0;
-	int min_distance = 100;
-	int damage = 16;
 
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
 
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, min_distance, 500, qfalse, &targets_hit) == qtrue)
-		{
-			// zyk: first element, Ice
-			zyk_spawn_ice_element(ent, player_ent);
 
-			// zyk: second element, Fire. Multiplies by 2.5 because of the damage reduction in G_Damage()
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_elemental_fire", "4", "env/flame_jet", 1000, 2.5 * damage, 35, 2500);
-
-			// zyk: third element, Earth. Multiplies by 2.5 because of the damage reduction in G_Damage()
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_elemental_earth", "4", "env/rock_smash", 2500, 2.5 * damage, 35, 4000);
-
-			// zyk: fourth element, Wind
-			player_ent->client->pers.quest_power_status |= (1 << 5);
-			player_ent->client->pers.quest_power_hit_counter = -179;
-			player_ent->client->pers.quest_target4_timer = level.time + 7000;
-
-			// zyk: target is hit by the Ice element for 4 seconds
-			player_ent->client->pers.quest_power_status |= (1 << 26);
-			player_ent->client->pers.quest_target11_timer = level.time + 4000;
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/glass_tumble3.wav"));
-		}
-	}
-}
-
-// zyk: No Attack ability
-void zyk_no_attack(gentity_t *ent)
-{
-	int i = 0;
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (player_ent && player_ent->client && ent != player_ent &&
-			zyk_unique_ability_can_hit_target(ent, player_ent) == qtrue &&
-			Distance(ent->client->ps.origin, player_ent->client->ps.origin) < 300)
-		{
-			G_Damage(player_ent, ent, ent, NULL, NULL, 15, 0, MOD_UNKNOWN);
-
-			player_ent->client->ps.weaponTime = 3000;
-			player_ent->client->ps.electrifyTime = level.time + 3000;
-			player_ent->client->pers.no_attack_timer = level.time + 3000;
-
-			if (player_ent->client->ps.weaponstate == WEAPON_CHARGING ||
-				player_ent->client->ps.weaponstate == WEAPON_CHARGING_ALT)
-			{
-				player_ent->client->ps.weaponstate = WEAPON_READY;
-			}
-		}
-	}
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/hologram_off.mp3"));
-}
-
-// zyk: Super Beam ability
-void zyk_super_beam(gentity_t *ent, int angle_yaw)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	if (angle_yaw == 0)
-		angle_yaw = 1;
-
-	zyk_set_entity_field(new_ent, "classname", "fx_runner");
-	zyk_set_entity_field(new_ent, "spawnflags", "0");
-	zyk_set_entity_field(new_ent, "targetname", "zyk_super_beam");
-
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->client->ps.origin[0], (int)ent->client->ps.origin[1], ((int)ent->client->ps.origin[2] + ent->client->ps.viewheight)));
-	
-	zyk_set_entity_field(new_ent, "angles", va("%d %d 0", (int)ent->client->ps.viewangles[0], angle_yaw));
-
-	new_ent->s.modelindex = G_EffectIndex("env/hevil_bolt");
-
-	new_ent->parent = ent;
-
-	zyk_spawn_entity(new_ent);
-
-	level.special_power_effects[new_ent->s.number] = ent->s.number;
-	level.special_power_effects_timer[new_ent->s.number] = level.time + 2000;
-}
-
-// zyk: Force Storm ability
-extern void Boba_FlyStop(gentity_t *self);
-extern void Jedi_Decloak(gentity_t *self);
 extern void Jedi_DecloakPair(gentity_t *self);
-void zyk_force_storm(gentity_t *ent)
-{
-	int i = 0;
 
-	zyk_quest_effect_spawn(ent, ent, "zyk_force_storm", "4", "env/huge_lightning", 0, 20, 120, 3000);
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (player_ent && player_ent->client && ent != player_ent &&
-			zyk_unique_ability_can_hit_target(ent, player_ent) == qtrue &&
-			Distance(ent->client->ps.origin, player_ent->client->ps.origin) < 380)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_force_storm", "4", "env/huge_lightning", 0, 20, 120, 3000);
-
-			// zyk: decrease enemy movement speed
-			player_ent->client->pers.stun_baton_less_speed_timer = level.time + 2500;
-
-			if (!player_ent->NPC)
-			{ //disable jetpack temporarily
-				if (player_ent->client->jetPackOn)
-					Jetpack_Off(player_ent);
-				player_ent->client->jetPackToggleTime = level.time + 5000;
-			}
-			else if (player_ent->NPC && player_ent->client->NPC_class == CLASS_BOBAFETT)
-			{ // zyk: also disables npc jetpack
-				Boba_FlyStop(player_ent);
-			}
-
-			if (player_ent->client->ps.powerups[PW_CLOAKED])
-			{ // zyk: disables cloak of enemies
-				// GalaxyRP fix: [Cloak Item] uses Jedi_DecloakPair now -- Force Storm deals no real HP
-				// damage (no G_Damage() call in this function at all), so it isn't covered by the new
-				// centralized "any damage decloaks" hook in G_Damage() and needs its own pair-aware call
-				// so a cloaked vehicle+rider caught in the storm both come down, not just whichever one
-				// happens to be `player_ent` in this loop iteration.
-				Jedi_DecloakPair(player_ent);
-			}
-		}
-	}
-}
-
-// zyk: Force Scream ability
-void force_scream(gentity_t *ent)
-{
-	zyk_quest_effect_spawn(ent, ent, "zyk_effect_scream", "4", "howler/sonic", 0, 18, 300, 6000);
-
-	ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-	ent->client->ps.forceDodgeAnim = BOTH_FORCE_RAGE;
-	ent->client->ps.forceHandExtendTime = level.time + 4500;
-
-	G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/chars/howler/howl.mp3"));
-}
 
 void zyk_force_dash_effect(gentity_t *ent)
 {
@@ -6492,55 +6240,7 @@ void shifting_sand(gentity_t *ent, int distance)
 	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_sand", "0", "env/sand_spray", 0, 0, 0, time_to_teleport);
 }
 
-// zyk: Time Power
 extern void display_yellow_bar(gentity_t *ent, int duration);
-void time_power(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-					
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_status |= (1 << 2);
-			player_ent->client->pers.quest_target2_timer = level.time + duration;
-
-			if (i < MAX_CLIENTS)
-			{ // zyk: player hit by this power
-				if (player_ent->client->pers.quest_power_usage_timer < level.time)
-				{
-					player_ent->client->pers.quest_power_usage_timer = level.time + duration;
-				}
-				else
-				{ // zyk: already used a power, so increase the cooldown time
-					player_ent->client->pers.quest_power_usage_timer += duration;
-				}
-
-				display_yellow_bar(player_ent, (player_ent->client->pers.quest_power_usage_timer - level.time));
-			}
-			else if (player_ent->NPC)
-			{ // zyk: npc or boss must also not be able to use magic
-				player_ent->client->pers.light_quest_timer += duration;
-				player_ent->client->pers.guardian_timer += duration;
-				player_ent->client->pers.universe_quest_timer += duration;
-			}
-
-			player_ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-			player_ent->client->ps.forceDodgeAnim = player_ent->client->ps.torsoAnim;
-			player_ent->client->ps.forceHandExtendTime = level.time + duration;
-
-			// zyk: disabled force powers
-			player_ent->client->ps.fd.forceDeactivateAll = 1;
-
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_time", "0", "misc/genrings", 0, 0, 0, duration);
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/electric_beam_lp.wav"));
-		}
-	}
-}
 
 // zyk: Water Splash. Damages the targets and heals the user
 void water_splash(gentity_t *ent, int distance, int damage)
@@ -6799,37 +6499,8 @@ void ice_block(gentity_t *ent, int duration)
 	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/glass_tumble3.wav"));
 }
 
-// zyk: Ultra Drain
-void ultra_drain(gentity_t *ent, int radius, int damage, int duration)
-{
-	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_drain", "4", "misc/possession", 1000, damage, radius, duration);
-}
 
-// zyk: Magic Explosion
-void magic_explosion(gentity_t *ent, int radius, int damage, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_explosion", "4", "explosions/hugeexplosion1", 1500, damage, radius, duration + 1000);
-	}
 
-	// GalaxyRP fix: [RPG Class] Magic Master Unique Skill damage bonus removed — rpg_class is permanently 0
-	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_explosion", "4", "explosions/hugeexplosion1", 500, damage, radius, duration);
-}
-
-// zyk: Healing Area
-void healing_area(gentity_t *ent, int damage, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		damage += 1;
-	}
-
-	// GalaxyRP fix: [RPG Class] Magic Master Unique Skill damage bonus removed — rpg_class is permanently 0
-	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_healing", "4", "env/red_cyc", 0, damage, 228, duration);
-}
 
 // zyk: Slow Motion
 void slow_motion(gentity_t *ent, int distance, int duration)
@@ -10305,217 +9976,35 @@ void G_RunFrame( int levelTime ) {
 			}
 
 			// zyk: abilities of custom quest npcs
-			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_CUSTOM_QUEST_NPC) && ent->health > 0)
-			{
-				// zyk: magic powers
-				if (ent->client->pers.light_quest_timer < level.time)
-				{
-					int random_number = Q_irand(0, 29);
-
-					if (ent->client->sess.selected_left_special_power & (1 << MAGIC_HEALING_WATER) && random_number == 0)
-					{
-						healing_water(ent, 120);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_WATER_SPLASH) && random_number == 1)
-					{
-						water_splash(ent, 400, 15);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_WATER_ATTACK) && random_number == 2)
-					{
-						water_attack(ent, 500, 40);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_EARTHQUAKE) && random_number == 3)
-					{
-						earthquake(ent, 2000, 300, 500);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_ROCKFALL) && random_number == 4)
-					{
-						rock_fall(ent, 500, 40);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_SHIFTING_SAND) && random_number == 5)
-					{
-						shifting_sand(ent, 1000);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_SLEEPING_FLOWERS) && random_number == 6)
-					{
-						sleeping_flowers(ent, 2500, 350);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_POISON_MUSHROOMS) && random_number == 7)
-					{
-						poison_mushrooms(ent, 100, 600);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_TREE_OF_LIFE) && random_number == 8)
-					{
-						tree_of_life(ent);
-					}
-					else if (ent->client->sess.selected_left_special_power & (1 << MAGIC_MAGIC_SHIELD) && random_number == 9)
-					{
-						magic_shield(ent, 6000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_DOME_OF_DAMAGE) && random_number == 10)
-					{
-						dome_of_damage(ent, 500, 25);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_MAGIC_DISABLE) && random_number == 11)
-					{
-						magic_disable(ent, 450);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ULTRA_SPEED) && random_number == 12)
-					{
-						ultra_speed(ent, 15000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_SLOW_MOTION) && random_number == 13)
-					{
-						slow_motion(ent, 400, 15000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_FAST_AND_SLOW) && random_number == 14)
-					{
-						fast_and_slow(ent, 400, 6000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_FLAME_BURST) && random_number == 15)
-					{
-						flame_burst(ent, 5000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ULTRA_FLAME) && random_number == 16)
-					{
-						ultra_flame(ent, 500, 35);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_FLAMING_AREA) && random_number == 17)
-					{
-						flaming_area(ent, 20);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_BLOWING_WIND) && random_number == 18)
-					{
-						blowing_wind(ent, 700, 5000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_HURRICANE) && random_number == 19)
-					{
-						hurricane(ent, 600, 5000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_REVERSE_WIND) && random_number == 20)
-					{
-						reverse_wind(ent, 700, 5000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ULTRA_RESISTANCE) && random_number == 21)
-					{
-						ultra_resistance(ent, 30000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ULTRA_STRENGTH) && random_number == 22)
-					{
-						ultra_strength(ent, 30000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ENEMY_WEAKENING) && random_number == 23)
-					{
-						enemy_nerf(ent, 450);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ICE_STALAGMITE) && random_number == 24)
-					{
-						ice_stalagmite(ent, 500, 130);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ICE_BOULDER) && random_number == 25)
-					{
-						ice_boulder(ent, 380, 40);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_ICE_BLOCK) && random_number == 26)
-					{
-						ice_block(ent, 3500);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_HEALING_AREA) && random_number == 27)
-					{
-						healing_area(ent, 2, 5000);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_MAGIC_EXPLOSION) && random_number == 28)
-					{
-						magic_explosion(ent, 320, 130, 900);
-					}
-					else if (ent->client->sess.selected_left_special_power  & (1 << MAGIC_LIGHTNING_DOME) && random_number == 29)
-					{
-						lightning_dome(ent, 70);
-					}
-
-					ent->client->pers.light_quest_timer = level.time + ent->client->pers.light_quest_messages;
-				}
-
-				// zyk: ultimate magic and quest powers
-				if (ent->client->pers.hunter_quest_timer < level.time)
-				{
-					int random_number = Q_irand(0, 7);
-
-					if (ent->client->sess.selected_right_special_power  & (1 << 0) && random_number == 0)
-					{
-						ultra_drain(ent, 450, 30, 8000);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 1) && random_number == 1)
-					{
-						immunity_power(ent, 20000);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 2) && random_number == 2)
-					{
-						chaos_power(ent, 400, 4600);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 3) && random_number == 3)
-					{
-						time_power(ent, 400, 4000);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 4) && random_number == 4)
-					{ // zyk: Light Power
-						ent->client->pers.quest_power_status |= (1 << 14);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 5) && random_number == 5)
-					{ // zyk: Dark Power
-						ent->client->pers.quest_power_status |= (1 << 15);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 6) && random_number == 6)
-					{ // zyk: Eternity Power
-						ent->client->pers.quest_power_status |= (1 << 16);
-					}
-					else if (ent->client->sess.selected_right_special_power  & (1 << 7) && random_number == 7)
-					{ // zyk: Universe Power
-						ent->client->pers.quest_power_status |= (1 << 13);
-					}
-
-					ent->client->pers.hunter_quest_timer = level.time + ent->client->pers.hunter_quest_messages;
-				}
-
-				// zyk: unique abilities
-				if (ent->client->pers.universe_quest_timer < level.time)
-				{
-					int random_number = Q_irand(0, 4);
-
-					if (ent->client->sess.selected_special_power & (1 << 0) && random_number == 0)
-					{
-						ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 2000;
-
-						ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-						ent->client->ps.forceDodgeAnim = BOTH_FORCE_DRAIN_START;
-						ent->client->ps.forceHandExtendTime = level.time + 2000;
-
-						zyk_super_beam(ent, ent->client->ps.viewangles[1]);
-					}
-					else if (ent->client->sess.selected_special_power & (1 << 1) && random_number == 1)
-					{
-						ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-						elemental_attack(ent);
-					}
-					else if (ent->client->sess.selected_special_power & (1 << 2) && random_number == 2)
-					{
-						ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-						zyk_no_attack(ent);
-					}
-					else if (ent->client->sess.selected_special_power & (1 << 3) && random_number == 3)
-					{
-						ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-						force_scream(ent);
-					}
-					else if (ent->client->sess.selected_special_power & (1 << 4) && random_number == 4)
-					{
-						ent->client->ps.powerups[PW_NEUTRALFLAG] = level.time + 500;
-						zyk_force_storm(ent);
-					}
-
-					ent->client->pers.universe_quest_timer = level.time + ent->client->pers.universe_quest_messages;
-				}
-			}
+			// GalaxyRP fix: [Magic] the custom-quest-NPC ability dispatch used to be here, 211 lines of
+			// it: a random-power chain for NPCs carrying PLAYER_STATUS_CUSTOM_QUEST_NPC, picking magic
+			// powers out of sess.selected_left_special_power and special powers out of
+			// sess.selected_special_power.
+			//
+			// Nothing has ever been able to set that status bit. The name appears exactly twice in the
+			// whole tree -- its enum entry in g_local.h and the single read that used to be on this
+			// line -- there is no "player_statuses |= (1 << PLAYER_STATUS_CUSTOM_QUEST_NPC)" anywhere,
+			// every player_statuses set in the tree uses a literal PLAYER_STATUS_* name rather than a
+			// variable bit index, and player_statuses is never restored from the database or the session
+			// string -- it is only ever assigned 0 wholesale. So the bit sat at the zero ClientConnect's
+			// memset gives it and the block never ran once.
+			//
+			// Removing it orphaned twelve functions further up this file, which went with it: chaos_power,
+			// elemental_attack, force_scream, healing_area, immunity_power, lightning_dome,
+			// magic_explosion, time_power, ultra_drain, zyk_force_storm, zyk_no_attack and
+			// zyk_super_beam. This block was their only caller; the quest_mage chain just below calls
+			// twenty-seven OTHER effect functions and none of these twelve, and none of the twelve was
+			// ever taken by address (the zyk_force_storm / zyk_super_beam matches elsewhere are entity
+			// targetname strings that happen to share the names, not function pointers).
+			//
+			// Consequences worth knowing, all of them pre-existing dead weight rather than new:
+			// quest_power_status bits 1, 2 and 26 had no setter other than chaos_power, time_power and
+			// elemental_attack, so those three bits are now permanently 0 and their ~21 readers across
+			// six files are permanently-false tests. Bits 0 and 5 keep other setters. The entity
+			// targetname handling for "zyk_force_storm" and "zyk_super_beam" in g_misc.c and g_combat.c
+			// can no longer be reached either, and zyk_lightning_dome_detonate() (g_weapon.c) and
+			// zyk_spawn_ice_element() lost their last callers. All left in place deliberately, to be
+			// judged on their own rather than swept up behind this one.
 
 			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) remain in use by the live quest_mage chain below
 
