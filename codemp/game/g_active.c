@@ -1102,13 +1102,27 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		// of the timer, and disabling the cvar actively clears any protection still in effect instead
 		// of freezing it. ClientSpawn() also clears the flag alongside the timer now, closing (2) at
 		// its source as well.
+		//
+		// GalaxyRP fix: [gameplay] pers.chat_protection_timer now holds the level.time at which the
+		// player OPENED chat, and the test below is on the time elapsed since. It used to hold the
+		// deadline, "level.time + cvar", baked in at that moment: a lowered cvar did not reach anyone
+		// already typing until they closed chat, and an absurdly large value overflowed the sum
+		// negative, which made the old "deadline < level.time" true at once -- instant protection from
+		// a setting that read as "practically never". With the elapsed form the live value applies on
+		// every one-second tick of this loop and a huge value simply never arrives. The cvar is still
+		// milliseconds, rounded up to the tick: the tick that sees chat open records the start, and
+		// since ticks are at least 1000 ms apart, 1 and 1000 both protect on the next one, 5000 on the
+		// fifth after it. 0 stays the "not talking" sentinel: this loop cannot run before level.time
+		// has advanced 1000 ms from map start, so level.time is never 0 here, and ClientSpawn() still
+		// resets the field to 0 together with the flag, which is what keeps protection from surviving
+		// a respawn.
 		if (zyk_chat_protection_timer.integer > 0)
 		{ // zyk: chat protection. If 0, it is off. If greater than 0, set the timer to protect the player
 			if (client->ps.eFlags & EF_TALK && client->pers.chat_protection_timer == 0)
 			{
-				client->pers.chat_protection_timer = level.time + zyk_chat_protection_timer.integer;
+				client->pers.chat_protection_timer = level.time;
 			}
-			else if (ent->client->ps.eFlags & EF_TALK && client->pers.chat_protection_timer < level.time)
+			else if (ent->client->ps.eFlags & EF_TALK && level.time - client->pers.chat_protection_timer >= zyk_chat_protection_timer.integer)
 			{
 				client->pers.player_statuses |= (1 << PLAYER_STATUS_CHAT_PROTECTION);
 			}

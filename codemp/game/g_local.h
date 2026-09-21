@@ -836,6 +836,8 @@ typedef struct clientPersistant_s {
 	int player_scale;
 
 	// zyk: chat protection cooldown timer. After this time, player will be protected against damage
+	// GalaxyRP fix: [gameplay] holds the level.time at which the player opened chat (0 = not talking),
+	// not the deadline -- see the block in ClientTimerActions() for why. Reset to 0 by ClientSpawn().
 	int chat_protection_timer;
 
 	// zyk: used to print all mission fields when editing a Custom Quest

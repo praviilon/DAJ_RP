@@ -290,9 +290,14 @@ void RP_CVU_rpgMaxLevel(void)
 // test and falls into the proportional branch, where "asave = take * (STAT_ARMOR / scaled_damage)" is
 // itself negative and the following "take -= asave" therefore INCREASES the damage the player takes
 // before the armour is zeroed. One free extra-damage hit per spawn, from a setting that reads like it
-// should merely give less shield. Bounded to [0, 200]: 0 is a legitimate "no starting shield", and 200
-// is double the logged-out maximum health that the shield pickup cap in bg_misc.c already works
-// against, so anything higher is not a balance choice but a mistake.
+// should merely give less shield. Bounded to [0, 100]: 0 is a legitimate "no starting shield", and 100
+// is the ceiling everything else already works against -- the cvar only ever reaches logged-out
+// players (ClientSpawn() writes it, then initialize_rpg_skills() overwrites it for characters with
+// pers.max_rpg_shield), their STAT_MAX_HEALTH is Com_Clampi(1, 100, handicap), and STAT_MAX_ARMOR /
+// Pickup_Armor() refuse any shield above that. The bound used to be 200: nothing capped the value
+// itself, so a player spawned with 200 and kept it until hit, but no pickup could ever refill above
+// 100, which made the top half of the range a one-shot bonus rather than a setting. Whatever the
+// bound, it must stay <= 255: PERS_ATTACKEE_ARMOR packs the armour into eight bits (g_combat.c).
 void RP_CVU_startingShield(void)
 {
 	if (rp_starting_shield.integer < 0)
@@ -300,9 +305,9 @@ void RP_CVU_startingShield(void)
 		trap->Cvar_Set("rp_starting_shield", "0");
 		trap->Cvar_Update(&rp_starting_shield);
 	}
-	else if (rp_starting_shield.integer > 200)
+	else if (rp_starting_shield.integer > 100)
 	{
-		trap->Cvar_Set("rp_starting_shield", "200");
+		trap->Cvar_Set("rp_starting_shield", "100");
 		trap->Cvar_Update(&rp_starting_shield);
 	}
 }
