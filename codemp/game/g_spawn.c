@@ -558,7 +558,16 @@ spawn_t	spawns[] = {
 	{ "fx_runner",							SP_fx_runner },
 	{ "fx_snow",							SP_CreateSnow, qtrue },
 	{ "fx_spacedust",						SP_CreateSpaceDust, qtrue },
-	{ "fx_wind",							SP_CreateWind },
+	// GalaxyRP fix: [Logical Entities] TaystJK marks this one networked while the three fx_*
+	// classes above it are logical, and nothing in the code supports the split: its SP_CreateWind
+	// is byte-for-byte theirs, and like SP_CreateRain/Snow/SpaceDust it only calls G_EffectIndex
+	// and reads its own spawn keys -- it never links, never sets a model or a think/use, and never
+	// hands its entity number to the engine. "fx_wind" appears nowhere else in this tree, so
+	// nothing looks one up. Their list is curated by class name rather than derived from the spawn
+	// function (see misc_cubemap below for the proof), and this is one of its misses. Do not let a
+	// re-sync of this table from upstream quietly put it back: a map with a script_targetname on an
+	// fx_wind is networked by the router anyway, and "nological 1" is the per-entity override.
+	{ "fx_wind",							SP_CreateWind, qtrue },
 	{ "gametype_item",						SP_gametype_item },
 	{ "info_camp",							SP_info_camp, qtrue },
 	{ "info_jedimaster_start",				SP_info_jedimaster_start },
@@ -583,6 +592,11 @@ spawn_t	spawns[] = {
 	{ "light",								SP_light },
 	{ "misc_ammo_floor_unit",				SP_misc_ammo_floor_unit },
 	{ "misc_bsp",							SP_misc_bsp },
+	// GalaxyRP: [Logical Entities] left networked deliberately. SP_misc_cubemap is the identical
+	// one-liner G_FreeEntity(ent) that SP_info_null is, and info_null IS marked logical -- which is
+	// what shows TaystJK's list to be hand-curated rather than derived. Unlike fx_wind above, the
+	// marking costs nothing here: the entity is gone on the frame it spawned, so which region it
+	// was allocated from is unobservable. Not worth the churn of changing.
 	{ "misc_cubemap",						SP_misc_cubemap },
 	{ "misc_exploding_crate",				SP_misc_exploding_crate}, // zyk: added this code
 	{ "misc_faller",						SP_misc_faller },
@@ -608,6 +622,10 @@ spawn_t	spawns[] = {
 	{ "misc_turret",						SP_misc_turret },
 	{ "misc_turretG2",						SP_misc_turretG2 },
 	{ "misc_weapon_shooter",				SP_misc_weapon_shooter },
+	// GalaxyRP: [Logical Entities] left networked for the same reason as misc_cubemap above --
+	// SP_misc_weather_zone frees the entity immediately, so the region never matters. The zone the
+	// client actually uses is read from the BSP's own entity lump by cgame, never from this entity
+	// (see the "die" note in the /admweather effect table, g_cmds.c).
 	{ "misc_weather_zone",					SP_misc_weather_zone },
 	{ "npc_alora",							SP_NPC_Alora, qtrue },
 	{ "npc_bartender",						SP_NPC_Bartender, qtrue },
