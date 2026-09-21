@@ -1108,11 +1108,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	Q_strncpyz(zyk_mapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof(zyk_mapname));
 	strcpy(level.zykmapname, zyk_mapname);
 
-	level.is_vjun3_map = qfalse;
-	if (Q_stricmp(zyk_mapname, "vjun3") == 0)
-	{ // zyk: fixing vjun3 map. It will not load protocol_imp npc to prevent exceeding the npc model limit (16) and crashing clients
-		level.is_vjun3_map = qtrue;
-	}
+	// GalaxyRP fix: [NPC] the is_vjun3_map flag that was set here is gone: its only reader dropped
+	// protocol_imp and r2d2_imp on vjun3 unconditionally to stay under the old 16-entry
+	// MAX_ANIM_FILES, which has been 128 since 3.47. Both types are on the zyk_sp_npc_fix list.
 
 	if (Q_stricmp(zyk_mapname, "yavin1") == 0 || Q_stricmp(zyk_mapname, "yavin1b") == 0 || Q_stricmp(zyk_mapname, "yavin2") == 0 || 
 		Q_stricmp(zyk_mapname, "t1_danger") == 0 || Q_stricmp(zyk_mapname, "t1_fatal") == 0 || Q_stricmp(zyk_mapname, "t1_inter") == 0 ||
@@ -1123,7 +1121,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		Q_stricmp(zyk_mapname, "vjun3") == 0 || Q_stricmp(zyk_mapname, "t3_bounty") == 0 || Q_stricmp(zyk_mapname, "t3_byss") == 0 ||
 		Q_stricmp(zyk_mapname, "t3_hevil") == 0 || Q_stricmp(zyk_mapname, "t3_rift") == 0 || Q_stricmp(zyk_mapname, "t3_stamp") == 0 ||
 		Q_stricmp(zyk_mapname, "taspir1") == 0 || Q_stricmp(zyk_mapname, "taspir2") == 0 || Q_stricmp(zyk_mapname, "kor1") == 0 ||
-		Q_stricmp(zyk_mapname, "kor2") == 0)
+		Q_stricmp(zyk_mapname, "kor2") == 0 ||
+		// GalaxyRP fix: [NPC] the six academy hub maps were missing, so zyk_sp_npc_fix never applied
+		// to the SP maps most likely to host RP -- the ones with Kyle, Luke, Rosh, the students and
+		// the protocol droids in them.
+		Q_stricmp(zyk_mapname, "academy1") == 0 || Q_stricmp(zyk_mapname, "academy2") == 0 || Q_stricmp(zyk_mapname, "academy3") == 0 ||
+		Q_stricmp(zyk_mapname, "academy4") == 0 || Q_stricmp(zyk_mapname, "academy5") == 0 || Q_stricmp(zyk_mapname, "academy6") == 0)
 	{
 		level.sp_map = qtrue;
 	}

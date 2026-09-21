@@ -1922,9 +1922,6 @@ typedef struct level_locals_s {
 	// zyk: the player who called the last vote
 	int voting_player;
 
-	// zyk: fix for vjun3 map. It crashs clients in MP because of the npc skin limit (16). It will not load the protocol_imp npc
-	qboolean is_vjun3_map;
-
 	// zyk: tests if it is a sp map in loading time
 	qboolean sp_map;
 

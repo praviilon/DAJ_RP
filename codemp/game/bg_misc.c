@@ -3184,10 +3184,19 @@ int BG_ModelCache(const char *modelName, const char *skinName)
 	#endif // _GAME
 }
 
+// GalaxyRP fix: [NPC] both pools sized for every networked slot to hold an NPC at once. NPC
+// bookkeeping is allocated ONCE PER ENTITY SLOT and never given back -- G_CreateFakeClient() and
+// New_NPC_t() on the server (gclient_t + gNPC_t, ~10.6 KB), CG_CreateNPCClient() on the client
+// (clientInfo_t, ~6.2 KB) -- and G_Spawn() skips slots freed in the last second, so under steady
+// temp-entity traffic NPC spawns drift across the whole free range over a long map. The old sizes
+// (6,000,000 / 2,048,000) covered ~560 / ~300 distinct slots; past that BG_Alloc() Com_Errors with
+// "buffer exceeded tail", which is a client disconnect, or on a dedicated server an exit. 992
+// possible NPC slots need ~10.5 MB / ~6.1 MB plus the animation sets; static BSS, so no cost until
+// touched.
 #if defined(_GAME)
-	#define MAX_POOL_SIZE	6000000 //1024000 // zyk: increased from 3000000 to 6000000
-#elif defined(_CGAME) //don't need as much for cgame stuff. 2mb will be fine.
-	#define MAX_POOL_SIZE	2048000
+	#define MAX_POOL_SIZE	12000000 //1024000 // zyk: increased from 3000000 to 6000000
+#elif defined(_CGAME)
+	#define MAX_POOL_SIZE	8388608
 #elif defined(UI_BUILD) //And for the ui the only thing we'll be using this for anyway is allocating anim data for g2 menu models
 	#define MAX_POOL_SIZE	512000
 #endif

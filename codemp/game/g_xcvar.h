@@ -510,6 +510,13 @@ XCVAR_DEF( rp_allow_grapple_hook,		"2",		RP_CVU_allowGrappleHook,	CVAR_ARCHIVE|C
 // entity between regions. 0 puts everything in the networked table, exactly as before the feature.
 XCVAR_DEF( rp_logical_entities,			"1",		NULL,				CVAR_ARCHIVE|CVAR_LATCH,						qfalse )
 XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [NPC] a content filter, not a fix any more. 1 frees the spawners of the SP story cast
+// (Tavion, the Kothos twins, Rosh, Kyle, Luke, Chewie, Alora, Boba), the droids, merchants and
+// creatures on SP maps (level.sp_map, g_main.c) -- see the list in SP_NPC_spawner(). It was written
+// against two problems that no longer exist: the 16-entry MAX_ANIM_FILES that crashed clients when
+// too many non-humanoid models were loaded (128 since 3.47), and networked entity pressure (logical
+// entities and the ZYK_ENTITY_RESERVE guards). The unconditional vjun3 protocol_imp/r2d2_imp drop
+// that lived beside it has been folded in here; both types are on the list.
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
