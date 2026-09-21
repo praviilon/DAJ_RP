@@ -335,8 +335,6 @@ XCVAR_DEF( zyk_tripmine_splash_damage,	"105",			NULL,				CVAR_ARCHIVE|CVAR_NORES
 XCVAR_DEF( zyk_detpack_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_detpack_splash_damage,	"200",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_saber_throw_damage,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_magic_fist_damage,	"14",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_magic_fist_velocity,	"5000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_ammo_respawn_time,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_shield_respawn_time,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_health_respawn_time,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
@@ -374,82 +372,32 @@ XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NOR
 // contradict the engine's own "will be changed upon restarting" a moment after it printed.
 XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
-XCVAR_DEF( zyk_magic_fist_mp_cost,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_healing_area_mp_cost,	"5",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_lightning_dome_mp_cost,	"15",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_magic_explosion_mp_cost,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ultra_strength_mp_cost,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_poison_mushrooms_mp_cost,	"18",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_water_splash_mp_cost,	"20",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ultra_flame_mp_cost,	"21",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rockfall_mp_cost,	"18",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_dome_of_damage_mp_cost,	"22",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ice_stalagmite_mp_cost,	"20",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ice_boulder_mp_cost,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_hurricane_mp_cost,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_slow_motion_mp_cost,	"17",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ultra_resistance_mp_cost,	"10",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_sleeping_flowers_mp_cost,	"25",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_healing_water_mp_cost,	"23",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flame_burst_mp_cost,	"23",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_earthquake_mp_cost,	"18",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_magic_shield_mp_cost,	"25",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_blowing_wind_mp_cost,	"20",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ultra_speed_mp_cost,	"17",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ultra_drain_mp_cost,	"35",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_immunity_power_mp_cost,	"30",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_chaos_power_mp_cost,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_time_power_mp_cost,	"35",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_water_attack_mp_cost, "21",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_shifting_sand_mp_cost, "18",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_tree_of_life_mp_cost,  "17",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_magic_disable_mp_cost, "18",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_fast_and_slow_mp_cost, "22",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flaming_area_mp_cost, "22",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_reverse_wind_mp_cost, "23",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enemy_nerf_mp_cost,	"18",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ice_block_mp_cost, "20",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_universe_mp_cost_factor,	"1.4",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_healing_area,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_lightning_dome,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_magic_explosion,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ultra_strength,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_poison_mushrooms,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_water_splash,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ultra_flame,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_rockfall,	"1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_dome_of_damage,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ice_stalagmite,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ice_boulder,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_hurricane,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_slow_motion,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ultra_resistance,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_sleeping_flowers,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_healing_water,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_flame_burst,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_earthquake,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_magic_shield,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_blowing_wind,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ultra_speed,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ultra_drain,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_immunity_power,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_chaos_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_time_power,	"1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Magic] the 73 magic-system cvars that used to be defined here and just above were
+// removed. They were the per-power MP costs (*_mp_cost), the per-power on/off switches
+// (zyk_enable_*), zyk_universe_mp_cost_factor, and the magic-fist trio (zyk_magic_fist_damage /
+// _velocity / _mp_cost). Every one of them was read by exactly one thing: the player's magic-power
+// dispatch in TryGrapple()'s RPG branch (g_cmds.c), which was itself removed as permanently
+// unreachable -- all seven powers it could trigger were gated on pers.defeated_guardians or
+// pers.universe_quest_progress/universe_quest_counter, fields nothing anywhere ever writes. With the
+// dispatch gone the cvars had no readers left at all, in any module or asset.
+//
+// This changes nothing in game. The ~33 magic effect functions in g_main.c (earthquake(),
+// hurricane(), time_power(), ...) are still live -- the quest_mage NPC's random-power chain calls
+// them -- but it calls them with hardcoded arguments, never through a cvar, and an zyk_enable_*
+// switch only ever gated a PLAYER's access to a power a player can no longer invoke.
+//
+// zyk_magic_fist_velocity and zyk_magic_fist_mp_cost went with magic_fist_velocity() in g_weapon.c,
+// their sole reader, which had no callers of its own (see the note at its old location there).
+//
+// NOT removed, and not to be confused with these: zyk_max_special_power_targets, which is live --
+// it caps how many entities one effect may hit and is read by zyk_special_power_can_hit_target(),
+// the filter all 21 of those effect call sites go through.
+//
 // GalaxyRP fix: [Quests] zyk_enable_light_power, zyk_enable_dark_power, zyk_enable_eternity_power,
 // and zyk_enable_universe_power used to be defined here. Their only consumers were the /settings 1-4
 // (Light/Dark/Eternity/Universe Power) special-casing in Cmd_Settings_f, which was removed since those
 // quest-completion-granted powers can no longer be earned (see the GalaxyRP fix comment in g_cmds.c).
 // Removed outright.
-XCVAR_DEF( zyk_enable_resurrection_power,	"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_water_attack,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_shifting_sand,    "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_tree_of_life,     "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_magic_disable,	"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_fast_and_slow, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_flaming_area, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_reverse_wind, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_enemy_nerf, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_enable_ice_block, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_screen_message/zyk_screen_message_timer to
 // rp_screen_message/rp_screen_message_timer -- matches this codebase's rp_ naming convention for
 // GalaxyRP-authored cvars (see rp_allow_playsound_command/rp_allow_emotes above).

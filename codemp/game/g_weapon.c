@@ -3997,18 +3997,14 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	}
 }
 
-int magic_fist_velocity(gentity_t *ent)
-{
-	int magic_bolt_speed = zyk_magic_fist_velocity.integer;
-
-	if (ent->client->pers.magic_power >= (zyk_magic_fist_mp_cost.integer * 8) &&
-		ent->client->pers.unique_skill_duration > level.time && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_1))
-	{ // zyk: Magic Master Unique Ability 1 increases speed of magic bolt shots
-		magic_bolt_speed += (magic_bolt_speed * 0.2);
-	}
-
-	return magic_bolt_speed;
-}
+// GalaxyRP fix: [Magic] magic_fist_velocity() used to be defined here. It computed a launch speed
+// for the magic-bolt shot from zyk_magic_fist_velocity, with a 20% bonus for Magic Master Unique
+// Ability 1 -- and it had no callers anywhere in the tree, the magic-bolt weapon it served having
+// been removed long before. Its body was doubly dead on top of that: pers.unique_skill_duration is
+// written in four places and every one sets it to 0, so "> level.time" was permanently false, and
+// PLAYER_STATUS_UNIQUE_ABILITY_1 is one of the bits g_local.h already marks as never set.
+// Removed, and zyk_magic_fist_velocity / zyk_magic_fist_mp_cost with it -- this was their only
+// reader (see the note in g_xcvar.h).
 
 //---------------------------------------------------------
 // FireMelee
