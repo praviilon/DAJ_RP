@@ -6453,9 +6453,28 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// target_lasers included. Sentry guns are not affected (WP_FireTurretMissile passes
 			// the owner through, so the attacker is a player) and Seeker drones are NPCs, which
 			// have clients of their own.
+			//
+			// GalaxyRP fix: [Death System] "&& !certainDeath" -- two callers pass a player as their own
+			// attacker for damage that is, by construction, the end: the void / fall-to-death timer in
+			// ClientThink_real() (g_active.c: 9999, DAMAGE_NO_PROTECTION, MOD_FALLING, attacker =
+			// otherKiller or SELF when nobody pushed you) and the Duel-team change in Cmd_DuelTeam_f()
+			// (g_cmds.c: 99999, DAMAGE_NO_PROTECTION, MOD_SUICIDE, attacker = self). Self has a client,
+			// so the "somebody did this to you" test admitted them, the player went down at
+			// RP_DOWNED_HEALTH -- knockdown message, invulnerability grant and all -- and the same
+			// timer fired again next frame, found them already down and killed them: the
+			// "PraViilon killed PraViilon by MOD_FALLING" pair in the log. Named by the MOD +
+			// DAMAGE_NO_PROTECTION pairing rather than by attacker == targ, because a pushed player
+			// arrives here with the pusher as attacker and must take the same outright death (they
+			// did, one frame late) while player_die() still credits the push. Plain MOD_FALLING
+			// without the flag -- survivable fall damage -- keeps its knockdown, so the MOD-list
+			// warning above still stands. And it sits in the left half of the OR for the reason
+			// given two paragraphs up: a player ALREADY down who then falls into the void must still
+			// reach the clear-then-die arm.
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum
 				&& !zyk_minigame_forces_death(targ)
-				&& ((RP_DownedSystemEnabled() && attacker && attacker->client) || G_PlayerIsDowned(targ))) {
+				&& ((RP_DownedSystemEnabled() && attacker && attacker->client
+					&& !((mod == MOD_FALLING || mod == MOD_SUICIDE) && (dflags & DAMAGE_NO_PROTECTION)))
+					|| G_PlayerIsDowned(targ))) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				//
 				// GalaxyRP fix: [Death System] ...or if a rancor has them in its fist, which ends in

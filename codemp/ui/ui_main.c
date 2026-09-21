@@ -6877,7 +6877,10 @@ static void UI_RunMenuScript(char **args)
 		{
 			UI_UpdateCharacterSkin();
 		}
-#if 0
+		// GalaxyRP fix: [UI] OpenJK c79e6576 -- the four "Create Game" force/weapon handlers below
+		// were inside "#if 0 ... #endif", so the menu's force-power and weapon toggles did nothing
+		// when a listen server was started from it. Re-enabled as upstream did: the block only ever
+		// needed forcePowerDisable initialised and the ui_netGametype spelling corrected.
 		else if (Q_stricmp(name, "setui_dualforcepower") == 0)
 		{
 			int forcePowerDisable = trap->Cvar_VariableValue("g_forcePowerDisable");
@@ -6912,7 +6915,7 @@ static void UI_RunMenuScript(char **args)
 		}
 		else if (Q_stricmp(name, "dualForcePowers") == 0)
 		{
-			int	dualforcePower,i, forcePowerDisable;
+			int	dualforcePower,i, forcePowerDisable=0;
 			dualforcePower = trap->Cvar_VariableValue("ui_dualforcepower");
 
 			if (dualforcePower==0)	// All force powers
@@ -6970,8 +6973,8 @@ static void UI_RunMenuScript(char **args)
 			int	weaponDisable,i;
 			const char *cvarString;
 
-			if (uiInfo.gameTypes[ui_netGameType.integer].gtEnum == GT_DUEL ||
-				uiInfo.gameTypes[ui_netGameType.integer].gtEnum == GT_POWERDUEL)
+			if (uiInfo.gameTypes[ui_netGametype.integer].gtEnum == GT_DUEL ||
+				uiInfo.gameTypes[ui_netGametype.integer].gtEnum == GT_POWERDUEL)
 			{
 				cvarString = "g_duelWeaponDisable";
 			}
@@ -6996,7 +6999,6 @@ static void UI_RunMenuScript(char **args)
 				trap->Cvar_Set(cvarString, va("%i",weaponDisable));
 			}
 		}
-#endif
 		// If this is siege, change all the bots to humans, because we faked it earlier
 		//  swapping humans for bots on the menu
 		else if (Q_stricmp(name, "setSiegeNoBots") == 0)
