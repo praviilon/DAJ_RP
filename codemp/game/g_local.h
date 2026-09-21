@@ -1909,13 +1909,17 @@ typedef struct level_locals_s {
 	// left in place -- untangling it further would mean following level.quest_map's per-map fallback
 	// selection logic too, which is out of scope for this pass.
 
-	// zyk: each index has the effect id. The value is the owner of the effect used in Special Powers
-	// GalaxyRP: [Logical Entities] sized for both regions. G_Damage() reads this at
-	// attacker->s.number, and a logical target_kill passes itself as the attacker.
-	int special_power_effects[MAX_ENTITIESTOTAL];
-
-	// zyk: timer to remove each effect used in Special Powers
-	int special_power_effects_timer[MAX_ENTITIESTOTAL];
+	// GalaxyRP fix: [Magic] special_power_effects[MAX_ENTITIESTOTAL] and
+	// special_power_effects_timer[MAX_ENTITIESTOTAL] used to be here -- 32 KB holding, per entity
+	// slot, which player owned the magic effect occupying it and when that effect expired. Their
+	// only producer was the quest_mage power chain in g_main.c, and that NPC type no longer
+	// exists, so every entry was permanently -1. The readers went with them: the two blocks in
+	// G_RadiusDamage() (g_combat.c) and clear_special_power_effect() (g_main.c).
+	//
+	// The comment that stood here justified the MAX_ENTITIESTOTAL sizing with "G_Damage() reads
+	// this at attacker->s.number, and a logical target_kill passes itself as the attacker". Both
+	// halves were wrong and are not carried forward: G_Damage() never read these arrays (the
+	// reader was G_RadiusDamage), and target_kill_use() passes NULL as the attacker, not itself.
 
 	// GalaxyRP: [Race Mode] race_mode_vehicle[MAX_RACERS] used to be declared here, holding the swoop
 	// entity ids used to validate racers. Removed with Race Mode, along with MAX_RACERS itself.

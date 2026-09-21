@@ -6645,9 +6645,10 @@ qboolean CanDamage (gentity_t *targ, vec3_t origin) {
 G_RadiusDamage
 ============
 */
-extern qboolean npcs_on_same_team(gentity_t *attacker, gentity_t *target);
-extern qboolean zyk_unique_ability_can_hit_target(gentity_t *attacker, gentity_t *target);
-extern qboolean zyk_check_immunity_power(gentity_t *ent);
+// GalaxyRP fix: [Magic] the externs for npcs_on_same_team(), zyk_unique_ability_can_hit_target()
+// and zyk_check_immunity_power() used to be here. They existed only for the two
+// special_power_effects blocks inside this function, which went with the array. All three
+// functions themselves survive in g_main.c.
 qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, float radius,
 					 gentity_t *ignore, gentity_t *missile, int mod) {
 	float		points, dist;
@@ -6758,121 +6759,21 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 			}
 			else
 			{
-				if (attacker && ent && level.special_power_effects[attacker->s.number] != -1 && 
-					Q_stricmp(attacker->targetname, "zyk_quest_effect_healing") == 0)
-				{ // zyk: Healing Area. Heals the user and his allies
-					gentity_t *quest_power_user = &g_entities[level.special_power_effects[attacker->s.number]];
-
-					// zyk: if the power user and the target are allies (player or npc), or the target is the quest power user himself, heal him
-					// GalaxyRP fix: [Dead Code] dropped trailing guardian_mode==guardian_mode conjunct (guardian_mode always 0, always true)
-					if (quest_power_user && quest_power_user->client && ent && ent->client && ent->health > 0 &&
-						(level.special_power_effects[attacker->s.number] == ent->s.number || OnSameTeam(quest_power_user, ent) == qtrue ||
-						npcs_on_same_team(quest_power_user, ent) == qtrue || zyk_is_ally(quest_power_user,ent) == qtrue))
-					{
-						// GalaxyRP fix: [Dead Code] removed rpg_class==8 Magic Master Unique Skill healing-bonus
-						// branch (rpg_class always 0); only the base heal amount below is ever reached
-						int heal_amount = 6;
-
-						// zyk: Universe Power
-						if (quest_power_user->client->pers.quest_power_status & (1 << 13))
-						{
-							heal_amount += 2;
-						}
-
-						if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
-							ent->health += heal_amount;
-						else
-							ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-					}
-				}
-				
-				if (attacker && ent && level.special_power_effects[attacker->s.number] != -1 && level.special_power_effects[attacker->s.number] != ent->s.number)
-				{ // zyk: if it is an effect used by special power, then attacker must be the owner of the effect. Also, do not hit the owner
-					gentity_t *quest_power_user = &g_entities[level.special_power_effects[attacker->s.number]];
-
-					if (ent && ent->client &&
-						Q_stricmp(attacker->targetname, "zyk_effect_scream") != 0 &&
-						Q_stricmp(attacker->targetname, "zyk_timed_bomb_explosion") != 0 &&
-						Q_stricmp(attacker->targetname, "zyk_vertical_dfa") != 0 &&
-						Q_stricmp(attacker->targetname, "zyk_force_storm") != 0 &&
-						((Q_stricmp(attacker->targetname, "zyk_quest_effect_healing") != 0 && zyk_check_immunity_power(ent)) || 
-						 (Q_stricmp(attacker->targetname, "zyk_quest_effect_healing") == 0 && zyk_is_ally(quest_power_user, ent) == qfalse && zyk_check_immunity_power(ent))))
-					{ // zyk: do not hit enemies using Immunity Power if the effect is not from some unique abilities
-						continue;
-					}
-
-					// zyk: if the power user and the target are allies (player or npc), then do not hit
-					if (quest_power_user && quest_power_user->client && ent && ent->client &&
-						(OnSameTeam(quest_power_user, ent) == qtrue || npcs_on_same_team(quest_power_user, ent) == qtrue))
-					{
-						continue;
-					}
-
-					if (zyk_is_ally(quest_power_user, ent) == qtrue)
-					{
-						continue;
-					}
-
-					// GalaxyRP fix: [Dead Code] removed guardian_mode boss-battle-validation continue (guardian_mode always 0, always false)
-
-					if (Q_stricmp(attacker->targetname, "zyk_quest_effect_drain") == 0 ||
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_watersplash") == 0)
-					{ // zyk: Ultra Drain heals the power user
-						if (quest_power_user && quest_power_user->client && quest_power_user->health > 0 && 
-							zyk_can_hit_target(quest_power_user, ent) == qtrue && zyk_is_ally(quest_power_user, ent) == qfalse && ent->health > 0)
-						{
-							int heal_amount = (int)points;
-
-							if ((quest_power_user->health + heal_amount) < quest_power_user->client->ps.stats[STAT_MAX_HEALTH])
-								quest_power_user->health += heal_amount;
-							else
-								quest_power_user->health = quest_power_user->client->ps.stats[STAT_MAX_HEALTH];
-						}
-					}
-
-					// zyk: target will not be knocked back by Rockfall, Dome of Damage, Ultra Flame, Ultra Drain, Water Splash, 
-					// Acid Water, Flaming Area, Healing Area, Vertical DFA and Force Storm
-					if (Q_stricmp(attacker->targetname, "zyk_quest_effect_rockfall") == 0 || 
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_watersplash") == 0 ||
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_dome") == 0 || 
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_flame") == 0 || 
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_flaming_area") == 0 ||
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_acid") == 0 ||
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_drain") == 0 ||
-						Q_stricmp(attacker->targetname, "zyk_quest_effect_healing") == 0 || 
-						Q_stricmp(attacker->targetname, "zyk_vertical_dfa") == 0 || 
-						Q_stricmp(attacker->targetname, "zyk_force_storm") == 0)
-					{
-						if (Q_stricmp(attacker->targetname, "zyk_quest_effect_flaming_area") == 0 && quest_power_user && quest_power_user != ent && ent->client)
-						{ // zyk: if player touches the flame, will keep catching fire for some seconds
-							ent->client->pers.quest_power_status |= (1 << 23);
-							ent->client->pers.quest_power_user5_id = quest_power_user->s.number;
-							ent->client->pers.quest_power_hit4_counter = 15;
-							ent->client->pers.quest_target8_timer = level.time + 200;
-						}
-
-						G_Damage (ent, quest_power_user, quest_power_user, NULL, origin, (int)points, DAMAGE_RADIUS, mod);
-					}
-					else if (Q_stricmp(attacker->targetname, "zyk_effect_scream") == 0)
-					{ // zyk: it will also not knockback by Force Scream ability
-						if (ent->client && Q_irand(0, 3) == 0 && zyk_unique_ability_can_hit_target(quest_power_user, ent) == qtrue)
-						{ // zyk: it has a chance of setting a stun anim on the target
-							ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-							ent->client->ps.forceDodgeAnim = BOTH_SONICPAIN_END;
-							ent->client->ps.forceHandExtendTime = level.time + 3000;
-						}
-
-						G_Damage(ent, quest_power_user, quest_power_user, NULL, origin, (int)points, DAMAGE_RADIUS, mod);
-					}
-					else
-					{
-						G_Damage (ent, quest_power_user, quest_power_user, dir, origin, (int)points, DAMAGE_RADIUS, mod);
-					}
-				}
-				else if (!attacker || level.special_power_effects[attacker->s.number] == -1)
-				{
-					G_Damage (ent, NULL, attacker, dir, origin, (int)points, DAMAGE_RADIUS, mod);
-				}
+				// GalaxyRP fix: [Magic] two blocks used to sit here, both keyed on
+				// level.special_power_effects[attacker->s.number]: a Healing Area block that healed the
+				// effect owner's allies, and a 83-line attribution block that re-pointed the damage at the
+				// owner, skipped his allies and the owner himself, applied the Ultra Drain / Water Splash
+				// lifesteal, the Force Scream stun and the no-knockback list, and set the flaming-area
+				// catch-fire bit. Both went with level.special_power_effects[] -- the array had exactly one
+				// producer, the quest_mage power chain, and that NPC no longer exists, so every entry was
+				// permanently -1 and neither block could be entered.
+				//
+				// What remains is the branch that used to be guarded by "else if (!attacker ||
+				// level.special_power_effects[attacker->s.number] == -1)". With the array gone that guard is
+				// always true, so it is now unconditional. The one input that fell through BOTH branches was
+				// an entry equal to ent->s.number (the "do not hit your own effect" case), which needed a
+				// non--1 entry and can no longer occur. This is also exactly what stock TaystJK does here.
+				G_Damage (ent, NULL, attacker, dir, origin, (int)points, DAMAGE_RADIUS, mod);
 			}
 
 			if (ent && ent->client && roastPeople && missile &&

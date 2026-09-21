@@ -1370,11 +1370,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			level.duel_matches[zyk_iterator][3] = 0;
 		}
 
-		for (zyk_iterator = 0; zyk_iterator < ENTITYNUM_MAX_NORMAL; zyk_iterator++)
-		{ // zyk: initializing special power variables
-			level.special_power_effects[zyk_iterator] = -1;
-			level.special_power_effects_timer[zyk_iterator] = 0;
-		}
+		// GalaxyRP fix: [Magic] the level.special_power_effects[] / _timer[] init loop used to be
+		// here. Both arrays went with the magic effect engine. Worth recording: this loop ran to
+		// ENTITYNUM_MAX_NORMAL while the arrays were sized MAX_ENTITIESTOTAL, so the logical-entity
+		// half was never seeded with the -1 sentinel and sat at 0 -- "owned by entity 0". Nothing
+		// reachable ever read those slots, but the inconsistency goes with the arrays.
 
 		for (zyk_iterator = 0; zyk_iterator < MAX_CLIENTS; zyk_iterator++)
 		{
@@ -5521,8 +5521,9 @@ void zyk_quest_effect_spawn(gentity_t *ent, gentity_t *target_ent, char *targetn
 		if (start_time > 0)
 			new_ent->nextthink = level.time + start_time;
 
-		level.special_power_effects[new_ent->s.number] = ent->s.number;
-		level.special_power_effects_timer[new_ent->s.number] = level.time + duration;
+		// GalaxyRP fix: [Magic] the two level.special_power_effects[] writes that recorded the owner
+		// and the expiry used to be here; both arrays are gone. The "duration" parameter is now
+		// unused and is kept only so the 19 call sites need no edit.
 
 		if (Q_stricmp(targetname, "zyk_quest_effect_drain") == 0)
 			G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/arc_lp.wav"));
@@ -5546,8 +5547,7 @@ void zyk_quest_effect_spawn(gentity_t *ent, gentity_t *target_ent, char *targetn
 
 		zyk_spawn_entity(new_ent);
 
-		level.special_power_effects[new_ent->s.number] = ent->s.number;
-		level.special_power_effects_timer[new_ent->s.number] = level.time + duration;
+		// GalaxyRP fix: [Magic] the matching owner/expiry writes for the model branch went here too.
 	}
 }
 
@@ -6391,8 +6391,8 @@ void zyk_spawn_ice_block(gentity_t *ent, int duration, int pitch, int yaw, int x
 
 	zyk_spawn_entity(new_ent);
 
-	level.special_power_effects[new_ent->s.number] = ent->s.number;
-	level.special_power_effects_timer[new_ent->s.number] = level.time + duration;
+	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
+	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
 }
 
 // zyk: Ice Block
@@ -6515,8 +6515,8 @@ void ultra_flame_circle(gentity_t *ent, char *targetname, char *spawnflags, char
 	if (start_time > 0) 
 		new_ent->nextthink = level.time + start_time;
 
-	level.special_power_effects[new_ent->s.number] = ent->s.number;
-	level.special_power_effects_timer[new_ent->s.number] = level.time + duration;
+	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
+	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
 }
 
 // zyk: Ultra Flame
@@ -6570,8 +6570,8 @@ void flaming_area_flames(gentity_t *ent, char *targetname, char *spawnflags, cha
 
 	G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/fire_lp.wav"));
 
-	level.special_power_effects[new_ent->s.number] = ent->s.number;
-	level.special_power_effects_timer[new_ent->s.number] = level.time + duration;
+	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
+	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
 }
 
 // zyk: Flaming Area
@@ -6732,20 +6732,17 @@ void Player_FireFlameThrower( gentity_t *self )
 	}
 }
 
-// zyk: clear effects of some special powers
-void clear_special_power_effect(gentity_t *ent)
-{
-	if (level.special_power_effects[ent->s.number] != -1 && level.special_power_effects_timer[ent->s.number] < level.time)
-	{ 
-		level.special_power_effects[ent->s.number] = -1;
-
-		// zyk: if it is a misc_model_breakable power, remove it right now
-		if (Q_stricmp(ent->classname, "misc_model_breakable") == 0)
-			G_FreeEntity(ent);
-		else
-			ent->think = G_FreeEntity;
-	}
-}
+// GalaxyRP fix: [Magic] clear_special_power_effect() used to be here. G_RunFrame called it on every
+// live entity every frame; when level.special_power_effects[] held an owner for that slot and the
+// matching timer had expired it cleared the slot and freed the effect entity (immediately for a
+// misc_model_breakable, next think otherwise). It was the ONLY thing that ever freed an entity
+// spawned by a magic power, and the only thing besides the init loop that ever wrote -1.
+//
+// It went with the arrays. Nothing produces those entries any more, so the function had become a
+// per-entity, per-frame read of two ints out of a 32 KB structure that could only ever answer
+// "no". Its removal also ends a latent hazard: G_FreeEntity() never reset the array, so an effect
+// entity freed by any other path before its timer expired left a live owner id behind, and the
+// next entity to take that slot number would have been treated as that player's magic effect.
 
 // zyk: shows a text message from the file based on the language set by the player.
 // GalaxyRP fix: [Text messages] this used to accept "additional arguments to concat in the
@@ -9629,8 +9626,6 @@ void G_RunFrame( int levelTime ) {
 			continue;
 		}
 
-		clear_special_power_effect(ent);
-
 		if ( i < MAX_CLIENTS )
 		{
 			G_CheckClientTimeouts ( ent );
@@ -9932,128 +9927,30 @@ void G_RunFrame( int levelTime ) {
 			// zyk_spawn_ice_element() lost their last callers. All left in place deliberately, to be
 			// judged on their own rather than swept up behind this one.
 
-			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) remain in use by the live quest_mage chain below
+			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) are kept, but are now zero-caller — see the note below
 
-			// GalaxyRP fix: [Guardian] ymir_boss and thor_boss ability sub-chains removed here — both were
-			// gated on universe_quest_messages==-10000, a sentinel no code path ever assigns, so they were
-			// permanently unreachable (unlike quest_mage's sibling chain just below, which has no such
-			// guard and is reachable by an admin-spawned quest_mage NPC). guardian_timer is still used by
-			// the surviving quest_mage chain and was NOT removed.
-			if (ent->health > 0 && Q_stricmp(ent->NPC_type, "quest_mage") == 0 && ent->enemy && ent->client->pers.guardian_timer < level.time)
-			{ // zyk: powers used by the quest_mage npc
-				int random_magic = Q_irand(0, 26);
-
-				if (random_magic == 0)
-				{
-					ultra_strength(ent, 30000);
-				}
-				else if (random_magic == 1)
-				{
-					poison_mushrooms(ent, 100, 600);
-				}
-				else if (random_magic == 2)
-				{
-					water_splash(ent, 400, 15);
-				}
-				else if (random_magic == 3)
-				{
-					ultra_flame(ent, 500, 35);
-				}
-				else if (random_magic == 4)
-				{
-					rock_fall(ent, 500, 40);
-				}
-				else if (random_magic == 5)
-				{
-					dome_of_damage(ent, 500, 25);
-				}
-				else if (random_magic == 6)
-				{
-					hurricane(ent, 600, 5000);
-				}
-				else if (random_magic == 7)
-				{
-					slow_motion(ent, 400, 15000);
-				}
-				else if (random_magic == 8)
-				{
-					ultra_resistance(ent, 30000);
-				}
-				else if (random_magic == 9)
-				{
-					sleeping_flowers(ent, 2500, 350);
-				}
-				else if (random_magic == 10)
-				{
-					healing_water(ent, 120);
-				}
-				else if (random_magic == 11)
-				{
-					flame_burst(ent, 5000);
-				}
-				else if (random_magic == 12)
-				{
-					earthquake(ent, 2000, 300, 500);
-				}
-				else if (random_magic == 13)
-				{
-					magic_shield(ent, 6000);
-				}
-				else if (random_magic == 14)
-				{
-					blowing_wind(ent, 700, 5000);
-				}
-				else if (random_magic == 15)
-				{
-					ultra_speed(ent, 15000);
-				}
-				else if (random_magic == 16)
-				{
-					ice_stalagmite(ent, 500, 130);
-				}
-				else if (random_magic == 17)
-				{
-					ice_boulder(ent, 380, 40);
-				}
-				else if (random_magic == 18)
-				{
-					water_attack(ent, 500, 40);
-				}
-				else if (random_magic == 19)
-				{
-					shifting_sand(ent, 1000);
-				}
-				else if (random_magic == 20)
-				{
-					tree_of_life(ent);
-				}
-				else if (random_magic == 21)
-				{
-					magic_disable(ent, 450);
-				}
-				else if (random_magic == 22)
-				{
-					fast_and_slow(ent, 400, 6000);
-				}
-				else if (random_magic == 23)
-				{
-					flaming_area(ent, 20);
-				}
-				else if (random_magic == 24)
-				{
-					reverse_wind(ent, 700, 5000);
-				}
-				else if (random_magic == 25)
-				{
-					enemy_nerf(ent, 450);
-				}
-				else if (random_magic == 26)
-				{
-					ice_block(ent, 3500);
-				}
-
-				ent->client->pers.guardian_timer = level.time + Q_irand(3000, 6000);
-			}
+			// GalaxyRP fix: [Guardian] ymir_boss and thor_boss ability sub-chains were removed here earlier,
+			// and the quest_mage chain that used to follow them has now gone too -- 115 lines picking one of
+			// twenty-seven magic powers at random (ultra_strength, poison_mushrooms, water_splash, hurricane,
+			// rock_fall, ice_block, ...) every few seconds for any NPC whose NPC_type was "quest_mage".
+			//
+			// That NPC type no longer exists: it was defined in zyk_quest_enemies.npc, one of the three quest
+			// asset files deleted with the magic orphans, so NPC_ParseParms() now fails the name outright and
+			// the condition could never be true again. This chain was the last live entry point into the
+			// magic effect system.
+			//
+			// The twenty-seven effect functions themselves are KEPT, deliberately, as material to repurpose
+			// (a weapon upgrade, say). They are now zero-caller. Two things they relied on have gone with the
+			// chain, so they are reference code rather than working powers: level.special_power_effects[] no
+			// longer records who owns an effect, and clear_special_power_effect() -- the only thing that ever
+			// freed the entities they spawn -- is gone too. Reviving one means giving it its own owner link
+			// and its own lifetime first.
+			//
+			// Consequences, all of them dead weight already: quest_power_status bit 12 (Flame Burst) loses its
+			// only setter, flame_burst(), so the bit-12 branch in Player_FireFlameThrower() and the one in
+			// quest_power_events() can no longer be entered -- the stun baton flame thrower is driven by
+			// pers.flame_thrower from g_weapon.c and is completely unaffected. guardian_timer loses its only
+			// reader but keeps a writer in a kept power, so the field stays.
 		}
 
 		// zyk: added check for mind control on npcs here. NPCs being mind controlled cant think
