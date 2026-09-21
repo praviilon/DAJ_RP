@@ -9593,6 +9593,14 @@ void G_RunFrame( int levelTime ) {
 			fclose(this_file);
 		}
 
+		// GalaxyRP fix: [Logical Entities] the preset just respawned every entity through
+		// RP_SpawnForRoute(), so a trigger_shipboundary's marker is back in the logical region --
+		// where handing its number to the engine ends the server process. Promote them again, as
+		// the map spawn pass does. Above G_FindTeams() for the same reason it is above it there:
+		// that function builds teammaster/teamchain POINTER chains and moves a slave's targetname
+		// onto its master, so a free-and-reallocate has to happen first. See g_spawn.c.
+		RP_PromoteShipboundaryTargets();
+
 		// zyk: CTF need to have the flags spawned again when an entity file is loaded
 		// general initialization
 		G_FindTeams();

@@ -1985,6 +1985,8 @@ typedef struct level_locals_s {
 	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot
 	qboolean zyk_weather_late_effect_warned;		// a weather effect was refused for arriving after the block
 	qboolean rp_shipboundary_logical_warned;	// shipboundary_touch reports a logical target once per map
+	qboolean rp_shipboundary_target_warned;		// ...and a missing one, likewise once per map
+	qboolean rp_hyperspace_target_warned;		// hyperspace_touch, same idea for its two targets
 
 	int zyk_weather_slot;			// first CS_EFFECTS index of the block, 0 while unclaimed
 	int zyk_weather_counter;		// appended to every string so a rewrite always re-broadcasts
@@ -2322,6 +2324,12 @@ void	RP_LegacySlotRelease( gentity_t *e );
 // start, the spawn table marks the class logical, the entity does not carry "nological 1" and it
 // has no script_targetname (ICARUS needs an engine-side entity); G_Spawn() otherwise.
 gentity_t	*RP_SpawnForClassname( const char *classname, qboolean nological, qboolean hasScriptTargetname );
+
+// GalaxyRP fix: [Logical Entities] the trigger_shipboundary target promotion, see g_spawn.c.
+// Called at the end of the map spawn pass, and again after an Entity System preset load --
+// /entload and the automatic default.txt load both free every entity and respawn from the file,
+// which puts the markers straight back in the logical region with nothing to promote them.
+void		RP_PromoteShipboundaryTargets( void );
 qboolean	G_IsLogicalEntity( const char *classname );
 // GalaxyRP: [Logical Entities] the same decision for a caller that holds its key/value pairs as
 // strings rather than in level.spawnVars (/entadd, the entity-file loader): note every pair, then

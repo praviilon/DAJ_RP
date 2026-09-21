@@ -2288,11 +2288,22 @@ void G_LinkLocations( void ) {
 // engine. trigger_shipboundary is the one class that does, and it is the trigger, not the marker,
 // that knows it.
 //
-// So resolve that here, once, at the end of the spawn pass: for every trigger_shipboundary, find
-// the entity its "target" names and, if it landed in the logical region, re-spawn it as a
-// networked one. This runs while level.spawning is still qtrue, which matters twice -- G_Spawn()
+// So resolve that here, at the end of the spawn pass: for every trigger_shipboundary, find the
+// entity its "target" names and, if it landed in the logical region, re-spawn it as a networked
+// one. At map load this runs while level.spawning is still qtrue, which matters twice -- G_Spawn()
 // is still legal, and RP_LegacySlotAssign()/RP_LegacySlotRelease() still track slots, so the
 // marker keeps the legacy number it would have had with rp_logical_entities 0.
+//
+// It runs a SECOND time, from G_RunFrame's Entity System load block (g_main.c), because /entload
+// and the automatic <map>/default.txt load both free every entity in both regions and respawn
+// from the file -- which puts the markers straight back in the logical region with nothing to
+// promote them. There level.spawning is qfalse, and that is fine: G_Spawn() carries no such guard
+// (the only readers of the flag are G_SpawnString, zyk_brush_model_allowed and the two legacy-slot
+// helpers, none of which this pass calls), and the legacy-slot swap below simply becomes a no-op
+// on zeros, which is correct -- legacySlot only drives the hardcoded per-map fixups in G_InitGame,
+// which finished long before. That call site sits above the load block's G_FindTeams(), mirroring
+// the order here: G_FindTeams builds teammaster/teamchain POINTER chains and moves a slave's
+// targetname onto its master, so a free-and-reallocate has to happen before it, not after.
 //
 // It has to be a post-pass rather than a decision at spawn time because the entity string may
 // name the target before it defines it: on the map this was found with, 4 of the 18 boundaries
@@ -2307,7 +2318,7 @@ void G_LinkLocations( void ) {
 // allows. The de-duplication is free: once a marker is promoted, G_Find() -- which walks the
 // networked region first -- returns the networked copy for every later boundary naming it, and
 // the isLogical test below skips it.
-static void RP_PromoteShipboundaryTargets( void ) {
+void RP_PromoteShipboundaryTargets( void ) {
 	gentity_t	*bound;
 	int			promoted = 0;
 
@@ -2318,6 +2329,7 @@ static void RP_PromoteShipboundaryTargets( void ) {
 	RP_FOR_EACH_ENTITY( bound ) {
 		gentity_t	*src, *dst;
 		int			number, spare;
+		int			i, keys;
 
 		if ( !bound->inuse || !bound->classname ||
 			Q_stricmp( bound->classname, "trigger_shipboundary" ) ) {
@@ -2341,6 +2353,17 @@ static void RP_PromoteShipboundaryTargets( void ) {
 			G_LogPrintf( "trigger_shipboundary target '%s' (classname %s) is not an inert marker; "
 				"leaving it in the logical region.\n",
 				bound->target, src->classname ? src->classname : "?" );
+			continue;
+		}
+
+		// G_Spawn() ends the server process on a dedicated build when the table is exhausted, and
+		// this pass also runs after a preset load, where /entload puts it within reach of anything
+		// an admin can type. Refusing costs the shipboundary_touch fallback -- the ship is
+		// destroyed at the edge and the refusal is in the log -- which is survivable; not refusing
+		// is not. Same margin discipline as /entadd (4) and /spawnplatform (2).
+		if ( !G_EntitySlotsAvailable( 1 ) ) {
+			G_LogPrintf( "trigger_shipboundary target '%s' not promoted: %d entity slots free.\n",
+				bound->target, G_FreeEntityCount() );
 			continue;
 		}
 
@@ -2370,6 +2393,30 @@ static void RP_PromoteShipboundaryTargets( void ) {
 		// s.pos.trBase, TR_STATIONARY, r.currentOrigin. Still no link -- shipboundary_touch
 		// links the target itself on first touch, which is the stock behaviour.
 		G_SetOrigin( dst, dst->s.origin );
+
+		// GalaxyRP fix: [Entity System] the Entity System's key/value record lives in
+		// level.zyk_spawn_strings[], indexed by s.number, so it does not follow the entity to its
+		// new slot: G_Spawn() above zeroed the count at dst's index and G_FreeEntity() below zeroes
+		// it at src's. Left alone, the promoted marker ends up with no record at all -- and
+		// /entsave writes no line whatsoever for an entity with no pairs (see Cmd_EntSave_f), so
+		// the marker silently disappears from every preset saved after a map load. /entload then
+		// brings the boundaries back pointing at a target that no longer exists, which is the one
+		// condition shipboundary_touch cannot recover the map from.
+		//
+		// The slots hold pointers into the map-lifetime string pool that G_NewString() allocates
+		// from, so moving the pointers is both correct and free -- the same reasoning
+		// zyk_main_set_entity_field() uses when it compacts a row after a key removal. The clamp
+		// cannot fire today (the row is MAX_SPAWN_VARS*2 and the writer is bounded by
+		// MAX_SPAWN_VARS) and is here so the bound is local to the copy rather than two functions
+		// away.
+		keys = level.zyk_spawn_strings_values_count[src->s.number];
+		if ( keys > ZYK_MAX_SPAWN_STRING_SLOTS ) {
+			keys = ZYK_MAX_SPAWN_STRING_SLOTS;
+		}
+		for ( i = 0; i < keys; i++ ) {
+			level.zyk_spawn_strings[dst->s.number][i] = level.zyk_spawn_strings[src->s.number][i];
+		}
+		level.zyk_spawn_strings_values_count[dst->s.number] = keys;
 
 		src->legacySlot = spare;
 		G_FreeEntity( src );

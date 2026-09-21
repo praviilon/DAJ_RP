@@ -1557,8 +1557,26 @@ void shipboundary_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 
 	ent = G_Find (NULL, FOFS(targetname), self->target);
 	if (!ent || !ent->inuse)
-	{ //this is bad
-		trap->Error( ERR_DROP, "trigger_shipboundary has invalid target '%s'\n", self->target );
+	{
+		// GalaxyRP fix: [Logical Entities] this was trap->Error(ERR_DROP), and common.cpp promotes
+		// every ERR_DROP to ERR_FATAL on a dedicated server -- so one boundary whose marker had
+		// gone missing ended the server process the first time any fighter reached the map edge,
+		// with nothing in the log to say why (Com_Shutdown closes it before Sys_Error prints).
+		//
+		// A marker that is not there is an ordinary misconfiguration, not a reason to take everyone
+		// offline: an Entity System preset that was saved without it, an /entremove, a hand-edited
+		// file. Same fallback as the logical-target guard below, and as the "no pilot or missing
+		// parts" branch further down -- say so once, and destroy the ship that cannot be turned
+		// around. "other" was validated at the top of this function, so its origin is safe to read.
+		if ( !level.rp_shipboundary_target_warned )
+		{
+			level.rp_shipboundary_target_warned = qtrue;
+			G_LogPrintf( "%s: trigger_shipboundary target '%s' does not exist; cannot turn the "
+				"ship around, destroying it instead.\n",
+				level.mapname, self->target ? self->target : "" );
+		}
+
+		G_Damage(other, other, other, NULL, other->client->ps.origin, 99999, DAMAGE_NO_PROTECTION, MOD_SUICIDE);
 		return;
 	}
 
@@ -1652,13 +1670,27 @@ void SP_trigger_shipboundary(gentity_t *self)
 
 	if (!self->target || !self->target[0])
 	{
-		trap->Error( ERR_DROP, "trigger_shipboundary without a target." );
+		// GalaxyRP fix: [Logical Entities] was trap->Error(ERR_DROP), which ends the server process
+		// on a dedicated build. A trigger this malformed cannot work whatever we do, but it is also
+		// reachable at RUNTIME, not just at map load: zyk_main_spawn_entity() calls G_CallSpawn()
+		// for every line of an Entity System preset, so one truncated /entload record -- or an
+		// /entadd of a trigger_shipboundary with a key missing -- took the whole server down. Free it
+		// instead: the trigger simply does not exist, the log says which one and where, and
+		// everyone stays connected. The return is NOT optional -- the old code relied on
+		// trap->Error never coming back, and without it execution would carry on below.
+		G_LogPrintf( "trigger_shipboundary at %s has no \"target\"; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 	G_SpawnInt("traveltime", "0", &self->genericValue1);
 
 	if (!self->genericValue1)
 	{
-		trap->Error( ERR_DROP, "trigger_shipboundary without traveltime." );
+		// GalaxyRP fix: [Logical Entities] as above -- free it rather than ending the server, and
+		// return, because the old code relied on trap->Error never coming back.
+		G_LogPrintf( "trigger_shipboundary at %s has no \"traveltime\"; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 
 	self->think = shipboundary_think;
@@ -1693,8 +1725,20 @@ void hyperspace_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 				//Get the offset from the local position
 				ent = G_Find (NULL, FOFS(targetname), self->target);
 				if (!ent || !ent->inuse)
-				{ //this is bad
-					trap->Error( ERR_DROP, "trigger_hyperspace has invalid target '%s'\n", self->target );
+				{
+					// GalaxyRP fix: [Logical Entities] was trap->Error(ERR_DROP), a process exit
+					// on a dedicated server -- see shipboundary_touch above for why that is the
+					// wrong answer to a missing marker. A hyperspace that cannot resolve its
+					// destination is not the same situation as a boundary that cannot turn a ship
+					// around, though: nothing is leaving the map, so the jump simply fails and the
+					// ship carries on flying. State is left as it is; hyperSpaceTime expires.
+					if ( !level.rp_hyperspace_target_warned )
+					{
+						level.rp_hyperspace_target_warned = qtrue;
+						G_LogPrintf( "%s: trigger_hyperspace target '%s' does not exist; the jump "
+							"cannot be completed.\n",
+							level.mapname, self->target ? self->target : "" );
+					}
 					return;
 				}
 				VectorSubtract( other->client->ps.origin, ent->s.origin, diff );
@@ -1705,8 +1749,20 @@ void hyperspace_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 				//Now get the base position of the destination
 				ent = G_Find (NULL, FOFS(targetname), self->target2);
 				if (!ent || !ent->inuse)
-				{ //this is bad
-					trap->Error( ERR_DROP, "trigger_hyperspace has invalid target2 '%s'\n", self->target2 );
+				{
+					// GalaxyRP fix: [Logical Entities] was trap->Error(ERR_DROP), a process exit
+					// on a dedicated server -- see shipboundary_touch above for why that is the
+					// wrong answer to a missing marker. A hyperspace that cannot resolve its
+					// destination is not the same situation as a boundary that cannot turn a ship
+					// around, though: nothing is leaving the map, so the jump simply fails and the
+					// ship carries on flying. State is left as it is; hyperSpaceTime expires.
+					if ( !level.rp_hyperspace_target_warned )
+					{
+						level.rp_hyperspace_target_warned = qtrue;
+						G_LogPrintf( "%s: trigger_hyperspace target2 '%s' does not exist; the jump "
+							"cannot be completed.\n",
+							level.mapname, self->target2 ? self->target2 : "" );
+					}
 					return;
 				}
 				VectorCopy( ent->s.origin, newOrg );
@@ -1736,8 +1792,17 @@ void hyperspace_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 	{
 		ent = G_Find (NULL, FOFS(targetname), self->target);
 		if (!ent || !ent->inuse)
-		{ //this is bad
-			trap->Error( ERR_DROP, "trigger_hyperspace has invalid target '%s'\n", self->target );
+		{
+			// GalaxyRP fix: [Logical Entities] as the two sites above -- a missing marker fails the
+			// jump rather than ending the server. Here the jump has not started yet, so returning
+			// simply means it never does.
+			if ( !level.rp_hyperspace_target_warned )
+			{
+				level.rp_hyperspace_target_warned = qtrue;
+				G_LogPrintf( "%s: trigger_hyperspace target '%s' does not exist; the jump cannot "
+					"be started.\n",
+					level.mapname, self->target ? self->target : "" );
+			}
 			return;
 		}
 
@@ -1788,11 +1853,19 @@ void SP_trigger_hyperspace(gentity_t *self)
 
 	if (!self->target || !self->target[0])
 	{
-		trap->Error( ERR_DROP, "trigger_hyperspace without a target." );
+		// GalaxyRP fix: [Logical Entities] as above -- free it rather than ending the server, and
+		// return, because the old code relied on trap->Error never coming back.
+		G_LogPrintf( "trigger_hyperspace at %s has no \"target\"; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 	if (!self->target2 || !self->target2[0])
 	{
-		trap->Error( ERR_DROP, "trigger_hyperspace without a target2." );
+		// GalaxyRP fix: [Logical Entities] as above -- free it rather than ending the server, and
+		// return, because the old code relied on trap->Error never coming back.
+		G_LogPrintf( "trigger_hyperspace at %s has no \"target2\"; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 
 	self->delay = Distance( self->r.absmax, self->r.absmin );//my size
