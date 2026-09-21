@@ -2451,78 +2451,12 @@ void G_SetTauntAnim( gentity_t *ent, int taunt )
 	}
 }
 
-// zyk: each client frame must make the Fast Dash ability user faster and knockdown targets
-extern qboolean zyk_unique_ability_can_hit_target(gentity_t *attacker, gentity_t *target);
-extern void zyk_force_dash_effect(gentity_t *ent);
-void zyk_do_force_dash(gentity_t *ent)
-{
-	vec3_t	forward, dir;
-	int			i, num;
-	int			touch[MAX_GENTITIES];
-	gentity_t	*hit;
-	vec3_t		mins, maxs;
-	vec3_t	range = { 30, 30, 48 };
-
-	if (ent->client->pers.quest_power_status & (1 << 2))
-	{ // zyk: hit by Time Power or knocked down. Stop Dash
-		return;
-	}
-
-	if (ent->health < 1)
-	{ // zyk: if player dies, stop dash
-		return;
-	}
-
-	// zyk: make player dash towards the direction he is looking at
-	VectorCopy(ent->client->ps.viewangles, dir);
-	AngleVectors(dir, forward, NULL, NULL);
-	VectorNormalize(forward);
-	VectorScale(forward, 2.7 * ent->client->ps.speed, forward);
-	VectorCopy(forward, ent->client->ps.velocity);
-
-	if (ent->client->pers.fast_dash_timer < level.time)
-	{
-		ent->client->pers.fast_dash_timer = level.time + 100;
-
-		zyk_force_dash_effect(ent);
-
-		VectorSubtract(ent->client->ps.origin, range, mins);
-		VectorAdd(ent->client->ps.origin, range, maxs);
-
-		num = trap->EntitiesInBox(mins, maxs, touch, MAX_GENTITIES);
-
-		for (i = 0; i < num; i++)
-		{
-			hit = &g_entities[touch[i]];
-
-			if (hit && hit != ent && hit->client && zyk_unique_ability_can_hit_target(ent, hit))
-			{ // zyk: Fast Dash ability knocks target down
-				vec3_t target_dir;
-				int target_knockdown_scale = 500;
-
-				VectorSubtract(hit->client->ps.origin, ent->client->ps.origin, target_dir);
-				VectorNormalize(target_dir);
-
-				// zyk: if using Meditate taunt, remove it
-				if (hit->client->ps.legsAnim == BOTH_MEDITATE && hit->client->ps.torsoAnim == BOTH_MEDITATE)
-				{
-					hit->client->ps.legsAnim = hit->client->ps.torsoAnim = BOTH_MEDITATE_END;
-				}
-
-				hit->client->ps.velocity[0] = target_dir[0] * target_knockdown_scale;
-				hit->client->ps.velocity[1] = target_dir[1] * target_knockdown_scale;
-				hit->client->ps.velocity[2] = 250;
-
-				hit->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-				hit->client->ps.forceHandExtendTime = level.time + 1000;
-				hit->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
-				hit->client->ps.quickerGetup = qtrue;
-
-				G_Damage(hit, ent, ent, NULL, NULL, 10, DAMAGE_NO_ARMOR, MOD_UNKNOWN);
-			}
-		}
-	}
-}
+// GalaxyRP fix: [Magic] zyk_do_force_dash() used to be here -- the per-frame half of the Fast Dash
+// ability, which accelerated the user and knocked down anyone it passed through. It had no callers
+// anywhere in the tree, and it was the only caller of zyk_force_dash_effect() (g_main.c) and the
+// only reader of pers.fast_dash_timer; all three have gone together. The two externs above it went
+// with it -- zyk_unique_ability_can_hit_target() itself survives, it still has a live caller in
+// g_combat.c.
 
 /*
 ==============

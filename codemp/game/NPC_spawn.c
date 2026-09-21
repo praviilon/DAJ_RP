@@ -880,8 +880,11 @@ void NPC_Begin (gentity_t *ent)
 	{//No NPCs should telefrag
 		if (NPC_SpotWouldTelefrag(ent))
 		{
-			// zyk: added jawa seller condition, remove it to avoid exploit in which player can spawn a lot of sellers
-			if ( ent->wait < 0 || Q_stricmp(ent->NPC_type, "jawa_seller") == 0)
+			// GalaxyRP fix: [Quests] the "|| NPC_type is jawa_seller" clause here was zyk's anti-exploit
+			// rule, stopping a player spawning a pile of sellers by placing them in solid. The
+			// jawa_seller NPC type no longer exists (it went with the zyk_quest_*.npc assets), so the
+			// clause could never fire again; the wait < 0 half is untouched.
+			if ( ent->wait < 0 )
 			{//remove yourself
 				G_DebugPrint( WL_DEBUG, "NPC %s could not spawn, firing target3 (%s) and removing self\n", ent->targetname, ent->target3 );
 				//Fire off our target3

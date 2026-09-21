@@ -952,7 +952,8 @@ typedef struct clientPersistant_s {
 	int monk_unique_timer;
 
 	// zyk: used by Fast Dash ability
-	int fast_dash_timer;
+	// GalaxyRP fix: [Magic] fast_dash_timer used to be here. Its only writers were zyk_force_dash()
+	// (g_main.c) and zyk_do_force_dash() (g_active.c), both removed as orphans; nothing read it.
 
 	// zyk: used by Aimed Shot ability
 	int unique_skill_user_id;

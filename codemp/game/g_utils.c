@@ -2717,20 +2717,12 @@ void TryUse( gentity_t *ent )
 	// and the " / ally" columns in /dueltable and /duelmatches (g_cmds.c). Removing them changed
 	// no behaviour: every one of those branches tested a value that was permanently -1.
 
-	if (ent->client->sess.amrpgmode == 2 && target && target->client && target->NPC && target->health > 0 && Q_stricmp( target->NPC_type, "jawa_seller" ) == 0)
-	{ // zyk: player talked to jawa_seller
-		// GalaxyRP fix: [Shop] dropped stale "buy or sell" wording -- there has never been a working
-		// /sell command (see the matching fixes on the Shop tab and category tooltips in
-		// ingame_galaxyrp.menu, and the /list commands help text in Cmd_ListAccount_f).
-		trap->SendServerCommand( ent->s.number, va("chat \"^3Jawa Seller: ^7%s^7, use the ^3/stuff ^7command to see stuff to buy! :)\"", ent->client->pers.netname));
-
-		// zyk: setting use anim
-		ent->client->ps.forceHandExtend = HANDEXTEND_TAUNT;
-		ent->client->ps.forceDodgeAnim = BOTH_BUTTON_HOLD;
-		ent->client->ps.forceHandExtendTime = level.time + 500;
-
-		return;
-	}
+	// GalaxyRP fix: [Quests] the jawa_seller Use branch used to be here -- pressing Use on a
+	// jawa_seller NPC printed a hint to type /stuff and played a taunt animation. It was the only
+	// code anywhere that needed that NPC to exist, and the NPC itself has gone with the three
+	// zyk_quest_*.npc asset files. /buy and /stuff are plain command rows with no NPC dependency of
+	// any kind, so the shop is unaffected; the two "Jawa Seller:" lines Cmd_Buy_f prints are chat
+	// text with no entity behind them and are deliberately kept.
 
 	// GalaxyRP fix: [RPG Class] Bounty Hunter Upgrade sentry gun recovery removed — rpg_class is permanently 0
 	// GalaxyRP fix: [RPG Class] Bounty Hunter Upgrade force field recovery removed — rpg_class is permanently 0

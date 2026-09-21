@@ -5931,72 +5931,22 @@ void enemy_nerf(gentity_t *ent, int distance)
 	}
 }
 
-// zyk: used by Duelist Vertical DFA ability
-void zyk_vertical_dfa_effect(gentity_t *ent)
-{
-	gentity_t *new_ent = G_Spawn();
+// GalaxyRP fix: [Magic] zyk_vertical_dfa_effect() used to be here -- the Duelist Vertical DFA
+// impact effect, which spawned an fx_runner with targetname "zyk_vertical_dfa". It had no callers
+// anywhere in the tree: the Duelist RPG class that invoked it went with rpg_class, which is
+// permanently 0. Nothing else in the tree creates that targetname, so the three sites that still
+// test for it -- g_misc.c's fx_runner_link() and SP_fx_runner(), and g_combat.c's radius-damage
+// exclusion list -- can no longer be reached; they are left alone here on purpose, to be judged
+// alongside the rest of the magic-effect removal rather than swept up behind this one.
 
-	zyk_set_entity_field(new_ent, "classname", "fx_runner");
-	zyk_set_entity_field(new_ent, "spawnflags", "4");
-	zyk_set_entity_field(new_ent, "targetname", "zyk_vertical_dfa");
 
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0], (int)ent->r.currentOrigin[1], (int)ent->r.currentOrigin[2] - 20));
 
-	new_ent->s.modelindex = G_EffectIndex("ships/proton_impact");
-
-	zyk_spawn_entity(new_ent);
-
-	new_ent->splashDamage = 130;
-
-	new_ent->splashRadius = 600;
-
-	level.special_power_effects[new_ent->s.number] = ent->s.number;
-	level.special_power_effects_timer[new_ent->s.number] = level.time + 600;
-}
-
-void zyk_bomb_model_think(gentity_t *ent)
-{
-	// zyk: bomb timer seconds to explode. Each call to this function decrease counter until it reaches 0
-	ent->count--;
-
-	if (ent->count == 0)
-	{ // zyk: explodes the bomb
-		zyk_quest_effect_spawn(ent->parent, ent, "zyk_timed_bomb_explosion", "4", "explosions/hugeexplosion1", 0, 480, 430, 800);
-
-		ent->think = G_FreeEntity;
-		ent->nextthink = level.time + 500;
-	}
-	else
-	{
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/mpalarm.wav"));
-		ent->nextthink = level.time + 1000;
-	}
-}
-
-void zyk_add_bomb_model(gentity_t *ent)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "0");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0], (int)ent->r.currentOrigin[1], (int)ent->r.currentOrigin[2] - 20));
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/factory/bomb_new_deact.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_timed_bomb");
-
-	zyk_set_entity_field(new_ent, "count", "3");
-
-	new_ent->parent = ent;
-	new_ent->think = zyk_bomb_model_think;
-	new_ent->nextthink = level.time + 1000;
-
-	zyk_spawn_entity(new_ent);
-
-	ent->wait = level.time + 5000;
-
-	G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/cloth1.mp3"));
-}
+// GalaxyRP fix: [Magic] zyk_bomb_model_think() and zyk_add_bomb_model() used to be here -- a
+// three-second timed bomb prop ("zyk_timed_bomb") that counted down and then spawned a
+// "zyk_timed_bomb_explosion" effect. zyk_add_bomb_model() had no callers at all, and it was the
+// only thing that ever set zyk_bomb_model_think as a think, so the pair was unreachable together.
+// Nothing else creates either targetname; the one remaining test for the explosion, in
+// g_combat.c's radius-damage exclusion list, is left in place with the rest of that block.
 
 void zyk_ice_bomb_ice_think(gentity_t *ent)
 {
@@ -6058,34 +6008,10 @@ void zyk_ice_bomb(gentity_t *ent)
 	G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/cloth1.mp3"));
 }
 
-void zyk_spawn_ice_element(gentity_t *ent, gentity_t *player_ent)
-{
-	int i = 0;
-	int initial_angle = -179;
-
-	for (i = 0; i < 4; i++)
-	{
-		gentity_t *new_ent = G_Spawn();
-
-		zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-		zyk_set_entity_field(new_ent, "spawnflags", "65537");
-		zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)player_ent->r.currentOrigin[0], (int)player_ent->r.currentOrigin[1], (int)player_ent->r.currentOrigin[2]));
-
-		zyk_set_entity_field(new_ent, "angles", va("0 %d 0", initial_angle + (i * 89)));
-
-		zyk_set_entity_field(new_ent, "mins", "-70 -70 -70");
-		zyk_set_entity_field(new_ent, "maxs", "70 70 70");
-
-		zyk_set_entity_field(new_ent, "model", "models/map_objects/rift/crystal_wall.md3");
-
-		zyk_set_entity_field(new_ent, "targetname", "zyk_elemental_ice");
-
-		zyk_spawn_entity(new_ent);
-
-		level.special_power_effects[new_ent->s.number] = ent->s.number;
-		level.special_power_effects_timer[new_ent->s.number] = level.time + 4000;
-	}
-}
+// GalaxyRP fix: [Magic] zyk_spawn_ice_element() used to be here -- it ringed a player with four
+// crystal_wall models named "zyk_elemental_ice". Its last caller went with elemental_attack() in
+// the custom-quest-NPC dispatch removal, as the note further down this file records. Nothing else
+// creates or tests that targetname, so this one comes out clean.
 
 
 
@@ -6093,20 +6019,12 @@ void zyk_spawn_ice_element(gentity_t *ent, gentity_t *player_ent)
 extern void Jedi_DecloakPair(gentity_t *self);
 
 
-void zyk_force_dash_effect(gentity_t *ent)
-{
-	zyk_quest_effect_spawn(ent, ent, "zyk_effect_force_dash", "0", "force/rage2", 0, 0, 0, 200);
-}
-
-// zyk: Fast Dash ability
-void zyk_force_dash(gentity_t *ent)
-{
-	G_SetAnim(ent, NULL, SETANIM_BOTH, BOTH_FORCELONGLEAP_START, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh9.mp3"));
-
-	ent->client->pers.fast_dash_timer = 0;
-}
+// GalaxyRP fix: [Magic] zyk_force_dash_effect() and zyk_force_dash() used to be here, the effect
+// and the animation half of the Fast Dash ability. Both were orphans: their only caller was
+// zyk_do_force_dash() in g_active.c, which had no callers of its own and has been removed with
+// them, and pers.fast_dash_timer -- written only by those two -- went with it. Nothing else
+// creates the "zyk_effect_force_dash" targetname; the two sites in g_misc.c that still test for
+// it are left alone here, with the rest of that list.
 
 // zyk: Healing Water
 void healing_water(gentity_t *ent, int heal_amount)
