@@ -10179,9 +10179,17 @@ void CG_Player( centity_t *cent ) {
 					}
 
 				}
+				// GalaxyRP fix: [Saber Sounds] added "&& !cent->currentState.saberHolstered", the same
+				// missing guard as the local-player arm in CG_CheckPlayerG2Weapons (cg_weapons.c), which
+				// carries the full explanation. Short version: the sibling "switching away" arm above
+				// tests saberHolstered three times and this one tested it nowhere, so a holstered saber
+				// made the ignition sound every time cent->weapon was reset by a respawn, a model or
+				// saber change, a ghoul2 rebuild or a spectator transition. The BG_SI_SetDesiredLength()
+				// calls at the bottom of the arm stay outside the new condition on purpose.
 				else if (cent->currentState.weapon == WP_SABER
 					&& cent->weapon != cent->currentState.weapon
-					&& !cent->saberWasInFlight)
+					&& !cent->saberWasInFlight
+					&& !cent->currentState.saberHolstered)
 				{ //switching to the saber
 					//trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, trap->S_RegisterSound( "sound/weapons/saber/saberon.wav" ));
 					if (ci->saber[0].soundOn)
@@ -10189,7 +10197,10 @@ void CG_Player( centity_t *cent ) {
 						trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, ci->saber[0].soundOn);
 					}
 
-					if (ci->saber[1].soundOn)
+					// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test -- see
+					// Cmd_ToggleSaber_f in g_cmds.c for why an unused second saber has a playable soundOn.
+					if (ci->saber[1].soundOn &&
+						ci->saber[1].model[0])
 					{
 						trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, ci->saber[1].soundOn);
 					}

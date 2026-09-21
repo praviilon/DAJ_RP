@@ -357,7 +357,10 @@ void G_ForceSaberOn(gentity_t *ent)
 	{
 		G_Sound(ent, CHAN_AUTO, ent->client->saber[0].soundOn);
 	}
-	if (ent->client->saber[1].soundOn)
+	// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test -- see Cmd_ToggleSaber_f in
+	// g_cmds.c for why an unused second saber has a playable soundOn.
+	if (ent->client->saber[1].soundOn &&
+		ent->client->saber[1].model[0])
 	{
 		G_Sound(ent, CHAN_AUTO, ent->client->saber[1].soundOn);
 	}

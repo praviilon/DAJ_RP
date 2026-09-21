@@ -298,7 +298,11 @@ void WP_ActivateSaber( gentity_t *self )
 			G_Sound(self, CHAN_WEAPON, self->client->saber[0].soundOn);
 		}
 
-		if (self->client->saber[1].soundOn)
+		// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test -- see Cmd_ToggleSaber_f in
+		// g_cmds.c for why an unused second saber has a playable soundOn. Note WP_DeactivateSaber()
+		// just above already tests it on the way out.
+		if (self->client->saber[1].soundOn &&
+			self->client->saber[1].model[0])
 		{
 			G_Sound(self, CHAN_WEAPON, self->client->saber[1].soundOn);
 		}

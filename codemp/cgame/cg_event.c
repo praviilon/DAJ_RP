@@ -2423,7 +2423,12 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 				{
 					trap->S_StartSound (NULL, es->number, CHAN_AUTO, ci->saber[0].soundOn );
 				}
-				if (ci->saber[1].soundOn)
+				// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test -- see Cmd_ToggleSaber_f
+				// in g_cmds.c for why an unused second saber has a playable soundOn. This is the genuine
+				// ignition path, so before this fix every normal saber toggle-on played two overlapping
+				// copies of the same sound for a single-saber player.
+				if (ci->saber[1].soundOn &&
+					ci->saber[1].model[0])
 				{
 					trap->S_StartSound (NULL, es->number, CHAN_AUTO, ci->saber[1].soundOn );
 				}

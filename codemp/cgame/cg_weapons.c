@@ -2598,7 +2598,27 @@ void CG_CheckPlayerG2Weapons(playerState_t *ps, centity_t *cent)
 				trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, cgs.clientinfo[ps->clientNum].saber[1].soundOff);
 			}
 		}
-		else if (ps->weapon == WP_SABER && cent->weapon != ps->weapon && !cent->saberWasInFlight)
+		// GalaxyRP fix: [Saber Sounds] added "&& !ps->saberHolstered". The sibling "switching away"
+		// arm just above tests saberHolstered three times; this arm tested it nowhere, so a saber that
+		// was in the player's hands but NOT lit still made the ignition sound whenever this comparison
+		// fired -- and it fires on far more than a real weapon switch. cent->weapon is purely local
+		// bookkeeping for "which weapon model is bolted to our ghoul2 instance" (nothing else in cgame
+		// reads it except these sound arms), and it is reset to 0 by every respawn
+		// (CG_RestoreClientGhoul_f, the rcg/ircg server command), every saber or model change
+		// (CG_NewClientInfo), every ghoul2 rebuild and every spectator transition. Each of those then
+		// read as "switched to the saber". With /settings 3 OFF -- spawn with the saber selected but
+		// not ignited -- that meant an ignition sound on every single spawn.
+		//
+		// A genuine ignition does not come through here at all: it is EV_SABER_UNHOLSTER, raised in
+		// bg_saber.c and played in cg_event.c, which never looks at cent->weapon. So this guard cannot
+		// silence a real toggle. cg_players.c carries the same fix for other players.
+		//
+		// The two BG_SI_SetDesiredLength() calls at the bottom of this arm deliberately stay OUTSIDE
+		// the new condition: their len argument of 0 means RETRACT (BG_SI_SetLengthGradual expands -1,
+		// not 0, to lengthMax), so they reset the blade to zero to let it grow in on a real switch.
+		// Moving them under a saberHolstered test would change the blade animation.
+		else if (ps->weapon == WP_SABER && cent->weapon != ps->weapon && !cent->saberWasInFlight
+			&& !ps->saberHolstered)
 		{ //switching to the saber
 			//trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, trap->S_RegisterSound( "sound/weapons/saber/saberon.wav" ));
 			if (cgs.clientinfo[ps->clientNum].saber[0].soundOn)
@@ -2606,7 +2626,10 @@ void CG_CheckPlayerG2Weapons(playerState_t *ps, centity_t *cent)
 				trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, cgs.clientinfo[ps->clientNum].saber[0].soundOn);
 			}
 
-			if (cgs.clientinfo[ps->clientNum].saber[1].soundOn)
+			// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test -- see Cmd_ToggleSaber_f
+			// in g_cmds.c for why an unused second saber has a playable soundOn.
+			if (cgs.clientinfo[ps->clientNum].saber[1].soundOn &&
+				cgs.clientinfo[ps->clientNum].saber[1].model[0])
 			{
 				trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, cgs.clientinfo[ps->clientNum].saber[1].soundOn);
 			}

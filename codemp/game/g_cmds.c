@@ -9418,7 +9418,17 @@ void Cmd_ToggleSaber_f(gentity_t *ent)
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[0].soundOn);
 			}
-			if (ent->client->saber[1].soundOn)
+			// GalaxyRP fix: [Saber Sounds] added the saber[1].model[0] test. WP_RemoveSaber()
+			// (bg_saberLoad.c) clears model[0] and the name, but it calls WP_SaberSetDefaults() first,
+			// which leaves soundOn/soundOff as valid default indices -- so a single-saber player's
+			// unused saber[1] still has a playable soundOn, and this played two overlapping copies of
+			// the same ignition sound on every saber toggle-on. Every saber-OFF site in the codebase
+			// already tests model[0] before playing saber[1]'s sound (including the else branch of this
+			// very function, a few lines below); no saber-ON site did. The other five are in
+			// cg_weapons.c, cg_players.c, cg_event.c, w_saber.c (WP_ActivateSaber) and NPC_combat.c
+			// (G_ForceSaberOn), and point back here.
+			if (ent->client->saber[1].soundOn &&
+				ent->client->saber[1].model[0])
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[1].soundOn);
 			}
