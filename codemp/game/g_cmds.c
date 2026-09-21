@@ -17488,6 +17488,11 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 	int i = 0;
 	int first_free = 0;
 	int base_index = 0;
+	// GalaxyRP fix: [Weather] counted here as the base is captured rather than read back out of
+	// zyk_weather_count_kinds(), which reports the base only once level.zyk_weather_use_base is
+	// set -- and that does not happen until this whole function has finished
+	int base_clouds = 0;
+	int base_winds = 0;
 
 	if (level.zyk_weather_slot != 0)
 		return qtrue;
@@ -17532,9 +17537,13 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 	// first /admweather default.
 	for (i = 1; i < first_free; i++)
 	{
+		zyk_weather_kind_t kind = ZYK_WFX_UNKNOWN;
+
 		trap->GetConfigstring(CS_EFFECTS + i, content, sizeof(content));
 
-		if (content[0] != '*' || zyk_weather_command_kind(content) == ZYK_WFX_UNKNOWN)
+		kind = zyk_weather_command_kind(content);
+
+		if (content[0] != '*' || kind == ZYK_WFX_UNKNOWN)
 			continue;
 
 		if (level.zyk_weather_base_count >= ZYK_WEATHER_MAX_BASE)
@@ -17542,6 +17551,33 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 			level.zyk_weather_base_truncated = qtrue;
 			continue;
 		}
+
+		// GalaxyRP fix: [Weather] the count above used to be the only cap here, so a map whose
+		// weather fit inside ZYK_WEATHER_MAX_BASE but asked for more particle clouds than the
+		// renderer holds had every one of them captured. The renderer refuses the excess itself --
+		// every push_back in tr_WorldEffects.cpp is guarded by full(), so nothing is corrupted and
+		// the sky looks the same either way -- but it refuses them SILENTLY, which left the block
+		// carrying a command that can never be shown, /admweather default listing a "map" line
+		// nobody sees, and the status screen reporting a figure like "6 of 5 particle effects".
+		// The admin's own layers were already held to these two limits by zyk_weather_add_layer();
+		// the map's weather simply was not. Refusing it here costs nothing real and makes every
+		// count downstream mean what it says. Recorded as truncation for the same reason the count
+		// cap is: something the map shipped is not in the recipe.
+		//
+		// The wind arm cannot fire while ZYK_WEATHER_MAX_BASE (8) is below ZYK_WEATHER_MAX_WINDS
+		// (10) -- capture stops long before eleven winds. It is written anyway so the two limits
+		// are applied as a pair, and so raising the cap later cannot open the wind case silently.
+		if ((kind == ZYK_WFX_CLOUD && base_clouds >= ZYK_WEATHER_MAX_CLOUDS)
+			|| (kind == ZYK_WFX_WIND && base_winds >= ZYK_WEATHER_MAX_WINDS))
+		{
+			level.zyk_weather_base_truncated = qtrue;
+			continue;
+		}
+
+		if (kind == ZYK_WFX_CLOUD)
+			base_clouds++;
+		else if (kind == ZYK_WFX_WIND)
+			base_winds++;
 
 		Q_strncpyz(level.zyk_weather_base[level.zyk_weather_base_count], content,
 			sizeof(level.zyk_weather_base[0]));
@@ -17612,10 +17648,15 @@ static qboolean zyk_weather_claim_block( gentity_t *ent )
 
 	if (level.zyk_weather_base_truncated == qtrue)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"^3This map sets up more weather than the system can hold, so only the first %d command(s) are kept. ^3/admweather default ^7will restore those.\n\"",
-			ZYK_WEATHER_MAX_BASE) );
-		G_LogPrintf("admweather: map weather truncated to %d command(s) at ZYK_WEATHER_MAX_BASE\n",
-			ZYK_WEATHER_MAX_BASE);
+		// GalaxyRP fix: [Weather] report what was actually kept rather than ZYK_WEATHER_MAX_BASE.
+		// The count is no longer the only thing that can truncate -- the cloud limit above can bite
+		// first, and then fewer than the cap are kept and naming the cap would be a plain lie. The
+		// log line carries the breakdown so the two causes can be told apart afterwards.
+		trap->SendServerCommand( ent-g_entities, va("print \"^3This map sets up more weather than the system can hold, so only %d of its command(s) are kept. ^3/admweather default ^7will restore those.\n\"",
+			level.zyk_weather_base_count) );
+		G_LogPrintf("admweather: map weather truncated to %d command(s) (%d/%d particle effects, %d/%d winds, cap %d)\n",
+			level.zyk_weather_base_count, base_clouds, ZYK_WEATHER_MAX_CLOUDS,
+			base_winds, ZYK_WEATHER_MAX_WINDS, ZYK_WEATHER_MAX_BASE);
 	}
 
 	return qtrue;
@@ -17667,8 +17708,8 @@ static void zyk_weather_status( gentity_t *ent )
 
 	if (level.zyk_weather_base_truncated == qtrue)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"^3Note: ^7this map sets up more weather than the system can hold; only the first %d command(s) of its own are kept.\n\"",
-			ZYK_WEATHER_MAX_BASE) );
+		trap->SendServerCommand( ent-g_entities, va("print \"^3Note: ^7this map sets up more weather than the system can hold; only %d of its own command(s) are kept.\n\"",
+			level.zyk_weather_base_count) );
 	}
 
 	trap->SendServerCommand( ent-g_entities, "print \"\n\"" );
