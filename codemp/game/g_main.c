@@ -5872,7 +5872,8 @@ void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
 // ClientConnect's memset gives them. This note used to credit add_new_char() with writing them at
 // character creation; that function has since been removed as dead too, see g_cmds.c), and that
 // deletion took magic_sense()'s only call site with it. Its siblings magic_shield() and
-// magic_disable() survive because the quest_mage chain further down this file still calls them;
+// magic_disable() survive as zero-caller reference code (the quest_mage chain that used to call
+// them went with the magic engine -- see the note in G_RunFrame);
 // magic_explosion() has since gone the same way as magic_sense(), when the custom-quest-NPC block
 // that was its last caller was removed. Nothing anywhere called magic_sense(). It also wrote
 // pers.skill_levels[4] straight into forcePowerLevel[FP_SEE] with no amrpgmode guard while
@@ -6293,7 +6294,8 @@ void magic_disable(gentity_t *ent, int distance)
 			else
 			{ // zyk: npc or boss dont get affected that much
 				player_ent->client->pers.light_quest_timer += (duration/2);
-				player_ent->client->pers.guardian_timer += (duration/2);
+				// GalaxyRP fix: [Guardian] a guardian_timer bump sat here; that field is gone (write-only
+				// once the quest_mage chain took its last reader with it).
 				player_ent->client->pers.universe_quest_timer += (duration/2);
 			}
 
@@ -6835,7 +6837,9 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 
 
 // zyk: controls the quest powers stuff
-extern void initialize_rpg_skills(gentity_t *ent);
+// GalaxyRP fix: [Magic] an extern for initialize_rpg_skills() used to be here. Its last caller in
+// this file was the bit-10 Resurrection Power branch of quest_power_events(), removed just below;
+// the function itself lives on with a caller in g_cmds.c.
 extern void zyk_wind_down_seeker_drone(gentity_t *ent);
 // GalaxyRP: [Sniper Battle] the zyk_apply_character_loadout() declaration that sat here went with
 // the removal -- sniper_battle_end() was this file's only caller.
@@ -6850,391 +6854,24 @@ void quest_power_events(gentity_t *ent)
 				ent->client->pers.quest_power_status &= ~(1 << 0);
 			}
 
-			if (ent->client->pers.quest_power_status & (1 << 1))
-			{ // zyk: Chaos Power
-				if (ent->client->pers.quest_power_hit3_counter > 0 && ent->client->pers.quest_target1_timer < level.time)
-				{ // zyk: Chaos Power hit
-					gentity_t *chaos_user = &g_entities[ent->client->pers.quest_power_user1_id];
 
-					G_Damage(ent, chaos_user, chaos_user, NULL, NULL, 8, 0, MOD_UNKNOWN);
-					ent->client->pers.quest_power_hit3_counter--;
-					ent->client->pers.quest_target1_timer = level.time + 200;
-				}
-				
-				if (ent->client->pers.quest_power_hit3_counter == 0)
-				{ // zyk: end of Chaos Power
-					ent->client->pers.quest_power_status &= ~(1 << 1);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 2) && ent->client->pers.quest_target2_timer < level.time)
-			{ // zyk: Time Power. Remove it from target when duration ends
-				ent->client->pers.quest_power_status &= ~(1 << 2);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 3) && ent->client->pers.quest_power2_timer < level.time)
-			{ // zyk: Ultra Strength
-				ent->client->pers.quest_power_status &= ~(1 << 3);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 4))
-			{ // zyk: Poison Mushrooms
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 4);
-				}
-
-				if (ent->client->pers.quest_power_hit_counter > 0 && ent->client->pers.quest_target3_timer < level.time)
-				{
-					gentity_t *poison_mushrooms_user = &g_entities[ent->client->pers.quest_power_user2_id];
-
-					if (poison_mushrooms_user && poison_mushrooms_user->client)
-					{
-						zyk_quest_effect_spawn(poison_mushrooms_user, ent, "zyk_quest_effect_poison", "0", "noghri_stick/gas_cloud", 0, 0, 0, 300);
-
-						// zyk: Universe Power
-						if (poison_mushrooms_user->client->pers.quest_power_status & (1 << 13))
-							G_Damage(ent,poison_mushrooms_user,poison_mushrooms_user,NULL,NULL,6,0,MOD_UNKNOWN);
-						else
-							G_Damage(ent,poison_mushrooms_user,poison_mushrooms_user,NULL,NULL,4,0,MOD_UNKNOWN);
-					}
-
-					ent->client->pers.quest_power_hit_counter--;
-					ent->client->pers.quest_target3_timer = level.time + 200;
-				}
-				else if (ent->client->pers.quest_power_hit_counter == 0 && ent->client->pers.quest_target3_timer < level.time)
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 4);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 5))
-			{ // zyk: Hurricane
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 5);
-				}
-
-				if (ent->client->pers.quest_target4_timer > level.time)
-				{
-					static vec3_t forward;
-					vec3_t blow_dir;
-
-					if (ent->client->pers.quest_debounce1_timer < level.time)
-					{
-						ent->client->pers.quest_debounce1_timer = level.time + 50;
-
-						VectorSet(blow_dir, -70, ent->client->pers.quest_power_hit_counter, 0);
-
-						AngleVectors(blow_dir, forward, NULL, NULL);
-
-						VectorNormalize(forward);
-
-						VectorSet(ent->client->ps.velocity, forward[0] * 450.0, forward[1] * 450.0, forward[2] * 100.0);
-
-						ent->client->pers.quest_power_hit_counter += 8;
-						if (ent->client->pers.quest_power_hit_counter >= 180)
-							ent->client->pers.quest_power_hit_counter -= 359;
-					}
-				}
-				else
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 5);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 6))
-			{ // zyk: Slow Motion
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 6);
-				}
-
-				if (ent->client->pers.quest_target5_timer < level.time)
-				{ // zyk: Slow Motion run out
-					ent->client->pers.quest_power_status &= ~(1 << 6);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 7) && ent->client->pers.quest_power3_timer < level.time)
-			{ // zyk: Ultra Resistance
-				ent->client->pers.quest_power_status &= ~(1 << 7);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 8))
-			{ // zyk: Blowing Wind
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 8);
-				}
-
-				if (ent->client->pers.quest_target6_timer > level.time)
-				{
-					gentity_t *blowing_wind_user = &g_entities[ent->client->pers.quest_power_user3_id];
-
-					if (ent->client->pers.quest_debounce1_timer < level.time)
-					{
-						ent->client->pers.quest_debounce1_timer = level.time + 50;
-
-						if (blowing_wind_user && blowing_wind_user->client)
-						{
-							static vec3_t forward;
-							vec3_t dir;
-
-							AngleVectors(blowing_wind_user->client->ps.viewangles, forward, NULL, NULL);
-
-							VectorNormalize(forward);
-
-							if (ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
-								VectorScale(forward, 215.0, dir);
-							else
-								VectorScale(forward, 40.0, dir);
-
-							VectorAdd(ent->client->ps.velocity, dir, ent->client->ps.velocity);
-						}
-					}
-				}
-				else
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 8);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 9) && ent->client->pers.quest_power3_timer < level.time)
-			{ // zyk: Ultra Speed
-				ent->client->pers.quest_power_status &= ~(1 << 9);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 11))
-			{ // zyk: Magic Shield
-				if (ent->client->pers.quest_power4_timer < level.time)
-				{ // zyk: Magic Shield run out
-					ent->client->pers.quest_power_status &= ~(1 << 11);
-				}
-				else
-				{
-					ent->client->ps.eFlags |= EF_INVULNERABLE;
-					ent->client->invulnerableTimer = ent->client->pers.quest_power4_timer;
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 12))
-			{ // zyk: Flame Burst
-				if (ent->client->pers.flame_thrower < level.time)
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 12);
-				}
-				else if (ent->client->cloakDebReduce < level.time)
-				{ // zyk: fires the flame thrower
-					Player_FireFlameThrower(ent);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 17))
-			{ // zyk: Shifting Sand
-				if (ent->client->pers.quest_power5_timer < level.time)
-				{ // zyk: after this time, teleports to the new location and add effect there too
-					if (Distance(ent->client->ps.origin, g_entities[ent->client->pers.quest_power_effect1_id].s.origin) < 100)
-					{ // zyk: only teleports if the player is near the effect
-						vec3_t origin;
-						int random_x = Q_irand(0, 1);
-						int random_y = Q_irand(0, 1);
-
-						if (random_x == 0)
-							random_x = -1;
-						if (random_y == 0)
-							random_y = -1;
-
-						gentity_t *this_enemy = &g_entities[ent->client->pers.quest_power_user4_id];
-
-						origin[0] = this_enemy->client->ps.origin[0] + (Q_irand(70, 100) * random_x);
-						origin[1] = this_enemy->client->ps.origin[1] + (Q_irand(70, 100) * random_y);
-						origin[2] = this_enemy->client->ps.origin[2] + Q_irand(40, 100);
-
-						zyk_TeleportPlayer(ent, origin, ent->client->ps.viewangles);
-
-						VectorCopy(ent->client->ps.origin, ent->client->pers.teleport_point);
-					}
-
-					ent->client->pers.quest_power_status &= ~(1 << 17);
-					ent->client->pers.quest_power_status |= (1 << 18);
-
-					ent->client->pers.quest_power5_timer = level.time + 4000;
-					zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_sand", "0", "env/sand_spray", 0, 0, 0, 2000);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 18))
-			{ // zyk: Shifting Sand after the teleport, validating if player is not suck
-				if (ent->client->pers.quest_power5_timer < level.time)
-				{
-					if (VectorCompare(ent->client->ps.origin, ent->client->pers.teleport_point) == qtrue)
-					{ // zyk: stuck, teleport back
-						zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_sand", "0", "env/sand_spray", 0, 0, 0, 1000);
-						zyk_TeleportPlayer(ent, ent->client->pers.teleport_angles, ent->client->ps.viewangles);
-						zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_sand", "0", "env/sand_spray", 0, 0, 0, 1000);
-					}
-
-					ent->client->pers.quest_power_status &= ~(1 << 18);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 19))
-			{ // zyk: Tree of Life
-				if (ent->client->pers.quest_power_hit2_counter > 0)
-				{
-					if (ent->client->pers.quest_power6_timer < level.time)
-					{
-						int heal_amount = 20;
-
-						// zyk: Universe Power
-						if (ent->client->pers.quest_power_status & (1 << 13))
-						{
-							heal_amount = 40;
-						}
-
-						if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
-							ent->health += heal_amount;
-						else
-							ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-
-						ent->client->pers.quest_power_hit2_counter--;
-						ent->client->pers.quest_power6_timer = level.time + 1000;
-
-						G_Sound(ent, CHAN_ITEM, G_SoundIndex("sound/weapons/force/heal.wav"));
-					}
-				}
-				else
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 19);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 20))
-			{ // zyk: Reverse Wind
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 20);
-				}
-
-				if (ent->client->pers.quest_target6_timer > level.time)
-				{
-					gentity_t *reverse_wind_user = &g_entities[ent->client->pers.quest_power_user3_id];
-
-					if (ent->client->pers.quest_debounce1_timer < level.time)
-					{
-						ent->client->pers.quest_debounce1_timer = level.time + 50;
-
-						if (reverse_wind_user && reverse_wind_user->client)
-						{
-							vec3_t dir, forward;
-
-							VectorSubtract(reverse_wind_user->client->ps.origin, ent->client->ps.origin, forward);
-							VectorNormalize(forward);
-
-							if (ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
-								VectorScale(forward, 215.0, dir);
-							else
-								VectorScale(forward, 46.0, dir);
-
-							VectorAdd(ent->client->ps.velocity, dir, ent->client->ps.velocity);
-						}
-					}
-				}
-				else
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 20);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 21))
-			{ // zyk: Enemy Weakening
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 21);
-				}
-
-				if (ent->client->pers.quest_target7_timer < level.time)
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 21);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 22))
-			{ // zyk: Ice Block
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 22);
-				}
-
-				if (ent->client->pers.quest_power7_timer < level.time)
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 22);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 23))
-			{ // zyk: hit by Flaming Area
-				if (ent->client->pers.quest_power_status & (1 << 0))
-				{ // zyk: testing for Immunity Power in target player
-					ent->client->pers.quest_power_status &= ~(1 << 23);
-				}
-
-				if (ent->client->pers.quest_power_hit4_counter > 0 && ent->client->pers.quest_target8_timer < level.time)
-				{
-					gentity_t *flaming_area_user = &g_entities[ent->client->pers.quest_power_user5_id];
-
-					if (flaming_area_user && flaming_area_user->client)
-					{
-						zyk_quest_effect_spawn(flaming_area_user, ent, "zyk_quest_effect_flaming_area_hit", "0", "env/fire", 0, 0, 0, 300);
-
-						// zyk: Universe Power
-						if (flaming_area_user->client->pers.quest_power_status & (1 << 13))
-							G_Damage(ent, flaming_area_user, flaming_area_user, NULL, NULL, 3, 0, MOD_UNKNOWN);
-						else
-							G_Damage(ent, flaming_area_user, flaming_area_user, NULL, NULL, 2, 0, MOD_UNKNOWN);
-					}
-
-					ent->client->pers.quest_power_hit4_counter--;
-					ent->client->pers.quest_target8_timer = level.time + 200;
-				}
-				else if (ent->client->pers.quest_power_hit4_counter == 0 && ent->client->pers.quest_target8_timer < level.time)
-				{
-					ent->client->pers.quest_power_status &= ~(1 << 23);
-				}
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 24) && ent->client->pers.quest_target9_timer < level.time)
-			{ // zyk: hit by Sleeping Flowers
-				ent->client->pers.quest_power_status &= ~(1 << 24);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 25) && ent->client->pers.quest_target10_timer < level.time)
-			{ // zyk: hit by Ice Boulder
-				ent->client->pers.quest_power_status &= ~(1 << 25);
-			}
-
-			if (ent->client->pers.quest_power_status & (1 << 26) && ent->client->pers.quest_target11_timer < level.time)
-			{ // zyk: hit by Elemental Attack
-				ent->client->pers.quest_power_status &= ~(1 << 26);
-			}
-		}
-		else if (!ent->NPC && ent->client->pers.quest_power_status & (1 << 10) && ent->client->pers.quest_power1_timer < level.time && 
-				!(ent->client->ps.eFlags & EF_DISINTEGRATION)) 
-		{ // zyk: Resurrection Power
-			ent->r.contents = CONTENTS_BODY;
-			ent->client->ps.pm_type = PM_NORMAL;
-			ent->client->ps.fallingToDeath = 0;
-			ent->client->noCorpse = qtrue;
-			ent->client->ps.eFlags &= ~EF_NODRAW;
-			ent->client->ps.eFlags2 &= ~EF2_HELD_BY_MONSTER;
-			ent->flags = 0;
-			ent->die = player_die; // zyk: must set this function again
-			initialize_rpg_skills(ent);
-			ent->client->pers.jetpack_fuel = MAX_JETPACK_FUEL;
-			ent->client->ps.jetpackFuel = 100;
-			ent->client->ps.cloakFuel = 100;
-			ent->client->pers.quest_power_status &= ~(1 << 10);
+			// GalaxyRP fix: [Magic] twenty-one more quest_power_status blocks used to follow, one per
+			// magic status effect: Chaos Power (1), Time Power (2), Ultra Strength (3), Poison Mushrooms
+			// (4), Hurricane (5), Slow Motion (6), Ultra Resistance (7), Blowing Wind (8), Ultra Speed (9),
+			// Magic Shield (11), Flame Burst (12), Shifting Sand (17 and its follow-up 18), Tree of Life
+			// (19), Reverse Wind (20), Enemy Weakening (21), Ice Block (22), and the four "hit by" timers
+			// for Flaming Area (23), Sleeping Flowers (24), Ice Boulder (25) and Elemental Attack (26).
+			//
+			// Not one of those bits can be set any more. Bits 1, 2 and 26 lost their setters with
+			// chaos_power(), time_power() and elemental_attack() in the custom-quest-NPC removal; the rest
+			// are set only inside the twenty-seven effect functions, which are kept as reference code but
+			// have had no caller since the quest_mage chain went; bit 18 is set only inside the bit-17
+			// block, so it went the same way. Only bit 0 survives above, set by duel_tournament_prepare().
+			//
+			// The else-branch that followed this one went too: it was the Resurrection Power handler, gated
+			// on bit 10, which has no setter anywhere in the tree and never had one after the quest command
+			// that used to grant it was removed. It was the last caller of initialize_rpg_skills() from
+			// this file.
 		}
 	}
 }
@@ -9913,9 +9550,10 @@ void G_RunFrame( int levelTime ) {
 			// Removing it orphaned twelve functions further up this file, which went with it: chaos_power,
 			// elemental_attack, force_scream, healing_area, immunity_power, lightning_dome,
 			// magic_explosion, time_power, ultra_drain, zyk_force_storm, zyk_no_attack and
-			// zyk_super_beam. This block was their only caller; the quest_mage chain just below calls
-			// twenty-seven OTHER effect functions and none of these twelve, and none of the twelve was
-			// ever taken by address (the zyk_force_storm / zyk_super_beam matches elsewhere are entity
+			// zyk_super_beam. This block was their only caller; the quest_mage chain that used to sit just
+			// below called twenty-seven OTHER effect functions and none of these twelve (that chain has
+			// since gone too, and the twenty-seven are kept as zero-caller reference code). None of the
+			// twelve was ever taken by address (the zyk_force_storm / zyk_super_beam matches elsewhere are entity
 			// targetname strings that happen to share the names, not function pointers).
 			//
 			// Consequences worth knowing, all of them pre-existing dead weight rather than new:

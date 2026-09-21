@@ -10224,7 +10224,8 @@ qboolean TryGrapple(gentity_t *ent)
 				// because the NPC "custom quest npc" random-power block there still called them. That block has
 				// since been removed as unreachable in its own right, which orphaned twelve of them --
 				// ultra_drain() and time_power() among them -- and they went with it. The twenty-seven the
-				// quest_mage chain calls are still there and still live.
+				// quest_mage chain called are still there, but that chain has since been removed as well and
+				// they are kept deliberately as zero-caller reference code.
 
 				// GalaxyRP fix: [Dead Code] the Magic Boost branch used to be here, shortening the magic
 				// cooldown by 3000ms. It needed pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ
@@ -11158,11 +11159,11 @@ void initialize_rpg_skills(gentity_t *ent)
 		// zyk: setting default value of can_play_quest
 		ent->client->pers.can_play_quest = 0;
 
-		// GalaxyRP fix: [Guardian] the guardian_mode=0 and guardian_invoked_by_id=-1 resets that used to
-		// be here are removed along with the fields themselves (guardian_mode's sole setter, and
-		// guardian_invoked_by_id's sole setter spawn_boss(), have zero callers). guardian_timer stays
-		// live and is left reset below (used by the quest_mage/ymir/thor ability chain in g_main.c).
-		ent->client->pers.guardian_timer = 0;
+		// GalaxyRP fix: [Guardian] the guardian_mode=0, guardian_invoked_by_id=-1 and guardian_timer=0
+		// resets that used to be here are removed along with the fields themselves. guardian_mode's sole
+		// setter and guardian_invoked_by_id's sole setter spawn_boss() have zero callers; guardian_timer
+		// lost its last reader when the quest_mage chain went with the magic engine, leaving it
+		// write-only.
 
 		ent->client->pers.eternity_quest_timer = 0;
 

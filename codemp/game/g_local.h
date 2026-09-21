@@ -1162,8 +1162,9 @@ typedef struct clientPersistant_s {
 	// zyk: powers that hits the target player more than once need a hit counter
 	int quest_power_hit_counter;
 	int quest_power_hit2_counter;
-	int quest_power_hit3_counter;
-	int quest_power_hit4_counter;
+	// GalaxyRP fix: [Magic] quest_power_hit3_counter and quest_power_hit4_counter used to be here,
+	// counting the remaining Chaos Power and Flaming Area ticks on this player. Both were read and
+	// written only inside the quest_power_events blocks that went with the magic engine.
 
 	// zyk: timers of the quest powers used by this player
 	int quest_power1_timer;
@@ -1175,27 +1176,30 @@ typedef struct clientPersistant_s {
 	int quest_power7_timer;
 
 	// zyk: timers used by the quest powers hitting this player
-	int quest_target1_timer;
+	// GalaxyRP fix: [Magic] quest_target1_timer (Chaos Power) used to head this group; its only
+	// sites were in the quest_power_events blocks that went with the magic engine.
 	int quest_target2_timer;
 	int quest_target3_timer;
 	int quest_target4_timer;
 	int quest_target5_timer;
 	int quest_target6_timer;
 	int quest_target7_timer;
-	int quest_target8_timer;
+	// GalaxyRP fix: [Magic] quest_target8_timer (Flaming Area) went the same way.
 	int quest_target9_timer;
 	int quest_target10_timer;
-	int quest_target11_timer;
+	// GalaxyRP fix: [Magic] quest_target11_timer (Elemental Attack) went the same way.
 
 	// zyk: quest powers debounce timer, for example, like Wind powers
 	int quest_debounce1_timer;
 
 	// zyk: player ids which are hitting the target player
-	int quest_power_user1_id;
+	// GalaxyRP fix: [Magic] quest_power_user1_id (Chaos Power) used to head this group; read only
+	// by the quest_power_events block that went with the magic engine.
 	int quest_power_user2_id;
 	int quest_power_user3_id;
 	int quest_power_user4_id;
-	int quest_power_user5_id;
+	// GalaxyRP fix: [Magic] quest_power_user5_id (Flaming Area) went the same way. It had lost its
+	// last writer one commit earlier, with the G_RadiusDamage magic block.
 
 	// zyk: sets the id of the effect of the magic used by this player
 	int quest_power_effect1_id;
@@ -1218,8 +1222,9 @@ typedef struct clientPersistant_s {
 	// it is permanently 0 with zero live readers/writers left anywhere in the codebase (spawn_boss,
 	// its sole setter, has no callers).
 
-	// zyk: used by the last guardians in quests for their special abilities
-	int guardian_timer;
+	// GalaxyRP fix: [Guardian] guardian_timer used to be here, pacing the quest guardians' special
+	// abilities. Its last reader went with the quest_mage chain, leaving it write-only; the write
+	// inside magic_disable() and the reset in Cmd_... (g_cmds.c) have gone with it.
 
 	// GalaxyRP fix: [Guardian] guardian_invoked_by_id field removed here — it is permanently -1
 	// with zero live readers/writers left anywhere in the codebase (spawn_boss, its sole setter,

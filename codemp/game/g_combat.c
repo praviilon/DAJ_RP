@@ -2187,7 +2187,9 @@ qboolean g_bookkeepingDeath = qfalse;
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
 extern void remove_credits(gentity_t *ent, int credits);
 extern void zyk_NPC_Kill_f( char *name );
-extern gentity_t *Zyk_NPC_SpawnType(char *npc_type, int x, int y, int z, int yaw);
+// GalaxyRP fix: [Guardian] an extern for Zyk_NPC_SpawnType() used to be here. That function was
+// removed with the quest guardians (see the note at its old site in g_main.c); the declaration was
+// left behind and had no call site in this file or anywhere else.
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 extern void player_restore_force(gentity_t *ent);
 extern void melee_battle_restore(gentity_t *ent);

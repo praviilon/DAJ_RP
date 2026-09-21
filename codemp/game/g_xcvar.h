@@ -381,10 +381,11 @@ XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART
 // pers.universe_quest_progress/universe_quest_counter, fields nothing anywhere ever writes. With the
 // dispatch gone the cvars had no readers left at all, in any module or asset.
 //
-// This changes nothing in game. The ~33 magic effect functions in g_main.c (earthquake(),
-// hurricane(), time_power(), ...) are still live -- the quest_mage NPC's random-power chain calls
-// them -- but it calls them with hardcoded arguments, never through a cvar, and an zyk_enable_*
-// switch only ever gated a PLAYER's access to a power a player can no longer invoke.
+// This changes nothing in game. The magic effect functions in g_main.c (earthquake(), hurricane(),
+// ...) were called only by the quest_mage NPC's random-power chain, with hardcoded arguments and
+// never through a cvar, and an zyk_enable_* switch only ever gated a PLAYER's access to a power a
+// player can no longer invoke. That chain has since been removed with the magic engine and the
+// twenty-seven surviving effect functions are kept as zero-caller reference code.
 //
 // zyk_magic_fist_velocity and zyk_magic_fist_mp_cost went with magic_fist_velocity() in g_weapon.c,
 // their sole reader, which had no callers of its own (see the note at its old location there).

@@ -564,31 +564,25 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			ent->methodOfDeath != MOD_SABER &&
 			ent->methodOfDeath != MOD_TURBLAST)
 		{
+			// GalaxyRP fix: [Magic] a "cannot_deflect" guard used to wrap this block, set by a Magic Fist
+			// test (methodOfDeath == MOD_MELEE on a bowcaster/demp2/concussion shot). Nothing in the tree
+			// can produce such a missile any more -- magic_fist_velocity() went with the magic cvars and
+			// no code assigns MOD_MELEE to a missile's methodOfDeath -- so the guard was always false and
+			// the deflect always ran. What is left is the stock TaystJK deflect, which has no such guard.
 			vec3_t fwd;
-			int cannot_deflect = 0;
 
-			// zyk: Magic Fist can hit anything!
-			if (ent->methodOfDeath == MOD_MELEE && (ent->s.weapon == WP_BOWCASTER || ent->s.weapon == WP_DEMP2 || ent->s.weapon == WP_CONCUSSION))
+			if (trace)
 			{
-				cannot_deflect = 1;
+				VectorCopy(trace->plane.normal, fwd);
+			}
+			else
+			{ //oh well
+				AngleVectors(other->r.currentAngles, fwd, NULL, NULL);
 			}
 
-			if (cannot_deflect == 0)
-			{
-
-				if (trace)
-				{
-					VectorCopy(trace->plane.normal, fwd);
-				}
-				else
-				{ //oh well
-					AngleVectors(other->r.currentAngles, fwd, NULL, NULL);
-				}
-
-				G_DeflectMissile(other, ent, fwd);
-				G_MissileBounceEffect(ent, ent->r.currentOrigin, fwd);
-				return;
-			}
+			G_DeflectMissile(other, ent, fwd);
+			G_MissileBounceEffect(ent, ent->r.currentOrigin, fwd);
+			return;
 		}
 	}
 
@@ -615,46 +609,26 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		!(ent->dflags&DAMAGE_HEAVY_WEAP_CLASS) &&
 		(other->flags & FL_SHIELDED || zyk_can_deflect_shots(other)) )
 	{
+		// GalaxyRP fix: [Magic] a "cannot_deflect" guard used to wrap this block, set by three tests that
+		// can no longer be true: the shot's owner being NPC_type "guardian_boss_7" or "guardian_boss_10"
+		// (both definitions went with the three zyk_quest_*.npc asset files, so neither NPC can exist),
+		// and a Magic Fist test on methodOfDeath == MOD_MELEE, which nothing in the tree ever assigns to
+		// a missile. The owner lookup and the this_npc local existed only to feed those two NPC tests and
+		// went with them. What is left is the stock TaystJK deflect, which has no such guard.
 		vec3_t fwd;
-		gentity_t *this_npc = NULL;
-		int cannot_deflect = 0;
 
-		if (ent->r.ownerNum >= MAX_CLIENTS)
-			this_npc = &g_entities[ent->r.ownerNum];
-
-		// zyk: Guardian of Wind can hit anyone with his blaster shots
-		if (this_npc && this_npc->client && Q_stricmp(this_npc->NPC_type, "guardian_boss_7") == 0)
+		if (other->client)
 		{
-			cannot_deflect = 1;
+			AngleVectors(other->client->ps.viewangles, fwd, NULL, NULL);
+		}
+		else
+		{
+			AngleVectors(other->r.currentAngles, fwd, NULL, NULL);
 		}
 
-		// zyk: Guardian of Ice can hit anyone with his bowcaster shots
-		if (this_npc && this_npc->client && Q_stricmp(this_npc->NPC_type, "guardian_boss_10") == 0)
-		{
-			cannot_deflect = 1;
-		}
-
-		// zyk: Magic Fist can hit anything!
-		if (ent->methodOfDeath == MOD_MELEE && (ent->s.weapon == WP_BOWCASTER || ent->s.weapon == WP_DEMP2 || ent->s.weapon == WP_CONCUSSION))
-		{
-			cannot_deflect = 1;
-		}
-
-		if (cannot_deflect == 0)
-		{
-			if (other->client)
-			{
-				AngleVectors(other->client->ps.viewangles, fwd, NULL, NULL);
-			}
-			else
-			{
-				AngleVectors(other->r.currentAngles, fwd, NULL, NULL);
-			}
-
-			G_DeflectMissile(other, ent, fwd);
-			G_MissileBounceEffect(ent, ent->r.currentOrigin, fwd);
-			return;
-		}
+		G_DeflectMissile(other, ent, fwd);
+		G_MissileBounceEffect(ent, ent->r.currentOrigin, fwd);
+		return;
 	}
 
 	if (other->takedamage && other->client &&
@@ -663,7 +637,9 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		ent->s.weapon != WP_TRIP_MINE &&
 		ent->s.weapon != WP_DET_PACK &&
 		ent->s.weapon != WP_DEMP2 &&
-		!(ent->s.weapon == WP_CONCUSSION && ent->methodOfDeath == MOD_MELEE) && // zyk: cannot be Ultra Bolt
+		// GalaxyRP fix: [Magic] a "not an Ultra Bolt" conjunct used to be here, excluding a concussion
+		// shot whose methodOfDeath was MOD_MELEE. Nothing in the tree assigns MOD_MELEE to a missile,
+		// so it was a permanently-true conjunct.
 		ent->methodOfDeath != MOD_REPEATER_ALT &&
 		ent->methodOfDeath != MOD_FLECHETTE_ALT_SPLASH &&
 		ent->methodOfDeath != MOD_CONC &&
@@ -761,7 +737,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			ent->s.weapon != WP_TRIP_MINE &&
 			ent->s.weapon != WP_DET_PACK &&
 			ent->s.weapon != WP_DEMP2 &&
-			!(ent->s.weapon == WP_CONCUSSION && ent->methodOfDeath == MOD_MELEE) && // zyk: cannot be Ultra Bolt
+			// GalaxyRP fix: [Magic] the matching "not an Ultra Bolt" conjunct went from here too.
 			ent->methodOfDeath != MOD_REPEATER_ALT &&
 			ent->methodOfDeath != MOD_FLECHETTE_ALT_SPLASH &&
 			ent->methodOfDeath != MOD_CONC &&
