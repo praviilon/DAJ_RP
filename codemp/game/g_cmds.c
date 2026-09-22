@@ -3416,7 +3416,7 @@ void zyk_wind_down_seeker_drone( gentity_t *ent )
 // which is "client->ps.eFlags = flags" where flags is ps.eFlags & EF_TELEPORT_BIT -- so everything
 // in the playerState that is not explicitly put back dies there. player_die() adds its own
 // "zoomMode = 0; // Turn off zooming when we die". rp_seamlesslogin 1 removed that respawn, which
-// left four things running for a character that no longer owns them:
+// left five things running for a character that no longer owns them:
 //
 //   Remote. ItemUse_Seeker() sets EF_SEEKERDRONE with a 60-second droneExistTime, and only the
 //   eFlags wipe or that timer ever clears it, so the drone kept orbiting and shooting. Wound down
@@ -3429,6 +3429,16 @@ void zyk_wind_down_seeker_drone( gentity_t *ent )
 //   was clobbered on the next frame and then, on dismount, replaced by the PREVIOUS character's --
 //   silent cross-character loadout corruption. EWebThink() self-destructs on owner health < 1,
 //   which is why a respawn hid it.
+//
+//   GalaxyRP fix: [Emplaced Gun] the map-placed emplaced gun, which is a different mechanism from
+//   the e-web above and was missed by it -- that block only releases a player from their OWN
+//   e-web, and a player sitting on a map gun has ewebIndex 0, so nothing here touched them at all.
+//   emplaced_gun_update() (g_weapon.c) forces ps.weapon back to WP_EMPLACED_GUN on every think
+//   while they are mounted, so the incoming character's weapon was overwritten exactly the way the
+//   e-web overwrote STAT_WEAPONS; and when they finally stood up, the gun handed them the OUTGOING
+//   character's weapon with no ownership test of any kind. Released through
+//   zyk_release_from_emplaced_gun(), the same call the gun's own dismount makes, so the two paths
+//   cannot end up meaning different things.
 //
 //   Binoculars and the disruptor scope. Both live in ps.zoomMode (2 and 1). It is cleared on a
 //   pmove weapon change (PM_BeginWeaponChange) and on death, and neither happens here: the account
@@ -3488,7 +3498,44 @@ void zyk_stop_active_holdables( gentity_t *ent )
 		}
 	}
 
-	// 3. binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together
+	// 3. the map-placed emplaced gun -- see the note above on why the e-web block does not cover it
+	if (ent->client->ps.emplacedIndex)
+	{
+		gentity_t *gun = &g_entities[ent->client->ps.emplacedIndex];
+
+		// Four tests, because entity slots get recycled and nothing clears this index on the
+		// player's behalf when the gun behind it goes away. classname and activator together are
+		// what make it certain: emplaced_gun_use() is the only thing that points an emplaced_gun's
+		// activator at its rider, and the e-web -- the only other thing that ever sets
+		// ps.emplacedIndex -- tracks its rider through r.ownerNum, never sets activator, and has
+		// already been released by the block above by the time we get here.
+		//
+		// The classname NULL test is not decoration. Every entity that has been through G_Spawn
+		// has one (G_InitGentity writes "noclass", G_FreeEntity writes "freed"), and a slot that
+		// has not been through it fails the inuse test first -- so today it cannot be NULL here.
+		// That is three separate facts holding a raw Q_stricmp() up, and holdstop/negctl.py found
+		// the gap by deleting the e-web block above: ps.emplacedIndex then still pointed at the
+		// e-web when this ran. One pointer test is cheaper than depending on all three.
+		if (gun->inuse && gun->classname && Q_stricmp(gun->classname, "emplaced_gun") == 0
+			&& gun->activator == ent)
+		{
+			zyk_release_from_emplaced_gun(gun, ent);
+		}
+		else
+		{
+			// An index with nothing behind it any more. Clear the rider's half of the mount so the
+			// incoming character does not start out believing they are sitting on something; the
+			// gun's half, if there ever was one, is not ours to guess at. ps.weapon is deliberately
+			// left to PM_Weapon()'s "oh no!" recovery (bg_pmove.c), which is written for exactly
+			// this state -- WP_EMPLACED_GUN held with no emplacedIndex under it -- and picks a
+			// weapon the player actually owns on the very next pmove.
+			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
+			ent->client->ps.emplacedIndex = 0;
+			ent->client->ps.saberHolstered = 0;
+		}
+	}
+
+	// 4. binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together
 	if (ent->client->ps.zoomMode)
 	{
 		ent->client->ps.zoomMode = 0;

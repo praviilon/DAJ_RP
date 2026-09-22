@@ -2572,6 +2572,9 @@ qboolean G_FilterPacket (char *from);
 void FireWeapon( gentity_t *ent, qboolean altFire );
 void BlowDetpacks(gentity_t *ent);
 void RemoveDetpacks(gentity_t *ent);
+// GalaxyRP fix: [Emplaced Gun] shared by the gun's own dismount and by the account commands --
+// see zyk_stop_active_holdables() in g_cmds.c.
+void zyk_release_from_emplaced_gun( gentity_t *gun, gentity_t *rider );
 
 //
 // p_hud.c

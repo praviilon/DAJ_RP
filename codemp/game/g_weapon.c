@@ -5132,6 +5132,81 @@ static void WP_FireEmplaced( gentity_t *ent, qboolean altFire )
 
 //----------------------------------------------------------
 extern qboolean TryHeal(gentity_t *ent, gentity_t *target); //g_utils.c
+
+/*
+GalaxyRP fix: [Emplaced Gun] which weapon a rider gets back when they leave the gun.
+
+The weapon they sat down with, if they still own it. That ownership test is the point: the five
+account commands all rewrite STAT_WEAPONS while the player is still mounted -- /logout through
+zyk_remove_guns(), the four character/login paths through the skills load -- so by the time they
+stand up the stored weapon can easily be one this character never had. It used to be assigned
+back regardless, leaving the player holding a weapon with its STAT_WEAPONS bit clear and no way
+back to it except cycling weapons by hand.
+
+The fallback is the lowest-numbered weapon they do own, which is exactly what PM_Weapon()'s
+"oh no!" recovery in bg_pmove.c picks for a player left holding WP_EMPLACED_GUN with no gun under
+them. WP_EMPLACED_GUN itself is excluded as well as WP_NONE -- the caller clears its bit just
+before calling this, but handing it back here would recreate the very state that recovery exists
+to undo.
+*/
+static int zyk_emplaced_restore_weapon( gclient_t *client, int stored )
+{
+	int i = 0;
+
+	if ( stored > WP_NONE && stored < WP_NUM_WEAPONS &&
+		(client->ps.stats[STAT_WEAPONS] & (1 << stored)) )
+	{
+		return stored;
+	}
+
+	for ( i = 0; i < WP_NUM_WEAPONS; i++ )
+	{
+		if ( i != WP_NONE && i != WP_EMPLACED_GUN &&
+			(client->ps.stats[STAT_WEAPONS] & (1 << i)) )
+		{
+			return i;
+		}
+	}
+
+	return WP_NONE;
+}
+
+/*
+GalaxyRP fix: [Emplaced Gun] put a rider back on their feet and the gun back to rest, in one place.
+
+Two callers: emplaced_gun_update() below, which is the ordinary dismount, and
+zyk_stop_active_holdables() in g_cmds.c, which is the account commands. They used to be one
+caller, and the account commands simply did not release a player from a map-placed gun at all --
+the block there only handles a player's own e-web, and a player on a map gun has ewebIndex 0.
+
+The gun's own s.weapon is restored unconditionally rather than swapped back. See the comment in
+emplaced_gun_use() below for what that field is really for and what the swap did to it.
+
+rider is taken as a parameter rather than read from gun->activator because gun->activator is
+cleared here, and because the dismount branch in emplaced_gun_update() reaches this after
+ps.emplacedIndex has already been zeroed by someone else -- pmove, player_die() or StopFollowing()
+-- so neither side can be looked up from the other by then.
+*/
+void zyk_release_from_emplaced_gun( gentity_t *gun, gentity_t *rider )
+{
+	if ( !gun || !rider || !rider->client )
+	{
+		return;
+	}
+
+	rider->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
+	rider->client->ps.weapon = zyk_emplaced_restore_weapon( rider->client, gun->genericValue6 );
+	rider->r.ownerNum = ENTITYNUM_NONE;
+	rider->client->ps.emplacedTime = level.time + 1000;
+	rider->client->ps.emplacedIndex = 0;
+	rider->client->ps.saberHolstered = 0;
+
+	gun->genericValue6 = 0;
+	gun->s.weapon = WP_EMPLACED_GUN;
+	gun->s.activeForcePass = 0;
+	gun->activator = NULL;
+}
+
 void emplaced_gun_use( gentity_t *self, gentity_t *other, trace_t *trace )
 {
 	vec3_t fwd1, fwd2;
@@ -5218,10 +5293,27 @@ void emplaced_gun_use( gentity_t *self, gentity_t *other, trace_t *trace )
 
 	self->genericValue1 = 1;
 
-	oldWeapon = activator->s.weapon;
+	// GalaxyRP fix: [Emplaced Gun] ps.weapon, not s.weapon. s.weapon is the ENTITY STATE copy,
+	// written from ps.weapon by BG_PlayerStateToEntityState() (bg_misc.c) during the PREVIOUS
+	// frame's ClientEndFrame(), while TryUse() reaches this after the current frame's pmove has
+	// already run -- so a weapon change that finished this frame had not reached s.weapon yet and
+	// the gun stored the weapon the player had just switched away from, then handed it back on
+	// dismount. ps.weapon is what the dismount side already reads; both ends now agree.
+	oldWeapon = activator->client->ps.weapon;
+
+	// GalaxyRP fix: [Emplaced Gun] a gun whose s.weapon is not WP_EMPLACED_GUN cannot happen any
+	// more -- nothing writes that field after SP_emplaced_gun() except the line below -- but it
+	// used to happen on almost every dismount, and it was permanent. Repair it rather than pass it
+	// on, and say so, because if this ever prints again something new has started writing there.
+	if ( self->s.weapon != WP_EMPLACED_GUN )
+	{
+		G_LogPrintf( "WARNING: emplaced_gun %i had s.weapon %i instead of WP_EMPLACED_GUN; repaired.\n",
+			self->s.number, self->s.weapon );
+		self->s.weapon = WP_EMPLACED_GUN;
+	}
 
 	// swap the users weapon with the emplaced gun
-	activator->client->ps.weapon = self->s.weapon;
+	activator->client->ps.weapon = WP_EMPLACED_GUN;
 	activator->client->ps.weaponstate = WEAPON_READY;
 	activator->client->ps.stats[STAT_WEAPONS] |= ( 1 << WP_EMPLACED_GUN );
 
@@ -5230,8 +5322,31 @@ void emplaced_gun_use( gentity_t *self, gentity_t *other, trace_t *trace )
 	self->s.emplacedOwner = activator->s.number;
 	self->s.activeForcePass = NUM_FORCE_POWERS+1;
 
-	// the gun will track which weapon we used to have
-	self->s.weapon = oldWeapon;
+	// GalaxyRP fix: [Emplaced Gun] the rider's previous weapon is stashed in genericValue6, a
+	// server-side field, instead of being parked in the gun's own s.weapon.
+	//
+	// s.weapon on an emplaced-type entity is not spare storage: it is how the client tells an
+	// emplaced gun from an e-web. EWeb_Create() sets WP_NONE on an e-web "for the sake of being
+	// able to differentiate client-side between this and an emplaced gun" (g_items.c), and four
+	// places read it that way -- CG_UsingEWeb() (cg_predict.c), which turns client prediction OFF
+	// for its rider; the crosshair muzzle point and the e-web health bar (both cg_draw.c); and the
+	// rider's leg angles (bg_pmove.c). Parking a rider's pistol there made the gun lie about what
+	// it was for as long as it was occupied, and a rider whose previous weapon happened to be
+	// WP_NONE turned a map gun into an "e-web" outright.
+	//
+	// Worse, it did not end at dismount. emplaced_gun_update() below SWAPPED the two values back,
+	// which only restores WP_EMPLACED_GUN if the rider's ps.weapon is still WP_EMPLACED_GUN at
+	// that instant -- and usually it is not. Leaving a gun clears ps.emplacedIndex first (pmove
+	// does it on a backward step, player_die() and StopFollowing() do it outright), and the next
+	// pmove's "oh no!" recovery in PM_Weapon() then assigns a real weapon immediately, before this
+	// entity's 50ms think gets to run. So the gun kept whatever that was, for the rest of the map;
+	// nothing ever reset it, not even the CANRESPAWN branch in emplaced_gun_update(). StopFollowing()
+	// was the clean route to the WP_NONE case: it sets ps.weapon = WP_NONE and ps.emplacedIndex = 0
+	// in the same breath.
+	//
+	// genericValue6 is free on this class -- 1 through 5 and 10 are the ones emplaced guns use --
+	// and it is not a spawn key, so no map can set it (only "genericvalue7" is exposed, g_spawn.c).
+	self->genericValue6 = oldWeapon;
 
 	//user's new owner becomes the gun ent
 	activator->r.ownerNum = self->s.number;
@@ -5272,7 +5387,6 @@ void emplaced_gun_pain( gentity_t *self, gentity_t *attacker, int damage )
 void emplaced_gun_update(gentity_t *self)
 {
 	vec3_t	smokeOrg, puffAngle;
-	int oldWeap;
 	float ownLen = 0;
 
 	if (self->health < 1 && !self->genericValue5)
@@ -5349,18 +5463,9 @@ void emplaced_gun_update(gentity_t *self)
 	if ((self->activator && self->activator->client) &&
 		(!self->activator->inuse || self->activator->client->ps.emplacedIndex != self->s.number || self->genericValue4 || ownLen > 64))
 	{ //get the user off of me then
-		self->activator->client->ps.stats[STAT_WEAPONS] &= ~(1<<WP_EMPLACED_GUN);
-
-		oldWeap = self->activator->client->ps.weapon;
-		self->activator->client->ps.weapon = self->s.weapon;
-		self->s.weapon = oldWeap;
-		self->activator->r.ownerNum = ENTITYNUM_NONE;
-		self->activator->client->ps.emplacedTime = level.time + 1000;
-		self->activator->client->ps.emplacedIndex = 0;
-		self->activator->client->ps.saberHolstered = 0;
-		self->activator = NULL;
-
-		self->s.activeForcePass = 0;
+		// GalaxyRP fix: [Emplaced Gun] this used to be an inline swap of ps.weapon and s.weapon.
+		// See zyk_release_from_emplaced_gun() above, which is now shared with the account commands.
+		zyk_release_from_emplaced_gun( self, self->activator );
 	}
 	else if (self->activator && self->activator->client)
 	{ //make sure the user is using the emplaced gun weapon
