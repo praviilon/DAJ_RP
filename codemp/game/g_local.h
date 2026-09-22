@@ -820,11 +820,10 @@ typedef struct clientPersistant_s {
 	// zyk: timer of the poison darts
 	int poison_dart_hit_timer;
 
-	// zyk: used by Wrist Shot ability
-	int wrist_shot_counter;
+	// GalaxyRP fix: [Dead Fields] wrist_shot_counter (Wrist Shot ability) used to be here. It was
+	// declaration-only -- nothing in the tree ever read or wrote it.
 
-	// zyk: used by Ice Bomb ability
-	int ice_bomb_counter;
+	// GalaxyRP fix: [Dead Fields] ice_bomb_counter (Ice Bomb ability) went the same way.
 
 	// zyk: cooldown time to buy or sell
 	int buy_sell_timer;
@@ -860,7 +859,8 @@ typedef struct clientPersistant_s {
 	int	bitvalue; // zyk: player is considered as admin if bitvalue is > 0, because he has at least 1 admin command
 	
 	int level; // zyk: RPG mode level
-	int level_up_score; // zyk: RPG mode Level Up Score
+	// GalaxyRP fix: [Dead Fields] level_up_score used to be here -- declaration-only. Note the live
+	// UI cvar ui_zyk_rpg_level_up_score (ui_xcvar.h) is unrelated and is NOT affected.
 	int xp;
 	int skillpoints; // zyk: RPG mode skillpoints
 
@@ -955,8 +955,8 @@ typedef struct clientPersistant_s {
 	// GalaxyRP fix: [Magic] fast_dash_timer used to be here. Its only writers were zyk_force_dash()
 	// (g_main.c) and zyk_do_force_dash() (g_active.c), both removed as orphans; nothing read it.
 
-	// zyk: used by Aimed Shot ability
-	int unique_skill_user_id;
+	// GalaxyRP fix: [Dead Fields] unique_skill_user_id (Aimed Shot ability) used to be here --
+	// declaration-only.
 
 	// zyk: stun baton 3/3 timer. This entity has less run speed during this time
 	int stun_baton_less_speed_timer;
@@ -1007,8 +1007,12 @@ typedef struct clientPersistant_s {
 	// zyk: entity ids of the mind controlled entities. Default -1, which means player is not controlling anyone
 	int mind_controlled1_id;
 
-	// zyk: bit flag, loaded in load_account()
-	// Possible bit values (1 << bit_value) are:
+	// GalaxyRP fix: [Dead Fields] the secrets_found bit flag used to be declared at the end of this
+	// list. It was declaration-only -- never written, and never actually written to the database
+	// either; the three upgrades that still mattered moved to player_settings bits 0/1/2. The list
+	// below is KEPT as reference: thirteen comments across g_items.c, g_weapon.c, g_combat.c,
+	// bg_pmove.c and g_cmds.c cite these bit numbers when explaining where each upgrade went.
+	// Possible bit values (1 << bit_value) were:
 	// 0 - Holdable Items Upgrade
 	// 1 - Unused (was Bounty Hunter Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
 	// 2 - Unique Ability 1
@@ -1031,17 +1035,13 @@ typedef struct clientPersistant_s {
 	//      Jetpack Upgrade gameplay is gated by skill_levels[34], unrelated to this bitfield)
 	// 18 - Unused
 	// 19 - Unused (was Force Guardian Upgrade, removed as inert/non-functional -- GalaxyRP fix: [Upgrades])
-	int secrets_found;
 
 	// GalaxyRP (Alex): [Telemark] Saving the coordinates here
 	vec3_t saved_origin;
 	vec3_t saved_view_angles;
 
-	// zyk: amount of sentries the Bounty Hunter starts with
-	int bounty_hunter_sentries;
-
-	// zyk: amount of sentries placed in map
-	int bounty_hunter_placed_sentries;
+	// GalaxyRP fix: [Dead Fields] bounty_hunter_sentries and bounty_hunter_placed_sentries used to be
+	// here, counting the Bounty Hunter's starting and placed sentries. Both were declaration-only.
 
 	int max_force_power; // zyk: max force power the player can have based on skill_levels[54] value
 
@@ -1063,19 +1063,10 @@ typedef struct clientPersistant_s {
 	// zyk: amount of skills used by the player. After a certain amount of uses, player gets 1 experience point (level up score)
 	int skill_counter;
 
-	// zyk: number of guardians the player already defeated
-	// the value would have been 10 (once NUM_OF_GUARDIANS, now removed) after completing the quest
-	// before that, has bitvalue of each defeated guardian. Possible bitvalues are:
-	// 4 - Guardian of Water
-	// 5 - Guardian of Earth
-	// 6 - Guardian of Forest
-	// 7 - Guardian of Intelligence
-	// 8 - Guardian of Agility
-	// 9 - Guardian of Fire
-	// 10 - Guardian of Wind
-	// 11 - Guardian of Resistance
-	// 12 - Guardian of Ice
-	int defeated_guardians; 
+	// GalaxyRP fix: [Dead Fields] defeated_guardians used to be here, a bitfield of which quest
+	// guardians the player had beaten (bits 4-12, Water through Ice). It was declaration-only:
+	// nothing ever wrote it, which is precisely why several dead branches gated on it were removed
+	// in earlier passes. Comments elsewhere still name it when explaining those removals.
 
 	// GalaxyRP fix: [Quests] removed hunter_quest_progress and eternity_quest_progress here — both
 	// were write-only (only ever reset to 0), with zero readers anywhere in the codebase.
@@ -1112,8 +1103,11 @@ typedef struct clientPersistant_s {
 	// 1 - Player got the Crystal of Truth
 	// 2 - Player got the Crystal of Time
 
-	// If player chose Challenge Mode in settings, sets a bit value 29
-	int universe_quest_counter;
+	// GalaxyRP fix: [Dead Fields] universe_quest_counter used to be declared here, holding the bit
+	// values documented above plus bit 29 for Challenge Mode. It was declaration-only; nothing ever
+	// wrote it, which is why the branches gated on it (including the Challenge-Mode-only path noted
+	// in g_combat.c) were removed as unreachable. universe_quest_progress is a DIFFERENT field and
+	// survives -- it still has a live reader in g_combat.c.
 
 	// GalaxyRP fix: [Quests] removed universe_quest_objective_control here — its sole reader was the
 	// dead universe_quest_messages==-10000 block in g_combat.c's player_die(), removed alongside it.
@@ -1167,7 +1161,10 @@ typedef struct clientPersistant_s {
 	// written only inside the quest_power_events blocks that went with the magic engine.
 
 	// zyk: timers of the quest powers used by this player
-	int quest_power1_timer;
+	// GalaxyRP fix: [Magic] quest_power1_timer used to head this group. Its last two sites were the
+	// Immunity Power set in duel_tournament_prepare() and the clear in the removed
+	// quest_power_events(); its siblings 2-7 survive, each still written by one of the kept effect
+	// functions.
 	int quest_power2_timer;
 	int quest_power3_timer;
 	int quest_power4_timer;

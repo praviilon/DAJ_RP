@@ -536,12 +536,14 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		}
 	}
 
-	// zyk: rockets and concussion, both with upgrade, and Ultra Bolt, can use force pushable/pullable entities, like the rock at start of t3_rift map
+	// zyk: rockets and concussion, both with upgrade, can use force pushable/pullable entities, like the rock at start of t3_rift map
+	// GalaxyRP fix: [Magic] a third disjunct used to follow the two below, admitting an Ultra Bolt --
+	// a concussion shot whose methodOfDeath was MOD_MELEE. Nothing in the tree assigns MOD_MELEE to a
+	// missile (magic_fist_velocity() went with the magic cvars), so it could never be true.
 	if (Q_stricmp(other->classname, "func_static") == 0 && (other->spawnflags & 1 || other->spawnflags & 2) && 
 		ent->parent && ent->parent->client && ent->parent->client->sess.amrpgmode == 2 && 
 		((ent->s.weapon == WP_ROCKET_LAUNCHER && ent->parent->client->pers.skill_levels[26] == 2) || 
-		(ent->s.weapon == WP_CONCUSSION && ent->parent->client->pers.skill_levels[27] == 2) || 
-		(ent->s.weapon == WP_CONCUSSION && ent->methodOfDeath == MOD_MELEE)))
+		(ent->s.weapon == WP_CONCUSSION && ent->parent->client->pers.skill_levels[27] == 2)))
 	{
 		GlobalUse(other, ent->parent, ent->parent);
 		goto killProj;

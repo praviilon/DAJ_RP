@@ -6830,10 +6830,11 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 // matching fix comment there), so magic_master_has_this_power()'s guardian-quest gating for the
 // other ~27 powers was never actually consulted by anything reachable either. With all six
 // functions confirmed to have no other callers (grep'd across the whole tree), removed the entire
-// dead selection/gating layer rather than leave it half-connected. The underlying defeated_guardians
-// quest-progress field and the individual magic power effect functions (water_splash(),
-// earthquake(), etc.) are untouched -- defeated_guardians has plenty of other live uses elsewhere,
-// and the effect functions are simply uncalled now, same as before this cleanup for ~27 of them.
+// dead selection/gating layer rather than leave it half-connected. The individual magic power effect
+// functions (water_splash(), earthquake(), etc.) were left untouched and are simply uncalled.
+// This note used to add that defeated_guardians "has plenty of other live uses elsewhere"; that was
+// already wrong when written -- the field had no live reader at all -- and it has since been removed
+// from clientPersistant_t as declaration-only.
 
 
 // zyk: controls the quest powers stuff
@@ -6843,38 +6844,20 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 extern void zyk_wind_down_seeker_drone(gentity_t *ent);
 // GalaxyRP: [Sniper Battle] the zyk_apply_character_loadout() declaration that sat here went with
 // the removal -- sniper_battle_end() was this file's only caller.
-void quest_power_events(gentity_t *ent)
-{
-	if (ent && ent->client)
-	{
-		if (ent->health > 0)
-		{
-			if (ent->client->pers.quest_power_status & (1 << 0) && ent->client->pers.quest_power1_timer < level.time)
-			{ // zyk: Immunity Power
-				ent->client->pers.quest_power_status &= ~(1 << 0);
-			}
-
-
-			// GalaxyRP fix: [Magic] twenty-one more quest_power_status blocks used to follow, one per
-			// magic status effect: Chaos Power (1), Time Power (2), Ultra Strength (3), Poison Mushrooms
-			// (4), Hurricane (5), Slow Motion (6), Ultra Resistance (7), Blowing Wind (8), Ultra Speed (9),
-			// Magic Shield (11), Flame Burst (12), Shifting Sand (17 and its follow-up 18), Tree of Life
-			// (19), Reverse Wind (20), Enemy Weakening (21), Ice Block (22), and the four "hit by" timers
-			// for Flaming Area (23), Sleeping Flowers (24), Ice Boulder (25) and Elemental Attack (26).
-			//
-			// Not one of those bits can be set any more. Bits 1, 2 and 26 lost their setters with
-			// chaos_power(), time_power() and elemental_attack() in the custom-quest-NPC removal; the rest
-			// are set only inside the twenty-seven effect functions, which are kept as reference code but
-			// have had no caller since the quest_mage chain went; bit 18 is set only inside the bit-17
-			// block, so it went the same way. Only bit 0 survives above, set by duel_tournament_prepare().
-			//
-			// The else-branch that followed this one went too: it was the Resurrection Power handler, gated
-			// on bit 10, which has no setter anywhere in the tree and never had one after the quest command
-			// that used to grant it was removed. It was the last caller of initialize_rpg_skills() from
-			// this file.
-		}
-	}
-}
+// GalaxyRP fix: [Magic] quest_power_events() used to be here. It ran every frame for every client
+// and every NPC, and by the end it held one reachable statement: clearing quest_power_status bit 0
+// (Immunity Power) once quest_power1_timer had passed. The twenty-one status blocks around it had
+// already gone with the magic engine.
+//
+// Bit 0's only remaining producer was duel_tournament_prepare(), and its only reader,
+// zyk_check_immunity_power(), has been unreachable since the effect functions lost their caller --
+// so the bit was written and cleared but never consulted. Rather than leave a per-frame call for
+// that, the whole bit-0 pair went with this function: the set in prepare() and the clear in
+// duel_tournament_restore_duelist(). quest_power1_timer, which had no other site, went too.
+//
+// If the magic system is ever revived, note that the set and the clear are a PAIR -- see the
+// history kept on duel_tournament_restore_duelist() below for the bug that appears if one comes
+// back without the other.
 
 // zyk: damages target player with poison hits
 void poison_dart_hits(gentity_t *ent)
@@ -7092,19 +7075,21 @@ void player_discard_backup(gentity_t *ent)
 // GalaxyRP fix: [Duel Tournament] everything duel_tournament_prepare() applied, undone in one
 // place, so the two call sites in the mode-5 block below cannot drift apart.
 //
-// The immunity clear is the part that was missing. prepare() sets quest_power_status bit 0 -- the
-// Immunity Power, which zyk_check_immunity_power() tests to block quest and magic damage -- and
-// sets quest_power1_timer to level.duel_tournament_timer, the duel's SCHEDULED end. Nothing
-// cleared the bit when a duel finished early, and quest_power_events() only clears it once that
-// original deadline passes, so a duelist who won at ten seconds of a sixty-second match kept
-// magic immunity for the remaining fifty -- through the score screen, the next pairing, and into
-// their next duel or open play. Losers were covered by accident (player_die zeroes the whole of
+// HISTORY, worth keeping because it is a trap to fall into twice. prepare() used to set
+// quest_power_status bit 0 -- the Immunity Power, which zyk_check_immunity_power() tests to block
+// quest and magic damage -- along with quest_power1_timer, the duel's SCHEDULED end. Nothing
+// cleared the bit when a duel finished early, and the only other clear ran once that original
+// deadline passed, so a duelist who won at ten seconds of a sixty-second match kept magic immunity
+// for the remaining fifty -- through the score screen, the next pairing, and into their next duel
+// or open play. Losers were covered by accident (player_die zeroes the whole of
 // quest_power_status) and so was anyone who spectated (ClientSpawn does the same); only the
-// survivor leaked it, which is exactly the player it most advantaged.
+// survivor leaked it, which is exactly the player it most advantaged. The clear added here fixed
+// that.
 //
-// Only the bit is cleared, not quest_power1_timer: that timer is shared with quest_power_status
-// bit 10, and zeroing it would make a pending bit-10 check fire immediately. With bit 0 down the
-// timer's value no longer means anything to this power.
+// Both halves have since gone: bit 0 lost its last reader when the magic effect functions lost
+// theirs, so the set in prepare(), the clear below and quest_power1_timer were all removed. If the
+// immunity is ever reintroduced, reintroduce the SET AND THE CLEAR TOGETHER -- one without the
+// other is the bug described above.
 void duel_tournament_restore_duelist(gentity_t *ent)
 {
 	if (!ent || !ent->client)
@@ -7112,8 +7097,6 @@ void duel_tournament_restore_duelist(gentity_t *ent)
 
 	player_restore_force(ent);
 	player_restore_loadout(ent);
-
-	ent->client->pers.quest_power_status &= ~(1 << 0);
 }
 
 // zyk: finished the duel tournament
@@ -7207,9 +7190,10 @@ void duel_tournament_prepare(gentity_t *ent)
 	ent->client->ps.weapon = WP_SABER;
 	ent->s.weapon = WP_SABER;
 
-	// zyk: setting Immunity Power so every status power on the duelist will be cancelled
-	ent->client->pers.quest_power_status |= (1 << 0);
-	ent->client->pers.quest_power1_timer = level.duel_tournament_timer;
+	// GalaxyRP fix: [Magic] an Immunity Power set used to be here -- quest_power_status bit 0 plus
+	// quest_power1_timer -- so that every magic status effect on the duelist was cancelled. The
+	// blocks that did the cancelling went with the magic engine and bit 0 had no reader left, so
+	// the set and its matching clear in duel_tournament_restore_duelist() were removed together.
 
 	// zyk: reset hp and shield of duelist
 	ent->health = 100;
@@ -9424,7 +9408,6 @@ void G_RunFrame( int levelTime ) {
 				}
 			}
 
-			quest_power_events(ent);
 			poison_dart_hits(ent);
 
 			// zyk: tutorial, which teaches the player the RPG Mode features
@@ -9513,7 +9496,6 @@ void G_RunFrame( int levelTime ) {
 			WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
 			WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
 
-			quest_power_events(ent);
 			poison_dart_hits(ent);
 
 			if (ent->client->pers.universe_quest_artifact_holder_id != -1 && ent->health > 0 && ent->client->ps.powerups[PW_FORCE_BOON] < (level.time + 1000))

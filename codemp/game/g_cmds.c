@@ -11432,9 +11432,10 @@ extern qboolean zyk_spawn_strings_full(gentity_t *ent);
 // Light/Dark/Hunter/Eternity/Universe Quest map-turn selection alike -- unreachable, so all four
 // functions have been deleted outright along with their direct call sites elsewhere in the codebase
 // (g_main.c, g_client.c, g_combat.c, g_items.c, g_utils.c). The pers.* quest-progress fields these
-// functions read/wrote (defeated_guardians, universe_quest_progress, can_play_quest, etc.) are kept
-// -- they are still read by live code elsewhere (the magic-power selection system), so only the dead
-// selection logic itself is removed here.
+// functions read/wrote were kept at the time. Most still are -- universe_quest_progress and
+// can_play_quest among them -- but defeated_guardians has since been removed from
+// clientPersistant_t, having turned out to be declaration-only: no live code ever read or wrote it.
+// Only the dead selection logic itself was removed here.
 // GalaxyRP fix: [Quests] correction, made in a later pass: this comment previously also listed
 // hunter_quest_progress and eternity_quest_progress as "still read by live code elsewhere" and cited
 // "/settings Challenge Mode" as a reader -- both were wrong. hunter_quest_progress/
