@@ -1699,6 +1699,45 @@ static void CG_LoggedInUpdate_f(void)
 	trap->Cvar_Set("ui_loggedin", CG_Argv(1));
 }
 
+// GalaxyRP: [Radar] the local player's ally set, as the two bitfields the server keeps in
+// sess.ally1/ally2 -- ally1 for client slots 0-15, ally2 for 16-31, matching zyk_ally_bit_set().
+// The radar uses it to colour an ally differently from an enemy below GT_TEAM.
+//
+// This replaces a pair of EV_USE_ITEM14 events that set and cleared one bit of a per-slot client
+// cache. A reliable, sequenced server command is the right carrier for it: the whole set arrives
+// in one message, it cannot be lost, and ClientBegin re-sends it, so it survives a map change --
+// the events did not, and since sess.ally1/ally2 ride the session string the server went on
+// believing in allies the client had forgotten, which showed up as every ally reading as an enemy
+// after every map change.
+static void CG_AllyUpdate_f(void)
+{
+	if (trap->Cmd_Argc() < 3)
+	{
+		return;
+	}
+
+	cg.ally1 = atoi(CG_Argv(1));
+	cg.ally2 = atoi(CG_Argv(2));
+}
+
+// GalaxyRP: [Radar] one place knows the ally1/ally2 split on this side, mirroring
+// zyk_ally_bit_set() in g_main.c. Out-of-range slots answer "not an ally" rather than indexing
+// anything.
+qboolean CG_IsAlly( int clientNum )
+{
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS )
+	{
+		return qfalse;
+	}
+
+	if ( clientNum > 15 )
+	{
+		return (cg.ally2 & (1 << (clientNum - 16))) ? qtrue : qfalse;
+	}
+
+	return (cg.ally1 & (1 << clientNum)) ? qtrue : qfalse;
+}
+
 // GalaxyRP fix: [Saber] the server can change a player's saber1/saber2 out from under them --
 // on login/character load (restoring the character's saved saber from the database) or by
 // silently rejecting/correcting an invalid combo typed at the /saber console command (e.g. two
@@ -1991,6 +2030,7 @@ static serverCommand_t	commands[] = {
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },
 	{ "spc",				CG_SiegeProfileMenu_f },
+	{ "supdateally",		CG_AllyUpdate_f },	// GalaxyRP: [Radar]
 	{ "supdateloggedin",	CG_LoggedInUpdate_f },	// GalaxyRP: [Profile UI]
 	{ "supdatemodel",		CG_ModelUpdate_f },
 	{ "supdatename",		CG_NameUpdate_f },

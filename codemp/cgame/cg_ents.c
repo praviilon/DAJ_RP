@@ -828,6 +828,30 @@ static void CG_SiegeEntRenderAboveHead(centity_t *cent)
 void CG_AddRadarEnt(centity_t *cent)
 {
 	static const size_t numRadarEnts = ARRAY_LEN( cg.radarEntities );
+
+	// GalaxyRP: [Radar] cloaked things stay off the radar. One gate here covers every source --
+	// players and NPCs (cg_players.c, which vehicles also reach: CG_G2Animated ends by calling
+	// CG_Player) and anything flagged EF_RADAROBJECT (three more call sites in this file).
+	//
+	// No new plumbing is needed. BG_PlayerStateToEntityState already packs powerups[] into the
+	// transmitted s.powerups bitmask, so this reads for other players exactly as it does for
+	// yourself, arrives in every snapshot, and is right while spectating. A cloaked rider and their
+	// cloaked vehicle each carry PW_CLOAKED (Cmd_VehicleCloak_f cloaks both), so a cloaked pair
+	// disappears together without this needing to know anything about vehicles -- and a rider who
+	// cloaks solo while mounted hides only themselves, leaving the vehicle on the radar, which is
+	// the honest answer.
+	//
+	// This also filters cg.radarEntities[] for the automap (CG_AddRefentForAutoMap, cg_view.c),
+	// which consumes the same list. That is deliberate: a cloaked player should not be visible on
+	// one and not the other.
+	//
+	// Worth being clear about what this is: the radar renders entities the client already has in
+	// its snapshot, so this hides them from YOUR radar, not from a modified client. Real
+	// concealment would mean the server withholding the entity.
+	if (cent->currentState.powerups & (1 << PW_CLOAKED))
+	{
+		return;
+	}
 	if (cg.radarEntityCount >= numRadarEnts)
 	{
 #ifdef _DEBUG

@@ -13074,6 +13074,27 @@ void Cmd_AllyList_f( gentity_t *ent ) {
 	}
 }
 
+// GalaxyRP: [Radar] push this player's ally set to their own client. sess.ally1/ally2 are a bit per
+// client slot (ally1 for 0-15, ally2 for 16-31), and cgame mirrors them in cg.ally1/cg.ally2 so the
+// radar can colour an ally differently from an enemy below GT_TEAM.
+//
+// A reliable server command rather than an entity event, which is what this used to be. The events
+// carried one slot each and were delivered through the snapshot, so they could be lost and were
+// never re-sent; sess.ally1/ally2 meanwhile ride the session string and survive a map change. The
+// server therefore went on believing in allies the client had forgotten, and every ally read as an
+// enemy on the radar after every map change until the player re-ran /allyadd. Sending the whole set
+// in one message, and again from ClientBegin, removes the class of bug rather than the instance.
+void send_ally_update(gentity_t *ent)
+{
+	if (!ent || !ent->client)
+	{
+		return;
+	}
+
+	trap->SendServerCommand(ent->s.number, va("supdateally %i %i\n",
+		ent->client->sess.ally1, ent->client->sess.ally2));
+}
+
 void zyk_add_ally(gentity_t *ent, int client_id)
 {
 	if (client_id > 15)
@@ -13145,8 +13166,10 @@ void Cmd_AllyAdd_f( gentity_t *ent ) {
 		// zyk: add this player as an ally
 		zyk_add_ally(ent, client_id);
 
-		// zyk: sending event to update radar at client-side
-		G_AddEvent(ent, EV_USE_ITEM14, client_id);
+		// zyk: sending the updated ally set to the client-side radar
+		// GalaxyRP fix: [Radar] was G_AddEvent(ent, EV_USE_ITEM14, client_id), one bit of a per-slot
+		// client cache. The whole set goes in one reliable server command now; see send_ally_update().
+		send_ally_update(ent);
 
 		trap->SendServerCommand(ent->s.number, va("print \"Added ally %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		trap->SendServerCommand( client_id, va("print \"%s^7 added you as ally\n\"", ent->client->pers.netname) );
@@ -13228,8 +13251,10 @@ void Cmd_AllyRemove_f( gentity_t *ent ) {
 		// zyk: removes this ally
 		zyk_remove_ally(ent, client_id);
 
-		// zyk: sending event to update radar at client-side
-		G_AddEvent(ent, EV_USE_ITEM14, (client_id + MAX_CLIENTS));
+		// zyk: sending the updated ally set to the client-side radar
+		// GalaxyRP fix: [Radar] was G_AddEvent(ent, EV_USE_ITEM14, client_id + MAX_CLIENTS), the
+		// "no longer an ally" half of the same per-slot cache. See send_ally_update().
+		send_ally_update(ent);
 
 		trap->SendServerCommand( ent-g_entities, va("print \"Removed ally %s^7\n\"", g_entities[client_id].client->pers.netname) );
 		trap->SendServerCommand( client_id, va("print \"%s^7 removed you as an ally\n\"", ent->client->pers.netname) );

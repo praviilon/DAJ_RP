@@ -3371,8 +3371,25 @@ float CG_DrawRadar ( float y )
 		return y;
 	}
 
-	if (cgs.gametype < GT_TEAM && !(cg.rpg_stuff & (1 << 0)) && !cg.predictedPlayerState.m_iVehicleNum)
-	{ // zyk: verify if this player has the Radar Upgrade in non-team gametypes. Show radar if in a vehicle
+	// GalaxyRP: [Radar] availability. At or above GT_TEAM (Team, Siege, CTF, CTY) the radar is always
+	// available and cg_drawRadar is the only toggle -- this early-out is unreachable there, so those
+	// gametypes are untouched. Below GT_TEAM a logged-in player carries it on foot; a logged-out one
+	// still needs a vehicle, exactly as before.
+	//
+	// This replaces `!(cg.rpg_stuff & (1 << 0))`, the "Bounty Hunter radar upgrade" flag, which was
+	// permanently 0 -- its only setter was a pers.rpg_class == 2 branch, and rpg_class was removed as
+	// dead. That made the old test `gametype < GT_TEAM && !vehicle`, i.e. the radar simply never drew
+	// on foot below GT_TEAM. The new condition is that same expression with one more conjunct, so it
+	// can only fire in a SUBSET of the cases it fires in today: nobody loses the radar, logged-in
+	// players gain it on foot.
+	//
+	// ui_loggedin mirrors the local player's sess.loggedin and is authoritative from ClientBegin
+	// onward -- g_client.c pushes "supdateloggedin" unconditionally on both of ClientBegin's paths,
+	// which is what stops a player who was logged in on a previous map arriving holding a stale 1.
+	// cgame already reads it this way in CG_GreyItem (cg_ents.c). "The local player" is unambiguous
+	// here because this function has already returned for spectators and followers a few lines above.
+	if (cgs.gametype < GT_TEAM && !cg.predictedPlayerState.m_iVehicleNum && !ui_loggedin.integer)
+	{
 		return y;
 	}
 
@@ -3883,24 +3900,36 @@ float CG_DrawRadar ( float y )
 					continue;
 				}
 				
-				if (cg.zyk_rpg_stuff[cent->currentState.number] & (1 << 1))
-				{ // zyk: if this is a stealth attacker with upgrade, do not draw it on radar
-					continue;
-				}
+				// GalaxyRP fix: [Radar] a "this is a Stealth Attacker with the upgrade, hide them"
+				// skip used to sit here on cg.zyk_rpg_stuff[n] bit 1. Only the CLEARING event for
+				// that bit was ever sent (EV_ITEMUSEFAIL parm 10); the setter, parm 9, came from a
+				// pers.rpg_class == 5 branch that went with rpg_class itself. The bit was therefore
+				// permanently 0 and this skip never fired once. Cloaked entities are what get kept
+				// off the radar now, and that is filtered earlier, in CG_AddRadarEnt.
 
 				if (cgs.gametype == GT_SIEGE && cl->team != local->team)
 				{ // zyk: in Siege, shows on radar only players from the same team
 					continue;
 				}
 
-				if (cgs.gametype >= GT_TEAM && cgs.gametype != GT_SIEGE && cl->team != local->team && !(cg.rpg_stuff & (1 << 0)))
-				{ // zyk: in other team gametypes, shows all players if this is a Bounty Hunter with Upgrade
+				// GalaxyRP fix: [Radar] the trailing `&& !(cg.rpg_stuff & (1 << 0))` is gone with that
+				// permanently-0 flag. Dropping a conjunct that was always TRUE leaves this condition
+				// exactly as it behaved: in Team, CTF and CTY the radar still shows teammates only.
+				if (cgs.gametype >= GT_TEAM && cgs.gametype != GT_SIEGE && cl->team != local->team)
+				{ // zyk: in other team gametypes, enemies are not shown on the radar
 					continue;
 				}
 
-				// zyk: shows red for enemies in non-team gametypes or if it is a team gametype and player is a Bounty Hunter with Upgrade
-				if ((cgs.gametype < GT_TEAM && !(cg.zyk_rpg_stuff[cent->currentState.number] & (1 << 2))) || 
-					(cgs.gametype >= GT_TEAM && cg.rpg_stuff & (1 << 0) && cl->team != local->team))
+				// zyk: shows red for enemies in non-team gametypes
+				// GalaxyRP fix: [Radar] the second disjunct, `gametype >= GT_TEAM && (cg.rpg_stuff &
+				// (1 << 0)) && cl->team != local->team`, is gone: that flag was permanently 0, so the
+				// disjunct was permanently false and removing it changes nothing. It was moot anyway
+				// -- the skip above means no enemy reaches this line in a team gametype.
+				//
+				// What is left is the below-GT_TEAM rule, and it is the only colour distinction those
+				// gametypes have: everyone who reaches here is drawn, red if they are not an ally of
+				// yours and green (the fixed teamColor above) if they are.
+				if (cgs.gametype < GT_TEAM && !CG_IsAlly(cent->currentState.number))
 				{
 					VectorCopy ( g_color_table[ColorIndex(COLOR_RED)], color);
 					color[3] = 1.0f;

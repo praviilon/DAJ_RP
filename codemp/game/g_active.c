@@ -1287,15 +1287,13 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_RADAR_EVENT)))
-		{ // zyk: send this event after some seconds in map and if the player did not received this event yet
-			// must wait some seconds because after a map change, sometimes the event is not received by the client-side game right away
-			// GalaxyRP fix: [Dead Code] collapsed to the unconditional else-branch; the
-			// rpg_class==2 guard was tautologically false (pers.rpg_class is always 0).
-			G_AddEvent(ent, EV_ITEMUSEFAIL, 6);
-
-			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_RADAR_EVENT);
-		}
+		// GalaxyRP fix: [Radar] a step used to sit here pushing EV_ITEMUSEFAIL parm 6, which CLEARED
+		// cg.rpg_stuff bit 0 on the client -- the "Bounty Hunter radar upgrade" flag. Parm 5, the only
+		// thing that could ever SET that bit, was sent from a branch gated on pers.rpg_class == 2, and
+		// rpg_class went in an earlier dead-code pass (it has zero live references left in the tree).
+		// So the bit could only ever be 0, every reader of it in cg_draw.c was a permanently-false
+		// test, and this step spent a cascade slot telling the client something it already believed.
+		// Removed with the flag itself; see the collapsed conditions in CG_DrawRadar.
 		// GalaxyRP fix: [Skills] a jetpack-flame step used to sit here, pushing EV_ITEMUSEFAIL parm 7
 		// or 8 once per cascade and marking PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT. The flag it was
 		// announcing now rides the entity state as EF_RPG_JETPACK_UPGRADE, set every frame further
@@ -1315,15 +1313,16 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		}
 		else
 		{
-			// zyk: event to set the stealth attacker upgrade
-			// GalaxyRP fix: [Dead Code] collapsed to the unconditional else-branch; the
-			// rpg_class==5 guard was tautologically false (pers.rpg_class is always 0).
-			G_AddEvent(ent, EV_ITEMUSEFAIL, 10);
-
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_RADAR_EVENT);
-			// GalaxyRP fix: [Skills] the SENT_JETPACK_FLAME_EVENT reset went with the cascade step
-			// above; the enum entry is left in g_local.h, since renumbering PLAYER_STATUS_* is a
-			// separate decision (see the same note on PLAYER_STATUS_CUSTOM_QUEST_NPC).
+			// GalaxyRP fix: [Radar] this branch also used to push EV_ITEMUSEFAIL parm 10, clearing
+			// cg.zyk_rpg_stuff[n] bit 1 -- "this player is a Stealth Attacker with the upgrade, hide
+			// them from the radar". Parm 9, its only setter, came from a pers.rpg_class == 5 branch
+			// that is long gone, so the bit was permanently 0 and the skip it drove in CG_DrawRadar
+			// never once fired. The branch itself stays: it is what resets the flags below and makes
+			// the cascade cycle.
+			//
+			// The SENT_RADAR_EVENT and SENT_JETPACK_FLAME_EVENT resets went with their steps. Both
+			// enum entries are left in g_local.h, since renumbering PLAYER_STATUS_* is a separate
+			// decision (see the same note on PLAYER_STATUS_CUSTOM_QUEST_NPC).
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
 		}

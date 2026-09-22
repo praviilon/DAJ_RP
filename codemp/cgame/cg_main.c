@@ -2455,7 +2455,6 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum )
 	char buf[64];
 	const char	*s;
 	int i = 0;
-	int j = 0;
 	int rngDiscard;
 
 	// GalaxyRP fix: [RNG] cgame carries its own copy of q_math.c, so its holdrand is separate from
@@ -2516,9 +2515,6 @@ Ghoul2 Insert End
 
 	cg.clientNum = clientNum;
 
-	// zyk: initialize this value, used by RPG Mode
-	cg.rpg_stuff = 0;
-
 	cg.magic_power = 100;
 
 	cg.immunity_power_duration = 0;
@@ -2531,12 +2527,11 @@ Ghoul2 Insert End
 	cg.unique_duration_control = 0;
 	cg.using_unique_boost = 0;
 
-	// zyk: initialize the blue jet players
-	for (j = 0; j < MAX_CLIENTS; j++)
-	{
-		cg.zyk_rpg_stuff[j] = 0;
-		// GalaxyRP fix: [RPG Class] removed unused rpg_class init (client-side array deleted)
-	}
+	// GalaxyRP fix: [Radar] the per-slot zyk_rpg_stuff[] loop that used to sit here is gone with the
+	// array. The ally bitfields it is replaced by start at 0 the same way, and unlike that cache
+	// they are re-sent from ClientBegin, so they do not stay zero after a map change.
+	cg.ally1 = 0;
+	cg.ally2 = 0;
 
 	cgs.processedSnapshotNum = serverMessageNum;
 	cgs.serverCommandSequence = serverCommandSequence;

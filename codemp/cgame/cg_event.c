@@ -2667,17 +2667,11 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		DEBUGNAME("EV_USE_ITEM9");
 		//CG_UseItem( cent ); zyk: commented this, not used in mod
 
-		if (cg.snap->ps.clientNum == es->number)
-		{
-			if (es->eventParm >= 0 && es->eventParm < MAX_CLIENTS)
-			{ // zyk: player id who is allied to the player
-				cg.zyk_rpg_stuff[es->eventParm] |= (1 << 2);
-			}
-			else if (es->eventParm >= MAX_CLIENTS && es->eventParm < (MAX_CLIENTS * 2))
-			{ // zyk: player id who is no longer allied to the player
-				cg.zyk_rpg_stuff[es->eventParm-MAX_CLIENTS] &= ~(1 << 2);
-			}
-		}
+		// GalaxyRP fix: [Radar] this used to set or clear cg.zyk_rpg_stuff[n] bit 2 -- "n is an ally
+		// of mine" -- from an eventParm carrying the other player's id, offset by MAX_CLIENTS to mean
+		// "no longer an ally". The whole ally set now arrives as the two sess.ally1/ally2 bitfields
+		// in one "supdateally" server command, which is reliable, cannot be lost, and is re-sent from
+		// ClientBegin so it survives a map change -- which this never did.
 
 		break;
 	case EV_USE_ITEM10:
@@ -2742,17 +2736,11 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		DEBUGNAME("EV_USE_ITEM14");
 		//CG_UseItem( cent );zyk: commented this, not used in mod
 
-		if (cg.snap->ps.clientNum == es->number)
-		{
-			if (es->eventParm >= 0 && es->eventParm < MAX_CLIENTS)
-			{ // zyk: player id who is allied to the player
-				cg.zyk_rpg_stuff[es->eventParm] |= (1 << 2);
-			}
-			else if (es->eventParm >= MAX_CLIENTS && es->eventParm < (MAX_CLIENTS * 2))
-			{ // zyk: player id who is no longer allied to the player
-				cg.zyk_rpg_stuff[es->eventParm-MAX_CLIENTS] &= ~(1 << 2);
-			}
-		}
+		// GalaxyRP fix: [Radar] this used to set or clear cg.zyk_rpg_stuff[n] bit 2 -- "n is an ally
+		// of mine" -- from an eventParm carrying the other player's id, offset by MAX_CLIENTS to mean
+		// "no longer an ally". The whole ally set now arrives as the two sess.ally1/ally2 bitfields
+		// in one "supdateally" server command, which is reliable, cannot be lost, and is re-sent from
+		// ClientBegin so it survives a map change -- which this never did.
 		break;
 
 	case EV_ITEMUSEFAIL:
@@ -2779,19 +2767,16 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 				break;
 			}
 
-			// zyk: If 5 or 6, it is the Radar used in RPG Mode by Bounty Hunter class
-			if (es->eventParm == 5)
-			{ // zyk: if 5, add the radar
-				cg.rpg_stuff |= (1 << 0);
-			}
-			else if (es->eventParm == 6)
-			{ // zyk: if 6, remove the radar
-				cg.rpg_stuff &= ~(1 << 0);
-			}
-			// GalaxyRP fix: [Skills] parms 7 and 8 used to set/clear cg.rpg_stuff bit 1, the local
-			// player's blue-jetpack-flame flag. That flag now rides the entity state as
-			// EF_RPG_JETPACK_UPGRADE and is read straight off the entity in cg_players.c, so nothing
-			// caches it here any more. Bit 0 (the Bounty Hunter radar, parms 5 and 6) is untouched.
+			// GalaxyRP fix: [Radar] the mod's six extra parms are all gone and this event is back to
+			// its four vanilla ones above. Parms 5/6 set and cleared cg.rpg_stuff bit 0 (the "Bounty
+			// Hunter radar upgrade"); 9/10 set and cleared cg.zyk_rpg_stuff[n] bit 1 ("hide this
+			// player from the radar"); 7/8 were the blue-jetpack flame, which moved to the entity
+			// state in an earlier pass. In both of the radar pairs only the CLEARING half was ever
+			// sent: the setters lived in branches gated on pers.rpg_class (2 = Bounty Hunter, 5 =
+			// Stealth Attacker) and rpg_class was removed as dead long ago, so neither bit could ever
+			// be 1 and every test of them in CG_DrawRadar was permanently false. The whole
+			// "else if (es->number < MAX_CLIENTS)" branch went with them -- nothing in the mod sends
+			// this event about another player any more.
 
 			if (!psStringEDRef)
 			{
@@ -2799,22 +2784,6 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			}
 
 			Com_Printf("%s\n", psStringEDRef);
-		}
-		else if (es->number < MAX_CLIENTS)
-		{ // zyk handling the per-player flags for other players
-			// GalaxyRP fix: [Skills] parms 7 and 8 used to set/clear cg.zyk_rpg_stuff[n] bit 0, the
-			// other-players copy of the blue-jetpack-flame flag. Gone for the same reason as bit 1 of
-			// cg.rpg_stuff above -- the flag is an entity-state bit now, so it arrives in every
-			// snapshot instead of once, cannot outlive the client slot it described, and needs no
-			// bounds-checked array. Parms 9 and 10 (radar visibility, bit 1) are untouched.
-			if (es->eventParm == 9)
-			{ // zyk: add this player so it will not be visible by the cg player radar
-				cg.zyk_rpg_stuff[es->number] |= (1 << 1);
-			}
-			else if (es->eventParm == 10)
-			{ // zyk: remove this player so it will be visible by the cg player radar
-				cg.zyk_rpg_stuff[es->number] &= ~(1 << 1);
-			}
 		}
 		break;
 

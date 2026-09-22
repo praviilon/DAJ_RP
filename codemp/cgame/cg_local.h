@@ -1049,11 +1049,12 @@ Ghoul2 Insert End
 	int numSpawnVarChars;
 	char spawnVarChars[MAX_SPAWN_VARS_CHARS];
 
-	// zyk: RPG stuff will be set here
-	// possible bitvalues are:
-	// 0 - Radar Upgrade
-	// 1 - Blue Jetpack Flame
-	int rpg_stuff;
+	// GalaxyRP fix: [Radar] cg.rpg_stuff used to be declared here, a two-bit client-side cache fed by
+	// EV_ITEMUSEFAIL: bit 0 "Radar Upgrade", bit 1 "Blue Jetpack Flame". Bit 1 moved to the entity
+	// state (EF_RPG_JETPACK_UPGRADE) in an earlier pass. Bit 0 turned out to be unsettable -- only its
+	// clearing event was ever sent, because the setter lived behind pers.rpg_class == 2 and rpg_class
+	// is long gone -- so every reader of it in CG_DrawRadar was a permanently-false test. With both
+	// bits gone the field had no users left.
 
 	// zyk: current amount of Magic Power (MP) of this RPG player
 	int magic_power;
@@ -1076,12 +1077,24 @@ Ghoul2 Insert End
 
 	// GalaxyRP fix: [RPG Class] removed unused client-side rpg_class array (server-side pers.rpg_class never varied meaningfully)
 
-	// zyk: sets clients which must have some RPG stuff set for this cg player to see the stuff on them
-	// Possible bitvalues:
-	// 0 - Blue Jet Flame
-	// 1 - Stealth Attacker Upgrade, which makes Radar not see this player
-	// 2 - Player ally
-	int zyk_rpg_stuff[MAX_CLIENTS];
+	// GalaxyRP fix: [Radar] cg.zyk_rpg_stuff[MAX_CLIENTS] used to sit here, a per-slot cache with
+	// three bits: 0 "Blue Jet Flame", 1 "Stealth Attacker Upgrade, hide from radar", 2 "player
+	// ally". Bit 0 moved to the entity state, bit 1 turned out to be unsettable, and bit 2 -- the
+	// only genuinely live one -- is replaced by the two fields below.
+	//
+	// Bit 2 could not follow bit 0 into the entity state: "X is an ally" is a property of the pair
+	// (viewer, X), not of X, and an entity state is broadcast to everyone. The server keeps the
+	// truth in sess.ally1/ally2, so it simply sends those two ints instead.
+
+	// GalaxyRP: [Radar] mirrors the local player's sess.ally1/ally2 -- a bit per client slot,
+	// ally1 for slots 0-15 and ally2 for 16-31, matching zyk_ally_bit_set() server-side. Pushed by
+	// the "supdateally" server command, which is reliable and sequenced rather than an entity event:
+	// it cannot be PVS-culled, cannot be lost, and is re-sent from ClientBegin, so it survives a map
+	// change. The old per-slot event cache did none of that -- allies read as enemies after every
+	// map change, because sess.ally1/ally2 ride the session string while the client cache was
+	// zeroed in CG_Init and nothing re-announced it.
+	int ally1;
+	int ally2;
 } cg_t;
 
 #define MAX_TICS	14
@@ -2087,6 +2100,7 @@ void CG_ParseServerinfo( void );
 void CG_SetConfigValues( void );
 void CG_ShaderStateChanged(void);
 
+qboolean CG_IsAlly( int clientNum );	// GalaxyRP: [Radar] cg_servercmds.c
 //
 // cg_playerstate.c
 //

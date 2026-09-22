@@ -2733,6 +2733,7 @@ extern void initialize_rpg_skills(gentity_t *ent);
 extern void duel_tournament_end();
 extern void melee_battle_end();
 extern void player_discard_backup(gentity_t *ent);
+extern void send_ally_update(gentity_t *ent);	// GalaxyRP: [Radar] g_cmds.c
 void SetTeamQuick(gentity_t *ent, int team, qboolean doBegin);
 void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	gentity_t	*ent;
@@ -3026,6 +3027,14 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		// pushes again itself, so hoisting the call would both lose a push and duplicate one.
 		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 	}
+
+	// GalaxyRP fix: [Radar] push the ally set every time a client begins. sess.ally1/ally2 ride the
+	// session string and so survive a map change, but cgame's copy is zeroed in CG_Init -- and the
+	// per-slot events this replaces were only ever sent when an ally was added or removed. The two
+	// went out of step on every map change, and the radar drew every ally as an enemy until the
+	// player happened to re-run /allyadd. Unconditional: a player with no allies gets 0 0, which is
+	// exactly what their client should hold.
+	send_ally_update(ent);
 
 	if ( (level.gametype == GT_POWERDUEL && client->sess.sessionTeam != TEAM_SPECTATOR && client->sess.duelTeam == DUELTEAM_FREE) ||
 		level.load_entities_timer != 0)
@@ -4768,8 +4777,10 @@ void ClientDisconnect( int clientNum ) {
 
 		zyk_remove_ally(player_ent, ent->s.number);
 
-		// zyk: sending event to update radar at client-side
-		G_AddEvent(player_ent, EV_USE_ITEM14, (ent->s.number + MAX_CLIENTS));
+		// zyk: sending the updated ally set to the client-side radar
+		// GalaxyRP fix: [Radar] was G_AddEvent(player_ent, EV_USE_ITEM14, ...), one bit of a per-slot
+		// client cache. send_ally_update() pushes the whole set reliably instead.
+		send_ally_update(player_ent);
 	}
 
 	// GalaxyRP fix: [NPC] release any NPC that was following this player.
