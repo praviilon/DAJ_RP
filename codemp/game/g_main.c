@@ -9539,10 +9539,19 @@ void G_RunFrame( int levelTime ) {
 			// quest_power_status bits 1, 2 and 26 had no setter other than chaos_power, time_power and
 			// elemental_attack, so those three bits are now permanently 0 and their ~21 readers across
 			// six files are permanently-false tests. Bits 0 and 5 keep other setters. The entity
-			// targetname handling for "zyk_force_storm" and "zyk_super_beam" in g_misc.c and g_combat.c
-			// can no longer be reached either, and zyk_lightning_dome_detonate() (g_weapon.c) and
-			// zyk_spawn_ice_element() lost their last callers. All left in place deliberately, to be
-			// judged on their own rather than swept up behind this one.
+			// targetname handling for "zyk_force_storm" and "zyk_super_beam" lives in g_misc.c, and
+			// zyk_lightning_dome_detonate() (g_weapon.c) and zyk_spawn_ice_element() lost their last
+			// callers. All left in place deliberately, to be judged on their own rather than swept up
+			// behind this one.
+			//
+			// Two corrections to the above, made in a later pass. (1) This note also named g_combat.c
+			// as holding some of that targetname handling; neither name appears in that file. (2) It
+			// said the handling "can no longer be reached either", which was wrong and was the reason
+			// a real bug sat unnoticed: the targetname handling is reached by any fx_runner carrying
+			// the name, which /entadd, /entedit, a .ent preset or a map can all supply. What the loss
+			// of zyk_super_beam() actually removed was the only writer of ent->parent on such an
+			// entity -- so the handler ran with a NULL parent and dereferenced it. See the guard and
+			// the full account in fx_runner_think() (g_misc.c).
 
 			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) are kept, but are now zero-caller — see the note below
 

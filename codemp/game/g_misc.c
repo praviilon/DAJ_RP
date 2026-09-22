@@ -2877,31 +2877,64 @@ void fx_runner_think( gentity_t *ent )
 		vec3_t		shot_mins, shot_maxs;
 		int radius = 32768;
 
-		VectorCopy(ent->s.origin, tfrom);
-		AngleVectors(ent->s.angles, fwd, NULL, NULL);
-		tto[0] = tfrom[0] + fwd[0] * radius;
-		tto[1] = tfrom[1] + fwd[1] * radius;
-		tto[2] = tfrom[2] + fwd[2] * radius;
+		// GalaxyRP fix: [stability] this whole half used to run unguarded, and its first act was to
+		// read user_ent->s.number for the trace's pass-entity. ent->parent is the ONLY source of
+		// user_ent, and nothing can supply one any more: zyk_super_beam() -- the function that did
+		// "new_ent->parent = ent" -- went with the eleven other orphans behind the removed
+		// custom-quest-NPC dispatch (see the note in g_main.c's G_RunFrame), and "parent" is not in
+		// fields[] (g_spawn.c), so no map, no .ent preset and no /entadd or /entedit key can set it
+		// either. So user_ent was NULL for every fx_runner in the game, and gentity_t begins with
+		// entityState_t s, which begins with int number -- user_ent->s.number was a read of address
+		// zero, i.e. an immediate server crash, not a bad value.
+		//
+		// That was reachable three ways, the last of them the dangerous one:
+		//   /entadd fx_runner targetname zyk_super_beam   (ADM_ENTITYSYSTEM)
+		//   /entedit <id> targetname zyk_super_beam       (converts an existing map fx_runner)
+		//   a saved preset -- /entsave round-trips the targetname, and g_main.c loads
+		//   GalaxyRP/entities/<map>/default.txt automatically ~1s into every map start, with nobody
+		//   typing anything. One experiment saved to a preset made that map permanently unbootable.
+		//
+		// The guard also covers a second, separate hole: the non-client G_Damage below tested
+		// "user_ent != target_ent", which is TRUE when user_ent is NULL, and never tested user_ent
+		// itself -- so it would have passed NULL as both inflictor and attacker. G_Damage has no
+		// NULL substitution at entry here or in stock TaystJK; it survives one only if every
+		// internal use happens to be guarded, which is not something to rely on.
+		//
+		// An ownerless beam now renders and keeps its 100ms cadence (that assignment stays OUTSIDE
+		// this guard deliberately -- moving it in would change the tick rate of any map-placed beam
+		// to the generic delay default of 200ms) and simply deals no damage, there being nobody to
+		// credit it to. The block is otherwise untouched, so it works again unchanged the day
+		// something sets parent on an fx_runner once more. The "user_ent &&" inside the first
+		// damage branch is redundant now; it is left exactly as it was rather than tidied, so this
+		// diff reads as the guard it is and nothing else.
+		if (user_ent)
+		{
+			VectorCopy(ent->s.origin, tfrom);
+			AngleVectors(ent->s.angles, fwd, NULL, NULL);
+			tto[0] = tfrom[0] + fwd[0] * radius;
+			tto[1] = tfrom[1] + fwd[1] * radius;
+			tto[2] = tfrom[2] + fwd[2] * radius;
 
-		VectorSet(shot_mins, -20, -20, -20);
-		VectorSet(shot_maxs, 20, 20, 20);
+			VectorSet(shot_mins, -20, -20, -20);
+			VectorSet(shot_maxs, 20, 20, 20);
 
-		trap->Trace(&tr, tfrom, shot_mins, shot_maxs, tto, user_ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+			trap->Trace(&tr, tfrom, shot_mins, shot_maxs, tto, user_ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
 
-		if (tr.fraction != 1.0 &&
-			tr.entityNum != ENTITYNUM_NONE)
-		{ // zyk: actually hit something
-			target_ent = &g_entities[tr.entityNum];
-		}
+			if (tr.fraction != 1.0 &&
+				tr.entityNum != ENTITYNUM_NONE)
+			{ // zyk: actually hit something
+				target_ent = &g_entities[tr.entityNum];
+			}
 
-		if (target_ent && target_ent->client && user_ent && user_ent->client && user_ent != target_ent &&
-			zyk_is_ally(user_ent, target_ent) == qfalse)
-		{ // zyk: if the enemy is hit by the super beam, damage him
-			G_Damage(target_ent, user_ent, user_ent, NULL, target_ent->client->ps.origin, 28, DAMAGE_NO_PROTECTION, MOD_CONC_ALT);
-		}
-		else if (target_ent && user_ent != target_ent && !target_ent->client && target_ent->health > 0 && target_ent->takedamage == qtrue)
-		{ // zyk: non-client damageable entity
-			G_Damage(target_ent, user_ent, user_ent, NULL, target_ent->r.currentOrigin, 28, DAMAGE_NO_PROTECTION, MOD_CONC_ALT);
+			if (target_ent && target_ent->client && user_ent && user_ent->client && user_ent != target_ent &&
+				zyk_is_ally(user_ent, target_ent) == qfalse)
+			{ // zyk: if the enemy is hit by the super beam, damage him
+				G_Damage(target_ent, user_ent, user_ent, NULL, target_ent->client->ps.origin, 28, DAMAGE_NO_PROTECTION, MOD_CONC_ALT);
+			}
+			else if (target_ent && user_ent != target_ent && !target_ent->client && target_ent->health > 0 && target_ent->takedamage == qtrue)
+			{ // zyk: non-client damageable entity
+				G_Damage(target_ent, user_ent, user_ent, NULL, target_ent->r.currentOrigin, 28, DAMAGE_NO_PROTECTION, MOD_CONC_ALT);
+			}
 		}
 
 		ent->nextthink = level.time + 100;
