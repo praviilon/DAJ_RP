@@ -486,6 +486,7 @@ TossClientItems
 rww - Toss the weapon away from the player in the specified direction
 =================
 */
+extern void ChangeWeapon( gentity_t *ent, int newWeapon );
 void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 {
 	vec3_t vel;
@@ -596,6 +597,19 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 		{
 			self->s.weapon = 0;
 			self->client->ps.weapon = 0;
+		}
+
+		// GalaxyRP fix: [NPC] an NPC needs the rest of what ChangeWeapon() does, not just ps.weapon.
+		// The two writes above are the whole of the switch for a player, whose client picks the new
+		// weapon itself, but for an NPC they leave NPCInfo->shotTime, burstCount and attackHold, and
+		// the aiFlags/burstSpacing that ChangeWeapon's per-weapon switch sets, all describing the
+		// weapon that was just taken away -- so a disarmed NPC fired its remaining weapon on the old
+		// one's cadence. Called after the writes rather than instead of them: ChangeWeapon() sets
+		// ps.weapon but not s.weapon, and it returns immediately on a non-NPC, so the explicit test
+		// is for the reader rather than for safety.
+		if (self->NPC)
+		{
+			ChangeWeapon(self, self->client->ps.weapon);
 		}
 
 		G_AddEvent(self, EV_NOAMMO, weapon);

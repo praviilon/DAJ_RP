@@ -2981,6 +2981,36 @@ void NPC_CheckGetNewWeapon( void )
 {
 	if ( NPCS.NPC->s.weapon == WP_NONE && NPCS.NPC->enemy )
 	{//if running away because dropped weapon...
+		// GalaxyRP fix: [NPC] draw a weapon we already own before going to look for one on the ground.
+		// This function is the one place in the AI whose whole job is "this NPC needs a weapon", and it
+		// only ever searched the world for a dropped ET_ITEM -- it never looked at what the NPC is
+		// already carrying. ps.weapon is what is in an NPC's HANDS, not what it owns, and the two come
+		// apart in both directions:
+		//
+		//   * NPC_BSST_Patrol() holsters CLASS_IMPERIAL NPCs on purpose -- ChangeWeapon(NPC, WP_NONE)
+		//     with the weapon left in STAT_WEAPONS -- so a holstered imperial looked exactly like a
+		//     disarmed one and went hunting for a gun on the floor while carrying a concussion rifle.
+		//
+		//   * an NPC that really was disarmed, ran back and picked its own weapon up again was stranded
+		//     the same way: Pickup_Weapon() sets STAT_WEAPONS and ammo and nothing else, and
+		//     ChangeWeapon() is the only thing that can select an NPC's weapon -- pers.cmd is memset at
+		//     the top of every NPC_Think() and PM_BeginWeaponChange() refuses WP_NONE on its first
+		//     line -- so it sat at WP_NONE for good with the weapon back in its inventory.
+		//
+		// ChooseBestWeapon() scans up from ps.weapon + 1, which from WP_NONE is the whole list, but it
+		// returns ps.weapon UNCHANGED when the NPC owns nothing, so its answer is checked rather than
+		// trusted. An NPC that genuinely has nothing falls through to the world search below, exactly
+		// as before.
+		{
+			int wp = ChooseBestWeapon();
+
+			if ( wp > WP_NONE && HaveWeapon( wp ) )
+			{
+				ChangeWeapon( NPCS.NPC, wp );
+				return;
+			}
+		}
+
 		if ( NPCS.NPCInfo->goalEntity
 			&& NPCS.NPCInfo->goalEntity == NPCS.NPCInfo->tempGoal
 			&& NPCS.NPCInfo->goalEntity->enemy

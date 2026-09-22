@@ -1445,7 +1445,23 @@ void NPC_RunBehavior( int team, int bState )
 				break;
 			}
 
-			if ( NPCS.NPC->enemy && NPCS.NPC->s.weapon == WP_NONE && bState != BS_HUNT_AND_KILL && !trap->ICARUS_TaskIDPending( (sharedEntity_t *)NPCS.NPC, TID_MOVE_NAV ) )
+			// GalaxyRP fix: [NPC] added the STAT_WEAPONS term. This gate means "in battle with no weapon,
+			// run away", but it asked what is in the NPC's HANDS, and an NPC can have empty hands while
+			// still owning a gun -- NPC_BSST_Patrol() holsters CLASS_IMPERIAL NPCs exactly that way. So
+			// the moment a holstered imperial acquired an enemy this fired and returned, and
+			// NPC_BehaviorSet_Stormtrooper() -- and with it NPC_BSST_Attack(), which carries the
+			// HaveWeapon()/NPC_ChangeWeapon() chain that would have drawn the weapon -- was never
+			// reached. Rax (CLASS_IMPERIAL, WP_CONCUSSION) holsters as soon as he does not see an enemy
+			// and then flees for the rest of his life carrying a rifle he owns and cannot select.
+			//
+			// Strictly narrowing: the new term is a conjunct, so an NPC that really owns nothing still
+			// flees exactly as before. The ~(1 << WP_NONE) is there because NPC_stats.c sets bit 0 for a
+			// "weapon WP_NONE" line in a .npc file, and bit 0 is not a weapon anyone can hold. NPCs under
+			// SCF_FORCED_MARCH never reach this gate -- NPC_RunBehavior routes them to NPC_BSDefault()
+			// several branches above -- so this cannot make a marching prisoner draw a weapon.
+			if ( NPCS.NPC->enemy && NPCS.NPC->s.weapon == WP_NONE
+				&& !(NPCS.NPC->client->ps.stats[STAT_WEAPONS] & ~(1 << WP_NONE))
+				&& bState != BS_HUNT_AND_KILL && !trap->ICARUS_TaskIDPending( (sharedEntity_t *)NPCS.NPC, TID_MOVE_NAV ) )
 			{//if in battle and have no weapon, run away, fixme: when in BS_HUNT_AND_KILL, they just stand there
 				if ( bState != BS_FLEE )
 				{
