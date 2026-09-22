@@ -2457,6 +2457,48 @@ void CG_CopyG2WeaponInstance(centity_t *cent, int weaponNum, void *toGhoul2)
 {
 	//rww - the -1 is because there is no "weapon" for WP_NONE
 	assert(weaponNum < MAX_WEAPONS);
+
+	// GalaxyRP fix: [Weapons] anything stripped of its weapon kept holding the model. WP_NONE is
+	// the one weapon_t member with no bg_itemlist entry, so CG_InitG2Weapons -- which only builds
+	// instances for IT_WEAPON items -- never makes one for it, and CG_G2WeaponInstance therefore
+	// returns NULL. The guard below then skipped this whole function, while both callers went on
+	// to record the new weapon anyway (ghoul2weapon = CG_G2WeaponInstance(.., WP_NONE), also NULL),
+	// so the comparison that brought us here never fired again. The old model stayed bolted to
+	// slot 1 until the entity died, lost the limb holding it, or changed model.
+	//
+	// Easy to reach, and mostly on NPCs. TossClientWeapon() (g_combat.c) sets ps.weapon to 0 when
+	// the victim has nothing else left, which is the normal outcome of a Force pull against one --
+	// NPC_SetWeapons() gives them only what their .npc file lists, so there is rarely a fallback,
+	// whereas a player usually still has melee or a saber and lands on a weapon that does have an
+	// instance. The imperials-at-ease hack in NPC_AI_Stormtrooper.c does it deliberately (and
+	// carries Raven's own commented-out removal, written against the SP weaponModel[] API that
+	// does not exist in MP), PM_FinishWeaponChange() lands here for any weapon the owner does not
+	// actually have, and zyk_deselect_weapon_if_active() does when the last weapon-granting skill
+	// is downgraded.
+	//
+	// Handled the way WP_EMPLACED_GUN and WP_MELEE already are below -- strip slot 1, and slot 2
+	// first, exactly as the non-saber branch does before every other weapon -- just hoisted above
+	// the guard so that it is reachable at all. Only two of this function's call sites can reach
+	// WP_NONE -- CG_Player() in cg_players.c and CG_CheckPlayerG2Weapons() below -- and both gate
+	// on !(eFlags & EF_DEAD) and !torsoBolt, so corpses, which player_die() also leaves on WP_NONE,
+	// are untouched and keep their weapon exactly as before. Of the rest, three are gated on
+	// weapon == WP_SABER, CG_SetInitialSnapshot() passes the FIRST_WEAPON literal (WP_BRYAR_PISTOL),
+	// and CG_ForceFPLSPlayerModel() sits inside an #if 0.
+	if (weaponNum == WP_NONE)
+	{
+		if (trap->G2API_HasGhoul2ModelOnIndex(&(toGhoul2), 2))
+		{
+			trap->G2API_RemoveGhoul2Model(&(toGhoul2), 2);
+		}
+
+		if (trap->G2API_HasGhoul2ModelOnIndex(&(toGhoul2), 1))
+		{
+			trap->G2API_RemoveGhoul2Model(&(toGhoul2), 1);
+		}
+
+		return;
+	}
+
 	if (CG_G2WeaponInstance(cent, weaponNum/*-1*/))
 	{
 		if (weaponNum == WP_SABER)
