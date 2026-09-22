@@ -2788,14 +2788,10 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			{ // zyk: if 6, remove the radar
 				cg.rpg_stuff &= ~(1 << 0);
 			}
-			else if (es->eventParm == 7)
-			{ // zyk: if 7, set the blue jetpack flame
-				cg.rpg_stuff |= (1 << 1);
-			}
-			else if (es->eventParm == 8)
-			{ // zyk: if 8, remove blue jetpack flame
-				cg.rpg_stuff &= ~(1 << 1);
-			}
+			// GalaxyRP fix: [Skills] parms 7 and 8 used to set/clear cg.rpg_stuff bit 1, the local
+			// player's blue-jetpack-flame flag. That flag now rides the entity state as
+			// EF_RPG_JETPACK_UPGRADE and is read straight off the entity in cg_players.c, so nothing
+			// caches it here any more. Bit 0 (the Bounty Hunter radar, parms 5 and 6) is untouched.
 
 			if (!psStringEDRef)
 			{
@@ -2805,16 +2801,13 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			Com_Printf("%s\n", psStringEDRef);
 		}
 		else if (es->number < MAX_CLIENTS)
-		{ // zyk handling the jetpack effect for other players
-			if (es->eventParm == 7)
-			{ // zyk: set the blue jetpack flame
-				cg.zyk_rpg_stuff[es->number] |= (1 << 0);
-			}
-			else if (es->eventParm == 8)
-			{ // zyk: remove blue jetpack flame
-				cg.zyk_rpg_stuff[es->number] &= ~(1 << 0);
-			}
-			else if (es->eventParm == 9)
+		{ // zyk handling the per-player flags for other players
+			// GalaxyRP fix: [Skills] parms 7 and 8 used to set/clear cg.zyk_rpg_stuff[n] bit 0, the
+			// other-players copy of the blue-jetpack-flame flag. Gone for the same reason as bit 1 of
+			// cg.rpg_stuff above -- the flag is an entity-state bit now, so it arrives in every
+			// snapshot instead of once, cannot outlive the client slot it described, and needs no
+			// bounds-checked array. Parms 9 and 10 (radar visibility, bit 1) are untouched.
+			if (es->eventParm == 9)
 			{ // zyk: add this player so it will not be visible by the cg player radar
 				cg.zyk_rpg_stuff[es->number] |= (1 << 1);
 			}

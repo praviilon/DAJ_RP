@@ -16199,20 +16199,17 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 			ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax;
 		}
 		break;
-	case 34:
-		// GalaxyRP fix: [Skills] the client-side blue/yellow jetpack flame effect (cg_players.c's
-		// jetpack FX code) reads a cached per-player flag that's normally set by a one-time-per-life
-		// event push in g_active.c's ClientThink sync cascade (gated by player_statuses bit 3) -- so
-		// upgrading or downgrading Jetpack to/from level 3 while already alive didn't take effect
-		// until the next respawn re-ran that cascade. Send the corrected event immediately here too,
-		// mirroring that cascade's own condition exactly, so the effect updates live instead of only
-		// on next respawn. This doesn't touch player_statuses bit 3, so the lazy cascade is left free
-		// to also (harmlessly) resend the same thing later.
-		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[34] == 3)
-			G_AddEvent(ent, EV_ITEMUSEFAIL, 7);
-		else
-			G_AddEvent(ent, EV_ITEMUSEFAIL, 8);
-		break;
+	// GalaxyRP fix: [Skills] case 34 (Jetpack) used to sit here, re-pushing the blue/yellow flame as
+	// an EV_ITEMUSEFAIL event because the client cached that flag and the lazy sync cascade in
+	// g_active.c only refreshed it once per life -- so a live /skillup or /skilldown across level 3
+	// did not show until the next respawn. It worked for BOTH directions because it lived in this
+	// shared function ahead of every `if (upgrade)` guard and re-read skill_levels[34] rather than
+	// inferring from the direction; both call sites write the new level before calling in.
+	//
+	// None of that is needed now. The flag rides the entity state as EF_RPG_JETPACK_UPGRADE, set
+	// from the live skill level every frame in g_active.c, so any change to the level -- from here,
+	// from login, from logout, from leaving RPG Mode -- is picked up on the next frame with nothing
+	// to push and nothing to keep in step.
 	default:
 		//GalaxyRP (Alex): [Skill] Do nothing for standard skills.
 		break;

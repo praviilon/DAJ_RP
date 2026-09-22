@@ -9975,8 +9975,17 @@ void CG_Player( centity_t *cent ) {
 				{ //create effects
 					//FIXME: Just one big effect
 					//Play the effect
-					if ((cg.snap->ps.clientNum == cent->currentState.number && cg.rpg_stuff & (1 << 1)) || 
-						(cg.snap->ps.clientNum != cent->currentState.number && cg.zyk_rpg_stuff[cent->currentState.number] & (1 << 0)))
+					// GalaxyRP fix: [Skills] this used to read a client-side cache keyed on whether the
+					// entity was "me" -- cg.rpg_stuff bit 1 for self, cg.zyk_rpg_stuff[number] bit 0 for
+					// everyone else -- filled by a one-shot EV_ITEMUSEFAIL event. The upgrade flag now
+					// rides the entity state (EF_RPG_JETPACK_UPGRADE, set in g_active.c), so this reads
+					// it off the same `cent` as the EF_JETPACK gate above. That fixes four things at
+					// once: the self/other test used cg.snap->ps.clientNum, which is the FOLLOWED player
+					// while spectating (so a spectator saw their own colour on whoever they watched); the
+					// event was PVS-culled and never re-sent; the cache was only zeroed in CG_Init, so a
+					// reused client slot kept the last occupant's colour; and the array was indexed by
+					// entity number with no bound check.
+					if (cent->currentState.eFlags & EF_RPG_JETPACK_UPGRADE)
 					{ // zyk: if this player has the jetpack upgrade, use the blue jetpack effect
 						trap->FX_PlayEffectID(cgs.effects.mBlueJet, flamePos, flameDir, -1, -1, qfalse);
 						trap->FX_PlayEffectID(cgs.effects.mBlueJet, flamePos, flameDir, -1, -1, qfalse);
@@ -9995,8 +10004,9 @@ void CG_Player( centity_t *cent ) {
 				{ //just idling
 					//FIXME: Different smaller effect for idle
 					//Play the effect
-					if ((cg.snap->ps.clientNum == cent->currentState.number && cg.rpg_stuff & (1 << 1)) || 
-						(cg.snap->ps.clientNum != cent->currentState.number && cg.zyk_rpg_stuff[cent->currentState.number] & (1 << 0)))
+					// GalaxyRP fix: [Skills] same swap as the flaming branch above -- entity-state bit
+					// instead of the cg.rpg_stuff / cg.zyk_rpg_stuff[] cache.
+					if (cent->currentState.eFlags & EF_RPG_JETPACK_UPGRADE)
 					{ // zyk: if player has the jetpack upgrade, use the blue jetpack effect
 						trap->FX_PlayEffectID(cgs.effects.mBlueJet, flamePos, flameDir, -1, -1, qfalse);
 					}

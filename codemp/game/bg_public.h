@@ -692,7 +692,20 @@ typedef enum {
 #define EF_ALT_FIRING			(1<<10)		// for alt-fires, mostly for lightning guns though
 #define	EF_JETPACK_ACTIVE		(1<<11)		//jetpack is activated
 
-#define EF_NOT_USED_1			(1<<12)		// not used
+#define EF_NOT_USED_1			(1<<12)		// claimed by GalaxyRP -- see EF_RPG_JETPACK_UPGRADE below
+// GalaxyRP: [Skills] set on a player whose Jetpack skill is at max level (3) in RPG Mode, so the
+// client draws the blue exhaust flame instead of the default Boba one (cg_players.c). Carried
+// here rather than pushed as an EV_ITEMUSEFAIL event into a client-side cache, which is what it
+// used to be: an entity-state bit is in every snapshot, so it is PVS-correct by construction,
+// cannot go stale when a client slot is reused, needs no resend for players who join later, and
+// is read off the same `cent` as the EF_JETPACK gate around it -- which is what makes it right
+// while spectating, where cg.snap->ps is the FOLLOWED player.
+//
+// The upstream name is kept above so a future merge from TaystJK does not silently hand this bit
+// to something else. eFlags is transmitted at its full 32 bits ({ NETF(eFlags), 32 } in msg.cpp,
+// identical in stock TaystJK), so claiming a spare bit changes nothing on the wire: a stock
+// client receives it, has no name for it, and keeps drawing the default flame.
+#define EF_RPG_JETPACK_UPGRADE	EF_NOT_USED_1
 
 #define	EF_TALK					(1<<13)		// draw a talk balloon
 #define	EF_CONNECTION			(1<<14)		// draw a connection trouble sprite

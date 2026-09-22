@@ -1296,16 +1296,12 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_RADAR_EVENT);
 		}
-		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT)))
-		{
-			// zyk: event to set the blue jetpack flame
-			if (client->sess.amrpgmode == 2 && client->pers.skill_levels[34] == 3)
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 7);
-			else
-				G_AddEvent(ent, EV_ITEMUSEFAIL, 8);
-
-			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
-		}
+		// GalaxyRP fix: [Skills] a jetpack-flame step used to sit here, pushing EV_ITEMUSEFAIL parm 7
+		// or 8 once per cascade and marking PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT. The flag it was
+		// announcing now rides the entity state as EF_RPG_JETPACK_UPGRADE, set every frame further
+		// down this file, so there is nothing left to announce. Removing the step shortens this
+		// cascade from five occupied slots to four, which only means the remaining ones come round
+		// slightly sooner inside the same window -- they are all idempotent state pushes.
 		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT)))
 		{ // zyk: tells the RPG class to the client-side mod to render the Force Shield effect and the resistance shield
 			// GalaxyRP fix: [Dead Code] dropped "+ client->pers.rpg_class"; pers.rpg_class is
@@ -1325,7 +1321,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 			G_AddEvent(ent, EV_ITEMUSEFAIL, 10);
 
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_RADAR_EVENT);
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
+			// GalaxyRP fix: [Skills] the SENT_JETPACK_FLAME_EVENT reset went with the cascade step
+			// above; the enum entry is left in g_local.h, since renumbering PLAYER_STATUS_* is a
+			// separate decision (see the same note on PLAYER_STATUS_CUSTOM_QUEST_NPC).
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
 		}
@@ -2831,6 +2829,29 @@ void ClientThink_real( gentity_t *ent ) {
 	else
 	{
 		client->ps.eFlags &= ~EF_JETPACK;
+	}
+
+	// GalaxyRP fix: [Skills] the blue jetpack exhaust flame used to be pushed to the client as an
+	// EV_ITEMUSEFAIL event (parm 7 on / 8 off) and cached there in cg.rpg_stuff / cg.zyk_rpg_stuff[].
+	// One push into a client-side cache had four separate failure modes: events ride the snapshot and
+	// are PVS-culled, so anyone who could not see the player during the ~3s window after their spawn
+	// never learned; nothing re-announced afterwards; the cache was only ever zeroed in CG_Init, so a
+	// reused client slot inherited the previous occupant's colour; and the render had to ask "is this
+	// me?" via cg.snap->ps.clientNum, which is the FOLLOWED player while spectating, so a spectator saw
+	// their own flame colour on whoever they were watching.
+	//
+	// Carrying it as an entity-state bit removes all four at once, because none of that machinery is
+	// left: the bit is in every snapshot for every player the client can see, it is recomputed here
+	// every frame rather than cached, and cg_players.c reads it off the same `cent` as the EF_JETPACK
+	// gate around it. Set unconditionally in both directions, so /skillup, /skilldown, login, logout
+	// and leaving RPG Mode all take effect on the next frame with nothing to resend.
+	if (client->sess.amrpgmode == 2 && client->pers.skill_levels[34] == 3)
+	{
+		client->ps.eFlags |= EF_RPG_JETPACK_UPGRADE;
+	}
+	else
+	{
+		client->ps.eFlags &= ~EF_RPG_JETPACK_UPGRADE;
 	}
 
 	// zyk: paralyzed by an admin. Keep him this way
