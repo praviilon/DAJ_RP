@@ -1161,9 +1161,9 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		// The wrapper's own condition was reachable; all three things inside it were not. Magic Regen
 		// needed pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ (22, galaxyrp/game/rp_local.h)
 		// and universe_quest_counter bit 0, and neither field was ever written anywhere in the tree, so
-		// both sat at 0 and 0 == 22 is false. universe_quest_counter has since been removed from
-		// clientPersistant_t entirely as declaration-only; universe_quest_progress survives, still read
-		// in g_combat.c. Healing Crystal and Energy Crystal needed PLAYER_STATUS_HEALING_CRYSTAL and
+		// both sat at 0 and 0 == 22 is false. Both fields have since been removed from
+		// clientPersistant_t entirely, along with the last branches that read them.
+		// Healing Crystal and Energy Crystal needed PLAYER_STATUS_HEALING_CRYSTAL and
 		// PLAYER_STATUS_ENERGY_CRYSTAL, two of the thirteen bits g_local.h marks as never set; each has
 		// zero "|=" sites in the tree. Nothing else lived in the block.
 

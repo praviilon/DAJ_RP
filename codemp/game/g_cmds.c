@@ -1505,11 +1505,10 @@ void Cmd_Scale_f( gentity_t *ent ) {
 		return;
 	}
 
-	if (g_entities[client_id].client->sess.amrpgmode == 2 && g_entities[client_id].client->pers.can_play_quest == 1)
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Cannot scale players in quests.\n\"" );
-		return;
-	}
+	// GalaxyRP fix: [Quests] a "Cannot scale players in quests." refusal sat here, gated on
+	// can_play_quest == 1. The only value ever assigned to can_play_quest anywhere in the tree was 0
+	// (a reset in initialize_rpg_skills, itself removed in this pass), so the refusal never fired; the
+	// field is gone from clientPersistant_t now.
 
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking scaling players in boss battles used to
 	// be here. guardian_mode is permanently 0 now, so it was unreachable.
@@ -11156,26 +11155,20 @@ void initialize_rpg_skills(gentity_t *ent)
 		ent->client->pers.buy_sell_timer = 0;
 		ent->client->pers.vertical_dfa_timer = 0;
 
-		// zyk: setting default value of can_play_quest
-		ent->client->pers.can_play_quest = 0;
-
 		// GalaxyRP fix: [Guardian] the guardian_mode=0, guardian_invoked_by_id=-1 and guardian_timer=0
 		// resets that used to be here are removed along with the fields themselves. guardian_mode's sole
 		// setter and guardian_invoked_by_id's sole setter spawn_boss() have zero callers; guardian_timer
 		// lost its last reader when the quest_mage chain went with the magic engine, leaving it
 		// write-only.
 
-		ent->client->pers.eternity_quest_timer = 0;
-
-		ent->client->pers.universe_quest_artifact_holder_id = -1;
-		ent->client->pers.universe_quest_messages = 0;
-		ent->client->pers.universe_quest_timer = 0;
-
-		ent->client->pers.light_quest_timer = 0;
-		ent->client->pers.light_quest_messages = 0;
-
-		ent->client->pers.hunter_quest_timer = 0;
-		ent->client->pers.hunter_quest_messages = 0;
+		// GalaxyRP fix: [Quests] nine more resets sat here -- can_play_quest, eternity_quest_timer,
+		// universe_quest_artifact_holder_id, universe_quest_messages, universe_quest_timer,
+		// light_quest_timer, light_quest_messages, hunter_quest_timer and hunter_quest_messages (plus
+		// universe_quest_progress, which never even had a reset). Every one of them was only ever
+		// assigned its own inert value -- 0, or -1 for the artifact holder id -- and every surviving
+		// reader tested for something else (== 1, != -1, == NUM_OF_UNIVERSE_QUEST_OBJ), so none of those
+		// readers could ever fire. All ten fields are gone from clientPersistant_t now, so the resets go
+		// with them; ClientConnect's memset already zeroes the struct.
 
 		// zyk: loading initial RPG weapons
 		if (!(ent->client->ps.stats[STAT_WEAPONS] & (1 << WP_STUN_BATON)) && ent->client->pers.skill_levels[18] > 0)
@@ -11432,10 +11425,11 @@ extern qboolean zyk_spawn_strings_full(gentity_t *ent);
 // Light/Dark/Hunter/Eternity/Universe Quest map-turn selection alike -- unreachable, so all four
 // functions have been deleted outright along with their direct call sites elsewhere in the codebase
 // (g_main.c, g_client.c, g_combat.c, g_items.c, g_utils.c). The pers.* quest-progress fields these
-// functions read/wrote were kept at the time. Most still are -- universe_quest_progress and
-// can_play_quest among them -- but defeated_guardians has since been removed from
-// clientPersistant_t, having turned out to be declaration-only: no live code ever read or wrote it.
-// Only the dead selection logic itself was removed here.
+// functions read/wrote were kept at the time. None of them survive now: defeated_guardians turned
+// out to be declaration-only, and universe_quest_progress, can_play_quest and the light/hunter/
+// eternity/universe quest timers and message counters all proved to be permanently zero (or
+// permanently -1), so every branch gated on them was unreachable and the fields went with those
+// branches. Only the dead selection logic itself was removed here.
 // GalaxyRP fix: [Quests] correction, made in a later pass: this comment previously also listed
 // hunter_quest_progress and eternity_quest_progress as "still read by live code elsewhere" and cited
 // "/settings Challenge Mode" as a reader -- both were wrong. hunter_quest_progress/

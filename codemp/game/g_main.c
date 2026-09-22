@@ -5867,10 +5867,11 @@ void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
 
 // GalaxyRP fix: [Magic] magic_sense() removed. The player-facing magic dispatch in
 // Cmd_ForceUse_f()/the grab-anim block in g_cmds.c was deleted earlier as permanently
-// unreachable (every power it could trigger is gated on pers.defeated_guardians or
-// pers.universe_quest_progress, which nothing in the codebase ever writes -- they sit at the zero
+// unreachable (every power it could trigger was gated on pers.defeated_guardians or
+// pers.universe_quest_progress, which nothing in the codebase ever wrote -- they sat at the zero
 // ClientConnect's memset gives them. This note used to credit add_new_char() with writing them at
-// character creation; that function has since been removed as dead too, see g_cmds.c), and that
+// character creation; that function has since been removed as dead too, see g_cmds.c. Both fields
+// have since been removed from clientPersistant_t outright, for exactly that reason), and that
 // deletion took magic_sense()'s only call site with it. Its siblings magic_shield() and
 // magic_disable() survive as zero-caller reference code (the quest_mage chain that used to call
 // them went with the magic engine -- see the note in G_RunFrame);
@@ -6291,13 +6292,10 @@ void magic_disable(gentity_t *ent, int distance)
 
 				display_yellow_bar(player_ent, (player_ent->client->pers.quest_power_usage_timer - level.time));
 			}
-			else
-			{ // zyk: npc or boss dont get affected that much
-				player_ent->client->pers.light_quest_timer += (duration/2);
-				// GalaxyRP fix: [Guardian] a guardian_timer bump sat here; that field is gone (write-only
-				// once the quest_mage chain took its last reader with it).
-				player_ent->client->pers.universe_quest_timer += (duration/2);
-			}
+			// GalaxyRP fix: [Quests] an else branch sat here for npcs and bosses. It bumped
+			// light_quest_timer and universe_quest_timer (and, before the last pass, guardian_timer) by
+			// half the duration. All three were write-only fields no reader ever consulted, so the branch
+			// did nothing observable; the fields are gone from clientPersistant_t now, and so is it.
 
 			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh10.mp3"));
 		}
@@ -9498,10 +9496,9 @@ void G_RunFrame( int levelTime ) {
 
 			poison_dart_hits(ent);
 
-			if (ent->client->pers.universe_quest_artifact_holder_id != -1 && ent->health > 0 && ent->client->ps.powerups[PW_FORCE_BOON] < (level.time + 1000))
-			{ // zyk: artifact holder npcs. Keep their artifact (force boon) active
-				ent->client->ps.powerups[PW_FORCE_BOON] = level.time + 1000;
-			}
+			// GalaxyRP fix: [Quests] a per-frame top-up sat here that kept PW_FORCE_BOON alive on
+			// "artifact holder" npcs. It was gated on universe_quest_artifact_holder_id != -1, and the only
+			// value ever assigned to that field anywhere in the tree was -1, so the test never passed.
 
 			// zyk: npcs cannot enter the Duel Tournament arena
 			if (level.duel_tournament_mode == 4 && 

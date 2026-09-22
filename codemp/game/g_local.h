@@ -1057,8 +1057,12 @@ typedef struct clientPersistant_s {
 	// GalaxyRP: [Race Mode] race_position used to be declared here -- the racer's starting-grid slot,
 	// written only by Cmd_RaceMode_f and read only by the race handlers. Removed with Race Mode.
 
-	// zyk: tests if this player can play a RPG Mode quest. Default 0. If 1, player can play a quest now
-	int can_play_quest;
+	// GalaxyRP fix: [Quests] can_play_quest used to be declared here -- "if 1, player can play a quest
+	// now". It never became 1: the only assignment anywhere in the tree was the `= 0` reset in
+	// initialize_rpg_skills, so every `can_play_quest == 1` guard was unreachable. Those guards have
+	// been removed one by one over earlier passes (g_utils.c's TryUse quest branch, g_active.c,
+	// g_client.c's and g_cmds.c's boss-music resets, g_combat.c); the last one, the /scale refusal in
+	// Cmd_Scale_f, went in this pass, so the field itself goes too.
 
 	// zyk: amount of skills used by the player. After a certain amount of uses, player gets 1 experience point (level up score)
 	int skill_counter;
@@ -1071,8 +1075,12 @@ typedef struct clientPersistant_s {
 	// GalaxyRP fix: [Quests] removed hunter_quest_progress and eternity_quest_progress here — both
 	// were write-only (only ever reset to 0), with zero readers anywhere in the codebase.
 
-	// zyk: Universe Quest progress of this player
-	int universe_quest_progress;
+	// GalaxyRP fix: [Quests] universe_quest_progress used to be declared here, the player's step count
+	// through the Universe Quest. Nothing in the tree ever wrote it -- no assignment, no database
+	// column (the schema has no quest table), no session string, no spawn key -- so it sat at the zero
+	// ClientConnect's memset gives it. Its readers all tested for a nonzero step (== 15 for Challenge
+	// Mode, == NUM_OF_UNIVERSE_QUEST_OBJ for the completion bonus in player_die), so none could fire.
+	// The last of them went in this pass and the field goes with them.
 
 	// zyk: counter used in some missions of Universe Quest
 	// Possible bit values in artifacts objective:
@@ -1106,18 +1114,24 @@ typedef struct clientPersistant_s {
 	// GalaxyRP fix: [Dead Fields] universe_quest_counter used to be declared here, holding the bit
 	// values documented above plus bit 29 for Challenge Mode. It was declaration-only; nothing ever
 	// wrote it, which is why the branches gated on it (including the Challenge-Mode-only path noted
-	// in g_combat.c) were removed as unreachable. universe_quest_progress is a DIFFERENT field and
-	// survives -- it still has a live reader in g_combat.c.
+	// in g_combat.c) were removed as unreachable. universe_quest_progress, a different field that
+	// survived that pass with one live reader, has since gone the same way -- see the note above.
 
 	// GalaxyRP fix: [Quests] removed universe_quest_objective_control here — its sole reader was the
 	// dead universe_quest_messages==-10000 block in g_combat.c's player_die(), removed alongside it.
 
-	// zyk: used to set the npc who holds the artifact in the third objective of Universe Quest
-	int universe_quest_artifact_holder_id;
+	// GalaxyRP fix: [Quests] universe_quest_artifact_holder_id used to be declared here, naming the npc
+	// holding the artifact in the third Universe Quest objective. The only value ever assigned to it
+	// anywhere was -1 (the NPC_spawn.c init and the initialize_rpg_skills reset), while both its
+	// readers tested `!= -1` -- the per-frame PW_FORCE_BOON top-up in G_RunFrame and the
+	// "zyk_quest_artifact" targetname stamp in TossClientItems. Neither could ever fire; both went in
+	// this pass, along with the field.
 
-	// zyk: controls the timed events in Universe Quest
-	int universe_quest_messages;
-	int universe_quest_timer;
+	// GalaxyRP fix: [Quests] universe_quest_messages and universe_quest_timer used to be declared here,
+	// driving the Universe Quest's timed events. Both were write-only: the only values ever assigned
+	// were 0 (the initialize_rpg_skills resets) and, for the timer, a cooldown bump in magic_disable's
+	// npc branch. Their readers all tested negative sentinels (-10000, -2000) that nothing ever wrote.
+	// Those readers were removed in earlier passes; the writers and the fields go in this one.
 
 	// zyk: bitvalue. Sets the power this player is using or the power that is affecting this player
 	// Possible values are:
@@ -1204,16 +1218,20 @@ typedef struct clientPersistant_s {
 	// zyk: magic power, required to use Special Powers
 	int magic_power;
 
-	// zyk: controls the timed events in Light Quest
-	int light_quest_messages;
-	int light_quest_timer;
+	// GalaxyRP fix: [Quests] light_quest_messages and light_quest_timer used to be declared here,
+	// driving the Light Quest's timed events. Both were write-only by the end -- reset to 0 in
+	// initialize_rpg_skills, with the timer also bumped by magic_disable's npc branch -- and no reader
+	// survived anywhere in the tree. Removed with the rest of the quest-progress fields.
 
-	// zyk: controls the timed events in Dark Quest
-	int hunter_quest_timer;
-	int hunter_quest_messages; // zyk: also used by the Guardian of Universe to know she already spawned the other guardians
+	// GalaxyRP fix: [Quests] hunter_quest_timer and hunter_quest_messages used to be declared here,
+	// driving the Dark Quest's timed events. hunter_quest_messages was additionally documented as the
+	// Guardian of Universe's "already spawned the other guardians" flag; that second use went with the
+	// guardian spawn chain in an earlier pass. Both fields were write-only afterwards -- reset to 0 in
+	// initialize_rpg_skills and read nowhere -- so both are removed here.
 
-	// zyk: used to show the riddles from time to time
-	int eternity_quest_timer;
+	// GalaxyRP fix: [Quests] eternity_quest_timer used to be declared here, pacing the Eternity Quest
+	// riddles. Write-only by the end: reset to 0 in initialize_rpg_skills, read nowhere in the tree.
+	// Removed with the rest of the quest-progress fields.
 
 	// GalaxyRP fix: [Guardian] guardian_mode field (and its boss-value documentation) removed here —
 	// it is permanently 0 with zero live readers/writers left anywhere in the codebase (spawn_boss,

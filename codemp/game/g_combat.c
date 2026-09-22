@@ -733,12 +733,10 @@ void TossClientItems( gentity_t *self ) {
 					drop->count = 1;
 				}
 
-				// zyk: artifact holder npc died. Set a targetname in this artifact
-				if (self->NPC && self->client->pers.universe_quest_artifact_holder_id != -1 && 
-					drop->item->giType == IT_POWERUP && drop->item->giTag == PW_FORCE_BOON)
-				{
-					drop->targetname = "zyk_quest_artifact";
-				}
+				// GalaxyRP fix: [Quests] a block here used to tag a dropped Force Boon with targetname
+				// "zyk_quest_artifact" when an "artifact holder" NPC died. Its guard was
+				// universe_quest_artifact_holder_id != -1, and that field was only ever assigned -1, so it
+				// could not fire. Nothing read the targetname either, so even a hit would have been invisible.
 
 				angle += 45;
 			}
@@ -2729,11 +2727,10 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			attacker->client->pers.credits_modifier = self->client->pers.level;
 			attacker->client->pers.score_modifier = self->client->pers.level / 50;
 
-			if (self->client->pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ)
-			{
-				attacker->client->pers.score_modifier += 1;
-				attacker->client->pers.credits_modifier += 20;
-			}
+			// GalaxyRP fix: [Quests] a bonus used to follow -- +1 score and +20 credits for killing a
+			// player who had finished the Universe Quest. It tested universe_quest_progress against
+			// NUM_OF_UNIVERSE_QUEST_OBJ (22), and nothing in the tree ever wrote that field: no assignment,
+			// no database column, no session string. It sat at 0, so the bonus was never once paid.
 		}
 		else if (self->NPC && self->client->NPC_class == CLASS_VEHICLE)
 		{ // zyk: vehicles will not give any score or credits
