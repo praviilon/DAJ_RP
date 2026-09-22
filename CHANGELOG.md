@@ -67,6 +67,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - The shipped server config (`assets/server/galaxyrp_server.cfg`) was reorganised by category with a one-line description on every cvar, one `set` form throughout and every value quoted. Several values were wrong and are corrected: `sv_timeout` was 3000 *seconds*, holding a crashed client's slot for 50 minutes, `sv_maxRate` and `g_userinfoValidate` had drifted off their defaults, and the weapon-mask examples were miscalculated.
 - `zyk_sp_npc_fix` is documented as what it actually does -- stripping the SP story cast, droids, merchants and creatures out of SP maps -- rather than the two engine limits it was originally written against, neither of which still exists. Its map list gains `academy1`-`academy6`, the hub maps most likely to host RP, and the shipped config sets it to 0 to match its default.
 - `rp_starting_shield`'s upper bound drops from 200 to 100. It only ever reaches logged-out players, whose shield pickups refuse anything above 100, so a higher value was a one-shot bonus that no pickup could ever refill.
+- Radar HUD can now be turned on in FFA mode for logged-in players. Cloaked players and vehicles are hidden on the radar.
 
 ### Fixed
 - **Dice rolls**: `/roll` could produce a non-uniform result and, on a Windows build, silently capped any roll above 32767; `/roll 2147483647` was undefined behavior. Rolls are now drawn with a bias-free rejection sample and bounded to 100 faces.
