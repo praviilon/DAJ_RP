@@ -697,11 +697,14 @@ typedef struct clientSession_s {
 // sets them any more: the features that did (the quest crystals, the unique abilities, the ice
 // bomb, the RPG tutorial, the custom-quest NPCs) were removed in earlier cleanups. They are named
 // rather than deleted so the numbering stays stable and a future cleanup can find the dead readers.
+// Bits marked "dead" go one step further: neither read nor written anywhere. They are kept for the
+// same reason -- renumbering PLAYER_STATUS_* shifts every bit above the gap, which is a decision of
+// its own and not something a cleanup of the last reader should make on the way past.
 typedef enum {
 	PLAYER_STATUS_SILENCED = 0,              // silenced by an admin
 	PLAYER_STATUS_EMOTE,                     // using an emote
-	PLAYER_STATUS_SENT_RADAR_EVENT,          // client-side received the Bounty Hunter Upgrade event
-	PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT,  // client-side received the Jetpack Upgrade event
+	PLAYER_STATUS_SENT_RADAR_EVENT,          // dead: announced the Bounty Hunter radar upgrade
+	PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT,  // dead: announced the Jetpack blue-flame upgrade
 	PLAYER_STATUS_SCALED,                    // /scale set a model scale other than 100
 	PLAYER_STATUS_CHAT_PROTECTION,           // chat protection is active for this player
 	// Downed: lying incapacitated and unable to act. Set both by the Death System (a lethal hit that

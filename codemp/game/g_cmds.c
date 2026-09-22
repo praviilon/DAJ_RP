@@ -444,10 +444,28 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 #define RP_SHAKE_MIN_SECONDS		1
 #define RP_SHAKE_MAX_SECONDS		5
 
+// GalaxyRP fix: [Chat] message colours in this table. The netname goes in raw, carrying whatever
+// ^N codes the player set, so the colour a row's message ends up in is whatever the LAST colour
+// code before the final %s left active -- or the name's own trailing colour when a row carries no
+// code at all. Two rows got that wrong. /low reset nothing after its ^9 verb, so the entire spoken
+// line came out grey instead of just "lowers their voice"; /long carried no code whatever, so both
+// its colon and its message inherited the speaker's name colour. Both now reset to ^2, which
+// matches /shout three rows below (verb in its own colour, speech in green) and matches plain say,
+// which builds name + ^7 + ": " and sends the message as COLOR_GREEN -- see the SAY_ALL case in
+// G_Say(). /all already had the green but let its colon inherit, so it takes the same ^7; /long and
+// /all now render identically to plain say, which is exactly what the help text promises them as
+// ("Normal speech at another range"). Their lack of a verb prefix is deliberate for the same reason
+// and is left alone.
+//
+// GalaxyRP fix: [Chat] trailing spaces in /my and /thought. delete_chat_command() strips only the
+// modifier token, so the text handed to va() still begins with the space that separated the two.
+// Every other row ends on a non-space and relies on that; these two ended on a space of their own
+// and rendered "Name's  hat" and "is thinking:  text" with a doubled space. The literal's space is
+// dropped -- the one arriving with the text does the job.
 const chat_modifiers_t chat_modifiers[] = {
-	{"/low",		"chat \"%s^9 lowers their voice:%s\n\"",			VOICE_DISTANCE_LOW	},
-	{"/long",		"chat \"%s:%s\n\"",									VOICE_DISTANCE_LONG	},
-	{"/all",		"chat \"%s:^2%s\n\"",								BROADCAST_DISTANCE	},
+	{"/low",		"chat \"%s^9 lowers their voice:^2%s\n\"",			VOICE_DISTANCE_LOW	},
+	{"/long",		"chat \"%s^7:^2%s\n\"",								VOICE_DISTANCE_LONG	},
+	{"/all",		"chat \"%s^7:^2%s\n\"",								BROADCAST_DISTANCE	},
 	{"/melow",		"chat \"%s^3%s\n\"",								ACTION_DISTANCE_LOW	},
 	{"/meall",		"chat \"%s^3%s\n\"",								BROADCAST_DISTANCE	},
 	{"/melong",		"chat \"%s^3%s\n\"",								ACTION_DISTANCE_LONG},
@@ -463,10 +481,10 @@ const chat_modifiers_t chat_modifiers[] = {
 	{"/forcelong",	"chat \"%s^5 uses the Force to%s\n\"",				ACTION_DISTANCE_LONG},
 	{"/forceall",	"chat \"%s^5 uses the Force to%s\n\"",				BROADCAST_DISTANCE	},
 	{"/force",		"chat \"%s^5 uses the Force to%s\n\"",				ACTION_DISTANCE		},
-	{"/mylow",		"chat \"%s^3's %s\n\"",								ACTION_DISTANCE_LOW	},
-	{"/myall",		"chat \"%s^3's %s\n\"",								BROADCAST_DISTANCE	},
-	{"/mylong",		"chat \"%s^3's %s\n\"",								ACTION_DISTANCE_LONG},
-	{"/my",			"chat \"%s^3's %s\n\"",								ACTION_DISTANCE		},
+	{"/mylow",		"chat \"%s^3's%s\n\"",								ACTION_DISTANCE_LOW	},
+	{"/myall",		"chat \"%s^3's%s\n\"",								BROADCAST_DISTANCE	},
+	{"/mylong",		"chat \"%s^3's%s\n\"",								ACTION_DISTANCE_LONG},
+	{"/my",			"chat \"%s^3's%s\n\"",								ACTION_DISTANCE		},
 	{"/ryl2",		"chat \"%s ^3(Ryl - Lekku only):^2%s\n\"",			VOICE_DISTANCE		},
 	{"/ryl",		"chat \"%s ^3(Ryl):^2%s\n\"",						VOICE_DISTANCE		},
 	{"/rodian",		"chat \"%s ^3(Rodian):^2%s\n\"",					VOICE_DISTANCE		},
@@ -478,7 +496,7 @@ const chat_modifiers_t chat_modifiers[] = {
 	{"/npcall",		"chat \"^3(%s^3) NPC:^4%s\n\"",						BROADCAST_DISTANCE	},
 	{"/comm",		"chat \"^6<%s^6>^3 -C-^2%s\n\"",					BROADCAST_DISTANCE	},
 	{"/c",			"chat \"^6<%s^6>^3 -C-^2%s\n\"",					BROADCAST_DISTANCE	},
-	{"/thought",	"chat \"%s ^7is thinking: %s\n\"",					BROADCAST_DISTANCE	},
+	{"/thought",	"chat \"%s ^7is thinking:%s\n\"",					BROADCAST_DISTANCE	},
 };
 
 void play_animation(gentity_t *ent, int animation, int time) {
@@ -1120,7 +1138,13 @@ void Cmd_Emote_f( gentity_t *ent )
 		return;
 	}
 
-	trap->SendServerCommand( ent-g_entities, va("print \"Unknown emote \\\"%s\\\". Use /emote list to see available emotes.\n\"", anim_id) );
+	// GalaxyRP fix: [Emote] the rejected name was wrapped in \" escapes, which the Q3 command
+	// tokenizer does not implement: cmd.cpp copies the backslash through verbatim and treats the
+	// quote right after it as the end of the argument -- its own comment there reads "NOTE TTimo
+	// this doesn't handle \" escaping". So every client printed "Unknown emote \" and dropped the
+	// rest of the line, which is why nobody has ever seen the /emote list hint this message ends
+	// with. Single quotes instead, matching every other "not found" message in this file.
+	trap->SendServerCommand( ent-g_entities, va("print \"Unknown emote '%s'. Use /emote list to see available emotes.\n\"", anim_id) );
 }
 
 /*
@@ -10361,8 +10385,13 @@ void send_rpg_events(int send_event_timer)
 		{
 			player_ent->client->pers.send_event_timer = level.time + send_event_timer;
 			player_ent->client->pers.send_event_interval = level.time + 100;
-			player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_RADAR_EVENT);
-			player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT);
+			// GalaxyRP fix: [Dead Code] two clears sat here, for PLAYER_STATUS_SENT_RADAR_EVENT and
+			// PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT. Both bits lost their setter and their reader
+			// when the radar flags and the jetpack-flame cascade step were retired -- the flame rides
+			// the entity state as EF_RPG_JETPACK_UPGRADE now -- leaving each with exactly one write,
+			// this clear, and nothing anywhere that could observe it. The two timer writes above are
+			// the whole of what this function still does: they reopen the window the event cascade in
+			// ClientTimerActions() runs inside.
 		}
 	}
 }
