@@ -3551,13 +3551,51 @@ void zyk_apply_character_skills( gentity_t *ent )
 	}
 }
 
+// GalaxyRP fix: [Account] the fuel ClientSpawn() resets and the seamless account path did not.
+//
+// Neither fuel recharges on its own. Across the whole tree the only things that put either of them
+// back are ClientSpawn(), StopFollowing(), the three /buy refills, duel_tournament_prepare() and
+// duel_tournament_prize(); the client side only reads them, for the two HUD bars. So at
+// rp_seamlesslogin 0 the deferred kill refilled both as a side effect of the respawn, and at 1 --
+// the default -- a player carried the previous character's drain across /login, /logout, /new,
+// /char new and /char use, with no way to clear it short of dying.
+//
+// Both jetpack values are written, not just the visible one: ps.jetpackFuel is only recomputed from
+// pers.jetpack_fuel inside the jetPackOn branch in G_RunFrame(), so setting one alone leaves the bar
+// disagreeing with the real fuel until the next flight. duel_tournament_prepare() and
+// duel_tournament_prize() in g_main.c set the pair the same way.
+//
+// ps.cloakFuel is named for the cloak but no longer powers it -- that cost was commented out in
+// ItemUse_Cloak() ("zyk: now cloak item doesnt use fuel anymore"). Its one remaining consumer is the
+// Flamethrower skill in g_weapon.c, so what a character switch used to carry across was the previous
+// character's flamethrower charge, including onto a character with no flamethrower skill at all.
+//
+// Unconditional rather than gated on rp_seamlesslogin: at 0 the kill resets it anyway, so calling it
+// either way makes the two paths land on the same state and keeps this independent of the cvar.
+//
+// Called from zyk_apply_character_loadout() below, which covers /login, /new, /char new and /char
+// use, and from Cmd_LogoutAccount_f() for /logout. Deliberately NOT folded into zyk_remove_guns(),
+// which /logout also calls: that helper has two other callers, ClientSpawn() -- where this is
+// already done a few lines earlier -- and the "remove" arm of Cmd_Give_f(), where refuelling as a
+// side effect of an admin stripping weapons would be a behaviour change nobody asked for.
+void zyk_reset_fuel( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	ent->client->pers.jetpack_fuel = MAX_JETPACK_FUEL;
+	ent->client->ps.jetpackFuel = 100;
+	ent->client->ps.cloakFuel = 100;
+}
+
 // GalaxyRP fix: [Account] the part of a character switch that initialize_rpg_skills() does not do.
 // /login, /new, /char new and /char use all apply the new character synchronously and then schedule a
 // kill, and the respawn that kill causes is what used to finish the job. That respawn cannot be relied
 // on: G_Kill() silently no-ops for a paralyzed player and in GT_DUEL/GT_POWERDUEL with
 // g_allowDuelSuicide off, so those players kept the previous character's leftovers indefinitely.
 //
-// Two things were left behind, both of which ClientSpawn() does and initialize_rpg_skills() does not:
+// Three things were left behind, all of which ClientSpawn() does and initialize_rpg_skills() does
+// not:
 //
 //  1. A running jetpack. Ownership is now cleared by initialize_rpg_skills() (see the mask there), but
 //     a jetpack already in flight has to be switched off as well, the way zyk_remove_guns() does it.
@@ -3566,6 +3604,7 @@ void zyk_apply_character_skills( gentity_t *ent )
 //     they are stuck holding it. The fallback order matches ClientSpawn's (saber, then Bryar Pistol,
 //     then melee) rather than zyk_remove_guns()'s unconditional melee, because the new character may
 //     well own a saber.
+//  3. The jetpack and flamethrower fuel -- see zyk_reset_fuel() just above.
 //
 // Ammo is deliberately NOT handled here. Both switch paths already restore the character's saved
 // ammo counts inline, in the same SQLITE_ROW branch that sets pers.CharID -- select_player_character()
@@ -3605,6 +3644,9 @@ void zyk_apply_character_loadout( gentity_t *ent )
 		else
 			ent->client->ps.weapon = WP_MELEE;
 	}
+
+	// 3. the fuel the respawn used to refill
+	zyk_reset_fuel(ent);
 }
 
 // GalaxyRP: [Account] does this account command still have to kill the player to take effect?
@@ -11677,6 +11719,11 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	zyk_stop_active_holdables(ent);
 
 	zyk_remove_guns(ent);
+
+	// GalaxyRP fix: [Account] the same fuel reset the four character/login commands get -- see
+	// zyk_reset_fuel(). Below zyk_remove_guns() because that call switches a running jetpack off,
+	// and deliberately not inside it: it has two other callers that must not refuel.
+	zyk_reset_fuel(ent);
 
 	// zyk_remove_guns() always grants saber (conditional on force level) and Bryar Pistol unconditionally,
 	// with no gametype exclusion -- strip them back out for Jedi Master/Siege, matching this function's
