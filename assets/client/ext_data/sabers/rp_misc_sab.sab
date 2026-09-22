@@ -45,8 +45,8 @@ holocomm
 	hitOtherEffect	"sparks/spark.efx"
 	spinsound	"sound/weapons/sword/spin.mp3"
     swingsound1             "sound/weapons/metal/swing1.wav"
-    swingsound2             "sound/weapons/metal/swing3.wav"
-    swingsound3             "sound/weapons/metal/swing2.wav"
+    swingsound2             "sound/weapons/metal/swing2.wav"
+    swingsound3             "sound/weapons/metal/swing3.wav"
     fallsound1              "sound/weapons/metal/fall1.wav"
     fallsound2              "sound/weapons/metal/fall1.wav"
     fallsound3              "sound/weapons/metal/fall1.wav"
@@ -108,8 +108,8 @@ comlink
 	hitOtherEffect	"sparks/spark.efx"
 	spinsound	"sound/weapons/sword/spin.mp3"
     swingsound1             "sound/weapons/metal/swing1.wav"
-    swingsound2             "sound/weapons/metal/swing3.wav"
-    swingsound3             "sound/weapons/metal/swing2.wav"
+    swingsound2             "sound/weapons/metal/swing2.wav"
+    swingsound3             "sound/weapons/metal/swing3.wav"
     fallsound1              "sound/weapons/metal/fall1.wav"
     fallsound2              "sound/weapons/metal/fall1.wav"
     fallsound3              "sound/weapons/metal/fall1.wav"
@@ -135,7 +135,6 @@ datapad
 	saberLength	50
 	saberColor	random
 	damagescale	0.05
-	boltToWrist 1
     noBlade         1
     saberRadius     3
     maxChain        0
@@ -171,8 +170,8 @@ datapad
 	hitOtherEffect	"sparks/spark.efx"
 	spinsound	"sound/weapons/sword/spin.mp3"
     swingsound1             "sound/weapons/metal/swing1.wav"
-    swingsound2             "sound/weapons/metal/swing3.wav"
-    swingsound3             "sound/weapons/metal/swing2.wav"
+    swingsound2             "sound/weapons/metal/swing2.wav"
+    swingsound3             "sound/weapons/metal/swing3.wav"
     fallsound1              "sound/weapons/metal/fall1.wav"
     fallsound2              "sound/weapons/metal/fall1.wav"
     fallsound3              "sound/weapons/metal/fall1.wav"
