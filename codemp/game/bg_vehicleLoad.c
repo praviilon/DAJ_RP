@@ -1436,6 +1436,63 @@ void BG_VehicleLoadParms( void )
 	BG_VehWeaponLoadParms();
 }
 
+#if defined(_GAME)
+/*
+BG_VehicleNameExists
+
+GalaxyRP fix: [Entity System] whether vehicleName names a vehicle, with no side effects and no
+output. BG_VehicleGetIndex() cannot be used to ask: for a name that is not a vehicle it prints a red
+"Could not find Vehicle" error, and for one not loaded yet it loads it into g_vehicleInfo. The
+entity-file loader asks this of every npc_spawner line (to skip the ones naming a vehicle, which
+the NPC loader always refuses), so it has to stay quiet for ordinary NPC types.
+
+The search is the one VEH_LoadVehicle() does: the vehicles already loaded, then the top-level
+"<name> { ... }" blocks of the .veh text read at game start. Before that text is read it answers
+qfalse, so the caller keeps its old behaviour.
+*/
+qboolean BG_VehicleNameExists( const char *vehicleName )
+{
+	const char	*p;
+	const char	*token;
+	int			v;
+
+	if ( !vehicleName || !vehicleName[0] || numVehicles == 0 )
+	{
+		return qfalse;
+	}
+
+	for ( v = VEHICLE_BASE; v < numVehicles; v++ )
+	{
+		if ( g_vehicleInfo[v].name && Q_stricmp( g_vehicleInfo[v].name, vehicleName ) == 0 )
+		{
+			return qtrue;
+		}
+	}
+
+	p = VehicleParms;
+	COM_BeginParseSession( "vehicles" );
+
+	while ( p )
+	{
+		token = COM_ParseExt( &p, qtrue );
+		if ( token[0] == 0 )
+		{
+			return qfalse;
+		}
+
+		if ( Q_stricmp( token, vehicleName ) == 0 )
+		{ // zyk: a name only counts if a braced block follows it, as in VEH_LoadVehicle
+			token = COM_ParseExt( &p, qtrue );
+			return ( Q_stricmp( token, "{" ) == 0 ) ? qtrue : qfalse;
+		}
+
+		SkipBracedSection( &p, 0 );
+	}
+
+	return qfalse;
+}
+#endif
+
 int BG_VehicleGetIndex( const char *vehicleName )
 { // zyk: changed this code. If client-side, gets a vehicle index of a base jka vehicle so player does not get kicked from server
 	int vehIndex = VEH_VehicleIndexForName( vehicleName );

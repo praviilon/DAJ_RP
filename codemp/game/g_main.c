@@ -8073,6 +8073,39 @@ extern int zyk_max_magic_power(gentity_t *ent);
 extern void G_Kill( gentity_t *ent );
 extern void save_quest_file(int quest_number);
 
+/*
+================
+zyk_entity_line_vehicle_npc_spawner
+
+GalaxyRP fix: [Entity System] for one parsed entity-file line: if it is an npc_spawner whose
+npc_type names a vehicle, return that type, else NULL. Keys are matched case-insensitively, and
+the LAST classname and npc_type win, as they do when the line is spawned. Only npc_spawner: an
+NPC_Vehicle line is how a vehicle is meant to come back, and the SP-style NPC_<name> spawner
+classes set their own NPC_type. See BG_VehicleNameExists() for why the lookup is a silent one.
+================
+*/
+static const char *zyk_entity_line_vehicle_npc_spawner( char (*keys)[ZYK_ENTITY_FILE_LINE_LENGTH], char (*values)[ZYK_ENTITY_FILE_LINE_LENGTH], int pairs_x2 )
+{
+	const char *classname = NULL;
+	const char *npc_type = NULL;
+	int m;
+
+	for ( m = 0; m < pairs_x2; m += 2 )
+	{
+		if ( Q_stricmp( keys[m / 2], "classname" ) == 0 )
+			classname = values[m / 2];
+		else if ( Q_stricmp( keys[m / 2], "npc_type" ) == 0 )
+			npc_type = values[m / 2];
+	}
+
+	if ( classname && npc_type && Q_stricmp( classname, "npc_spawner" ) == 0 && BG_VehicleNameExists( npc_type ) )
+	{
+		return npc_type;
+	}
+
+	return NULL;
+}
+
 void G_RunFrame( int levelTime ) {
 	int			i;
 	gentity_t	*ent;
@@ -9095,6 +9128,23 @@ void G_RunFrame( int levelTime ) {
 					continue;
 				}
 
+				// GalaxyRP fix: [Entity System] an npc_spawner naming a vehicle. /entsave used to write
+				// every live NPC as one of these, vehicles included, and the NPC loader always refuses a
+				// vehicle type that does not come from an NPC_Vehicle spawner -- two red console errors
+				// and nothing spawned. /entsave no longer writes them; presets saved before still hold
+				// them, so skip them here with one line in the log instead.
+				{
+					const char *vehicle_type = zyk_entity_line_vehicle_npc_spawner(zyk_keys, zyk_values, j);
+
+					if (vehicle_type)
+					{
+						G_LogPrintf("entity file %s: line %d is an npc_spawner for vehicle %s, skipped "
+							"(vehicles only spawn from NPC_Vehicle; re-save the preset to drop the line)\n",
+							level.load_entities_file, zyk_lines_read, vehicle_type);
+						continue;
+					}
+				}
+
 				// GalaxyRP fix: [Entity System] a good line is not enough on its own. This loop takes an
 				// entity per line and nothing bounds the number of lines, so it was the one player-driven
 				// spawn path with no check at all -- /entadd, /npc, npc_spawner and the asteroid field all
@@ -9180,6 +9230,13 @@ void G_RunFrame( int levelTime ) {
 		if( level.gametype >= GT_TEAM ) {
 			G_CheckTeamItems();
 		}
+
+		// GalaxyRP fix: [Entity System] the load above started with every non-client entity freed,
+		// the helper that runs the world's spawnscript among them, and no preset carries that helper
+		// back. Start the script again, as the map loader does, so a map that drives its spawners from
+		// it (the fighters on a siege space map) behaves after a preset load as it does at map start.
+		// See G_StartWorldSpawnScript() in g_spawn.c.
+		G_StartWorldSpawnScript( qtrue );
 
 		level.load_entities_timer = 0;
 	}

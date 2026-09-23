@@ -1657,6 +1657,16 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 
 	newent->classname = "NPC";
 	newent->NPC_type = ent->NPC_type;
+
+	// GalaxyRP fix: [Entity System] remember which spawner made this NPC, so /entsave can tell an NPC
+	// its spawner will recreate from one that has to be written out itself. See gentity_t::zyk_spawner_id.
+	if ( !ent->zyk_spawner_id )
+	{
+		ent->zyk_spawner_id = ++level.zyk_next_spawner_id;
+	}
+	newent->zyk_npc_spawner = ent;
+	newent->zyk_npc_spawner_id = ent->zyk_spawner_id;
+
 	trap->UnlinkEntity((sharedEntity_t *)newent);
 
 	VectorCopy(ent->s.angles, newent->s.angles);

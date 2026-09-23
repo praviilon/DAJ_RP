@@ -15204,6 +15204,62 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	}
 }
 
+// GalaxyRP fix: [Entity System] which live NPCs /entsave leaves out, and why. It used to write
+// every NPC as an npc_spawner line, which went wrong three ways:
+//  - a vehicle: the NPC loader refuses a vehicle type from anything but an NPC_Vehicle spawner
+//    ("Tried to spawn a vehicle NPC ... without using NPC_Vehicle"), so the line never produced
+//    anything. Vehicles come back from their own spawners.
+//  - the droid riding in a vehicle: it came back on its own, standing where the vehicle had been.
+//    The vehicle spawns its droid again itself.
+//  - an NPC whose spawner is being saved as well: the spawner makes it again on load, so it came
+//    back twice -- and since every line this writes loads back as such a spawner, any NPC in a
+//    preset doubled on each save and reload. The spawner recreates it the way the map does at
+//    start (the admin accepted that a moved NPC returns to its spawner, and that a triggered
+//    spawner's NPC is absent until the trigger fires again, as on a fresh map).
+// Everything else -- /npc spawn NPCs, whose one-frame spawner is never saved, NPC pilots, an NPC
+// whose spawner was removed -- is saved as before. When the spawner link cannot be confirmed the
+// NPC is saved, so the worst this can do is what /entsave did before.
+typedef enum {
+	ZYK_ENTSAVE_NPC_SAVE = 0,
+	ZYK_ENTSAVE_NPC_VEHICLE,
+	ZYK_ENTSAVE_NPC_DROID,
+	ZYK_ENTSAVE_NPC_FROM_SPAWNER
+} zyk_entsave_npc_t;
+
+static zyk_entsave_npc_t zyk_entsave_npc_skip_reason(gentity_t *npc)
+{
+	const gentity_t *spawner = npc->zyk_npc_spawner;
+	const int veh_num = npc->s.m_iVehicleNum;
+
+	if (npc->m_pVehicle || npc->s.NPC_class == CLASS_VEHICLE || (npc->client && npc->client->NPC_class == CLASS_VEHICLE))
+	{
+		return ZYK_ENTSAVE_NPC_VEHICLE;
+	}
+
+	// zyk: only a droid its vehicle is actually carrying -- the vehicle names it as m_pDroidUnit
+	if (veh_num > 0 && veh_num < ENTITYNUM_WORLD)
+	{
+		const gentity_t *veh = &g_entities[veh_num];
+
+		if (veh->inuse && veh->m_pVehicle && veh->m_pVehicle->m_pDroidUnit == (bgEntity_t *)npc)
+		{
+			return ZYK_ENTSAVE_NPC_DROID;
+		}
+	}
+
+	// zyk: the spawner must still be the one that made this NPC (same slot, same id -- a freed and
+	// reused slot is zeroed, so its id cannot match) and must have a record, i.e. /entsave is writing
+	// it out too. The /npc spawn command's one-frame spawner never has a record.
+	if (spawner && spawner != npc && npc->zyk_npc_spawner_id != 0 && spawner->inuse &&
+		spawner->zyk_spawner_id == npc->zyk_npc_spawner_id &&
+		level.zyk_spawn_strings_values_count[spawner->s.number] > 0)
+	{
+		return ZYK_ENTSAVE_NPC_FROM_SPAWNER;
+	}
+
+	return ZYK_ENTSAVE_NPC_SAVE;
+}
+
 // GalaxyRP (Alex): Builds an npc spawner string based on an npc entity.
 char *create_npc_spawner_for_npc(gentity_t *ent) {
 	// GalaxyRP fix: [Entity System] this line is assembled by hand rather than through the loop in
@@ -15248,6 +15304,10 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	// server command per offending entity -- see the log calls in the loop below
 	int over_long = 0;
 	int not_encodable = 0;
+	// GalaxyRP fix: [Entity System] live NPCs left out on purpose -- see zyk_entsave_npc_skip_reason()
+	int npcs_left_to_spawners = 0;
+	int vehicles_skipped = 0;
+	char skipped_note[128] = {0};
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15393,13 +15453,31 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			// type name was interpreted as a conversion against arguments that were never pushed.
 			// Pass it as data.
 			if (this_ent->client && this_ent->classname && strcmp(this_ent->classname, "NPC") == 0) {
-				const char *npc_line = create_npc_spawner_for_npc(this_ent);
+				const zyk_entsave_npc_t skip = zyk_entsave_npc_skip_reason(this_ent);
 
-				// zyk: NULL means the type did not encode in full, and it has already logged why
-				if (npc_line)
-					fprintf(this_file, "%s", npc_line);
+				if (skip == ZYK_ENTSAVE_NPC_FROM_SPAWNER)
+				{
+					npcs_left_to_spawners++;
+				}
+				else if (skip != ZYK_ENTSAVE_NPC_SAVE)
+				{
+					vehicles_skipped++;
+					G_LogPrintf("entsave: %s %d (%s) not saved: %s\n",
+						skip == ZYK_ENTSAVE_NPC_VEHICLE ? "vehicle" : "droid", this_ent->s.number,
+						this_ent->NPC_type ? this_ent->NPC_type : "no type",
+						skip == ZYK_ENTSAVE_NPC_VEHICLE ? "vehicles come back from their NPC_Vehicle spawners"
+						                                : "its vehicle spawns it again");
+				}
 				else
-					not_encodable++;
+				{
+					const char *npc_line = create_npc_spawner_for_npc(this_ent);
+
+					// zyk: NULL means the type did not encode in full, and it has already logged why
+					if (npc_line)
+						fprintf(this_file, "%s", npc_line);
+					else
+						not_encodable++;
+				}
 			}
 		}
 	}
@@ -15409,14 +15487,22 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	// GalaxyRP fix: [Entity System] the counts ride on the message /entsave already sends, so the
 	// admin still learns something went wrong without the loop sending him anything at all. The
 	// detail -- which entity, and why -- is in the log, where it cannot flood a connection.
+	// GalaxyRP fix: [Entity System] one extra line when live NPCs were left out on purpose, in the
+	// same single message -- never one per NPC (see above for why).
+	if (npcs_left_to_spawners > 0 || vehicles_skipped > 0)
+	{
+		Com_sprintf(skipped_note, sizeof(skipped_note), "^7Not written, as their spawners recreate them: %d NPC(s) and %d vehicle(s)/droid(s).\n",
+			npcs_left_to_spawners, vehicles_skipped);
+	}
+
 	if (over_long > 0 || not_encodable > 0)
 	{
-		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file. ^3%d entity(s) will not load back and %d could not be written; see the server log.\n\"",
-			arg1, over_long, not_encodable) );
+		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file. ^3%d entity(s) will not load back and %d could not be written; see the server log.\n%s\"",
+			arg1, over_long, not_encodable, skipped_note) );
 	}
 	else
 	{
-		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file\n\"", arg1) );
+		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file\n%s\"", arg1, skipped_note) );
 	}
 }
 

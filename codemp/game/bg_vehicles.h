@@ -641,3 +641,7 @@ typedef struct Vehicle_s
 #endif
 
 extern int BG_VehicleGetIndex( const char *vehicleName );
+#if defined(_GAME)
+// GalaxyRP fix: [Entity System] a SILENT "is this a vehicle name?" -- see bg_vehicleLoad.c
+extern qboolean BG_VehicleNameExists( const char *vehicleName );
+#endif

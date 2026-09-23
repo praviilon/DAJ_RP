@@ -2437,6 +2437,63 @@ G_SpawnEntitiesFromString
 Parses textual entity definitions out of an entstring and spawns gentities.
 ==============
 */
+/*
+==============
+G_StartWorldSpawnScript
+
+GalaxyRP fix: [Entity System] the world entity cannot run ICARUS scripts itself, so a map whose
+worldspawn has a "spawnscript" (e.g. a siege space map whose script triggers every fighter spawner)
+gets a helper entity that runs the script 100ms later. That helper was only ever created here, by
+the map loader. An entity preset load -- the default.txt loaded at map start, or /entload -- first
+frees every non-client entity, the helper included (at map start it is freed before it has even
+run), and the helper has no Entity System record, so no preset ever brings it back. The script
+therefore never ran on a map with a preset: the fighter spawners came back from the file, named
+and waiting to be triggered, and nothing triggered them.
+
+The map loader and the preset loader both call this now. At most one helper is ever alive: the
+preset loaders free the old one before they read the file. checkSlots is qfalse for the map
+loader, which keeps its original behaviour exactly, and qtrue for the preset loader, which runs
+mid-game where G_Spawn() running out of slots would end the process (see ZYK_ENTITY_RESERVE).
+Returns qtrue if a helper was started.
+==============
+*/
+qboolean G_StartWorldSpawnScript( qboolean checkSlots )
+{
+	gentity_t *script_runner;
+
+	if ( !g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN] || !g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN][0] )
+	{
+		return qfalse;
+	}
+
+	if ( checkSlots && G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		G_LogPrintf( "world spawnscript %s not started: %d entity slots free\n",
+			g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN], G_FreeEntityCount() );
+		return qfalse;
+	}
+
+	//World has a spawn script, but we don't want the world in ICARUS and running scripts,
+	//so make a scriptrunner and start it going.
+	script_runner = G_Spawn();
+	if ( !script_runner )
+	{
+		return qfalse;
+	}
+
+	script_runner->behaviorSet[BSET_USE] = g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN];
+	script_runner->count = 1;
+	script_runner->think = scriptrunner_run;
+	script_runner->nextthink = level.time + 100;
+
+	if ( script_runner->inuse )
+	{
+		trap->ICARUS_InitEnt( (sharedEntity_t *)script_runner );
+	}
+
+	return qtrue;
+}
+
 void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
 	// GalaxyRP: [Logical Entities] start the legacy-slot simulation with the table as it stands
 	// (clients and body queue). A sub-BSP spawns nested inside the main pass and must not restart it.
@@ -2474,23 +2531,9 @@ void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
 		G_SpawnGEntityFromSpawnVars(inSubBSP);
 	}
 
-	if( g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN] && g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN][0] )
-	{//World has a spawn script, but we don't want the world in ICARUS and running scripts,
-		//so make a scriptrunner and start it going.
-		gentity_t *script_runner = G_Spawn();
-		if ( script_runner )
-		{
-			script_runner->behaviorSet[BSET_USE] = g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN];
-			script_runner->count = 1;
-			script_runner->think = scriptrunner_run;
-			script_runner->nextthink = level.time + 100;
-
-			if ( script_runner->inuse )
-			{
-				trap->ICARUS_InitEnt( (sharedEntity_t *)script_runner );
-			}
-		}
-	}
+	// GalaxyRP fix: [Entity System] the world's spawnscript is started by G_StartWorldSpawnScript()
+	// now, so an entity preset load can start it again -- see the comment on that function.
+	G_StartWorldSpawnScript( qfalse );
 
 	if (!inSubBSP)
 	{

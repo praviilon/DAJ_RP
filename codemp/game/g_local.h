@@ -542,6 +542,16 @@ struct gentity_s {
 
 	// OpenJK add
 	int			useDebounceTime;	// for cultist_destroyer
+
+	// GalaxyRP fix: [Entity System] which spawner made an NPC, so /entsave can leave an NPC to a
+	// spawner that is itself being saved instead of writing it a second time (it came back doubled
+	// on every reload). zyk_spawner_id is given to a spawner by NPC_Spawn_Do() the first time it
+	// spawns; the NPC keeps a pointer to the spawner's slot and that id. A slot that has since been
+	// freed and reused is zeroed by G_FreeEntity(), so its id no longer matches and the link is
+	// ignored -- the NPC is then saved as before. See zyk_entsave_npc_skip_reason() in g_cmds.c.
+	int			zyk_spawner_id;			// on a spawner: its id, 0 until it has spawned
+	gentity_t	*zyk_npc_spawner;		// on an NPC: the spawner that made it
+	int			zyk_npc_spawner_id;		// on an NPC: that spawner's zyk_spawner_id at the time
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -1993,6 +2003,10 @@ typedef struct level_locals_s {
 	// zyk: amount of keys and values stored in this entity
 	int zyk_spawn_strings_values_count[MAX_ENTITIESTOTAL];
 
+	// GalaxyRP fix: [Entity System] the last id handed out as gentity_t::zyk_spawner_id. Starts at
+	// 0 with the rest of level, so ids are never 0 and never repeat within a map.
+	int zyk_next_spawner_id;
+
 	// GalaxyRP: [Weather] /admweather state. The block is claimed lazily, on the first use of the
 	// command in a map, and that timing is deliberate: claiming it in G_InitGame would put it below
 	// the effects the entity preset registers a second into the map, and those would then replay
@@ -2091,6 +2105,7 @@ qboolean	G_SpawnInt( const char *key, const char *defaultString, int *out );
 qboolean	G_SpawnVector( const char *key, const char *defaultString, float *out );
 qboolean	G_SpawnBoolean( const char *key, const char *defaultString, qboolean *out );
 void		G_SpawnEntitiesFromString( qboolean inSubBSP );
+qboolean	G_StartWorldSpawnScript( qboolean checkSlots );
 char *G_NewString( const char *string );
 
 // GalaxyRP fix: [Entity System] the entity-file loader reads one entity per line into a buffer of
