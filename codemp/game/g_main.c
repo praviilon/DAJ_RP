@@ -6840,6 +6840,8 @@ void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qbo
 // this file was the bit-10 Resurrection Power branch of quest_power_events(), removed just below;
 // the function itself lives on with a caller in g_cmds.c.
 extern void zyk_wind_down_seeker_drone(gentity_t *ent);
+// GalaxyRP fix: [Minigames] both mini-game prepares call this before their loadout snapshot.
+extern void zyk_release_mounts_for_minigame(gentity_t *ent);
 // GalaxyRP: [Sniper Battle] the zyk_apply_character_loadout() declaration that sat here went with
 // the removal -- sniper_battle_end() was this file's only caller.
 // GalaxyRP fix: [Magic] quest_power_events() used to be here. It ran every frame for every client
@@ -7144,7 +7146,13 @@ void duel_tournament_prepare(gentity_t *ent)
 {
 	int i = 0;
 
-	// GalaxyRP fix: [Duel Tournament] first statement in the function, before the strip below
+	// GalaxyRP fix: [Minigames] off any e-web or map emplaced gun first. While a player is mounted,
+	// STAT_WEAPONS holds the gun and not their weapons, so the snapshot below would record the
+	// wrong thing -- and a live e-web would keep writing over the saber handed out below. See
+	// zyk_release_mounts_for_minigame() in g_cmds.c.
+	zyk_release_mounts_for_minigame(ent);
+
+	// GalaxyRP fix: [Duel Tournament] straight after the release above, before the strip below
 	// takes the weapons, ammo and holdable items away. player_backup_force() further down is
 	// placed the same way relative to the force strip that follows it.
 	player_backup_loadout(ent);
@@ -7781,6 +7789,11 @@ void melee_battle_prepare()
 			{ // zyk: respawn him if he is dead
 				ClientRespawn(ent);
 			}
+
+			// GalaxyRP fix: [Minigames] off any e-web or map emplaced gun before the snapshot
+			// below, for the reasons given at the same call in duel_tournament_prepare(). After
+			// the respawn above: EWebDisattach() only gives weapons back to a living player.
+			zyk_release_mounts_for_minigame(ent);
 
 			// GalaxyRP fix: [Melee Battle] write down what the battle is about to take, so
 			// melee_battle_restore() can give back exactly that. Taken AFTER the ClientRespawn()

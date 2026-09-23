@@ -2182,6 +2182,9 @@ void ItemUse_Jetpack(gentity_t *ent);
 void ItemUse_UseCloak( gentity_t *ent );
 void ItemUse_UseDisp(gentity_t *ent, int type);
 void ItemUse_UseEWeb(gentity_t *ent);
+// GalaxyRP fix: [Minigames] also called by zyk_release_mounts_for_minigame() in g_cmds.c, which
+// puts a player's e-web away before a mini-game snapshots their weapons.
+void EWebDisattach(gentity_t *owner, gentity_t *eweb);
 void G_PrecacheDispensers(void);
 
 void ItemUse_Seeker(gentity_t *ent);

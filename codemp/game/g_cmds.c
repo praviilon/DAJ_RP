@@ -3408,6 +3408,72 @@ void zyk_wind_down_seeker_drone( gentity_t *ent )
 	}
 }
 
+// GalaxyRP fix: [Emplaced Gun] steps 3 and 4 of zyk_stop_active_holdables() below, moved out
+// into functions of their own so that zyk_release_mounts_for_minigame() further down runs the very
+// same code rather than a copy of it. The reasoning for both is in the long note above
+// zyk_stop_active_holdables(). Unchanged apart from comment wording.
+//
+// Release a player from a map-placed emplaced gun. Call it AFTER the player's own e-web has been
+// dealt with: the e-web also sets ps.emplacedIndex, and this relies on that index already being
+// cleared when it is the e-web's.
+static void zyk_release_map_emplaced_gun( gentity_t *ent )
+{
+	if (ent->client->ps.emplacedIndex)
+	{
+		gentity_t *gun = &g_entities[ent->client->ps.emplacedIndex];
+
+		// Four tests, because entity slots get recycled and nothing clears this index on the
+		// player's behalf when the gun behind it goes away. classname and activator together are
+		// what make it certain: emplaced_gun_use() is the only thing that points an emplaced_gun's
+		// activator at its rider, and the e-web -- the only other thing that ever sets
+		// ps.emplacedIndex -- tracks its rider through r.ownerNum, never sets activator, and has
+		// already been released by the caller's own e-web step by the time we get here.
+		//
+		// The classname NULL test is not decoration. Every entity that has been through G_Spawn
+		// has one (G_InitGentity writes "noclass", G_FreeEntity writes "freed"), and a slot that
+		// has not been through it fails the inuse test first -- so today it cannot be NULL here.
+		// That is three separate facts holding a raw Q_stricmp() up, and holdstop/negctl.py found
+		// the gap by deleting the account helper's e-web block: ps.emplacedIndex then still pointed
+		// at the e-web when this ran. One pointer test is cheaper than depending on all three.
+		if (gun->inuse && gun->classname && Q_stricmp(gun->classname, "emplaced_gun") == 0
+			&& gun->activator == ent)
+		{
+			zyk_release_from_emplaced_gun(gun, ent);
+		}
+		else
+		{
+			// An index with nothing behind it any more. Clear the rider's half of the mount so the
+			// player does not go on believing they are sitting on something; the gun's half, if
+			// there ever was one, is not ours to guess at. ps.weapon is deliberately left to
+			// PM_Weapon()'s "oh no!" recovery (bg_pmove.c), which is written for exactly this
+			// state -- WP_EMPLACED_GUN held with no emplacedIndex under it -- and picks a weapon
+			// the player actually owns on the very next pmove.
+			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
+			ent->client->ps.emplacedIndex = 0;
+			ent->client->ps.saberHolstered = 0;
+		}
+	}
+}
+
+// Turn off the binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together.
+static void zyk_cancel_zoom( gentity_t *ent )
+{
+	if (ent->client->ps.zoomMode)
+	{
+		ent->client->ps.zoomMode = 0;
+		// zoomTime is what cgame interpolates the zoom-OUT from (CG_CalcFov: f = (cg.time -
+		// ps.zoomTime) / ZOOM_OUT_TIME). Left stale, f is enormous, the interpolation is skipped and
+		// the view snaps out; set here, the player gets the same 100ms ease-out they would from
+		// pressing the key themselves.
+		ent->client->ps.zoomTime = level.time;
+		ent->client->ps.zoomLocked = qfalse;
+		ent->client->ps.zoomLockTime = 0;
+		// ps.zoomFov is deliberately NOT touched. That same interpolation runs FROM it, so the 0 that
+		// pm_cancelOutZoom writes would animate outward from maximum magnification -- worse than
+		// doing nothing. Do not "complete" this block by copying that line.
+	}
+}
+
 // GalaxyRP fix: [Account] stop every HOLDABLE this player currently has running, for the same
 // reason and at the same point as zyk_stop_active_force_powers() above.
 //
@@ -3508,58 +3574,95 @@ void zyk_stop_active_holdables( gentity_t *ent )
 		}
 	}
 
-	// 3. the map-placed emplaced gun -- see the note above on why the e-web block does not cover it
-	if (ent->client->ps.emplacedIndex)
-	{
-		gentity_t *gun = &g_entities[ent->client->ps.emplacedIndex];
+	// 3. the map-placed emplaced gun -- see the note above on why the e-web block does not cover
+	// it. After step 2 on purpose: see zyk_release_map_emplaced_gun().
+	zyk_release_map_emplaced_gun(ent);
 
-		// Four tests, because entity slots get recycled and nothing clears this index on the
-		// player's behalf when the gun behind it goes away. classname and activator together are
-		// what make it certain: emplaced_gun_use() is the only thing that points an emplaced_gun's
-		// activator at its rider, and the e-web -- the only other thing that ever sets
-		// ps.emplacedIndex -- tracks its rider through r.ownerNum, never sets activator, and has
-		// already been released by the block above by the time we get here.
-		//
-		// The classname NULL test is not decoration. Every entity that has been through G_Spawn
-		// has one (G_InitGentity writes "noclass", G_FreeEntity writes "freed"), and a slot that
-		// has not been through it fails the inuse test first -- so today it cannot be NULL here.
-		// That is three separate facts holding a raw Q_stricmp() up, and holdstop/negctl.py found
-		// the gap by deleting the e-web block above: ps.emplacedIndex then still pointed at the
-		// e-web when this ran. One pointer test is cheaper than depending on all three.
-		if (gun->inuse && gun->classname && Q_stricmp(gun->classname, "emplaced_gun") == 0
-			&& gun->activator == ent)
+	// 4. binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together
+	zyk_cancel_zoom(ent);
+}
+
+// GalaxyRP fix: [Minigames] get a player off anything they are manning before a mini-game takes
+// their loadout away.
+//
+// duel_tournament_prepare() and melee_battle_prepare() (g_main.c) both open with
+// player_backup_loadout(), which snapshots ps.stats[STAT_WEAPONS] so that the restore at the end
+// can hand it back. Nothing made sure the player was not mounted at that moment -- the sign-up
+// commands do not ask, and a player can mount during the countdown or between tournament rounds
+// anyway -- and a mount is exactly when that stat does not hold their weapons:
+//
+//   E-Web. EWebThink() (g_items.c) replaces the mask with the WP_EMPLACED_GUN bit on every frame
+//   while mounted; the real one is kept in the e-web's genericValue11. So the snapshot recorded
+//   that bit and nothing else. Nor did the e-web let go. Its think runs later in the same
+//   G_RunFrame(), after the teleport into the arena, so it overwrote the saber or fists prepare had
+//   just handed out and then tried to move its owner back beside it. When the way back was
+//   blocked it dismounted and put the whole pre-match arsenal back in the middle of the match:
+//   loaded guns in a punch-only Melee Battle. When the way was clear it pulled them out of the
+//   arena, where the leave-the-arena checks killed them. Whoever survived the match was then
+//   "restored" to fists and a stray WP_EMPLACED_GUN bit, their real weapons gone.
+//
+//   Map emplaced gun. Milder: emplaced_gun_update() releases a rider who is more than 64 units away
+//   on its next think, so the match itself was clean. But the snapshot kept the WP_EMPLACED_GUN
+//   bit, and the restore gave it back to a player who was no longer sitting on anything.
+//
+// This is NOT zyk_stop_active_holdables() above, and must not be turned into it. That one frees the
+// e-web without giving back the mask it holds, which is right when a different character takes
+// over and exactly wrong here: this is the same player, the mask in genericValue11 is theirs, and a
+// snapshot taken after a free would record no weapons at all. So the e-web is put away through
+// EWebDisattach() -- the call the use key makes -- which writes genericValue11 back into
+// STAT_WEAPONS and schedules the free for the e-web's next think, later in this same frame.
+// HI_EWEB and ewebHealth are left alone, just as when a player puts it away themselves. The map gun
+// and the zoom go through the same two functions the account helper uses.
+//
+// ps.weapon is not chosen here. EWebDisattach() leaves it on WP_EMPLACED_GUN, and both callers
+// assign the mini-game's weapon a few lines later; anyone else calling this would get PM_Weapon()'s
+// "oh no!" recovery (bg_pmove.c) on the next pmove, which picks a weapon they own.
+//
+// Call it BEFORE player_backup_loadout(), and only on a living player: EWebDisattach() gives the
+// mask back only when health is above zero. Both prepares respawn the dead first. The seeker drone
+// is not in here because both prepares already wind it down a few lines further on.
+void zyk_release_mounts_for_minigame( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	// 1. the e-web, put away rather than freed -- see above
+	if (ent->client->ewebIndex)
+	{
+		gentity_t *eweb = &g_entities[ent->client->ewebIndex];
+
+		// the same ownership test as the account helper's e-web block, for the same reason
+		if (eweb->inuse && eweb->r.ownerNum == ent->s.number)
 		{
-			zyk_release_from_emplaced_gun(gun, ent);
+			EWebDisattach(ent, eweb);
 		}
 		else
 		{
-			// An index with nothing behind it any more. Clear the rider's half of the mount so the
-			// incoming character does not start out believing they are sitting on something; the
-			// gun's half, if there ever was one, is not ours to guess at. ps.weapon is deliberately
-			// left to PM_Weapon()'s "oh no!" recovery (bg_pmove.c), which is written for exactly
-			// this state -- WP_EMPLACED_GUN held with no emplacedIndex under it -- and picks a
-			// weapon the player actually owns on the very next pmove.
-			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
-			ent->client->ps.emplacedIndex = 0;
-			ent->client->ps.saberHolstered = 0;
+			// Nothing of ours behind the index, so there is no mask to give back either. Clear our
+			// half of the mount. emplacedIndex only if it is this same stale index: anything else
+			// is a map gun, and step 2 has to still find it.
+			if (ent->client->ps.emplacedIndex == ent->client->ewebIndex)
+			{
+				ent->client->ps.emplacedIndex = 0;
+			}
+			ent->client->ewebIndex = 0;
 		}
 	}
 
-	// 4. binoculars (zoomMode 2) and the disruptor scope (zoomMode 1), together
-	if (ent->client->ps.zoomMode)
-	{
-		ent->client->ps.zoomMode = 0;
-		// zoomTime is what cgame interpolates the zoom-OUT from (CG_CalcFov: f = (cg.time -
-		// ps.zoomTime) / ZOOM_OUT_TIME). Left stale, f is enormous, the interpolation is skipped and
-		// the view snaps out; set here, the player gets the same 100ms ease-out they would from
-		// pressing the key themselves.
-		ent->client->ps.zoomTime = level.time;
-		ent->client->ps.zoomLocked = qfalse;
-		ent->client->ps.zoomLockTime = 0;
-		// ps.zoomFov is deliberately NOT touched. That same interpolation runs FROM it, so the 0 that
-		// pm_cancelOutZoom writes would animate outward from maximum magnification -- worse than
-		// doing nothing. Do not "complete" this block by copying that line.
-	}
+	// 2. the map-placed emplaced gun, after step 1 -- see zyk_release_map_emplaced_gun()
+	zyk_release_map_emplaced_gun(ent);
+
+	// 3. the WP_EMPLACED_GUN bit, whatever is left of it. Steps 1 and 2 have this player standing
+	// on nothing, and nobody standing on nothing legitimately owns it -- only the two mounts ever
+	// grant it, and zyk_add_guns() (/give guns) skips it on purpose. What this catches is a stray
+	// bit that was already in the mask the e-web stashed at deploy time, now put back by
+	// EWebDisattach().
+	ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
+
+	// 4. binoculars and the disruptor scope. Both prepares hand out a weapon by assigning
+	// ps.weapon, which skips PM_BeginWeaponChange()'s zoom clear, so a player scoped with the
+	// disruptor would otherwise start a saber duel still looking down the scope.
+	zyk_cancel_zoom(ent);
 }
 
 // GalaxyRP fix: [Account] load the incoming character's skills without resurrecting a corpse.
