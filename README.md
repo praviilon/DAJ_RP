@@ -1,6 +1,6 @@
 # Galaxy RP Mod - Dark Angels Fork
 
-Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
+Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers and its logical entities system. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
@@ -37,18 +37,21 @@ The mod contains these following main features:
 - A level system, and skill points system
 - An admin system with admin commands. These can be given one by one to each account
 - Acount settings, which the player can configure to turn on or off some features
-- A Racing Mode, with prize for the winner
-- A Duel Tournament system, with prize for the winner
+- Melee Battle Mode
+- Duel Tournament Mode
 - Credits, which can be used to buy and sell stuff while roleplaying
 - A skill counter
 - An ally system, which allows a player to add or remove allies
 - An emote system, together with 57 worded emotes, with a further 3000 accessible by id
-- Players can call vote to single player maps.
+- Players can call vote to single player maps
 - Siege voice chat in FFA gametype
+- Radar HUD in FFA. Cloaked players and vehicles being hidden on the radar
 - An entity system, which allows players to add, edit, list and remove entities that are in the map
 - Commands to remap shaders in a map
+- RGB Lightsaber colors
 - A client-side plugin with menus
 - Many cvars at server.cfg to customize mod features
+- Countless bugfixes and optimizations
 - And more...
 
 # Building
@@ -59,6 +62,31 @@ The mod actually requires the only game-code files from the build project: `jamp
 
 # Maintainers
 - Pra Viilon
+
+# Credits
+**GalaxyRP authors:**
+Alex
+JustJordyn
+RepJunkie
+TriForce
+ZelZel
+
+**Zyk mod author:**
+Zyk6870
+
+**JAPro author:**
+videoP
+
+**TaystJK and EternalJK authors:**
+Tayst
+Sunny
+Dan (eternal coders)
+
+**OpenJK authors:**
+Ensiform
+razor
+Xycaleth
+JACoders group
 
 # License
 **OpenJK** is licensed under GPLv2 as free software. You are free to use, modify and redistribute OpenJK following the terms in LICENSE.txt.
