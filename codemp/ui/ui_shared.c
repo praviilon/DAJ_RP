@@ -3314,6 +3314,67 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 	return qfalse;
 }
 
+// GalaxyRP fix: [UI] ITEM_TYPE_CHECKBOX, ported from TaystJK (its "bitMask" item keyword and the
+// two Item_YesNoBitmask_* functions). A checkbox shows and toggles ONE bit of an integer cvar, so
+// several checkboxes can share a flags cvar (TaystJK uses it for the 9 cg_stylePlayer toggles):
+//     type ITEM_TYPE_CHECKBOX   cvar "some_flags_cvar"   bitMask "3"
+// Before this port a checkbox drew nothing and ignored keys, and no menu shipped by us or by vanilla
+// JKA uses one, so nothing that exists today changes. Differences from TaystJK, all defensive:
+//  - bitMask must be a plain bit number 0-31; a missing, empty, non-numeric or out-of-range value
+//    (and a checkbox with no cvar) keeps the old behaviour: nothing drawn, keys not consumed.
+//    TaystJK used atoi() and shifted by whatever came out (a shift of 32+ or a negative one is
+//    undefined behaviour in C).
+//  - the cvar is read as a string and converted with atoi, the same way the engine fills
+//    cvar->integer, instead of through the float getCVarValue: a float has 24 bits of precision,
+//    so toggling bit 24 or above that way could silently change the lower bits too.
+//  - the bit is built from an unsigned 1u, so bit 31 is well defined.
+static int Item_Bitmask_Bit(const itemDef_t *item) {
+	const char *p;
+	int bit = 0;
+
+	if (!item->cvar || !item->cvar[0] || !item->bitMask || !item->bitMask[0]) {
+		return -1;
+	}
+	for (p = item->bitMask; *p; p++) {
+		if (*p < '0' || *p > '9') {
+			return -1;
+		}
+		bit = bit * 10 + (*p - '0');
+		if (bit > 31) {
+			return -1;
+		}
+	}
+	return bit;
+}
+
+static int Item_Bitmask_CvarValue(const itemDef_t *item) {
+	char buf[64];
+
+	buf[0] = '\0';
+	DC->getCVarString(item->cvar, buf, sizeof(buf));
+	return atoi(buf);
+}
+
+qboolean Item_YesNoBitmask_HandleKey(itemDef_t *item, int key) {
+	const int bit = Item_Bitmask_Bit(item);
+
+	if (bit < 0) {
+		return qfalse;
+	}
+	if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS)
+	{
+		if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3)
+		{
+			const unsigned int newValue = (unsigned int)Item_Bitmask_CvarValue(item) ^ (1u << bit);
+
+			DC->setCVar(item->cvar, va("%i", (int)newValue));
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
 qboolean Item_YesNo_HandleKey(itemDef_t *item, int key) {
   if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS && item->cvar)
 	{
@@ -4013,7 +4074,7 @@ qboolean Item_HandleKey(itemDef_t *item, int key, qboolean down) {
 		return qfalse;
 		break;
 	case ITEM_TYPE_CHECKBOX:
-		return qfalse;
+		return Item_YesNoBitmask_HandleKey(item, key); // GalaxyRP fix: [UI] was return qfalse, see Item_Bitmask_Bit
 		break;
 	case ITEM_TYPE_EDITFIELD:
 	case ITEM_TYPE_NUMERICFIELD:
@@ -4796,6 +4857,41 @@ void Item_TextField_Paint(itemDef_t *item) {
 		DC->drawTextWithCursor(item->textRect.x + item->textRect.w + offset, item->textRect.y, item->textscale, newColor, buff + editPtr->paintOffset, item->cursorPos - editPtr->paintOffset , cursor, item->window.rect.w, item->textStyle, item->iMenuFont);
 	} else {
 		DC->drawText(item->textRect.x + item->textRect.w + offset, item->textRect.y, item->textscale, newColor, buff + editPtr->paintOffset, 0, item->window.rect.w, item->textStyle,item->iMenuFont);
+	}
+}
+
+// GalaxyRP fix: [UI] ITEM_TYPE_CHECKBOX painter, ported from TaystJK; see Item_Bitmask_Bit above.
+// Same layout as Item_YesNo_Paint, but Yes/No comes from one bit of the cvar.
+void Item_YesNoBitmask_Paint(itemDef_t *item) {
+	char	sYES[20];
+	char	sNO[20];
+	vec4_t color;
+	qboolean set;
+	const char *yesnovalue;
+	const int bit = Item_Bitmask_Bit(item);
+
+	if (bit < 0) {
+		return;
+	}
+	set = ((unsigned int)Item_Bitmask_CvarValue(item) & (1u << bit)) ? qtrue : qfalse;
+
+	trap->SE_GetStringTextString("MENUS_YES", sYES, sizeof(sYES));
+	trap->SE_GetStringTextString("MENUS_NO", sNO, sizeof(sNO));
+
+	if (item->invertYesNo)
+		yesnovalue = set ? sNO : sYES;
+	else
+		yesnovalue = set ? sYES : sNO;
+
+	Item_TextColor(item, &color);
+	if (item->text)
+	{
+		Item_Text_Paint(item);
+		DC->drawText(item->textRect.x + item->textRect.w + 8, item->textRect.y, item->textscale, color, yesnovalue, 0, 0, item->textStyle, item->iMenuFont);
+	}
+	else
+	{
+		DC->drawText(item->textRect.x, item->textRect.y, item->textscale, color, yesnovalue, 0, 0, item->textStyle, item->iMenuFont);
 	}
 }
 
@@ -6541,6 +6637,7 @@ void Item_Paint(itemDef_t *item)
 	case ITEM_TYPE_RADIOBUTTON:
 		break;
 	case ITEM_TYPE_CHECKBOX:
+		Item_YesNoBitmask_Paint(item); // GalaxyRP fix: [UI] was an empty case, see Item_Bitmask_Bit
 		break;
 	case ITEM_TYPE_EDITFIELD:
 	case ITEM_TYPE_NUMERICFIELD:
@@ -8031,6 +8128,15 @@ qboolean ItemParse_special( itemDef_t *item, int handle ) {
 	return qtrue;
 }
 
+// GalaxyRP fix: [UI] bitMask <n> -- the bit an ITEM_TYPE_CHECKBOX shows and toggles (ported from
+// TaystJK). Stored as the raw string, as TaystJK does; Item_Bitmask_Bit validates it at use.
+qboolean ItemParse_bitMask( itemDef_t *item, int handle ) {
+	if (!PC_String_Parse(handle, &item->bitMask)) {
+		return qfalse;
+	}
+	return qtrue;
+}
+
 qboolean ItemParse_cvarTest( itemDef_t *item, int handle ) {
 	if (!PC_String_Parse(handle, &item->cvarTest)) {
 		return qfalse;
@@ -8546,6 +8652,7 @@ keywordHash_t itemParseKeywords[] = {
 	{"maxLineChars",	ItemParse_maxLineChars,		NULL	},
 	{"lineHeight",		ItemParse_lineHeight,		NULL	},
 	{"invertyesno",		ItemParse_invertyesno,		NULL	},
+	{"bitMask",			ItemParse_bitMask,			NULL	}, // GalaxyRP fix: [UI] ported from TaystJK
 	//JLF MPMOVED
 	{"scrollhidden",	ItemParse_scrollhidden,		NULL	},
 	{"xoffset		",	ItemParse_xoffset,			NULL	},

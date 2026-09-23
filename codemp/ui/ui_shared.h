@@ -326,6 +326,7 @@ typedef struct itemDef_s {
 	int			xoffset;
 
 	qboolean disabledHidden;				// hide the item when 'disabled' is true (for generic image items)
+	const char	*bitMask;					// GalaxyRP fix: [UI] ITEM_TYPE_CHECKBOX bit number (0-31) in the item's cvar, ported from TaystJK
 } itemDef_t;
 
 typedef struct menuDef_s {
