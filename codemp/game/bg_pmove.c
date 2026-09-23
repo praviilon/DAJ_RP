@@ -1151,7 +1151,34 @@ static void PM_Friction( void ) {
 	{
 		if ( !(pm->ps->pm_flags & PMF_TIME_KNOCKBACK) )
 		{
-			control = speed;// < pm_stopspeed ? pm_stopspeed : speed;
+			// GalaxyRP fix: [Vehicles] a landed fighter never came to rest. This friction is a pure
+			// fraction of the current speed (6 per second), so it only ever approaches zero, and the
+			// only full stop is the "speed < 1" test above. But Pmove then snaps the velocity to whole
+			// numbers (trap->SnapVector, round-to-nearest), and once one step of friction removes less
+			// than half a unit per axis the rounding puts it straight back: the fighter is stuck at
+			// that speed for good. That happens below 0.5 / (6 * frametime) u/s -- about 10 u/s when a
+			// pilot's 8ms commands drive it, 1-3 u/s parked -- in whatever direction the landing left
+			// over, so a parked fighter crept across the map.
+			//
+			// Vanilla had the answer commented out on this very line: a floor on the braking speed,
+			// the pm_stopspeed rule walking players and every non-fighter vehicle already use (see the
+			// vehicle branch above). It is applied here only while the throttle is at zero -- landed,
+			// parked, suspended or dropping -- so flight is untouched. Below 100 u/s that brakes at a
+			// constant 600 u/s^2, which reaches exactly 0 whatever the frame time. Knockback still
+			// skips friction entirely, as before.
+			//
+			// Not covered, by decision: an UNPILOTED fighter parked on a slope still slides downhill,
+			// more slowly than before. That slide is not friction's to stop -- PM_FlyVehicleMove's
+			// PM_StepSlideMove(1) applies gravity and clips it along the slope within the same step,
+			// so the ship moves before any friction runs. (With a pilot aboard gravity is near zero.)
+			if ( pm->ps->speed == 0.0f )
+			{
+				control = speed < pm_stopspeed ? pm_stopspeed : speed;
+			}
+			else
+			{
+				control = speed;
+			}
 			drop += control*pm_friction*pml.frametime;
 		}
 	}
