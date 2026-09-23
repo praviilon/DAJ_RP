@@ -5315,14 +5315,14 @@ qboolean zyk_minigame_forces_death(gentity_t *ent)
 // GalaxyRP fix: [Force] the "which force-power disable mask is actually in force right now" rule used
 // to exist only as three inline lines inside WP_InitForcePowers (w_force.c), so every other place that
 // consulted g_forcePowerDisable kept using the plain server-wide value even in Duel and Power Duel,
-// where rp_duelForcePowerDisable is meant to replace it. That left force powerups still spawning in
+// where g_duelForcePowerDisable is meant to replace it. That left force powerups still spawning in
 // duel gametypes and the jedi/merc split deciding on the wrong mask. Factored out here so there is one
 // answer to that question and every caller gets the same one.
 int G_ForcePowerDisableValue(void)
 {
 	if (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL)
 	{
-		return rp_duelForcePowerDisable.integer;
+		return g_duelForcePowerDisable.integer;
 	}
 
 	return g_forcePowerDisable.integer;

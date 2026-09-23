@@ -514,7 +514,7 @@ XCVAR_DEF( rp_rpg_max_level,			"100",			RP_CVU_rpgMaxLevel,			CVAR_ARCHIVE|CVAR_
 // Shield a LOGGED-OUT player spawns with; an RPG character's starting shield comes from their Max
 // Shield skill instead (pers.max_rpg_shield, see set_max_shield in g_cmds.c).
 XCVAR_DEF( rp_starting_shield,			"25",			RP_CVU_startingShield,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( rp_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
+XCVAR_DEF( g_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
 
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_pluginRequired,					"1",	RP_CVU_pluginRequired,	CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )

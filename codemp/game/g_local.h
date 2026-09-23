@@ -2476,7 +2476,7 @@ void RP_CVU_jediVmerc(void);
 void RP_CVU_allowGrapple(void);
 void RP_CVU_allowGrappleHook(void);
 
-// GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: rp_duelForcePowerDisable
+// GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: g_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.
 int G_ForcePowerDisableValue(void);
 

@@ -4755,14 +4755,14 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// all reach the character through this function; /login has its own call in Cmd_Login_F().
 	zyk_apply_character_loadout(ent);
 
-	// GalaxyRP (Alex): [Database] Kill the tntity to allow everything to take effect.
-	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
-		trap->SendServerCommand(ent - g_entities, va("print \"%s\n\"", ent->team));
-	}
-
+	// GalaxyRP fix: [Char] a leftover debug print used to sit here, inside the non-spectator test that
+	// once wrapped the G_Kill(): va("print \"%s\n\"", ent->team). ent->team is the map-entity "team"
+	// spawn key, never set on a player entity, so every /char use and /char new printed a bare
+	// "(null)" line to a non-spectator. Nothing read it; both the print and its now-empty test are gone.
+	//
 	// GalaxyRP: [Account] whether this still forces a respawn now depends on rp_seamlesslogin --
-	// see zyk_relog_kill_required(). The spectator test the print above keeps is part of that check
-	// too, so a spectator is never scheduled either way.
+	// see zyk_relog_kill_required(), whose own spectator test means a spectator is never scheduled
+	// either way.
 	zyk_schedule_relog_kill(ent);
 
 	// GalaxyRP (Alex): [Database] Assign the player the info from Accounts table.
