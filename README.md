@@ -1,6 +1,6 @@
 # Galaxy RP Mod - Dark Angels Fork
 
-Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers and its logical entities system. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way.
+Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers and its logical entities system. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way. New features are also gradually added to the mod.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
@@ -65,28 +65,28 @@ The mod actually requires the only game-code files from the build project: `jamp
 
 # Credits
 **GalaxyRP authors:**
-Alex
-JustJordyn
-RepJunkie
-TriForce
-ZelZel
+- Alex
+- JustJordyn
+- RepJunkie
+- TriForce
+- ZelZel
 
 **Zyk mod author:**
-Zyk6870
+- Zyk6870
 
 **JAPro author:**
-videoP
+- videoP
 
 **TaystJK and EternalJK authors:**
-Tayst
-Sunny
-Dan (eternal coders)
+- Tayst
+- Sunny
+- Dan (eternal coders)
 
 **OpenJK authors:**
-Ensiform
-razor
-Xycaleth
-JACoders group
+- Ensiform
+- razor
+- Xycaleth
+- JACoders group
 
 # License
 **OpenJK** is licensed under GPLv2 as free software. You are free to use, modify and redistribute OpenJK following the terms in LICENSE.txt.
