@@ -1737,6 +1737,16 @@ void EWebDie(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int dam
 {
 	vec3_t fxDir;
 
+	// GalaxyRP fix: [E-Web] die once. For anything that is not a client, G_Damage() calls ->die() on
+	// EVERY hit that lands while health is at or below zero, and nothing here used to clear
+	// takedamage -- while the entity itself is only freed on its next think (EWebDisattach() sets
+	// think = G_FreeEntity). So each further hit in the same frame, which flechette shards, repeater
+	// fire and overlapping splash all deliver, ran this whole function again: another
+	// EWEB_DEATH_DMG blast across EWEB_DEATH_RADIUS, landing on whoever was standing next to it --
+	// normally the owner, who is positioned right behind it -- another explosion effect, and another
+	// disattach. First line on purpose, ahead of the blast, so nothing below can re-enter either.
+	self->takedamage = qfalse;
+
 	G_RadiusDamage(self->r.currentOrigin, self, EWEB_DEATH_DMG, EWEB_DEATH_RADIUS, self, self, MOD_SUICIDE);
 
 	VectorSet(fxDir, 1.0f, 0.0f, 0.0f);
@@ -1765,6 +1775,17 @@ void EWebDie(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int dam
 			}
 		}
 	}
+
+	// GalaxyRP fix: [E-Web] and always go away afterwards. The only thing that used to schedule the
+	// free was EWebDisattach(), which runs only when there is a live owner to hand back to -- so an
+	// e-web that died without one was left in the world for the rest of the map, solid and shootable
+	// but no longer thinking: EWebThink() returns straight after calling this, without setting
+	// nextthink, and G_RunThink() has already zeroed it. Nothing reaches that branch today
+	// (r.ownerNum is only ever set by EWeb_Create(), and ClientDisconnect() frees a player's e-web
+	// before this could see them gone), but it was one guard away from a leak, and these two lines
+	// are exactly what EWebDisattach() writes on every other path, so repeating them is idempotent.
+	self->think = G_FreeEntity;
+	self->nextthink = level.time;
 }
 
 //e-web pain
@@ -2096,7 +2117,24 @@ void EWebThink(gentity_t *self)
 				owner->client->ps.viewangles[YAW] = yaw;
 			}
 			owner->client->ps.weapon = WP_EMPLACED_GUN;
-			owner->client->ps.stats[STAT_WEAPONS] = WP_EMPLACED_GUN;
+			// GalaxyRP fix: [E-Web] a bit, not the enum. This was "= WP_EMPLACED_GUN", and
+			// WP_EMPLACED_GUN is 17, so the mask it wrote was bits 0 and 4 -- WP_NONE and
+			// WP_BRYAR_PISTOL -- while the one weapon the player is actually holding was not in it.
+			// Nothing a player could see showed it: the weapon-select bar and weapon cycling both
+			// stand down while emplacedIndex is set, pmove forces cmd.weapon to WP_EMPLACED_GUN, and
+			// firing goes through this think rather than FireWeapon(). But every other writer of this
+			// bit treats it as a bit -- emplaced_gun_use() sets it with |=, the map-gun release clears
+			// it with &= ~ -- and this was the only one that did not.
+			//
+			// Still a wholesale replace, deliberately: while mounted the player holds this and nothing
+			// else, and EWebDisattach() puts the deploy-time mask back from genericValue11.
+			//
+			// The old value had one accidental virtue, which is why this has a companion in
+			// zyk_stop_active_holdables() (g_cmds.c). When an account command frees the e-web, the mask
+			// is left as whatever this line last wrote, and the skills load that follows only sets or
+			// clears the skill-backed weapons. That happened to correct bit 4, and bit 0 is inert; bit 17
+			// is neither, and nothing on that path would clear it -- so the helper takes it back itself.
+			owner->client->ps.stats[STAT_WEAPONS] = (1 << WP_EMPLACED_GUN);
 
 			if (self->genericValue8 < level.time)
 			{ //make sure the anim timer is done

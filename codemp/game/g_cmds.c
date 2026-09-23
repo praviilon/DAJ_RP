@@ -3424,11 +3424,11 @@ void zyk_wind_down_seeker_drone( gentity_t *ent )
 //
 //   E-Web. The worst of the four, because it is not merely cosmetic. EWeb_Create() stores the
 //   owner's STAT_WEAPONS in the e-web's genericValue11 and EWebThink() then overwrites
-//   ps.stats[STAT_WEAPONS] with WP_EMPLACED_GUN on EVERY FRAME while they are mounted; dismounting
-//   restores that stored mask. So logging in while manning one meant the freshly-loaded weapon set
-//   was clobbered on the next frame and then, on dismount, replaced by the PREVIOUS character's --
-//   silent cross-character loadout corruption. EWebThink() self-destructs on owner health < 1,
-//   which is why a respawn hid it.
+//   ps.stats[STAT_WEAPONS] with the WP_EMPLACED_GUN bit on EVERY FRAME while they are mounted;
+//   dismounting restores that stored mask. So logging in while manning one meant the freshly-loaded
+//   weapon set was clobbered on the next frame and then, on dismount, replaced by the PREVIOUS
+//   character's -- silent cross-character loadout corruption. EWebThink() self-destructs on owner
+//   health < 1, which is why a respawn hid it.
 //
 //   GalaxyRP fix: [Emplaced Gun] the map-placed emplaced gun, which is a different mechanism from
 //   the e-web above and was missed by it -- that block only releases a player from their OWN
@@ -3487,6 +3487,16 @@ void zyk_stop_active_holdables( gentity_t *ent )
 		// zeroed, not left as-is: EWeb_Create() resumes the previous deployment's health from this,
 		// and the incoming character should not inherit the damage the outgoing one took.
 		ent->client->ewebHealth = 0;
+		// GalaxyRP fix: [E-Web] and the one weapon bit EWebThink() handed them. The e-web is freed
+		// rather than disattached, so nothing puts the deploy-time mask back -- which is the point --
+		// and the mask stays as EWebThink() last wrote it: WP_EMPLACED_GUN and nothing else. The skills
+		// load that follows only sets or clears the skill-backed weapons, WP_EMPLACED_GUN is not one of
+		// them, and zyk_add_guns() skips it on purpose; so without this the incoming character would
+		// own it for good, and zyk_apply_character_loadout()'s ownership test would then accept
+		// WP_EMPLACED_GUN as a weapon they are allowed to be holding. A single-bit clear, not a
+		// restore: no character legitimately owns this bit, so it cannot take anything away from
+		// the incoming loadout, and it stays safe even if a later change calls this after the load.
+		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_EMPLACED_GUN);
 
 		// ownerNum as well as inuse: ewebIndex is only ever set to this player's own e-web and every
 		// path that frees one clears it (EWebDie routes through EWebDisattach), so a stale index
