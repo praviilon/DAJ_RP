@@ -2397,32 +2397,11 @@ void run_db_query(char* query, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt*
 ----ITEMS TABLE----
 */
 
-// GalaxyRP (Alex): [Database] INSERT This method inserts a new item row in the database.
-void insert_inv_table_row(gentity_t* ent, char* item_to_add, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-	// GalaxyRP fix: [security] this used to go through run_db_query() with the item name spliced
-	// straight into the INSERT text via va("...%s..."). Currently unreachable (no command calls this
-	// function today), but fixed for consistency/safety with the rest of the DB layer in case it's
-	// wired up later.
-	rc = sqlite3_prepare_v2(db, "INSERT INTO Items(CharID, ItemName) VALUES(?, ?)", -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	sqlite3_bind_int(stmt, 1, ent->client->pers.CharID);
-	sqlite3_bind_text(stmt, 2, item_to_add, -1, SQLITE_TRANSIENT);
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-	}
-	trap->SendServerCommand(ent->s.number, "print \"Item added to your inventory.\n\"");
-
-	sqlite3_finalize(stmt);
-
-	return;
-}
+// GalaxyRP fix: [Items] insert_inv_table_row() used to be here: a second INSERT into Items that
+// nothing called. It had been given a bound statement for safety, but not the
+// MAX_ITEMS_PER_CHARACTER cap inventory_add_item() carries, and it announced "Item added" whether
+// the INSERT worked or not -- so the first caller anyone wired up to it would have reopened both
+// holes. inventory_add_item() is the one way to create an item.
 
 
 /*
@@ -2477,10 +2456,11 @@ qboolean select_accounts_table_row(gentity_t* ent, char* username, sqlite3* db, 
 }
 
 // GalaxyRP (Alex): [Database] SELECT This method selects the id of an account going by the username provided. Usernames should be unique.
-// GalaxyRP fix: [stability] this function currently has zero callers anywhere in the codebase (confirmed
-// via a full-repo grep), so neither bug below is reachable today -- fixed anyway for correctness/safety
-// in case it's ever wired up later, matching insert_inv_table_row()'s same "unreachable today, fixed for
-// consistency" treatment elsewhere in this file.
+// GalaxyRP fix: [stability] this function currently has zero callers anywhere in the codebase
+// (confirmed via a full-repo grep), so neither bug below is reachable today -- fixed anyway for
+// correctness/safety in case it's ever wired up later. (The "unreachable today, fixed for
+// consistency" treatment it was compared with here, insert_inv_table_row(), has since been removed
+// outright.)
 int select_account_id_from_username(gentity_t* ent, char* username, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
 	// GalaxyRP fix: [stability] accountID used to be declared uninitialized here and was only ever
 	// assigned inside the "row found" branch below -- the not-found (rc == SQLITE_DONE) fallthrough
@@ -3992,6 +3972,55 @@ static void zyk_default_empty_saber_models(char *saber1, int saber1_size, char *
 
 	if (saber2 && saber2_size > 0 && saber2[0] == '\0')
 		Q_strncpyz(saber2, "none", saber2_size);
+}
+
+/*
+GalaxyRP fix: [Attributes] [Items] put player-written text into the shape it is stored and shown in:
+every control character (line breaks, tabs, anything below a space, and DEL) becomes a space, and
+leading and trailing spaces are trimmed. Colour codes are ordinary characters and are kept, and so
+are bytes above 127 -- the engine's own MSG_ReadString stopped filtering those so players could
+write in European languages, and descriptions and item names are exactly where they would.
+
+Line breaks are the reason this exists. The text ends up printed into somebody else's console -- a
+character description by /examine, an item name by /inventory and /giveitem -- and one containing a
+line break could append lines of its own that look like anything: an admin message, a server
+notice. An item name also goes into itemlog.txt, where a line break would forge a log entry. A
+default server strips them before the mod ever sees the text (sv_filterCommands), but that is a
+setting; this makes it the mod's rule.
+
+Used by /attributes when a description is set, by /examine when one is shown (so a row written by
+hand or by an older build is cleaned on the way out too), by /createitem on a new item's name, and
+by /giveitem on the name it prints. Works in place and returns the resulting length. It was
+zyk_clean_description() until the item commands needed it as well; it moved up here, ahead of the
+inventory code, unchanged.
+*/
+static int zyk_clean_text(char *text)
+{
+	char *p = NULL;
+	char *start = NULL;
+	int len = 0;
+
+	if (!text)
+		return 0;
+
+	for (p = text; *p; p++)
+	{
+		if ((unsigned char)*p < ' ' || (unsigned char)*p == 0x7f)
+			*p = ' ';
+	}
+
+	start = text;
+	while (*start == ' ')
+		start++;
+
+	if (start != text)
+		memmove(text, start, strlen(start) + 1);
+
+	len = (int)strlen(text);
+	while (len > 0 && text[len - 1] == ' ')
+		text[--len] = '\0';
+
+	return len;
 }
 
 /*
@@ -5555,30 +5584,82 @@ void remove_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], sqlite3*
 	// sqlite3_exec(), which run_db_query() wraps) only ever prepares a single statement, so the three
 	// DELETEs run as three separate bound statements here instead of one combined multi-statement
 	// text blob.
-	const char *remove_character_queries[3] = {
+	//
+	// GalaxyRP fix: [Items] and the character's items go with it, as a fourth DELETE. They never did:
+	// the Items table was simply missing from this list. That left the rows behind for good -- and
+	// worse, Characters.CharID is a plain INTEGER PRIMARY KEY with no AUTOINCREMENT, so SQLite hands
+	// the next new character max(CharID) + 1. Removing the character with the highest CharID and then
+	// creating any character, on any account, gave the new one the same CharID -- and every item the
+	// removed character had owned. InitializeGalaxyRpTables() (g_main.c) sweeps up the rows this used
+	// to leave behind.
+	//
+	// GalaxyRP fix: [Char] and all four now run inside one transaction, the way create_new_character()
+	// creates the rows. A failed statement used to be logged and skipped with "continue", and the
+	// player was still told the character had been removed -- whatever mix of rows was actually left.
+	// Now either every row goes or none does, and the player is told which.
+	const char *remove_character_queries[4] = {
 		"DELETE FROM Characters WHERE CharID=?",
 		"DELETE FROM Skills WHERE CharID=?",
-		"DELETE FROM Weapons WHERE CharID=?"
+		"DELETE FROM Weapons WHERE CharID=?",
+		"DELETE FROM Items WHERE CharID=?"
 	};
+	int removed_items = 0;
+	qboolean failed = qfalse;
 
-	for (int i = 0; i < 3; i++) {
+	if (sqlite3_exec(db, "BEGIN", 0, 0, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		failed = qtrue;
+	}
+
+	for (int i = 0; i < 4 && !failed; i++) {
 		rc = sqlite3_prepare_v2(db, remove_character_queries[i], -1, &stmt, NULL);
 		if (rc != SQLITE_OK)
 		{
 			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
 			sqlite3_finalize(stmt);
-			continue;
+			sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+			failed = qtrue;
+			break;
 		}
 		sqlite3_bind_int(stmt, 1, charID);
 		rc = sqlite3_step(stmt);
 		if (rc != SQLITE_DONE)
 		{
 			trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+			failed = qtrue;
+			break;
+		}
+		if (i == 3)
+		{
+			removed_items = sqlite3_changes(db);
 		}
 		sqlite3_finalize(stmt);
 	}
 
-	trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2has been removed.\n\"", char_name));
+	if (!failed && sqlite3_exec(db, "COMMIT", 0, 0, NULL) != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_exec(db, "ROLLBACK", 0, 0, NULL);
+		failed = qtrue;
+	}
+
+	if (failed)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Could not remove character %s^1. Nothing was changed.\n\"", char_name));
+		return;
+	}
+
+	if (removed_items > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2has been removed, along with its %d item%s.\n\"", char_name, removed_items, (removed_items == 1) ? "" : "s"));
+	}
+	else
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^2Character %s ^2has been removed.\n\"", char_name));
+	}
 	trap->SendServerCommand(ent - g_entities, va("cp \"^2Character %s ^2has been removed.\n\"", char_name));
 
 	return;
@@ -6387,13 +6468,14 @@ void inventory_display_end(gentity_t *ent) {
 	trap->SendServerCommand(ent->s.number, "print \"^2================================================================================\n\"");
 }
 
-// GalaxyRP fix: [security] this used to build its INSERT via va("...VALUES('%i',\"%s\")"...) with the
-// item name spliced straight into the query text -- unlike its siblings update_chars_table_row_with_
-// current_values() and insert_inv_table_row(), which were already hardened the same way, this one was
-// missed. A name containing a double quote (e.g. /createitem Vader"s Saber) broke the query outright
-// with a silently-swallowed SQL error, and a deliberately crafted name could inject arbitrary SQL.
-// Bound as a parameter instead. Also now returns qboolean so Cmd_CreateItem_f can tell whether the
-// item was actually created before logging it as created.
+// GalaxyRP fix: [security] this used to build its INSERT via va("...VALUES('%i',\"%s\")"...) with
+// the item name spliced straight into the query text -- unlike its siblings
+// update_chars_table_row_with_current_values() and the since-removed insert_inv_table_row(), which
+// were already hardened the same way, this one was missed. A name containing a double quote (e.g.
+// /createitem Vader"s Saber) broke the query outright with a silently-swallowed SQL error, and a
+// deliberately crafted name could inject arbitrary SQL. Bound as a parameter instead. Also now
+// returns qboolean so Cmd_CreateItem_f can tell whether the item was actually created before
+// logging it as created.
 qboolean inventory_add_item(gentity_t *ent, char item_to_add[MAX_STRING_CHARS], sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
 	// GalaxyRP fix: [Items] refuse once this character is at MAX_ITEMS_PER_CHARACTER -- see the
 	// constant for why the collection has to be bounded at all. Placed here rather than in
@@ -6453,17 +6535,81 @@ void inventory_remove_item(gentity_t *ent, int id_to_be_removed, sqlite3 *db, ch
 	return;
 }
 
-void inventory_transfer_item(gentity_t *ent, gentity_t *otherEnt, int itemID, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
-	//trap->Print(va("UPDATE Items SET CharID='%i' WHERE ItemID='%i'", otherEnt->client->pers.CharID, itemID));
-	rc = sqlite3_exec(db, va("UPDATE Items SET CharID='%i' WHERE ItemID='%i'", otherEnt->client->pers.CharID, itemID), 0, 0, &zErrMsg);
-	if (rc != SQLITE_OK)
+// GalaxyRP fix: [Items] the name of an item this character owns, for the /giveitem messages. Read
+// through zyk_db_column_string() (NULL-safe, bounded) and cleaned with zyk_clean_text(), because
+// it is about to be printed into two players' consoles and a row can predate /createitem's
+// cleaning. Returns qfalse if there is no such item on this character, or it could not be read.
+static qboolean inventory_item_name(int itemID, int charID, char *out, int out_size, sqlite3 *db, sqlite3_stmt *stmt)
+{
+	qboolean found = qfalse;
+
+	if (!out || out_size < 1)
+		return qfalse;
+
+	out[0] = '\0';
+
+	if (sqlite3_prepare_v2(db, "SELECT ItemName FROM Items WHERE ItemID=? AND CharID=?", -1, &stmt, NULL) != SQLITE_OK)
 	{
-		trap->Print("SQL error: %s\n", zErrMsg);
-		sqlite3_free(zErrMsg);
-		return;
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return qfalse;
 	}
 
-	trap->SendServerCommand(ent->s.number, "print \"Item was transferred.\n\"");
+	sqlite3_bind_int(stmt, 1, itemID);
+	sqlite3_bind_int(stmt, 2, charID);
+
+	if (sqlite3_step(stmt) == SQLITE_ROW)
+	{
+		zyk_db_column_string(out, out_size, stmt, 0);
+		zyk_clean_text(out);
+		found = qtrue;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return found;
+}
+
+// GalaxyRP fix: [Items] returns whether the item actually moved, and prints nothing itself.
+//
+// It used to splice both ids into the UPDATE with va(), report nothing back, and print "Item was
+// transferred." on its own -- after which Cmd_GiveItem_f printed "You've given an item to ..." as
+// well, so the giver saw two lines, and both appeared even when the UPDATE had failed. The caller
+// now says what happened, once.
+//
+// The UPDATE is bound, and matches the GIVER's CharID as well as the item id. Cmd_GiveItem_f checks
+// ownership first, but that is a separate statement; matching the owner here as well means the move
+// itself can only ever take an item from the character giving it, whatever else touched the row in
+// between (another program with the database open, say) and whoever calls this next. Exactly one
+// row changed is the only success.
+qboolean inventory_transfer_item(gentity_t *ent, gentity_t *otherEnt, int itemID, sqlite3 *db, char *zErrMsg, int rc, sqlite3_stmt *stmt) {
+	qboolean moved = qfalse;
+
+	rc = sqlite3_prepare_v2(db, "UPDATE Items SET CharID=? WHERE ItemID=? AND CharID=?", -1, &stmt, NULL);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return qfalse;
+	}
+
+	sqlite3_bind_int(stmt, 1, otherEnt->client->pers.CharID);
+	sqlite3_bind_int(stmt, 2, itemID);
+	sqlite3_bind_int(stmt, 3, ent->client->pers.CharID);
+
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE)
+	{
+		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
+	}
+	else
+	{
+		moved = (sqlite3_changes(db) == 1) ? qtrue : qfalse;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return moved;
 }
 
 void inventory_add_create_item_log(gentity_t *ent, char created_item_name[MAX_STRING_CHARS]) {
@@ -6590,11 +6736,25 @@ void Cmd_CreateItem_f(gentity_t *ent) {
 	}
 
 	if (trap->Argc() != 2) {
-		trap->SendServerCommand(ent->s.number, "print \"Usage: /createitem <itemname>\n\"");
+		trap->SendServerCommand(ent->s.number, "print \"Usage: /createitem <itemname>\nPut the name in double quotes if it has more than one word.\n\"");
 		return;
 	}
 
 	trap->Argv(1, arg1, sizeof(arg1));
+
+	// GalaxyRP fix: [Items] clean the name before anything else looks at it -- see
+	// zyk_clean_text(). A line break in an item name would print as extra lines in /inventory and
+	// in the /giveitem messages, and would forge an entry in itemlog.txt, which this name is
+	// written into below. The cleaned name is what is stored and logged, and what the length limit
+	// is measured on.
+	//
+	// An empty name, or one of nothing but spaces, used to be accepted and created an item that
+	// showed in /inventory as a bare id.
+	if (zyk_clean_text(arg1) == 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1Item names cannot be empty.\n\"");
+		return;
+	}
 
 	// GalaxyRP fix: [Items] refuse a name past MAX_ITEM_NAME_LENGTH -- see the constant for why an
 	// over-long name made the item permanently invisible in /inventory. Checked here, before
@@ -6694,6 +6854,15 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 		return;
 	}
 
+	// GalaxyRP fix: [Items] giving an item to yourself used to "work": the UPDATE rewrote the row's
+	// CharID to the value it already had and the command reported a gift. With the recipient now
+	// told about every item they receive, it would also greet you with your own gift. Refused,
+	// before anything else is checked or opened.
+	if (player_id == ent->s.number) {
+		trap->SendServerCommand(ent->s.number, "print \"You cannot give an item to yourself.\n\"");
+		return;
+	}
+
 	// GalaxyRP fix: [Items] a connected-but-not-yet-logged-in player has pers.CharID == 0 -- the whole
 	// client struct is zeroed on connect (see ClientConnect), and real CharIDs are auto-assigned
 	// starting at 1, so 0 is never a real character. Giving an item to someone still at the login
@@ -6760,9 +6929,31 @@ void Cmd_GiveItem_f(gentity_t *ent) {
 		return;
 	}
 
-	inventory_transfer_item(ent, &g_entities[player_id], item_id, db, zErrMsg, rc, stmt);
+	// GalaxyRP fix: [Items] name the item in both messages. Read after the ownership test above
+	// passed, so a failure here is the database's, not the player's, and nothing has moved yet.
+	char item_name[MAX_STRING_CHARS];
 
-	trap->SendServerCommand(ent->s.number, va("print \"^2You've given an item to %s^2\n\"", &g_entities[player_id].client->pers.netname));
+	if (inventory_item_name(item_id, ent->client->pers.CharID, item_name, sizeof(item_name), db, stmt) == qfalse)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1The item could not be transferred. Nothing changed.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
+	// GalaxyRP fix: [Items] report what the transfer actually did. "You've given an item" used to
+	// be printed whatever the UPDATE's outcome, and the recipient was never told anything -- an
+	// item just appeared in their /inventory. The stray & on pers.netname (the same
+	// pointer-to-array pattern fixed elsewhere in this file) went with the old line.
+	if (inventory_transfer_item(ent, &g_entities[player_id], item_id, db, zErrMsg, rc, stmt) == qfalse)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"^1The item could not be transferred. Nothing changed.\n\"");
+		sqlite3_close(db);
+		return;
+	}
+
+	trap->SendServerCommand(ent->s.number, va("print \"^2You gave ^3%s^2 to %s^2.\n\"", item_name, g_entities[player_id].client->pers.netname));
+	trap->SendServerCommand(player_id, va("print \"%s^2 gave you ^3%s^2 (item %d). Type /inv to see your inventory.\n\"", ent->client->pers.netname, item_name, item_id));
+	trap->SendServerCommand(player_id, va("cp \"^2You received an item from %s^2.\n\"", ent->client->pers.netname));
 
 	sqlite3_close(db); // GalaxyRP fix: this success path never closed the connection it opened above.
 
@@ -20365,49 +20556,9 @@ void description_display_end(gentity_t *ent) {
 // descriptions moved into the Characters table -- /attributes saves through
 // update_chars_table_row_with_current_values() and /examine reads pers.description. Removed rather
 // than left as a file writer keyed on a player-chosen name that the next person might wire back up.
-
-// GalaxyRP fix: [Attributes] put a description into the shape it is stored and shown in: every
-// control character (line breaks, tabs, anything below a space, and DEL) becomes a space, and
-// leading and trailing spaces are trimmed. Colour codes are ordinary characters and are kept, and
-// so are bytes above 127 -- the engine's own MSG_ReadString stopped filtering those so players
-// could write in European languages, and a description is exactly where they would.
 //
-// Line breaks are the reason this exists. /examine prints a description into the examiner's
-// console, and one containing a line break could append lines of its own that look like anything
-// -- an admin message, a server notice. A default server strips them before the mod ever sees the
-// text (sv_filterCommands), but that is a setting; this makes it the mod's rule. It runs when a
-// description is set AND when one is shown, so a row written by hand or by an older build is
-// cleaned on the way out too.
-//
-// Works in place and returns the resulting length.
-static int zyk_clean_description(char *text)
-{
-	char *p = NULL;
-	char *start = NULL;
-	int len = 0;
-
-	if (!text)
-		return 0;
-
-	for (p = text; *p; p++)
-	{
-		if ((unsigned char)*p < ' ' || (unsigned char)*p == 0x7f)
-			*p = ' ';
-	}
-
-	start = text;
-	while (*start == ' ')
-		start++;
-
-	if (start != text)
-		memmove(text, start, strlen(start) + 1);
-
-	len = (int)strlen(text);
-	while (len > 0 && text[len - 1] == ' ')
-		text[--len] = '\0';
-
-	return len;
-}
+// Its neighbour zyk_clean_description() now lives near the news code as zyk_clean_text(), shared
+// with the item commands.
 
 /*
 ==================
@@ -20450,12 +20601,12 @@ void Cmd_Examine_f(gentity_t *ent) {
 		return;
 	}
 
-	// GalaxyRP fix: [Attributes] shown from a cleaned copy -- see zyk_clean_description() -- so a
+	// GalaxyRP fix: [Attributes] shown from a cleaned copy -- see zyk_clean_text() -- so a
 	// description that reached the database by some other road cannot put line breaks into this
 	// console either. The stored text is left as it is.
 	Q_strncpyz(description, target->client->pers.description, sizeof(description));
 
-	if (zyk_clean_description(description) == 0) {
+	if (zyk_clean_text(description) == 0) {
 		trap->SendServerCommand(ent->s.number, va("print \"%s^7 has no description.\n\"", target->client->pers.netname));
 		return;
 	}
@@ -20483,7 +20634,7 @@ Cmd_Attributes_f
 ==================
 */
 // GalaxyRP fix: [Attributes] in order: the usage line for anything but exactly one argument; the
-// text cleaned (zyk_clean_description); nothing left means reset to RP_DEFAULT_DESCRIPTION; past
+// text cleaned (zyk_clean_text); nothing left means reset to RP_DEFAULT_DESCRIPTION; past
 // MAX_DESCRIPTION_LENGTH is refused; the same text as now is not saved again; anything else is
 // stored and saved. Every outcome now says what happened -- this used to print nothing at all, not
 // even on success.
@@ -20503,7 +20654,7 @@ void Cmd_Attributes_f(gentity_t *ent) {
 
 	trap->Argv(1, arg1, sizeof(arg1));
 
-	len = zyk_clean_description(arg1);
+	len = zyk_clean_text(arg1);
 
 	if (len == 0) {
 		if (strcmp(ent->client->pers.description, RP_DEFAULT_DESCRIPTION) == 0) {

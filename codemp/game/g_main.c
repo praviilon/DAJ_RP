@@ -605,6 +605,30 @@ void InitializeGalaxyRpTables(qboolean with_admin_account)
 	}
 	trap->Print("Done with Items table.\n");
 
+	// GalaxyRP fix: [Items] sweep up items whose character no longer exists. remove_character()
+	// (g_cmds.c) never deleted a character's Items rows until it was fixed, and Characters.CharID is
+	// reused: it is a plain INTEGER PRIMARY KEY, so a new character gets max(CharID) + 1, and removing
+	// the character with the highest CharID handed its items to whoever created a character next, on
+	// any account. The fix stops new leftovers; this removes the ones already in the database, on the
+	// first map load of the fixed build and harmlessly (it finds nothing) on every one after.
+	//
+	// It also takes the items the old /giveitem sent to CharID 0 (a player who was not logged in yet)
+	// -- no character has that id, so nobody could ever see them. CharID in Characters is the primary
+	// key and never NULL, so the NOT IN cannot be tripped up by a NULL in the subquery; the IS NULL arm
+	// catches an Items row with no owner at all. A failure is reported and the start-up carries on:
+	// nothing after this depends on it.
+	rc = sqlite3_exec(db, "DELETE FROM Items WHERE CharID IS NULL OR CharID NOT IN (SELECT CharID FROM Characters)", 0, 0, &zErrMsg);
+	if (rc != SQLITE_OK)
+	{
+		trap->Print("SQL error: %s\n", zErrMsg);
+		sqlite3_free(zErrMsg);
+		zErrMsg = 0;
+	}
+	else if (sqlite3_changes(db) > 0)
+	{
+		trap->Print("Removed %d orphaned item(s) belonging to characters that no longer exist.\n", sqlite3_changes(db));
+	}
+
 	//Alex: Create News Table
 
 	trap->Print("Initializing News Table.\n");
