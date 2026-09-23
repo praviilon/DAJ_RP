@@ -1151,6 +1151,9 @@ static void PM_Friction( void ) {
 	{
 		if ( !(pm->ps->pm_flags & PMF_TIME_KNOCKBACK) )
 		{
+			// the pilot's commands as the vehicle holds them (pEnt is the fighter itself here)
+			const Vehicle_t *pCmdVeh = ( pEnt && pEnt->m_pVehicle ) ? pEnt->m_pVehicle : NULL;
+
 			// GalaxyRP fix: [Vehicles] a landed fighter never came to rest. This friction is a pure
 			// fraction of the current speed (6 per second), so it only ever approaches zero, and the
 			// only full stop is the "speed < 1" test above. But Pmove then snaps the velocity to whole
@@ -1171,7 +1174,21 @@ static void PM_Friction( void ) {
 			// more slowly than before. That slide is not friction's to stop -- PM_FlyVehicleMove's
 			// PM_StepSlideMove(1) applies gravity and clips it along the slope within the same step,
 			// so the ship moves before any friction runs. (With a pilot aboard gravity is near zero.)
-			if ( pm->ps->speed == 0.0f )
+			//
+			// GalaxyRP fix: [Vehicles] ...but not while the pilot is flying the ship up or down. Taking
+			// off, and climbing or descending near the ground, all happen at throttle 0: the landing /
+			// launch branch of FighterNPC.c's ProcessMoveCommands pushes velocity[2] by acceleration *
+			// 60 u/s^2 (jump up; crouch or back down) and never touches the throttle. The floor above
+			// brakes at 600 u/s^2, so it cancelled that push outright for any ship with acceleration
+			// 10 or less -- engine on, nothing moving, and a speedIdle 0 ship (no gravity to settle
+			// it) could neither lift off nor come down -- and weakened it for the rest. While one of
+			// those commands is held the friction is the pure fraction again, exactly as before the
+			// floor; the moment they are released the floor stops the ship dead, as it does parked.
+			// Read from the vehicle's own m_ucmd, which the server and the predicting client both
+			// have: the vehicle's pmove command has upmove cleared on the server (g_active.c) and not
+			// on the client. m_ucmd is cleared whenever the pilot leaves, so an empty ship keeps the floor.
+			if ( pm->ps->speed == 0.0f
+				&& !( pCmdVeh && ( pCmdVeh->m_ucmd.upmove || pCmdVeh->m_ucmd.forwardmove < 0 ) ) )
 			{
 				control = speed < pm_stopspeed ? pm_stopspeed : speed;
 			}
