@@ -1134,7 +1134,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// GalaxyRP fix: [NPC] the is_vjun3_map flag that was set here is gone: its only reader dropped
 	// protocol_imp and r2d2_imp on vjun3 unconditionally to stay under the old 16-entry
-	// MAX_ANIM_FILES, which has been 128 since 3.47. Both types are on the zyk_sp_npc_fix list.
+	// MAX_ANIM_FILES, which has been 128 since 3.47. Both types are on the rp_sp_npc_fix list.
 
 	if (Q_stricmp(zyk_mapname, "yavin1") == 0 || Q_stricmp(zyk_mapname, "yavin1b") == 0 || Q_stricmp(zyk_mapname, "yavin2") == 0 || 
 		Q_stricmp(zyk_mapname, "t1_danger") == 0 || Q_stricmp(zyk_mapname, "t1_fatal") == 0 || Q_stricmp(zyk_mapname, "t1_inter") == 0 ||
@@ -1146,7 +1146,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		Q_stricmp(zyk_mapname, "t3_hevil") == 0 || Q_stricmp(zyk_mapname, "t3_rift") == 0 || Q_stricmp(zyk_mapname, "t3_stamp") == 0 ||
 		Q_stricmp(zyk_mapname, "taspir1") == 0 || Q_stricmp(zyk_mapname, "taspir2") == 0 || Q_stricmp(zyk_mapname, "kor1") == 0 ||
 		Q_stricmp(zyk_mapname, "kor2") == 0 ||
-		// GalaxyRP fix: [NPC] the six academy hub maps were missing, so zyk_sp_npc_fix never applied
+		// GalaxyRP fix: [NPC] the six academy hub maps were missing, so rp_sp_npc_fix never applied
 		// to the SP maps most likely to host RP -- the ones with Kyle, Luke, Rosh, the students and
 		// the protocol droids in them.
 		Q_stricmp(zyk_mapname, "academy1") == 0 || Q_stricmp(zyk_mapname, "academy2") == 0 || Q_stricmp(zyk_mapname, "academy3") == 0 ||
@@ -3971,14 +3971,14 @@ void CheckExitRules( void ) {
 			}
 		}
 
-		if (zyk_server_empty_change_map_time.integer > 0)
+		if (rp_server_empty_change_map_time.integer > 0)
 		{
 			if (level.num_fully_connected_clients == 0)
 			{ // zyk: changes map if server has no one for some time
 				if (level.server_empty_change_map_timer == 0)
 					level.server_empty_change_map_timer = level.time;
 
-				if ((level.time - level.server_empty_change_map_timer) > zyk_server_empty_change_map_time.integer)
+				if ((level.time - level.server_empty_change_map_timer) > rp_server_empty_change_map_time.integer)
 					ExitLevel();
 			}
 			else
@@ -4557,12 +4557,12 @@ void CheckVote( void ) {
 					//trap->Cvar_Set("bot_minplayers", "0");
 				}
 
-				if (nextMap && nextMap[0] && zyk_change_map_gametype_vote.integer)
+				if (nextMap && nextMap[0] && rp_change_map_gametype_vote.integer)
 				{
 					trap->SendConsoleCommand( EXEC_APPEND, va("map %s\n", nextMap ) );
 				}
 				else
-				{ // zyk: if zyk_change_map_gametype_vote is 0, just restart the current map
+				{ // zyk: if rp_change_map_gametype_vote is 0, just restart the current map
 					trap->SendConsoleCommand( EXEC_APPEND, "map_restart 0\n"  );
 				}
 			}
@@ -4618,8 +4618,8 @@ void CheckVote( void ) {
 		}
 
 		// zyk: set the timer for the next vote of this player
-		if (zyk_vote_timer.integer > 0 && level.voting_player > -1)
-			g_entities[level.voting_player].client->sess.vote_timer = zyk_vote_timer.integer;
+		if (rp_vote_timer.integer > 0 && level.voting_player > -1)
+			g_entities[level.voting_player].client->sess.vote_timer = rp_vote_timer.integer;
 	}
 	else 
 	{
@@ -4628,16 +4628,16 @@ void CheckVote( void ) {
 			trap->SendServerCommand( -1, va("print \"%s (%s)\n\"", G_GetStringEdString("MP_SVGAME", "VOTEPASSED"), level.voteStringClean) );
 			level.voteExecuteTime = level.time + level.voteExecuteDelay;
 			// zyk: set the timer for the next vote of this player
-			if (zyk_vote_timer.integer > 0 && level.voting_player > -1)
-				g_entities[level.voting_player].client->sess.vote_timer = zyk_vote_timer.integer;
+			if (rp_vote_timer.integer > 0 && level.voting_player > -1)
+				g_entities[level.voting_player].client->sess.vote_timer = rp_vote_timer.integer;
 		}
 		// same behavior as a timeout
 		else if ( level.voteNo >= (level.numVotingClients+1)/2 )
 		{
 			trap->SendServerCommand( -1, va("print \"%s (%s)\n\"", G_GetStringEdString("MP_SVGAME", "VOTEFAILED"), level.voteStringClean) );
 			// zyk: set the timer for the next vote of this player
-			if (zyk_vote_timer.integer > 0 && level.voting_player > -1)
-				g_entities[level.voting_player].client->sess.vote_timer = zyk_vote_timer.integer;
+			if (rp_vote_timer.integer > 0 && level.voting_player > -1)
+				g_entities[level.voting_player].client->sess.vote_timer = rp_vote_timer.integer;
 		}
 		else // still waiting for a majority
 			return;
@@ -4647,9 +4647,9 @@ void CheckVote( void ) {
 	// GalaxyRP fix: [Vote] level.voting_player was set when the vote was called and then never cleared,
 	// so it went on naming a client slot after the vote had resolved. Client slots are reused: if the
 	// player who called the vote disconnects and somebody else connects into the same slot before the
-	// vote finishes, the zyk_vote_timer cooldown above is applied to the newcomer, who is then refused
+	// vote finishes, the rp_vote_timer cooldown above is applied to the newcomer, who is then refused
 	// with "You cannot vote now" without ever having voted. Clearing it with the vote it belongs to
-	// keeps the two in step. (Only matters on servers that set zyk_vote_timer above 0.)
+	// keeps the two in step. (Only matters on servers that set rp_vote_timer above 0.)
 	level.voting_player = -1;
 
 	trap->SetConfigstring( CS_VOTE_TIME, "" );
@@ -5315,14 +5315,14 @@ qboolean zyk_minigame_forces_death(gentity_t *ent)
 // GalaxyRP fix: [Force] the "which force-power disable mask is actually in force right now" rule used
 // to exist only as three inline lines inside WP_InitForcePowers (w_force.c), so every other place that
 // consulted g_forcePowerDisable kept using the plain server-wide value even in Duel and Power Duel,
-// where zyk_duelForcePowerDisable is meant to replace it. That left force powerups still spawning in
+// where rp_duelForcePowerDisable is meant to replace it. That left force powerups still spawning in
 // duel gametypes and the jedi/merc split deciding on the wrong mask. Factored out here so there is one
 // answer to that question and every caller gets the same one.
 int G_ForcePowerDisableValue(void)
 {
 	if (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL)
 	{
-		return zyk_duelForcePowerDisable.integer;
+		return rp_duelForcePowerDisable.integer;
 	}
 
 	return g_forcePowerDisable.integer;
@@ -5426,7 +5426,7 @@ void Player_FireFlameThrower( gentity_t *self )
 	int entityList[MAX_GENTITIES];
 	int numListedEntities;
 	int e = 0;
-	int damage = zyk_flame_thrower_damage.integer;
+	int damage = rp_flame_thrower_damage.integer;
 
 	vec3_t	tfrom, tto, fwd;
 	vec3_t thispush_org, a;
@@ -5437,7 +5437,7 @@ void Player_FireFlameThrower( gentity_t *self )
 	float visionArc = 120;
 	float radius = 144;
 
-	self->client->cloakDebReduce = level.time + zyk_flame_thrower_cooldown.integer;
+	self->client->cloakDebReduce = level.time + rp_flame_thrower_cooldown.integer;
 
 	origin[0] = self->r.currentOrigin[0];
 	origin[1] = self->r.currentOrigin[1];
@@ -6016,9 +6016,9 @@ void duel_tournament_prize(gentity_t *ent)
 	}
 	
 	ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_BRYAR_PISTOL) | (1 << WP_BLASTER) | (1 << WP_DISRUPTOR) | (1 << WP_REPEATER);
-	ent->client->ps.ammo[AMMO_BLASTER] = zyk_max_blaster_pack_ammo.integer;
-	ent->client->ps.ammo[AMMO_POWERCELL] = zyk_max_power_cell_ammo.integer;
-	ent->client->ps.ammo[AMMO_METAL_BOLTS] = zyk_max_metal_bolt_ammo.integer;
+	ent->client->ps.ammo[AMMO_BLASTER] = rp_max_blaster_pack_ammo.integer;
+	ent->client->ps.ammo[AMMO_POWERCELL] = rp_max_power_cell_ammo.integer;
+	ent->client->ps.ammo[AMMO_METAL_BOLTS] = rp_max_metal_bolt_ammo.integer;
 	ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_SENTRY_GUN) | (1 << HI_SEEKER) | (1 << HI_MEDPAC_BIG);
 
 	ent->client->ps.jetpackFuel = 100;
@@ -6562,9 +6562,9 @@ void melee_battle_winner()
 		ent->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = level.time + 20000;
 
 		ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER) | (1 << WP_BLASTER) | (1 << WP_DISRUPTOR) | (1 << WP_REPEATER);
-		ent->client->ps.ammo[AMMO_BLASTER] = zyk_max_blaster_pack_ammo.integer;
-		ent->client->ps.ammo[AMMO_POWERCELL] = zyk_max_power_cell_ammo.integer;
-		ent->client->ps.ammo[AMMO_METAL_BOLTS] = zyk_max_metal_bolt_ammo.integer;
+		ent->client->ps.ammo[AMMO_BLASTER] = rp_max_blaster_pack_ammo.integer;
+		ent->client->ps.ammo[AMMO_POWERCELL] = rp_max_power_cell_ammo.integer;
+		ent->client->ps.ammo[AMMO_METAL_BOLTS] = rp_max_metal_bolt_ammo.integer;
 		ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_SENTRY_GUN) | (1 << HI_SEEKER) | (1 << HI_MEDPAC_BIG);
 
 		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/pickupenergy.wav"));
@@ -6961,7 +6961,7 @@ void G_RunFrame( int levelTime ) {
 	// Worst in signup, where the effect was the opposite of the intent: an admin pausing mode 1 to
 	// let latecomers in burned the countdown while paused, and on resume the mode-1 branch below ran
 	// immediately -- ending the tournament outright via duel_tournament_end() if the roster was still
-	// under zyk_duel_tournament_min_players. The pause killed the tournament it was meant to extend.
+	// under rp_duel_tournament_min_players. The pause killed the tournament it was meant to extend.
 	// Milder elsewhere: mode 3's three-second "X vs Y" announcement collapsed to nothing, so duelists
 	// were teleported into the arena the instant an admin resumed.
 	//
@@ -7032,7 +7032,7 @@ void G_RunFrame( int levelTime ) {
 				if (zyk_has_respawned == qfalse)
 				{
 					// zyk: setting the max time players can duel
-					level.duel_tournament_timer = level.time + zyk_duel_tournament_duel_time.integer;
+					level.duel_tournament_timer = level.time + rp_duel_tournament_duel_time.integer;
 
 					// zyk: prepare the duelists to start duel
 					duel_tournament_prepare(duelist_1);
@@ -7103,7 +7103,7 @@ void G_RunFrame( int levelTime ) {
 			{ // zyk: current cycle ended. Go to next one
 				level.duel_tournament_rounds++;
 
-				if (level.duel_tournament_rounds < zyk_duel_tournament_rounds_per_match.integer)
+				if (level.duel_tournament_rounds < rp_duel_tournament_rounds_per_match.integer)
 				{
 					level.duel_matches_done = 0;
 				}
@@ -7122,11 +7122,11 @@ void G_RunFrame( int levelTime ) {
 		}
 		else if (level.duel_tournament_mode == 1 && level.duel_tournament_timer < level.time)
 		{ // zyk: Duel tournament begins after validation on number of players
-			if (level.duelists_quantity > 1 && level.duelists_quantity >= zyk_duel_tournament_min_players.integer)
+			if (level.duelists_quantity > 1 && level.duelists_quantity >= rp_duel_tournament_min_players.integer)
 			{ // zyk: must have a minimum of 2 players
 				int zyk_number_of_teams = duel_tournament_generate_teams();
 
-				if (zyk_number_of_teams > 1 && zyk_number_of_teams >= zyk_duel_tournament_min_players.integer)
+				if (zyk_number_of_teams > 1 && zyk_number_of_teams >= rp_duel_tournament_min_players.integer)
 				{
 					level.duel_tournament_mode = 5;
 					level.duel_tournament_timer = level.time + 1500;
@@ -7138,13 +7138,13 @@ void G_RunFrame( int levelTime ) {
 				else
 				{
 					duel_tournament_end();
-					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
+					trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", rp_duel_tournament_min_players.integer));
 				}
 			}
 			else
 			{
 				duel_tournament_end();
-				trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", zyk_duel_tournament_min_players.integer));
+				trap->SendServerCommand(-1, va("chat \"^3Duel Tournament: ^7Not enough duelists (minimum of %d). Tournament is over!\"", rp_duel_tournament_min_players.integer));
 			}
 		}
 	}
@@ -7986,7 +7986,7 @@ void G_RunFrame( int levelTime ) {
 			{
 				if (duel_tournament_is_duelist(ent) == qtrue && 
 					!(ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS)) && // zyk: did not die in his duel yet
-					Distance(ent->client->ps.origin, level.duel_tournament_origin) > (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0) &&
+					Distance(ent->client->ps.origin, level.duel_tournament_origin) > (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0) &&
 					ent->health > 0)
 				{ // zyk: duelists cannot leave the arena after duel begins
 					ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
@@ -7996,7 +7996,7 @@ void G_RunFrame( int levelTime ) {
 				else if ((duel_tournament_is_duelist(ent) == qfalse || 
 					(level.duel_players[ent->s.number] != -1 && ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DUEL_TOURNAMENT_LOSS))) && // zyk: not a duelist or died in his duel
 					ent->client->sess.sessionTeam != TEAM_SPECTATOR && 
-					Distance(ent->client->ps.origin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0) &&
+					Distance(ent->client->ps.origin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0) &&
 					ent->health > 0)
 				{ // zyk: other players cannot enter the arena
 					ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
@@ -8121,7 +8121,7 @@ void G_RunFrame( int levelTime ) {
 
 			// zyk: npcs cannot enter the Duel Tournament arena
 			if (level.duel_tournament_mode == 4 && 
-				Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+				Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 			{
 				ent->health = 0;
 				ent->client->ps.stats[STAT_HEALTH] = 0;

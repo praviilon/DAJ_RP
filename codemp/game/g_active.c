@@ -1066,7 +1066,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 
 		// GalaxyRP fix: [gameplay/exploit] the PLAYER_STATUS_CHAT_PROTECTION bit makes G_Damage return early for this
 		// player (g_combat.c), so leaving it set means total damage immunity. Both the set and the
-		// clear used to live inside the "zyk_chat_protection_timer > 0" block, and the clear also
+		// clear used to live inside the "rp_chat_protection_timer > 0" block, and the clear also
 		// required chat_protection_timer != 0 -- so the flag could be stranded set, permanently, in
 		// two different ways. (1) An admin setting the cvar to 0 (documented as "0 to disable") while
 		// someone was currently protected: the whole block stops running, so nothing can ever clear
@@ -1094,13 +1094,13 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		// has advanced 1000 ms from map start, so level.time is never 0 here, and ClientSpawn() still
 		// resets the field to 0 together with the flag, which is what keeps protection from surviving
 		// a respawn.
-		if (zyk_chat_protection_timer.integer > 0)
+		if (rp_chat_protection_timer.integer > 0)
 		{ // zyk: chat protection. If 0, it is off. If greater than 0, set the timer to protect the player
 			if (client->ps.eFlags & EF_TALK && client->pers.chat_protection_timer == 0)
 			{
 				client->pers.chat_protection_timer = level.time;
 			}
-			else if (ent->client->ps.eFlags & EF_TALK && level.time - client->pers.chat_protection_timer >= zyk_chat_protection_timer.integer)
+			else if (ent->client->ps.eFlags & EF_TALK && level.time - client->pers.chat_protection_timer >= rp_chat_protection_timer.integer)
 			{
 				client->pers.player_statuses |= (1 << PLAYER_STATUS_CHAT_PROTECTION);
 			}
@@ -1199,7 +1199,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		}
 
 
-		if (zyk_vote_timer.integer > 0 && client->sess.vote_timer > 0)
+		if (rp_vote_timer.integer > 0 && client->sess.vote_timer > 0)
 		{ // zyk: countdown of the vote timer
 			client->sess.vote_timer--;
 		}
@@ -3253,7 +3253,7 @@ void ClientThink_real( gentity_t *ent ) {
 			VectorSubtract(ent->client->ps.origin, duelAgainst->client->ps.origin, vSub);
 			subLen = VectorLength(vSub);
 
-			if (subLen >= zyk_duel_radius.integer)
+			if (subLen >= rp_duel_radius.integer)
 			{
 				ent->client->ps.duelInProgress = 0;
 				duelAgainst->client->ps.duelInProgress = 0;
@@ -3589,7 +3589,7 @@ void ClientThink_real( gentity_t *ent ) {
 	else {
 		pmove.tracemask = MASK_PLAYERSOLID;
 
-		if (zyk_duel_no_collision.integer > 0)
+		if (rp_duel_no_collision.integer > 0)
 		{ // zyk: makes duelists not collide with other players
 			int j = 0;
 

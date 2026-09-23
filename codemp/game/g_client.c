@@ -4027,37 +4027,37 @@ void ClientSpawn(gentity_t *ent) {
 				{ //Max his ammo out for all the weapons he has.
 					// zyk: all weapons, including rocket launcher, will have max ammo based on the max ammo cvars
 					int ammo_type = AMMO_BLASTER;
-					int max_ammo = zyk_max_blaster_pack_ammo.integer;
+					int max_ammo = rp_max_blaster_pack_ammo.integer;
 
 					if (m == WP_DISRUPTOR || m == WP_BOWCASTER || m == WP_DEMP2)
 					{
 						ammo_type = AMMO_POWERCELL;
-						max_ammo = zyk_max_power_cell_ammo.integer;
+						max_ammo = rp_max_power_cell_ammo.integer;
 					}
 					else if (m == WP_REPEATER || m == WP_FLECHETTE || m == WP_CONCUSSION)
 					{
 						ammo_type = AMMO_METAL_BOLTS;
-						max_ammo = zyk_max_metal_bolt_ammo.integer;
+						max_ammo = rp_max_metal_bolt_ammo.integer;
 					}
 					else if (m == WP_ROCKET_LAUNCHER)
 					{
 						ammo_type = AMMO_ROCKETS;
-						max_ammo = zyk_max_rocket_ammo.integer;
+						max_ammo = rp_max_rocket_ammo.integer;
 					}
 					else if (m == WP_THERMAL)
 					{
 						ammo_type = AMMO_THERMAL;
-						max_ammo = zyk_max_thermal_ammo.integer;
+						max_ammo = rp_max_thermal_ammo.integer;
 					}
 					else if (m == WP_TRIP_MINE)
 					{
 						ammo_type = AMMO_TRIPMINE;
-						max_ammo = zyk_max_tripmine_ammo.integer;
+						max_ammo = rp_max_tripmine_ammo.integer;
 					}
 					else if (m == WP_DET_PACK)
 					{
 						ammo_type = AMMO_DETPACK;
-						max_ammo = zyk_max_detpack_ammo.integer;
+						max_ammo = rp_max_detpack_ammo.integer;
 					}
 
 					client->ps.ammo[ammo_type] = max_ammo;

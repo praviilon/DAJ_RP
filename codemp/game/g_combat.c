@@ -685,7 +685,7 @@ void TossClientItems( gentity_t *self ) {
 		// spawn with 100 rounds (NPC_spawn.c, NPC_stats.c) -- which on a busy map is a steady
 		// fountain rather than an occasional windfall.
 		//
-		// The ceiling is Cmd_Drop_f's: at most ceil(quantity * zyk_add_ammo_scale), and never more
+		// The ceiling is Cmd_Drop_f's: at most ceil(quantity * rp_add_ammo_scale), and never more
 		// than the victim had. TossClientWeapon() below caps at the unscaled quantity instead;
 		// matching the command rather than the force-push disarm keeps the two drops a player can
 		// actually compare -- "I threw it" and "they killed me for it" -- worth the same.
@@ -709,13 +709,13 @@ void TossClientItems( gentity_t *self ) {
 		dropped = Drop_Item( self, item, 0 );
 
 		packGive = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity
-							 * zyk_add_ammo_scale.value);
+							 * rp_add_ammo_scale.value);
 		carried = (weaponData[weapon].ammoIndex != AMMO_NONE)
 					? self->client->ps.ammo[weaponData[weapon].ammoIndex] : 0;
 		give = (carried < packGive) ? carried : packGive;
 
-		if ( zyk_add_ammo_scale.value > 0 && give > 0 )
-			dropped->count = (int)(give / zyk_add_ammo_scale.value);
+		if ( rp_add_ammo_scale.value > 0 && give > 0 )
+			dropped->count = (int)(give / rp_add_ammo_scale.value);
 		else
 			dropped->count = -1;	// carries nothing -- the same -1 Cmd_Drop_f uses
 	}
@@ -5018,7 +5018,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 
 	if (level.gametype == GT_SIEGE)
 	{
-		damage = (int)ceil(damage*zyk_scale_siege_damage.value);
+		damage = (int)ceil(damage*rp_scale_siege_damage.value);
 	}
 
 	// GalaxyRP fix: [Dead Code] removed ally-count Challenge-Mode damage bonus (guardian_invoked_by_id always -1)

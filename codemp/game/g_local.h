@@ -2454,7 +2454,7 @@ void RP_CVU_downedInvulnerabilityTimer(void);
 void RP_CVU_screenMessageTimer(void);
 void RP_CVU_flameThrowerCooldown(void);
 
-// GalaxyRP fix: [validation] zyk_list_cmds_results_per_page gates the pagination math in both
+// GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in both
 // Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c) -- see RP_CVU_listCmdsResultsPerPage's comment in
 // g_cvar.c for why it needs a minimum of 1 rather than the usual clamp-to-0 pattern.
 void RP_CVU_listCmdsResultsPerPage(void);
@@ -2476,7 +2476,7 @@ void RP_CVU_jediVmerc(void);
 void RP_CVU_allowGrapple(void);
 void RP_CVU_allowGrappleHook(void);
 
-// GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: zyk_duelForcePowerDisable
+// GalaxyRP fix: [Force] returns the force-power disable mask actually in effect: rp_duelForcePowerDisable
 // in Duel/Power Duel, g_forcePowerDisable everywhere else. See its definition in g_main.c.
 int G_ForcePowerDisableValue(void);
 

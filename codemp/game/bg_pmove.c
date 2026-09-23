@@ -11447,7 +11447,7 @@ void PmoveSingle (pmove_t *pmove) {
 	// set since the class abilities and the magic engine went. The rpg_class == 1 / 4 / 9
 	// branches (Force User, Monk, Force Guardian) went earlier, for the same reason.
 	if (level.duel_tournament_mode == 4 && player_ent && player_ent->s.number < MAX_CLIENTS && duel_tournament_is_duelist(player_ent) == qtrue && 
-			 (level.duel_tournament_timer - level.time) > (zyk_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME))
+			 (level.duel_tournament_timer - level.time) > (rp_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME))
 	{ // zyk: Duel Tournament duelist that has just been placed in arena. Wait some time before moving
 		stiffenedUp = qtrue;
 	}

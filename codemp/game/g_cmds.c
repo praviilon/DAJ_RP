@@ -1290,13 +1290,13 @@ void zyk_add_guns( gentity_t *ent )
 			ent->client->ps.stats[STAT_WEAPONS] |= (1 << i);
 	}
 
-	ent->client->ps.ammo[AMMO_BLASTER] = zyk_max_blaster_pack_ammo.integer;
-	ent->client->ps.ammo[AMMO_POWERCELL] = zyk_max_power_cell_ammo.integer;
-	ent->client->ps.ammo[AMMO_METAL_BOLTS] = zyk_max_metal_bolt_ammo.integer;
-	ent->client->ps.ammo[AMMO_ROCKETS] = zyk_max_rocket_ammo.integer;
-	ent->client->ps.ammo[AMMO_THERMAL] = zyk_max_thermal_ammo.integer;
-	ent->client->ps.ammo[AMMO_TRIPMINE] = zyk_max_tripmine_ammo.integer;
-	ent->client->ps.ammo[AMMO_DETPACK] = zyk_max_detpack_ammo.integer;
+	ent->client->ps.ammo[AMMO_BLASTER] = rp_max_blaster_pack_ammo.integer;
+	ent->client->ps.ammo[AMMO_POWERCELL] = rp_max_power_cell_ammo.integer;
+	ent->client->ps.ammo[AMMO_METAL_BOLTS] = rp_max_metal_bolt_ammo.integer;
+	ent->client->ps.ammo[AMMO_ROCKETS] = rp_max_rocket_ammo.integer;
+	ent->client->ps.ammo[AMMO_THERMAL] = rp_max_thermal_ammo.integer;
+	ent->client->ps.ammo[AMMO_TRIPMINE] = rp_max_tripmine_ammo.integer;
+	ent->client->ps.ammo[AMMO_DETPACK] = rp_max_detpack_ammo.integer;
 
 	ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_BINOCULARS);
 	ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_MEDPAC);
@@ -8985,7 +8985,7 @@ void Cmd_MapList_f( gentity_t *ent ) {
 		char file_content[MAX_STRING_CHARS];
 		char content[512];
 		int i = 0;
-		int results_per_page = zyk_list_cmds_results_per_page.integer; // zyk: number of results per page
+		int results_per_page = rp_list_cmds_results_per_page.integer; // zyk: number of results per page
 		FILE *map_list_file;
 		strcpy(file_content,"");
 		strcpy(content,"");
@@ -9015,7 +9015,7 @@ void Cmd_MapList_f( gentity_t *ent ) {
 				// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s",
 				// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte)
 				// stack buffer, and that strcpy had no bounds check on the destination at all.
-				// Enough map entries on one page (or zyk_list_cmds_results_per_page set too high)
+				// Enough map entries on one page (or rp_list_cmds_results_per_page set too high)
 				// overflows it. Q_strcat never writes past the destination's declared size.
 				Q_strcat(file_content, sizeof(file_content), content);
 				i++;
@@ -9228,7 +9228,7 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 	// be here. guardian_mode is permanently 0 now, so it was unreachable.
 
 	// zyk: tests if this player can vote now
-	if (zyk_vote_timer.integer > 0 && ent->client->sess.vote_timer > 0)
+	if (rp_vote_timer.integer > 0 && ent->client->sess.vote_timer > 0)
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"You cannot vote now, wait %d seconds and try again.\n\"", ent->client->sess.vote_timer));
 		return;
@@ -10132,7 +10132,7 @@ client with no engine support at all. TaystJK and JA++ both register it exactly 
 
 Everything else is Cmd_EngageDuel_f's: aliveness, downed, already-duelling, mini-game membership on
 both sides, the saber requirement, the five-second challenge window, the 256-unit trace, the health
-and shield reset, Jetpack_Off, and zyk_duel_radius. This function is the door, not a second copy of
+and shield reset, Jetpack_Off, and rp_duel_radius. This function is the door, not a second copy of
 the rules.
 ==================
 */
@@ -13999,21 +13999,21 @@ void Cmd_Drop_f( gentity_t *ent ) {
 		{
 			// zyk: setting amount of ammo in this dropped weapon
 			current_ammo = ent->client->ps.ammo[weaponData[weapon].ammoIndex];
-			ammo_count = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity * zyk_add_ammo_scale.value);
+			ammo_count = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity * rp_add_ammo_scale.value);
 
 			if (current_ammo < ammo_count)
 			{ // zyk: player does not have the default ammo to set in the weapon, so set the current_ammo of the player in the weapon
 				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= current_ammo;
-				if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
-					launched->count = (current_ammo / zyk_add_ammo_scale.value);
+				if (rp_add_ammo_scale.value > 0 && current_ammo > 0)
+					launched->count = (current_ammo / rp_add_ammo_scale.value);
 				else
 					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
 			}
 			else
 			{
 				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= ammo_count;
-				if (zyk_add_ammo_scale.value > 0 && current_ammo > 0)
-					launched->count = (ammo_count / zyk_add_ammo_scale.value);
+				if (rp_add_ammo_scale.value > 0 && current_ammo > 0)
+					launched->count = (ammo_count / rp_add_ammo_scale.value);
 				else
 					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
 			}
@@ -19608,7 +19608,7 @@ Cmd_DuelMode_f
 */
 extern void duel_tournament_end();
 void Cmd_DuelMode_f(gentity_t *ent) {
-	if (zyk_allow_duel_tournament.integer != 1)
+	if (rp_allow_duel_tournament.integer != 1)
 	{
 		trap->SendServerCommand(ent->s.number, va("chat \"^3Duel Tournament: ^7this mode is not allowed in this server\n\""));
 		return;
@@ -19703,7 +19703,7 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 				// GalaxyRP fix: [Leak] dropped a G_NewString() wrapper here. "zykmodelscale" is an
 				// F_INT field, so zyk_set_entity_field() runs atoi() on the string and never keeps
 				// the pointer -- the copy was pure waste out of the never-freed G_Alloc pool.
-				zyk_set_entity_field(new_ent, "zykmodelscale", zyk_duel_tournament_arena_scale.string);
+				zyk_set_entity_field(new_ent, "zykmodelscale", rp_duel_tournament_arena_scale.string);
 
 				zyk_spawn_entity(new_ent);
 
@@ -19717,7 +19717,7 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 			// line to every client. Late joiners still get in -- they just do not push the start back.
 			if (level.duel_tournament_mode != 1)
 			{
-				level.duel_tournament_timer = level.time + zyk_duel_tournament_time_to_start.integer;
+				level.duel_tournament_timer = level.time + rp_duel_tournament_time_to_start.integer;
 			}
 
 			level.duel_tournament_mode = 1;
@@ -19958,7 +19958,7 @@ void Cmd_DuelArena_f(gentity_t *ent) {
 	// Placed after the admin check rather than before it, so a non-admin still gets the permission
 	// refusal they get today instead of learning the server's cvar state; and before the
 	// zyk_create_dir() below, so a disabled mode touches no files or directories at all.
-	if (zyk_allow_duel_tournament.integer != 1)
+	if (rp_allow_duel_tournament.integer != 1)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^3Duel Tournament: ^7this mode is not allowed in this server\n\"");
 		return;
@@ -20079,7 +20079,7 @@ Cmd_MeleeMode_f
 extern void melee_battle_end();
 extern void melee_battle_restore(gentity_t *ent);
 void Cmd_MeleeMode_f(gentity_t *ent) {
-	if (zyk_allow_melee_battle.integer != 1)
+	if (rp_allow_melee_battle.integer != 1)
 	{
 		trap->SendServerCommand(ent->s.number, va("chat \"^3Melee Battle: ^7this mode is not allowed in this server\n\""));
 		return;
@@ -20135,7 +20135,7 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	// G_Damage returns before applying knockback, so they could not even be pushed off.
 	// melee_mode_quantity never reached 1, melee_battle_winner() never fired, and the battle sat
 	// out its full ten-minute timeout. The arena teleport does not break the duel either: the
-	// starting grid is 45 units per slot and zyk_duel_radius defaults to 1024.
+	// starting grid is 45 units per slot and rp_duel_radius defaults to 1024.
 	//
 	// The Duel Tournament survives the same trick only because validate_duelists() kills such a
 	// duelist on sight; the Melee Battle has no equivalent, which is why it has to refuse here.
@@ -20260,7 +20260,7 @@ void Cmd_MeleeArena_f(gentity_t *ent) {
 	// the same reasons, as the one on Cmd_DuelArena_f above. Cmd_MeleeMode_f already checks this
 	// cvar first, so nothing could be spawned with the mode disabled, but the destructive half of
 	// this toggle was reachable regardless.
-	if (zyk_allow_melee_battle.integer != 1)
+	if (rp_allow_melee_battle.integer != 1)
 	{
 		trap->SendServerCommand(ent - g_entities, "print \"^3Melee Battle: ^7this mode is not allowed in this server\n\"");
 		return;
@@ -20914,7 +20914,7 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 						// 63 characters, which would get split across two fgets() calls and desync
 						// that record's fields. Match Cmd_MapList_f's buffer size.
 	int i = 0;
-	int results_per_page = zyk_list_cmds_results_per_page.integer; // zyk: number of results per page
+	int results_per_page = rp_list_cmds_results_per_page.integer; // zyk: number of results per page
 	FILE *leaderboard_file;
 
 	if (trap->Argc() < 2)
@@ -20974,7 +20974,7 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 			// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s     ",
 			// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte) stack
 			// buffer, and that strcpy had no bounds check on the destination at all. Enough
-			// entries on one page (or zyk_list_cmds_results_per_page set too high) overflows it.
+			// entries on one page (or rp_list_cmds_results_per_page set too high) overflows it.
 			// Q_strcat never writes past the destination's declared size.
 			Q_strcat(file_content, sizeof(file_content), content);
 			Q_strcat(file_content, sizeof(file_content), "     ");

@@ -33,7 +33,7 @@ static void CVU_Derpity( void ) {
 }
 */
 
-// GalaxyRP fix: [validation] rp_screen_message_timer and zyk_flame_thrower_cooldown are read as
+// GalaxyRP fix: [validation] rp_screen_message_timer and rp_flame_thrower_cooldown are read as
 // plain countdown lengths (a value is copied out of the cvar once, then only ever decremented
 // toward 0 -- see motdTime in g_client.c/g_active.c). Neither validated its value, so a negative
 // setting produced a counter that counted away from zero forever instead of toward it, since
@@ -139,18 +139,18 @@ void RP_CVU_screenMessageTimer(void)
 	RP_ClampNonNegativeCvar(&rp_screen_message_timer, "rp_screen_message_timer");
 }
 
-// GalaxyRP fix: [validation] zyk_flame_thrower_cooldown is read unclamped in Player_FireFlameThrower()
-// (g_main.c) as self->client->cloakDebReduce = level.time + zyk_flame_thrower_cooldown.integer -- a
+// GalaxyRP fix: [validation] rp_flame_thrower_cooldown is read unclamped in Player_FireFlameThrower()
+// (g_main.c) as self->client->cloakDebReduce = level.time + rp_flame_thrower_cooldown.integer -- a
 // negative value pushes cloakDebReduce into the past, so the "cloakDebReduce < level.time" cooldown
 // gate is satisfied on effectively every server frame instead of respecting any cooldown at all,
 // letting the flamethrower re-fire (and re-deal damage) as fast as the server tick rate allows. Clamp
 // back to 0 the moment the cvar changes, same as the timer cvars above.
 void RP_CVU_flameThrowerCooldown(void)
 {
-	RP_ClampNonNegativeCvar(&zyk_flame_thrower_cooldown, "zyk_flame_thrower_cooldown");
+	RP_ClampNonNegativeCvar(&rp_flame_thrower_cooldown, "rp_flame_thrower_cooldown");
 }
 
-// GalaxyRP fix: [validation] zyk_list_cmds_results_per_page is read as results_per_page in both
+// GalaxyRP fix: [validation] rp_list_cmds_results_per_page is read as results_per_page in both
 // Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c), where it gates both pagination loop bounds:
 // results_per_page*(page-1) and results_per_page*page. When results_per_page is 0 (or negative),
 // both bounds evaluate to <= 0, so neither the skip-loop nor the read-loop ever runs for any page
@@ -159,10 +159,10 @@ void RP_CVU_flameThrowerCooldown(void)
 // the exact same bug those loops have with a negative value -- clamp to a minimum of 1 instead.
 void RP_CVU_listCmdsResultsPerPage(void)
 {
-	if (zyk_list_cmds_results_per_page.integer < 1)
+	if (rp_list_cmds_results_per_page.integer < 1)
 	{
-		trap->Cvar_Set("zyk_list_cmds_results_per_page", "1");
-		trap->Cvar_Update(&zyk_list_cmds_results_per_page);
+		trap->Cvar_Set("rp_list_cmds_results_per_page", "1");
+		trap->Cvar_Update(&rp_list_cmds_results_per_page);
 	}
 }
 
@@ -181,12 +181,12 @@ static void RP_ClampCvarMinimum(vmCvar_t* cvar, const char* cvarName, int minimu
 	}
 }
 
-// zyk_duel_radius is compared against the distance between the two duelists every frame
+// rp_duel_radius is compared against the distance between the two duelists every frame
 // (g_active.c): at 0 or below, "too far apart" is true immediately, so every private duel ends on
 // its very first frame and duelling is impossible. 100 units is close quarters but functional.
 void RP_CVU_duelRadius(void)
 {
-	RP_ClampCvarMinimum(&zyk_duel_radius, "zyk_duel_radius", 100);
+	RP_ClampCvarMinimum(&rp_duel_radius, "rp_duel_radius", 100);
 }
 
 // The Duel Tournament arena's kill radius is DUEL_TOURNAMENT_ARENA_SIZE * scale / 100 (g_main.c),
@@ -195,7 +195,7 @@ void RP_CVU_duelRadius(void)
 // arena on the first frame of every match.
 void RP_CVU_duelTournamentArenaScale(void)
 {
-	RP_ClampCvarMinimum(&zyk_duel_tournament_arena_scale, "zyk_duel_tournament_arena_scale", 200);
+	RP_ClampCvarMinimum(&rp_duel_tournament_arena_scale, "rp_duel_tournament_arena_scale", 200);
 }
 
 // Duelists are frozen in place for the first DUEL_TOURNAMENT_PROTECT_TIME (2000ms) of a match
@@ -204,7 +204,7 @@ void RP_CVU_duelTournamentArenaScale(void)
 // fought. 5000ms gives a (very short) 3 seconds of real duelling.
 void RP_CVU_duelTournamentDuelTime(void)
 {
-	RP_ClampCvarMinimum(&zyk_duel_tournament_duel_time, "zyk_duel_tournament_duel_time", 5000);
+	RP_ClampCvarMinimum(&rp_duel_tournament_duel_time, "rp_duel_tournament_duel_time", 5000);
 }
 
 // This sets "duel_tournament_timer = level.time + cvar" when the first player signs up, and the
@@ -213,7 +213,7 @@ void RP_CVU_duelTournamentDuelTime(void)
 // they just started and the mode can never be entered at all.
 void RP_CVU_duelTournamentTimeToStart(void)
 {
-	RP_ClampCvarMinimum(&zyk_duel_tournament_time_to_start, "zyk_duel_tournament_time_to_start", 1000);
+	RP_ClampCvarMinimum(&rp_duel_tournament_time_to_start, "rp_duel_tournament_time_to_start", 1000);
 }
 
 // GalaxyRP: [Sniper Battle] RP_CVU_sniperBattleTimeToStart() used to sit here, clamping

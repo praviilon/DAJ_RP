@@ -1928,13 +1928,13 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 	//int ammoType;
 	int stop = 1;
 
-	int max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer;
-	int max_powercell_ammo = zyk_max_power_cell_ammo.integer;
-	int max_metalbolt_ammo = zyk_max_metal_bolt_ammo.integer;
-	int max_rocket_ammo = zyk_max_rocket_ammo.integer;
-	int max_thermal_ammo = zyk_max_thermal_ammo.integer;
-	int max_tripmine_ammo = zyk_max_tripmine_ammo.integer;
-	int max_detpack_ammo = zyk_max_detpack_ammo.integer;
+	int max_blasterpack_ammo = rp_max_blaster_pack_ammo.integer;
+	int max_powercell_ammo = rp_max_power_cell_ammo.integer;
+	int max_metalbolt_ammo = rp_max_metal_bolt_ammo.integer;
+	int max_rocket_ammo = rp_max_rocket_ammo.integer;
+	int max_thermal_ammo = rp_max_thermal_ammo.integer;
+	int max_tripmine_ammo = rp_max_tripmine_ammo.integer;
+	int max_detpack_ammo = rp_max_detpack_ammo.integer;
 
 	if (!activator || !activator->client)
 	{

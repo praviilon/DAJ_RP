@@ -211,10 +211,10 @@ BRYAR PISTOL
 static void WP_FireBryarPistol( gentity_t *ent, qboolean altFire, int weapon )
 //---------------------------------------------------------
 {
-	int damage = zyk_blaster_pistol_damage.integer;
+	int damage = rp_blaster_pistol_damage.integer;
 	int count;
 
-	gentity_t	*missile = CreateMissile( muzzle, forward, zyk_blaster_pistol_velocity.integer, 10000, ent, altFire );
+	gentity_t	*missile = CreateMissile( muzzle, forward, rp_blaster_pistol_velocity.integer, 10000, ent, altFire );
 
 	missile->classname = "bryar_proj";
 	missile->s.weapon = WP_BRYAR_PISTOL;
@@ -399,8 +399,8 @@ BLASTER
 void WP_FireBlasterMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean altFire )
 //---------------------------------------------------------
 {
-	int velocity	= zyk_e11_blaster_rifle_velocity.integer;
-	int	damage		= zyk_e11_blaster_rifle_damage.integer;
+	int velocity	= rp_e11_blaster_rifle_velocity.integer;
+	int	damage		= rp_e11_blaster_rifle_damage.integer;
 	gentity_t *missile;
 
 	missile = CreateMissile( start, dir, velocity, 10000, ent, altFire );
@@ -462,8 +462,8 @@ void WP_FireTurboLaserMissile( gentity_t *ent, vec3_t start, vec3_t dir )
 void WP_FireEmplacedMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean altFire, gentity_t *ignore )
 //---------------------------------------------------------
 {
-	int velocity	= zyk_e11_blaster_rifle_velocity.integer;
-	int	damage		= zyk_e11_blaster_rifle_damage.integer;
+	int velocity	= rp_e11_blaster_rifle_velocity.integer;
+	int	damage		= rp_e11_blaster_rifle_damage.integer;
 	gentity_t *missile;
 
 	missile = CreateMissile( start, dir, velocity, 10000, ent, altFire );
@@ -530,7 +530,7 @@ DISRUPTOR
 static void WP_DisruptorMainFire( gentity_t *ent )
 //---------------------------------------------------------
 {
-	int			damage = zyk_disruptor_damage.integer;
+	int			damage = rp_disruptor_damage.integer;
 	qboolean	render_impact = qtrue;
 	vec3_t		start, end;
 	trace_t		tr;
@@ -707,7 +707,7 @@ void WP_DisruptorAltFire( gentity_t *ent )
 	int			traces = DISRUPTOR_ALT_TRACES;
 	qboolean	fullCharge = qfalse;
 
-	damage = zyk_disruptor_alt_damage.integer-30;
+	damage = rp_disruptor_alt_damage.integer-30;
 
 	//VectorCopy( muzzle, muzzle2 ); // making a backup copy
 
@@ -999,9 +999,9 @@ BOWCASTER
 
 static void WP_BowcasterAltFire( gentity_t *ent )
 {
-	int	damage	= zyk_bowcaster_damage.integer;
+	int	damage	= rp_bowcaster_damage.integer;
 
-	gentity_t *missile = CreateMissile( muzzle, forward, zyk_bowcaster_velocity.integer, 10000, ent, qfalse);
+	gentity_t *missile = CreateMissile( muzzle, forward, rp_bowcaster_velocity.integer, 10000, ent, qfalse);
 
 	missile->classname = "bowcaster_proj";
 	missile->s.weapon = WP_BOWCASTER;
@@ -1030,7 +1030,7 @@ static void WP_BowcasterAltFire( gentity_t *ent )
 static void WP_BowcasterMainFire( gentity_t *ent )
 //---------------------------------------------------------
 {
-	int	damage	= zyk_bowcaster_damage.integer, count;
+	int	damage	= rp_bowcaster_damage.integer, count;
 	float bowcaster_spread = BOWCASTER_ALT_SPREAD;
 	float		vel;
 	vec3_t		angs, dir;
@@ -1078,7 +1078,7 @@ static void WP_BowcasterMainFire( gentity_t *ent )
 	for (i = 0; i < count; i++ )
 	{
 		// create a range of different velocities
-		vel = zyk_bowcaster_velocity.integer * ( Q_flrand(-1.0f, 1.0f) * BOWCASTER_VEL_RANGE + 1.0f );
+		vel = rp_bowcaster_velocity.integer * ( Q_flrand(-1.0f, 1.0f) * BOWCASTER_VEL_RANGE + 1.0f );
 
 		vectoangles( forward, angs );
 
@@ -1138,9 +1138,9 @@ REPEATER
 static void WP_RepeaterMainFire( gentity_t *ent, vec3_t dir )
 //---------------------------------------------------------
 {
-	int	damage	= zyk_repeater_damage.integer;
+	int	damage	= rp_repeater_damage.integer;
 
-	gentity_t *missile = CreateMissile( muzzle, dir, zyk_repeater_velocity.integer, 10000, ent, qfalse );
+	gentity_t *missile = CreateMissile( muzzle, dir, rp_repeater_velocity.integer, 10000, ent, qfalse );
 
 	missile->classname = "repeater_proj";
 	missile->s.weapon = WP_REPEATER;
@@ -1161,10 +1161,10 @@ static void WP_RepeaterMainFire( gentity_t *ent, vec3_t dir )
 static void WP_RepeaterAltFire( gentity_t *ent )
 //---------------------------------------------------------
 {
-	int	damage	= zyk_repeater_alt_damage.integer;
-	int splash_damage = zyk_repeater_alt_splash_damage.integer;
+	int	damage	= rp_repeater_alt_damage.integer;
+	int splash_damage = rp_repeater_alt_splash_damage.integer;
 
-	gentity_t *missile = CreateMissile( muzzle, forward, zyk_repeater_alt_velocity.integer, 10000, ent, qtrue );
+	gentity_t *missile = CreateMissile( muzzle, forward, rp_repeater_alt_velocity.integer, 10000, ent, qtrue );
 
 	missile->classname = "repeater_alt_proj";
 	missile->s.weapon = WP_REPEATER;
@@ -1242,9 +1242,9 @@ DEMP2
 
 static void WP_DEMP2_MainFire( gentity_t *ent )
 {
-	int	damage	= zyk_demp2_damage.integer;
+	int	damage	= rp_demp2_damage.integer;
 
-	gentity_t *missile = CreateMissile( muzzle, forward, zyk_demp2_velocity.integer, 10000, ent, qfalse);
+	gentity_t *missile = CreateMissile( muzzle, forward, rp_demp2_velocity.integer, 10000, ent, qfalse);
 
 	missile->classname = "demp2_proj";
 	missile->s.weapon = WP_DEMP2;
@@ -1437,7 +1437,7 @@ void DEMP2_AltDetonate( gentity_t *ent )
 static void WP_DEMP2_AltFire( gentity_t *ent )
 //---------------------------------------------------------
 {
-	int		damage	= zyk_demp2_alt_damage.integer;
+	int		damage	= rp_demp2_alt_damage.integer;
 	int		count, origcount;
 	float	fact;
 	vec3_t	start, end;
@@ -1563,7 +1563,7 @@ static void WP_FlechetteMainFire( gentity_t *ent )
 
 		AngleVectors( angs, fwd, NULL, NULL );
 
-		missile = CreateMissile( muzzle, fwd, zyk_flechette_velocity.integer, 10000, ent, qfalse);
+		missile = CreateMissile( muzzle, fwd, rp_flechette_velocity.integer, 10000, ent, qfalse);
 
 		missile->classname = "flech_proj";
 		missile->s.weapon = WP_FLECHETTE;
@@ -1571,7 +1571,7 @@ static void WP_FlechetteMainFire( gentity_t *ent )
 		VectorSet( missile->r.maxs, FLECHETTE_SIZE, FLECHETTE_SIZE, FLECHETTE_SIZE );
 		VectorScale( missile->r.maxs, -1, missile->r.mins );
 
-		missile->damage = zyk_flechette_damage.integer;
+		missile->damage = rp_flechette_damage.integer;
 		missile->dflags = DAMAGE_DEATH_KNOCKBACK;
 		missile->methodOfDeath = MOD_FLECHETTE;
 		missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
@@ -1678,7 +1678,7 @@ static void WP_CreateFlechetteBouncyThing( vec3_t start, vec3_t fwd, gentity_t *
 //------------------------------------------------------------------------------
 {
 	// zyk: gentity_t	*missile = CreateMissile( start, fwd, 700 + Q_flrand(0.0f, 1.0f) * 700, 1500 + Q_flrand(0.0f, 1.0f) * 2000, self, qtrue );
-	gentity_t	*missile = CreateMissile( start, fwd, zyk_flechette_alt_velocity.integer, 1500 + Q_flrand(0.0f, 1.0f) * 2000, self, qtrue );
+	gentity_t	*missile = CreateMissile( start, fwd, rp_flechette_alt_velocity.integer, 1500 + Q_flrand(0.0f, 1.0f) * 2000, self, qtrue );
 
 	missile->think = WP_flechette_alt_blow;
 
@@ -1703,9 +1703,9 @@ static void WP_CreateFlechetteBouncyThing( vec3_t start, vec3_t fwd, gentity_t *
 
 	missile->bounceCount = 50;
 
-	missile->damage = zyk_flechette_alt_damage.integer;
+	missile->damage = rp_flechette_alt_damage.integer;
 	missile->dflags = 0;
-	missile->splashDamage = zyk_flechette_alt_splash_damage.integer;
+	missile->splashDamage = rp_flechette_alt_splash_damage.integer;
 	missile->splashRadius = FLECHETTE_ALT_SPLASH_RAD;
 
 	missile->r.svFlags = SVF_USE_CURRENT_ORIGIN;
@@ -1774,7 +1774,7 @@ void rocketThink( gentity_t *ent )
 	vec3_t	org;
 	float dot, dot2, dis;
 	int i;
-	float vel = (ent->spawnflags&1)?ent->speed:zyk_rocket_alt_velocity.integer;
+	float vel = (ent->spawnflags&1)?ent->speed:rp_rocket_alt_velocity.integer;
 
 	if ( ent->genericValue1 && ent->genericValue1 < level.time )
 	{//time's up, we're done, remove us
@@ -1944,16 +1944,16 @@ void RocketDie(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int d
 static void WP_FireRocket( gentity_t *ent, qboolean altFire )
 //---------------------------------------------------------
 {
-	int	damage	= zyk_rocket_damage.integer;
-	int splash_damage = zyk_rocket_splash_damage.integer;
-	int	vel = zyk_rocket_velocity.integer;
+	int	damage	= rp_rocket_damage.integer;
+	int splash_damage = rp_rocket_splash_damage.integer;
+	int	vel = rp_rocket_velocity.integer;
 	int dif = 0;
 	float rTime;
 	gentity_t *missile;
 
 	if ( altFire )
 	{
-		vel = zyk_rocket_alt_velocity.integer;
+		vel = rp_rocket_alt_velocity.integer;
 	}
 
 	missile = CreateMissile( muzzle, forward, vel, 30000, ent, altFire );
@@ -2139,7 +2139,7 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	}
 
 	// get charge amount
-	chargeAmount = chargeAmount / zyk_thermal_velocity.value;
+	chargeAmount = chargeAmount / rp_thermal_velocity.value;
 
 	if ( chargeAmount > 1.0f )
 	{
@@ -2155,7 +2155,7 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	bolt->s.pos.trType = TR_GRAVITY;
 	bolt->parent = ent;
 	bolt->r.ownerNum = ent->s.number;
-	VectorScale( dir, zyk_thermal_velocity.integer * chargeAmount, bolt->s.pos.trDelta );
+	VectorScale( dir, rp_thermal_velocity.integer * chargeAmount, bolt->s.pos.trDelta );
 
 	if ( ent->health >= 0 )
 	{
@@ -2170,9 +2170,9 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	bolt->s.loopSound = G_SoundIndex( "sound/weapons/thermal/thermloop.wav" );
 	bolt->s.loopIsSoundset = qfalse;
 
-	bolt->damage = zyk_thermal_damage.integer;
+	bolt->damage = rp_thermal_damage.integer;
 	bolt->dflags = 0;
-	bolt->splashDamage = zyk_thermal_splash_damage.integer;
+	bolt->splashDamage = rp_thermal_splash_damage.integer;
 	bolt->splashRadius = TD_SPLASH_RAD;
 
 	bolt->s.eType = ET_MISSILE;
@@ -2468,7 +2468,7 @@ void proxMineThink(gentity_t *ent)
 	ent->nextthink = level.time + 100; // zyk: added some miliseconds to prevent slowdown
 
 	if (level.duel_tournament_mode == 4 && 
-		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{ // zyk: cannot place it inside a Duel Tornament arena, in this case, remove it
 		ent->nextthink = level.time + 50;
 		ent->think = laserTrapExplode;
@@ -2546,7 +2546,7 @@ void laserTrapThink ( gentity_t *ent )
 	ent->s.time = -1; //let all clients know to draw a beam from this guy
 
 	if (level.duel_tournament_mode == 4 && 
-		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{ // zyk: cannot place it inside a Duel Tornament arena, in this case, remove it
 		ent->touch = 0;
 		ent->nextthink = level.time + LT_DELAY_TIME;
@@ -2637,7 +2637,7 @@ void TrapThink(gentity_t *ent)
 	ent->nextthink = level.time + 50;
 
 	if (level.duel_tournament_mode == 4 && 
-		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{ // zyk: cannot place it inside a Duel Tornament arena, in this case, remove it
 		ent->touch = 0;
 		ent->think = laserTrapExplode;
@@ -2652,9 +2652,9 @@ void CreateLaserTrap( gentity_t *laserTrap, vec3_t start, gentity_t *owner )
 	laserTrap->classname = "laserTrap";
 	laserTrap->flags |= FL_BOUNCE_HALF;
 	laserTrap->s.eFlags |= EF_MISSILE_STICK;
-	laserTrap->splashDamage = zyk_tripmine_splash_damage.integer;
+	laserTrap->splashDamage = rp_tripmine_splash_damage.integer;
 	laserTrap->splashRadius = LT_SPLASH_RAD;
-	laserTrap->damage = zyk_tripmine_damage.integer;
+	laserTrap->damage = rp_tripmine_damage.integer;
 	laserTrap->methodOfDeath = MOD_TRIP_MINE_SPLASH;
 	laserTrap->splashMethodOfDeath = MOD_TRIP_MINE_SPLASH;
 	laserTrap->s.eType = ET_GENERAL;
@@ -2981,8 +2981,8 @@ void drop_charge (gentity_t *self, vec3_t start, vec3_t dir)
 
 	bolt->parent = self;
 	bolt->r.ownerNum = self->s.number;
-	bolt->damage = zyk_detpack_damage.integer; // zyk: default 100
-	bolt->splashDamage = zyk_detpack_splash_damage.integer; // zyk: default 200
+	bolt->damage = rp_detpack_damage.integer; // zyk: default 100
+	bolt->splashDamage = rp_detpack_splash_damage.integer; // zyk: default 200
 	bolt->splashRadius = 200;
 	bolt->methodOfDeath = MOD_DET_PACK_SPLASH;
 	bolt->splashMethodOfDeath = MOD_DET_PACK_SPLASH;
@@ -3169,7 +3169,7 @@ void WP_DropDetPack( gentity_t *ent, qboolean alt_fire )
 
 static void WP_FireConcussionAlt( gentity_t *ent )
 {//a rail-gun-like beam
-	int			damage = zyk_concussion_alt_damage.integer, skip, traces = DISRUPTOR_ALT_TRACES;
+	int			damage = rp_concussion_alt_damage.integer, skip, traces = DISRUPTOR_ALT_TRACES;
 	qboolean	render_impact = qtrue;
 	vec3_t		start, end;
 	vec3_t		/*muzzle2,*/ dir;
@@ -3453,8 +3453,8 @@ static void WP_FireConcussionAlt( gentity_t *ent )
 static void WP_FireConcussion( gentity_t *ent )
 {//a fast rocket-like projectile
 	vec3_t	start;
-	int		damage	= zyk_concussion_damage.integer;
-	float	vel = zyk_concussion_velocity.integer;
+	int		damage	= rp_concussion_damage.integer;
+	float	vel = rp_concussion_velocity.integer;
 	gentity_t *missile;
 
 	//hold us still for a bit
@@ -3489,7 +3489,7 @@ static void WP_FireConcussion( gentity_t *ent )
 	missile->splashMethodOfDeath = MOD_CONC;
 
 	missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-	missile->splashDamage = zyk_concussion_splash_damage.integer;
+	missile->splashDamage = rp_concussion_splash_damage.integer;
 	missile->splashRadius = CONC_SPLASH_RADIUS;
 
 	// we don't want it to ever bounce
@@ -3590,11 +3590,11 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 		// zyk: stun baton in RPG mode does more damage
 		if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[18] > 1)
 		{
-			G_Damage( tr_ent, ent, ent, forward, tr.endpos, zyk_stun_baton_damage.integer * ent->client->pers.skill_levels[18], (DAMAGE_NO_KNOCKBACK|DAMAGE_HALF_ABSORB), MOD_STUN_BATON );
+			G_Damage( tr_ent, ent, ent, forward, tr.endpos, rp_stun_baton_damage.integer * ent->client->pers.skill_levels[18], (DAMAGE_NO_KNOCKBACK|DAMAGE_HALF_ABSORB), MOD_STUN_BATON );
 		}
 		else
 		{
-			G_Damage( tr_ent, ent, ent, forward, tr.endpos, zyk_stun_baton_damage.integer, (DAMAGE_NO_KNOCKBACK|DAMAGE_HALF_ABSORB), MOD_STUN_BATON );
+			G_Damage( tr_ent, ent, ent, forward, tr.endpos, rp_stun_baton_damage.integer, (DAMAGE_NO_KNOCKBACK|DAMAGE_HALF_ABSORB), MOD_STUN_BATON );
 		}
 
 		if (tr_ent->client)
@@ -3731,11 +3731,11 @@ void WP_FireMelee( gentity_t *ent, qboolean alt_fire )
 
 		if ( tr_ent->takedamage )
 		{ //damage them, do more damage if we're in the second right hook
-			int dmg = zyk_melee_left_hand_damage.integer;
+			int dmg = rp_melee_left_hand_damage.integer;
 
 			if (ent->client && ent->client->ps.torsoAnim == BOTH_MELEE2)
 			{ //do a tad bit more damage on the second swing
-				dmg = zyk_melee_right_hand_damage.integer;
+				dmg = rp_melee_right_hand_damage.integer;
 			}
 
 			if ( G_HeavyMelee( ent ) )

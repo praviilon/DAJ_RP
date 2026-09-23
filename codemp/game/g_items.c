@@ -39,7 +39,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #define	RESPAWN_TEAM_WEAPON	30
-// GalaxyRP fix: [Items] RESPAWN_POWERUP (90) is now the default of the zyk_powerup_respawn_time cvar
+// GalaxyRP fix: [Items] RESPAWN_POWERUP (90) is now the default of the rp_powerup_respawn_time cvar
 
 // Item Spawn flags
 #define ITMSF_SUSPEND		1
@@ -69,7 +69,7 @@ int adjustRespawnTime(float preRespawnTime, int itemType, int itemTag)
 			itemTag == WP_TRIP_MINE ||
 			itemTag == WP_DET_PACK)
 		{ //special case for these, use ammo respawn rate
-			respawnTime = zyk_ammo_respawn_time.integer;
+			respawnTime = rp_ammo_respawn_time.integer;
 		}
 	}
 
@@ -117,11 +117,11 @@ and the push code had a second, different copy that skipped g_adaptRespawn, the 
 time and the thermal/trip mine/det pack exception, and gave powerups 60s instead of 90.
 
 	weapon		g_weaponRespawn (RESPAWN_TEAM_WEAPON in team FFA)	adapted
-	ammo		zyk_ammo_respawn_time								adapted
-	shield		zyk_shield_respawn_time							adapted
-	health		zyk_health_respawn_time							adapted
-	holdable	zyk_holdable_item_respawn_time (jetpack too)		adapted
-	powerup		zyk_powerup_respawn_time							NOT adapted, as vanilla never did
+	ammo		rp_ammo_respawn_time								adapted
+	shield		rp_shield_respawn_time							adapted
+	health		rp_health_respawn_time							adapted
+	holdable	rp_holdable_item_respawn_time (jetpack too)		adapted
+	powerup		rp_powerup_respawn_time							NOT adapted, as vanilla never did
 	other		60													adapted
 
 "adapted" is adjustRespawnTime(), which also sends the thermal/trip mine/det pack weapons to the ammo
@@ -146,15 +146,15 @@ int G_ItemRespawnTime( const gentity_t *ent )
 		}
 		return adjustRespawnTime(g_weaponRespawn.integer, item->giType, item->giTag);
 	case IT_AMMO:
-		return adjustRespawnTime(zyk_ammo_respawn_time.integer, item->giType, item->giTag);
+		return adjustRespawnTime(rp_ammo_respawn_time.integer, item->giType, item->giTag);
 	case IT_ARMOR:
-		return adjustRespawnTime(zyk_shield_respawn_time.integer, item->giType, item->giTag);
+		return adjustRespawnTime(rp_shield_respawn_time.integer, item->giType, item->giTag);
 	case IT_HEALTH:
-		return adjustRespawnTime(zyk_health_respawn_time.integer, item->giType, item->giTag);
+		return adjustRespawnTime(rp_health_respawn_time.integer, item->giType, item->giTag);
 	case IT_HOLDABLE:
-		return adjustRespawnTime(zyk_holdable_item_respawn_time.integer, item->giType, item->giTag);
+		return adjustRespawnTime(rp_holdable_item_respawn_time.integer, item->giType, item->giTag);
 	case IT_POWERUP:
-		return zyk_powerup_respawn_time.integer;
+		return rp_powerup_respawn_time.integer;
 	default:
 		return adjustRespawnTime(60, item->giType, item->giTag);
 	}
@@ -225,7 +225,7 @@ void ShieldThink(gentity_t *self)
 	self->nextthink = level.time + 1000;
 
 	if (level.duel_tournament_mode > 0 && 
-		Distance(self->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(self->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{ // zyk: cannot place it inside a Duel Tornament arena, in this case, remove it
 		self->health = 0;
 	}
@@ -533,7 +533,7 @@ qboolean PlaceShield(gentity_t *playerent)
 		trap->Trace( &tr, pos, mins, maxs, dest, playerent->s.number, MASK_SOLID, qfalse, 0, 0 );
 
 		if (level.duel_tournament_mode > 0 && 
-			Distance(tr.endpos, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+			Distance(tr.endpos, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 		{ // zyk: cannot place it inside a Duel Tornament arena
 			return qfalse;
 		}
@@ -1002,7 +1002,7 @@ void pas_think( gentity_t *ent )
 	}
 
 	if (level.duel_tournament_mode == 4 && 
-		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{ // zyk: cannot place it inside a Duel Tornament arena, in this case, remove it
 		G_Sound(ent, CHAN_BODY, G_SoundIndex("sound/chars/turret/shutdown.wav"));
 		ent->s.bolt2 = ENTITYNUM_NONE;
@@ -2509,7 +2509,7 @@ int Pickup_Powerup( gentity_t *ent, gentity_t *other ) {
 		// anti-reward
 		client->ps.persistant[PERS_PLAYEREVENTS] ^= PLAYEREVENT_DENIEDREWARD;
 	}
-	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] zyk_powerup_respawn_time, see G_ItemRespawnTime
+	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] rp_powerup_respawn_time, see G_ItemRespawnTime
 }
 
 //======================================================================
@@ -2530,13 +2530,13 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 void Add_Ammo (gentity_t *ent, int weapon, int count)
 {
-	int max_blasterpack_ammo = zyk_max_blaster_pack_ammo.integer;
-	int max_powercell_ammo = zyk_max_power_cell_ammo.integer;
-	int max_metalbolt_ammo = zyk_max_metal_bolt_ammo.integer;
-	int max_rocket_ammo = zyk_max_rocket_ammo.integer;
-	int max_thermal_ammo = zyk_max_thermal_ammo.integer;
-	int max_tripmine_ammo = zyk_max_tripmine_ammo.integer;
-	int max_detpack_ammo = zyk_max_detpack_ammo.integer;
+	int max_blasterpack_ammo = rp_max_blaster_pack_ammo.integer;
+	int max_powercell_ammo = rp_max_power_cell_ammo.integer;
+	int max_metalbolt_ammo = rp_max_metal_bolt_ammo.integer;
+	int max_rocket_ammo = rp_max_rocket_ammo.integer;
+	int max_thermal_ammo = rp_max_thermal_ammo.integer;
+	int max_tripmine_ammo = rp_max_tripmine_ammo.integer;
+	int max_detpack_ammo = rp_max_detpack_ammo.integer;
 
 	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter max-ammo-bonus block gated
 	// on pers.rpg_class == 2, which is permanently 0 now.
@@ -2626,7 +2626,7 @@ int Pickup_Ammo (gentity_t *ent, gentity_t *other)
 	}
 	else
 	{
-		Add_Ammo (other, ent->item->giTag, (int)ceil(quantity * zyk_add_ammo_scale.value)); // zyk: cvar to scale the add ammo amount
+		Add_Ammo (other, ent->item->giTag, (int)ceil(quantity * rp_add_ammo_scale.value)); // zyk: cvar to scale the add ammo amount
 	}
 
 	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
@@ -2676,7 +2676,7 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other) {
 	other->client->ps.stats[STAT_WEAPONS] |= ( 1 << ent->item->giTag );
 
 	//Add_Ammo( other, ent->item->giTag, quantity );
-	Add_Ammo( other, weaponData[ent->item->giTag].ammoIndex, (int)ceil(quantity * zyk_add_ammo_scale.value) ); // zyk: cvar to scale the add ammo amount
+	Add_Ammo( other, weaponData[ent->item->giTag].ammoIndex, (int)ceil(quantity * rp_add_ammo_scale.value) ); // zyk: cvar to scale the add ammo amount
 
 	G_LogWeaponPickup(other->s.number, ent->item->giTag);
 
@@ -2712,7 +2712,7 @@ int Pickup_Health (gentity_t *ent, gentity_t *other) {
 	other->client->ps.stats[STAT_HEALTH] = other->health;
 
 	if ( ent->item->quantity == 100 ) {		// mega health respawns slow
-		return zyk_holdable_item_respawn_time.integer;
+		return rp_holdable_item_respawn_time.integer;
 	}
 
 	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
@@ -3419,7 +3419,7 @@ void FinishSpawningItem( gentity_t *ent ) {
 	}
 
 	// GalaxyRP fix: [Force] duel-aware, see G_ForcePowerDisableValue() -- force powerups used to keep
-	// spawning in Duel/Power Duel when only zyk_duelForcePowerDisable was set.
+	// spawning in Duel/Power Duel when only rp_duelForcePowerDisable was set.
 	if (G_ForcePowerDisableValue())
 	{ //if force powers disabled, don't add force powerups
 		if (ent->item->giType == IT_POWERUP)

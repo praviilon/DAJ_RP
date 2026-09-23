@@ -187,7 +187,7 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	int i, i_r, lastFPKnown = -1;
 	qboolean warnClient = qfalse, warnClientLimit = qfalse, didEvent = qfalse;
 	char userinfo[MAX_INFO_STRING], forcePowers[DEFAULT_FORCEPOWERS_LEN+1], readBuf[DEFAULT_FORCEPOWERS_LEN+1];
-	// zyk: if gametype is Duel or Power Duel, uses zyk_duelForcePowerDisable instead
+	// zyk: if gametype is Duel or Power Duel, uses rp_duelForcePowerDisable instead
 	// GalaxyRP fix: [Force] moved into G_ForcePowerDisableValue() (g_main.c) so the other readers of
 	// g_forcePowerDisable get the same duel-aware answer this function already did.
 	int force_powers_disabled = G_ForcePowerDisableValue();
@@ -616,7 +616,7 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 	// decides who it may be used ON, and with both of them commented out a duel stopped being sealed
 	// off from the rest of the map. A duellist could Grip, Mind Trick or Push a bystander who had
 	// nothing to do with the fight, and a bystander could do the same back -- Push in particular can
-	// shove a duellist past zyk_duel_radius and end a duel the pusher is not even part of. G_Damage
+	// shove a duellist past rp_duel_radius and end a duel the pusher is not even part of. G_Damage
 	// blocks the damage in both directions, but these powers do their real work through effects that
 	// never reach G_Damage: the grip hold, the trick, the knockback.
 	//

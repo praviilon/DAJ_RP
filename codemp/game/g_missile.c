@@ -1104,7 +1104,7 @@ void G_RunMissile( gentity_t *ent ) {
 	}
 
 	if (level.duel_tournament_mode == 4 && ent->s.weapon != WP_SABER && 
-		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * zyk_duel_tournament_arena_scale.value / 100.0))
+		Distance(ent->r.currentOrigin, level.duel_tournament_origin) < (DUEL_TOURNAMENT_ARENA_SIZE * rp_duel_tournament_arena_scale.value / 100.0))
 	{
 		// GalaxyRP: [Grapple Hook] G_FreeEntity() knows to detach a hook from its owner (g_utils.c),
 		// so this plain free is safe for one too; a hook cannot reach into the arena any more than

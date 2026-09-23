@@ -2041,7 +2041,7 @@ void SP_NPC_spawner( gentity_t *self)
 	// GalaxyRP fix: [NPC] an unconditional "vjun3 drops protocol_imp and r2d2_imp" block used to sit
 	// here, to stay under the 16-entry MAX_ANIM_FILES of the time (128 since 3.47). Both types are on
 	// the list below, so vjun3 now behaves like every other SP map: trimmed only when the cvar is on.
-	if (zyk_sp_npc_fix.integer)
+	if (rp_sp_npc_fix.integer)
 	{ // zyk: removing npcs from SP maps which are not that useful
 		if (level.sp_map == qtrue && (Q_stricmp(self->NPC_type, "player") == 0 || Q_stricmp(self->NPC_type, "r2d2_imp") == 0 || Q_stricmp(self->NPC_type, "r2d2") == 0 || 
 			 Q_stricmp(self->NPC_type, "protocol_imp") == 0 || Q_stricmp(self->NPC_type, "tavion_new") == 0 || Q_stricmp(self->NPC_type, "dkothos") == 0 || 

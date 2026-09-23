@@ -287,61 +287,61 @@ XCVAR_DEF( sv_maxclients,				"8",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARC
 // and its own shaders in ui_saber.c/cg_main.c) and TaystJK gates it on the same mechanism.
 XCVAR_DEF( taystJKinfo,					"11",			NULL,				CVAR_SERVERINFO|CVAR_ROM,						qfalse )
 XCVAR_DEF( timelimit,					"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
-XCVAR_DEF( zyk_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_metal_bolt_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_rocket_ammo,			"25",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_thermal_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_tripmine_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_detpack_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_blaster_pistol_damage,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_blaster_pistol_velocity,	"1600",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_e11_blaster_rifle_damage,	"20",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_e11_blaster_rifle_velocity,	"2300",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_disruptor_damage,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_disruptor_alt_damage,	"125",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_bowcaster_damage,	"50",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_bowcaster_velocity,	"1300",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_repeater_damage,	"14",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_repeater_velocity,	"1600",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_repeater_alt_damage,	"60",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_repeater_alt_velocity,	"1100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_repeater_alt_splash_damage,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_demp2_damage,	"35",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_demp2_velocity,	"3500",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_demp2_alt_damage,	"12",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flechette_damage,	"15",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flechette_velocity,	"3500",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flechette_alt_damage,	"110",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flechette_alt_velocity,	"1800",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flechette_alt_splash_damage,	"110",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rocket_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rocket_velocity,	"900",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rocket_alt_velocity,	"450",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_rocket_splash_damage,	"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_concussion_damage,	"75",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_concussion_velocity,	"3000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_concussion_splash_damage,	"40",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_concussion_alt_damage,	"25",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_stun_baton_damage,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_melee_left_hand_damage,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_melee_right_hand_damage,	"12",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_melee_kick_damage,	"10",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_thermal_damage,	"70",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_thermal_splash_damage,	"90",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_thermal_velocity,	"900",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_tripmine_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_tripmine_splash_damage,	"105",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_detpack_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_detpack_splash_damage,	"200",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_saber_throw_damage,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_ammo_respawn_time,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_shield_respawn_time,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_health_respawn_time,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_metal_bolt_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_rocket_ammo,			"25",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_thermal_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_tripmine_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_max_detpack_ammo,		"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_blaster_pistol_damage,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_blaster_pistol_velocity,	"1600",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_e11_blaster_rifle_damage,	"20",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_e11_blaster_rifle_velocity,	"2300",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_disruptor_damage,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_disruptor_alt_damage,	"125",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_bowcaster_damage,	"50",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_bowcaster_velocity,	"1300",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_repeater_damage,	"14",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_repeater_velocity,	"1600",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_repeater_alt_damage,	"60",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_repeater_alt_velocity,	"1100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_repeater_alt_splash_damage,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_demp2_damage,	"35",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_demp2_velocity,	"3500",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_demp2_alt_damage,	"12",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flechette_damage,	"15",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flechette_velocity,	"3500",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flechette_alt_damage,	"110",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flechette_alt_velocity,	"1800",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flechette_alt_splash_damage,	"110",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_rocket_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_rocket_velocity,	"900",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_rocket_alt_velocity,	"450",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_rocket_splash_damage,	"100",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_concussion_damage,	"75",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_concussion_velocity,	"3000",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_concussion_splash_damage,	"40",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_concussion_alt_damage,	"25",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_stun_baton_damage,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_melee_left_hand_damage,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_melee_right_hand_damage,	"12",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_melee_kick_damage,	"10",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_thermal_damage,	"70",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_thermal_splash_damage,	"90",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_thermal_velocity,	"900",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_tripmine_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_tripmine_splash_damage,	"105",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_detpack_damage,	"100",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_detpack_splash_damage,	"200",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_saber_throw_damage,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_ammo_respawn_time,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_shield_respawn_time,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_health_respawn_time,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Items] Force Enlightenment, Force Boon and Ysalamiri; was a fixed 90 (RESPAWN_POWERUP). Not
 // shortened by g_adaptRespawn, as vanilla never did. See G_ItemRespawnTime in g_items.c.
-XCVAR_DEF( zyk_powerup_respawn_time,	"90",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_powerup_respawn_time,	"90",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Quests] zyk_allow_guardian_quest and zyk_allow_bounty_quest used to be defined here.
 // Their only consumers, Cmd_GuardianQuest_f and Cmd_BountyQuest_f, were deleted as unreachable dead
 // code (see the GalaxyRP fix comment in g_cmds.c), leaving these cvars orphaned. Removed outright.
@@ -373,8 +373,8 @@ XCVAR_DEF( zyk_powerup_respawn_time,	"90",				NULL,				CVAR_ARCHIVE|CVAR_NORESTA
 // same moment the event ends. trackChange is qfalse for the reason it is on rp_downed_timer:
 // G_UpdateCvars broadcasts vmCvar->string, still the OLD value for a latched cvar, which would
 // contradict the engine's own "will be changed upon restarting" a moment after it printed.
-XCVAR_DEF( zyk_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
-XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( rp_allow_duel_tournament, "1",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( rp_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 // GalaxyRP fix: [Magic] the 73 magic-system cvars that used to be defined here and just above were
 // removed. They were the per-power MP costs (*_mp_cost), the per-power on/off switches
 // (zyk_enable_*), zyk_universe_mp_cost_factor, and the magic-fist trio (zyk_magic_fist_damage /
@@ -409,21 +409,21 @@ XCVAR_DEF( rp_screen_message,	"",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,				
 XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_listCmdsResultsPerPage (g_cvar.c) clamps a non-positive value
 // back to 1 -- see its comment for why 0 needs its own floor instead of the usual clamp-to-0 pattern.
-XCVAR_DEF( zyk_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_flameThrowerCooldown (g_cvar.c) clamps a negative value back to
 // 0 -- see its comment for why.
-XCVAR_DEF( zyk_flame_thrower_cooldown,	"50",			RP_CVU_flameThrowerCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_flame_thrower_damage,	"2",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_add_ammo_scale,	"0.5",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_chat_protection_timer,	"0",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_change_map_gametype_vote, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_vote_timer,	"0",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_saber_touch_damage, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_allow_duel_saber_touch_damage, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_saberDmgDelay_Idle,		"350",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_saberDamageScale,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_radius,					"1024",		RP_CVU_duelRadius,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-// GalaxyRP fix: [Duel Tournament] CVAR_LATCH, for the same reason as zyk_duel_tournament_duel_time
+XCVAR_DEF( rp_flame_thrower_cooldown,	"50",			RP_CVU_flameThrowerCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_flame_thrower_damage,	"2",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_add_ammo_scale,	"0.5",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_chat_protection_timer,	"0",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_change_map_gametype_vote, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_vote_timer,	"0",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_allow_saber_touch_damage, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_allow_duel_saber_touch_damage, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_saberDmgDelay_Idle,		"350",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_saberDamageScale,		"1",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_radius,					"1024",		RP_CVU_duelRadius,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Duel Tournament] CVAR_LATCH, for the same reason as rp_duel_tournament_duel_time
 // below. The globe is spawned once, when the tournament starts, with "zykmodelscale" set from this
 // cvar's value at that moment (Cmd_DuelMode_f) -- but every boundary test afterwards reads the LIVE
 // cvar: duelists are killed for leaving the arena and everyone else for entering it (G_RunFrame),
@@ -433,10 +433,10 @@ XCVAR_DEF( zyk_duel_radius,					"1024",		RP_CVU_duelRadius,				CVAR_ARCHIVE|CVAR
 // for "leaving", grow it and a spectator standing outside the globe dies for "entering". The
 // clamp in RP_CVU_duelTournamentArenaScale() only bounds the value; the latch removes the mid-event
 // route. trackChange qfalse for the reason given on the allow cvars above.
-XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaScale,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( rp_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaScale,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
 // GalaxyRP fix: [Duel Tournament] CVAR_LATCH, because lowering this mid-match freezes the duelists
 // for the rest of it. The arena-entry freeze in bg_pmove.c asks
-// "(level.duel_tournament_timer - level.time) > (zyk_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME)",
+// "(level.duel_tournament_timer - level.time) > (rp_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME)",
 // and duel_tournament_timer was baked from this cvar's value when the match began. Drop the cvar
 // from 180000 to 20000 while a match is running and the left side is still huge while the right
 // side collapses, so the test goes true again and PM_ pins the duelist in place until the last
@@ -445,8 +445,8 @@ XCVAR_DEF( zyk_duel_tournament_arena_scale, "800",		RP_CVU_duelTournamentArenaSc
 // RP_CVU_duelTournamentDuelTime()'s floor of 5000 does not cover this: it stops the value being set
 // too low BEFORE a match, and 20000 passes it. The latch removes the mid-match route instead, which
 // is the only one left. trackChange qfalse for the same reason as the two allow cvars above.
-XCVAR_DEF( zyk_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
-XCVAR_DEF( zyk_duel_tournament_min_players, "2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_tournament_duel_time, "180000",	RP_CVU_duelTournamentDuelTime,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( rp_duel_tournament_min_players, "2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_allow_jetpack_command,		"2",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue ) // GalaxyRP: logged-in players with the Jetpack skill only; see jetpack_command_allowed() in g_cmds.c
 // GalaxyRP: [Grapple Hook] who may fire the hook, with rp_allow_jetpack_command's tiers: 0 nobody,
 // 1 logged-out players and logged-in players with the Grapple Hook skill, 2 (default) logged-in
@@ -459,7 +459,7 @@ XCVAR_DEF( rp_allow_grapple_hook,		"2",		RP_CVU_allowGrappleHook,	CVAR_ARCHIVE|C
 // level.logical_entities_enabled, so a change takes effect at the next map and never moves a live
 // entity between regions. 0 puts everything in the networked table, exactly as before the feature.
 XCVAR_DEF( rp_logical_entities,			"1",		NULL,				CVAR_ARCHIVE|CVAR_LATCH,						qfalse )
-XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP: [NPC] a content filter, not a fix any more. 1 frees the spawners of the SP story cast
 // (Tavion, the Kothos twins, Rosh, Kyle, Luke, Chewie, Alora, Boba), the droids, merchants and
 // creatures on SP maps (level.sp_map, g_main.c) -- see the list in SP_NPC_spawner(). It was written
@@ -467,8 +467,8 @@ XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NO
 // too many non-humanoid models were loaded (128 since 3.47), and networked entity pressure (logical
 // entities and the ZYK_ENTITY_RESERVE guards). The unconditional vjun3 protocol_imp/r2d2_imp drop
 // that lived beside it has been folded in here; both types are on the list.
-XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Shop] renamed from zyk_allow_stun_baton_upgrade -- this only ever gated the Stun
 // Baton Upgrade's door-unlock effect (its speed-debuff effect was never gated by it), so the old
 // name overstated its scope; matches the rp_ prefix convention used by other RPG-specific cvars
@@ -484,7 +484,7 @@ XCVAR_DEF( rp_allow_playsound_command, "1",				NULL,				CVAR_ARCHIVE|CVAR_NOREST
 // GalaxyRP fix: [cleanup] renamed from zyk_allow_force_duel to rp_allow_force_duel -- it gates a
 // GalaxyRP-authored command (/engage_fullforceduel), so it belongs on this mod's rp_ prefix rather
 // than the inherited zyk_ one, the same move rp_allow_emotes and rp_allow_playsound_command above
-// already made. Moved here from beside zyk_allow_duel_tournament for the same reason: the name and
+// already made. Moved here from beside rp_allow_duel_tournament for the same reason: the name and
 // the block it sits in should agree.
 XCVAR_DEF( rp_allow_force_duel,			"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Private Duel] CVAR_LATCH. This is read every frame (ClientThink_real sets the
@@ -493,9 +493,9 @@ XCVAR_DEF( rp_allow_force_duel,			"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,		
 // that is solid again; PM's slide move never ejects from an all-solid start, so they stay stuck
 // until the duel ends by death or distance. 0 -> 1 is harmless, but a setting that is only ever
 // a server-style choice gains nothing from applying mid-map. trackChange qfalse as above.
-XCVAR_DEF( zyk_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
-XCVAR_DEF( zyk_duel_tournament_time_to_start, "12000", RP_CVU_duelTournamentTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_no_collision,		"1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART|CVAR_LATCH,			qfalse )
+XCVAR_DEF( rp_duel_tournament_time_to_start, "12000", RP_CVU_duelTournamentTimeToStart,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_duel_tournament_rounds_per_match, "1",	NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [cleanup] renamed from zyk_buying_selling_cooldown to rp_buying_cooldown -- there has
 // never been a working /sell command (see the Shop wording fixes elsewhere), so "selling" no longer
 // belongs in the name, and this moves it onto this mod's rp_ prefix instead of the inherited zyk_ one.
@@ -514,7 +514,7 @@ XCVAR_DEF( rp_rpg_max_level,			"100",			RP_CVU_rpgMaxLevel,			CVAR_ARCHIVE|CVAR_
 // Shield a LOGGED-OUT player spawns with; an RPG character's starting shield comes from their Max
 // Shield skill instead (pers.max_rpg_shield, see set_max_shield in g_cmds.c).
 XCVAR_DEF( rp_starting_shield,			"25",			RP_CVU_startingShield,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
+XCVAR_DEF( rp_duelForcePowerDisable,	"0",			NULL,				CVAR_ARCHIVE|CVAR_LATCH|CVAR_SERVERINFO,						qtrue )
 
 XCVAR_DEF( rp_default_account_permissions,		"0",	NULL,					CVAR_ARCHIVE | CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_pluginRequired,					"1",	RP_CVU_pluginRequired,	CVAR_ARCHIVE | CVAR_SERVERINFO,					qtrue )
