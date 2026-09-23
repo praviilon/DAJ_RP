@@ -2515,18 +2515,6 @@ Ghoul2 Insert End
 
 	cg.clientNum = clientNum;
 
-	cg.magic_power = 100;
-
-	cg.immunity_power_duration = 0;
-	cg.ultra_strength_duration = 0;
-	cg.ultra_resistance_duration = 0;
-	cg.unique_cooldown_timer = 0;
-	cg.unique_cooldown_duration = 0;
-	cg.unique_duration_timer = 0;
-	cg.unique_duration = 0;
-	cg.unique_duration_control = 0;
-	cg.using_unique_boost = 0;
-
 	// GalaxyRP fix: [Radar] the per-slot zyk_rpg_stuff[] loop that used to sit here is gone with the
 	// array. The ally bitfields it is replaced by start at 0 the same way, and unlike that cache
 	// they are re-sent from ClientBegin, so they do not stay zero after a map change.

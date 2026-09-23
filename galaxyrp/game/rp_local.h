@@ -33,20 +33,17 @@ int RP_DB_Open(sqlite3 **db);
 // GalaxyRP fix: [NPC] removed NUM_OF_GUARDIANS here. Its last user was the guardian_boss_1..10
 // loop in the /npc spawn blocklist, which has been removed along with the rest of that list;
 // the Light Quest it counted for was itself deleted as dead code in earlier work.
-#define NUM_OF_OBJECTIVES				10 // zyk: number of Dark Quest objectives
-// GalaxyRP fix: [Quests] removed NUM_OF_ETERNITY_QUEST_OBJ here — unused anywhere in the codebase
-#define NUM_OF_UNIVERSE_QUEST_OBJ		22 // zyk: number of Universe Quest objectives
+// GalaxyRP fix: [Quests] NUM_OF_OBJECTIVES (Dark Quest), NUM_OF_ETERNITY_QUEST_OBJ and
+// NUM_OF_UNIVERSE_QUEST_OBJ used to be defined here; the quests are gone and nothing read them.
 #define NUM_OF_SKILLS					60 // zyk: number of RPG Mode skills
 
 #define MAX_SHADER_REMAPS				128
 // GalaxyRP: [Race Mode] MAX_RACERS used to be defined here. Its only users were Cmd_RaceMode_f's
 // starting-grid search and level.race_mode_vehicle[], both removed with Race Mode itself.
 #define MAX_DUEL_MATCHES				496 // zyk: max matches a tournament may have
-#define MAX_CUSTOM_QUESTS				64 // zyk: max amount of custom quests
-#define MAX_CUSTOM_QUEST_MISSIONS		512 // zyk: max missions a custom quest can have
-#define MAX_MISSION_FIELD_LINES			8 // zyk: max lines of custom quest mission fields to send to client
-#define MAX_CUSTOM_QUEST_FIELDS			512 // zyk: max fields a custom quest mission can have
-#define MAX_BOUNTY_HUNTER_SENTRIES		5 // zyk: max sentries a Bounty Hunter can have if he has the Upgrade
+// GalaxyRP fix: [Quests] the MAX_CUSTOM_QUEST* sizes and MAX_BOUNTY_HUNTER_SENTRIES used to be
+// defined here, for the custom-quest tables in level_locals_t and the Bounty Hunter class; both
+// are gone.
 #define MAX_RPG_CHARS					60 // zyk: max RPG chars an account can have
 #define MAX_ACC_NAME_SIZE				30 // zyk: max characters an account or rpg char can have
 #define MAX_JETPACK_FUEL				10000 // zyk: max jetpack fuel the player can have
@@ -110,42 +107,8 @@ typedef enum {
 
 } zyk_admin_t;
 
-// zyk: magic powers values
-typedef enum {
-	MAGIC_MAGIC_SENSE,
-	MAGIC_HEALING_WATER,
-	MAGIC_WATER_SPLASH,
-	MAGIC_WATER_ATTACK,
-	MAGIC_EARTHQUAKE,
-	MAGIC_ROCKFALL,
-	MAGIC_SHIFTING_SAND,
-	MAGIC_SLEEPING_FLOWERS,
-	MAGIC_POISON_MUSHROOMS,
-	MAGIC_TREE_OF_LIFE,
-	MAGIC_MAGIC_SHIELD,
-	MAGIC_DOME_OF_DAMAGE,
-	MAGIC_MAGIC_DISABLE,
-	MAGIC_ULTRA_SPEED,
-	MAGIC_SLOW_MOTION,
-	MAGIC_FAST_AND_SLOW,
-	MAGIC_FLAME_BURST,
-	MAGIC_ULTRA_FLAME,
-	MAGIC_FLAMING_AREA,
-	MAGIC_BLOWING_WIND,
-	MAGIC_HURRICANE,
-	MAGIC_REVERSE_WIND,
-	MAGIC_ULTRA_RESISTANCE,
-	MAGIC_ULTRA_STRENGTH,
-	MAGIC_ENEMY_WEAKENING,
-	MAGIC_ICE_STALAGMITE,
-	MAGIC_ICE_BOULDER,
-	MAGIC_ICE_BLOCK,
-	MAGIC_HEALING_AREA,
-	MAGIC_MAGIC_EXPLOSION,
-	MAGIC_LIGHTNING_DOME,
-	MAX_MAGIC_POWERS
-
-} zyk_magic_t;
+// GalaxyRP fix: [Magic] the zyk_magic_t enum (MAGIC_MAGIC_SENSE ... MAX_MAGIC_POWERS) used to be
+// here. Its last use was the session's power-selection defaults, removed with the magic system.
 
 // zyk: shader remap struct
 typedef struct shaderRemap_s {

@@ -871,7 +871,6 @@ ClientTimerActions
 Actions that happen once a second
 ==================
 */
-extern int zyk_max_magic_power(gentity_t* ent);
 /*
 ==============
 RP_DownedTimerTick
@@ -1058,27 +1057,6 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		return;
 	}
 
-	if (client->sess.amrpgmode == 2 && client->pers.unique_skill_duration < level.time)
-	{ // zyk: Unique Ability run out. Remove the flags
-		if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_1))
-		{
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_1);
-		}
-		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_2))
-		{
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_2);
-		}
-		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_3))
-		{
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_3);
-		}
-	}
-	
-	if (client->pers.player_statuses & (1 << PLAYER_STATUS_ICE_BOMB_HIT) && client->pers.stun_baton_less_speed_timer < level.time)
-	{ // zyk: remove the Ice Bomb hit flag
-		client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ICE_BOMB_HIT);
-	}
-
 	while ( client->timeResidual >= 1000 )
 	{
 		client->timeResidual -= 1000;
@@ -1086,7 +1064,7 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		//GalaxyRP (Alex): [Ammo Recharge] Go check if player can recharge ammo, do it if they can.
 		RegenerateAmmo(ent, client);
 
-		// GalaxyRP fix: [gameplay/exploit] player_statuses bit 5 makes G_Damage return early for this
+		// GalaxyRP fix: [gameplay/exploit] the PLAYER_STATUS_CHAT_PROTECTION bit makes G_Damage return early for this
 		// player (g_combat.c), so leaving it set means total damage immunity. Both the set and the
 		// clear used to live inside the "zyk_chat_protection_timer > 0" block, and the clear also
 		// required chat_protection_timer != 0 -- so the flag could be stranded set, permanently, in
@@ -1136,24 +1114,6 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		{ // zyk: feature disabled -- don't leave anyone holding the protection it granted
 			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_CHAT_PROTECTION);
 			client->pers.chat_protection_timer = 0;
-		}
-
-		if ((ent->NPC || client->sess.amrpgmode == 2) && client->pers.quest_power_status & (1 << 14) && ent->health > 0)
-		{ // zyk: Light Power
-			if (ent->NPC)
-			{ // zyk: bosses using it
-				if ((ent->health + 2) < client->ps.stats[STAT_MAX_HEALTH])
-					ent->health += 2;
-				else
-					ent->health = client->ps.stats[STAT_MAX_HEALTH];
-			}
-			else
-			{ // zyk: players using it
-				if (ent->health < client->pers.max_rpg_health)
-					ent->health += 1;
-				else if (client->ps.stats[STAT_ARMOR] < client->pers.max_rpg_shield)
-					client->ps.stats[STAT_ARMOR] += 1;
-			}
 		}
 
 		// GalaxyRP fix: [Dead Code] the RPG auto-heal block used to be here -- "if (amrpgmode == 2 &&
@@ -1257,76 +1217,14 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 		}
 	}
 
-	if (client->pers.send_event_timer > level.time && client->pers.send_event_interval < level.time)
-	{
-		client->pers.send_event_interval = level.time + 100;
-
-		if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_IMMUNITY_EVENT))
-		{ // zyk: Immunity Power
-			G_AddEvent(ent, EV_USE_ITEM13, 101);
-
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_IMMUNITY_EVENT);
-		}
-		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT))
-		{ // zyk: Ultra Strength
-			G_AddEvent(ent, EV_USE_ITEM13, 102);
-
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT);
-		}
-		else if (client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT))
-		{ // zyk: Ultra Resistance
-			G_AddEvent(ent, EV_USE_ITEM13, 103);
-
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT);
-		}
-		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT)))
-		{
-			int scaled_magic_power = ((float)client->pers.magic_power/zyk_max_magic_power(ent)) * 100.0;
-
-			G_AddEvent(ent, EV_USE_ITEM13, scaled_magic_power);
-
-			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
-		}
-		// GalaxyRP fix: [Radar] a step used to sit here pushing EV_ITEMUSEFAIL parm 6, which CLEARED
-		// cg.rpg_stuff bit 0 on the client -- the "Bounty Hunter radar upgrade" flag. Parm 5, the only
-		// thing that could ever SET that bit, was sent from a branch gated on pers.rpg_class == 2, and
-		// rpg_class went in an earlier dead-code pass (it has zero live references left in the tree).
-		// So the bit could only ever be 0, every reader of it in cg_draw.c was a permanently-false
-		// test, and this step spent a cascade slot telling the client something it already believed.
-		// Removed with the flag itself; see the collapsed conditions in CG_DrawRadar.
-		// GalaxyRP fix: [Skills] a jetpack-flame step used to sit here, pushing EV_ITEMUSEFAIL parm 7
-		// or 8 once per cascade and marking PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT. The flag it was
-		// announcing now rides the entity state as EF_RPG_JETPACK_UPGRADE, set every frame further
-		// down this file, so there is nothing left to announce. Removing the step shortens this
-		// cascade from five occupied slots to four, which only means the remaining ones come round
-		// slightly sooner inside the same window -- they are all idempotent state pushes.
-		else if (!(client->pers.player_statuses & (1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT)))
-		{ // zyk: tells the RPG class to the client-side mod to render the Force Shield effect and the resistance shield
-			// GalaxyRP fix: [Dead Code] dropped "+ client->pers.rpg_class"; pers.rpg_class is
-			// always 0 server-side, so the sent value was tautologically always 104.
-			if (client->sess.amrpgmode == 2)
-				G_AddEvent(ent, EV_USE_ITEM13, 104);
-			else
-				G_AddEvent(ent, EV_USE_ITEM13, 114);
-
-			client->pers.player_statuses |= (1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
-		}
-		else
-		{
-			// GalaxyRP fix: [Radar] this branch also used to push EV_ITEMUSEFAIL parm 10, clearing
-			// cg.zyk_rpg_stuff[n] bit 1 -- "this player is a Stealth Attacker with the upgrade, hide
-			// them from the radar". Parm 9, its only setter, came from a pers.rpg_class == 5 branch
-			// that is long gone, so the bit was permanently 0 and the skip it drove in CG_DrawRadar
-			// never once fired. The branch itself stays: it is what resets the flags below and makes
-			// the cascade cycle.
-			//
-			// The SENT_RADAR_EVENT and SENT_JETPACK_FLAME_EVENT resets went with their steps. Both
-			// enum entries are left in g_local.h, since renumbering PLAYER_STATUS_* is a separate
-			// decision (see the same note on PLAYER_STATUS_CUSTOM_QUEST_NPC).
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENT_FORCE_USER_EVENT);
-			client->pers.player_statuses &= ~(1 << PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT);
-		}
-	}
+	// GalaxyRP fix: [Magic] the per-player event cascade used to run here: once a second for a few
+	// seconds after spawn, login and logout (send_rpg_events), it pushed the player's RPG state to
+	// the client as EV_USE_ITEM13 events -- the magic power bar, the Immunity / Ultra Strength /
+	// Ultra Resistance timers and finally the "is an RPG player" flag (parm 104 / 114) for the
+	// Force Shield draw. Every one of those readers is gone from cgame: the magic bars with the
+	// magic system, the flag with the rpg_class mirror. The cascade, its send_event_timer /
+	// send_event_interval fields, PLAYER_STATUS_SENT_FORCE_USER_EVENT and send_rpg_events() went
+	// with them.
 }
 
 /*
@@ -2453,8 +2351,8 @@ void G_SetTauntAnim( gentity_t *ent, int taunt )
 // ability, which accelerated the user and knocked down anyone it passed through. It had no callers
 // anywhere in the tree, and it was the only caller of zyk_force_dash_effect() (g_main.c) and the
 // only reader of pers.fast_dash_timer; all three have gone together. The two externs above it went
-// with it -- zyk_unique_ability_can_hit_target() itself survives, it still has a live caller in
-// g_combat.c.
+// with it; zyk_unique_ability_can_hit_target() itself outlived them for a while and has since been
+// deleted with the magic effect functions.
 
 /*
 ==============
@@ -2908,30 +2806,6 @@ void ClientThink_real( gentity_t *ent ) {
 			{
 				client->ps.pm_type = PM_NORMAL;
 			}
-
-			if (client->pers.quest_power_status & (1 << 2))
-			{ // zyk: player hit by Time Power
-				if (client->jetPackOn)
-				{
-					Jetpack_Off(ent);
-				}
-
-				if ( client->ps.saberHolstered < 2 )
-				{
-					client->ps.saberHolstered = 2;
-					if (client->saber[0].soundOff)
-					{
-						G_Sound(ent, CHAN_AUTO, client->saber[0].soundOff);
-					}
-					if (client->saber[1].soundOff &&
-						client->saber[1].model[0])
-					{
-						G_Sound(ent, CHAN_AUTO, client->saber[1].soundOff);
-					}
-					//prevent anything from being done for 400ms after holster
-					client->ps.weaponTime = 400;
-				}
-			}
 		}
 	}
 
@@ -3158,26 +3032,6 @@ void ClientThink_real( gentity_t *ent ) {
 			//ent->client->ps.speed = ent->client->ps.basespeed = NPC_GetRunSpeed( ent );
 		}
 
-		if (client->pers.quest_power_status & (1 << 6))
-		{ // zyk: hit by Slow Motion. Decrease speed
-			client->ps.speed /= 2;
-		}
-
-		if (client->pers.quest_power_status & (1 << 1))
-		{ // zyk: hit by Chaos Power. Decrease speed
-			client->ps.speed /= 2;
-		}
-
-		if (client->pers.quest_power_status & (1 << 2))
-		{ // zyk: hit by Time Power. Do not move at all
-			client->ps.speed = 0;
-		}
-		
-		if (client->pers.quest_power_status & (1 << 9))
-		{ // zyk: using Ultra Speed. Increase speed
-			client->ps.speed *= 2;
-		}
-
 		if (client->pers.stun_baton_less_speed_timer > level.time)
 		{ // zyk: stun baton 3/3 decreases speed
 			client->ps.speed /= 2;
@@ -3200,26 +3054,6 @@ void ClientThink_real( gentity_t *ent ) {
 		if (client->bodyGrabIndex != ENTITYNUM_NONE)
 		{ //can't go nearly as fast when dragging a body around
 			zyk_player_speed *= 0.2f;
-		}
-
-		if (client->pers.quest_power_status & (1 << 6))
-		{ // zyk: hit by Slow Motion. Decrease speed
-			zyk_player_speed /= 2;
-		}
-
-		if (client->pers.quest_power_status & (1 << 1))
-		{ // zyk: hit by Chaos Power. Decrease speed
-			zyk_player_speed /= 2;
-		}
-
-		if (client->pers.quest_power_status & (1 << 2))
-		{ // zyk: hit by Time Power. Do not move at all
-			zyk_player_speed = 0;
-		}
-		
-		if (client->pers.quest_power_status & (1 << 9))
-		{ // zyk: using Ultra Speed. Increase speed
-			zyk_player_speed *= 2;
 		}
 
 		if (client->pers.stun_baton_less_speed_timer > level.time)
@@ -3266,11 +3100,6 @@ void ClientThink_real( gentity_t *ent ) {
 			{
 				if (client->ps.eFlags2 & EF2_SHIP_DEATH)
 				{ //float there
-					VectorClear(client->ps.velocity);
-					client->ps.gravity = 1.0f;
-				}
-				else if (client->pers.quest_power_status & (1 << 2) && client->pers.quest_target2_timer > level.time)
-				{ // zyk: hit by Time Power
 					VectorClear(client->ps.velocity);
 					client->ps.gravity = 1.0f;
 				}

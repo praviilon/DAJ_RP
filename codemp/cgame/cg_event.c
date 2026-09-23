@@ -2690,46 +2690,11 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		DEBUGNAME("EV_USE_ITEM13");
 		//CG_UseItem( cent );zyk: commented this, not used in mod
 
-		if (cg.snap->ps.clientNum == es->number)
-		{
-			if (es->eventParm <= 100)
-			{ // zyk: current magic power
-				cg.magic_power = es->eventParm;
-			}
-			else if (es->eventParm == 101)
-			{ // zyk: Immunity Power
-				cg.immunity_power_duration = cg.time + 25000;
-			}
-			else if (es->eventParm == 102)
-			{ // zyk: Ultra Strength
-				cg.ultra_strength_duration = cg.time + 30000;
-			}
-			else if (es->eventParm == 103)
-			{ // zyk: Ultra Resistance
-				cg.ultra_resistance_duration = cg.time + 30000;
-			}
-		}
-
-		if (cg.snap->ps.clientNum == es->number && es->eventParm == 105 && cg.unique_cooldown_timer == 0)
-		{ // GalaxyRP fix: [RPG Class] an earlier fix in this codebase repointed this trigger at eventParm 104,
-			// reasoning that value meant "confirmed RPG Mode 2" once cg.rpg_class[num] >= 0 (its original guard)
-			// became dead code. That was wrong: 104 is g_active.c's own periodic per-player status-sync signal
-			// (sent once shortly after every spawn, and again for every connected player whenever
-			// send_rpg_events() runs, e.g. any time anyone uses their Unique Ability) -- nothing to do with this
-			// player having actually used theirs. That made this cooldown bar appear for every RPG player on
-			// every spawn (and re-appear for everyone whenever anyone used the ability), with no real cooldown
-			// behind it. Cmd_Unique_f (g_cmds.c) was fixed to send this event with its own dedicated parm
-			// (105), only to the entity that actually triggered an ability and only when it does, so the bar
-			// tracked the real 50-second reuse timer it was meant to.
-			// GalaxyRP fix: [Skills] Cmd_Unique_f itself has since been removed entirely (the /unique command
-			// was dead, disabled code -- see g_cmds.c), along with the only other eventParm-105 sender
-			// (g_active.c's GENCMD_ENGAGE_DUEL Unique Skill branch). Nothing sends 105 any more, so this
-			// block -- and the cooldown bar it drives (CG_DrawUniqueSkillTimer, cg_draw.c) -- is now
-			// permanently unreachable. Left in place rather than removed, since it's harmless dead code and
-			// wasn't itself part of what was asked to be removed.
-			cg.unique_cooldown_duration = 50000;
-			cg.unique_cooldown_timer = cg.time + cg.unique_cooldown_duration;
-		}
+		// GalaxyRP fix: [Magic] the mod's RPG event cascade used to arrive here: parms 0-100 (the
+		// magic power bar), 101-103 (the Immunity / Ultra Strength / Ultra Resistance timers), 105
+		// (the Unique Skill cooldown) and 104 / 114 (the "is an RPG player" flag, which this side had
+		// already stopped reading). The server has none of those systems left and no longer sends
+		// the event at all; the handlers and the bars they drove in cg_draw.c are gone.
 
 		break;
 	case EV_USE_ITEM14:

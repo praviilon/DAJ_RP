@@ -439,9 +439,9 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 // backstop for the map-entity path; this is the gate for the typed one.
 //
 // The ceiling is 10 rather than the client's own 16. 16 is the engine's refusal threshold, not a
-// tuned maximum: the strongest shake anywhere in the shipped game is 10 (the quake event in
-// g_main.c and target_screenshake's default), the rancor's footstep is 4 and weapon fire tops out
-// at 6. Intensity is also applied to the view ANGLES as well as the origin, so 10 already means ten
+// tuned maximum: the strongest shake anywhere in the shipped game is 10 (target_screenshake's
+// default; the magic earthquake, since deleted, used the same figure), the rancor's footstep is 4
+// and weapon fire tops out at 6. Intensity is also applied to the view ANGLES as well as the origin, so 10 already means ten
 // degrees of random pitch and yaw every frame.
 //
 // Length is bounded because nothing else bounds it. cgScreenEffects is a plain cgame global that
@@ -1895,9 +1895,9 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 
 	ent->client->pers.player_statuses |= (1 << PLAYER_STATUS_DOWNED);
 
-	// GalaxyRP fix: [Death System] bit 26 marks this as an admin punishment rather than a combat
+	// GalaxyRP fix: [Death System] the ADMIN_PARALYSIS bit marks this as an admin punishment rather than a combat
 	// knockdown. Everything that only asks "can this player act?" keeps reading bit 6 and is
-	// unaffected; only /getup and /helpup look at bit 26, so they can free the one and refuse the
+	// unaffected; only /getup and /helpup look at the ADMIN_PARALYSIS bit, so they can free the one and refuse the
 	// other. Always set alongside bit 6, never on its own.
 	if ( adminParalysis )
 	{
@@ -1961,18 +1961,18 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 RP_ClearDownedState
 
 GalaxyRP fix: [Death System] the one place the downed state is torn down. It clears the four fields
-that make it up -- player_statuses bits 6 and 26, pers.downedTime, and FL_NOTARGET -- and does
+that make it up -- the PLAYER_STATUS_DOWNED and ADMIN_PARALYSIS bits, pers.downedTime, and FL_NOTARGET -- and does
 nothing else: no animation, no message, no grace period, so every caller can still present the exit
 its own way.
 
 There used to be three hand-written copies of this and only one of them was complete. player_die()
-cleared all three status fields; help_up() cleared bit 6 and the countdown but not bit 26; and
+cleared all three status fields; help_up() cleared the DOWNED bit and the countdown but not the ADMIN_PARALYSIS bit; and
 G_Damage()'s branch for finishing off a player who is already down cleared bit 6 alone and left the
 other two to player_die(), which has three early returns (dead pm_type, intermission, no attacker)
 above its own cleanup. Both incomplete copies were safe, but only because of a guard somewhere else
--- can_player_get_up() refuses bit 26 before help_up() ever runs, and G_Damage() normalises a NULL
+-- can_player_get_up() refuses the ADMIN_PARALYSIS bit before help_up() ever runs, and G_Damage() normalises a NULL
 attacker to the world entity before it reaches that branch -- which is a property of the call sites,
-not of the code doing the clearing. The residue if either guarantee ever lapsed is bit 26 set with
+not of the code doing the clearing. The residue if either guarantee ever lapsed is the ADMIN_PARALYSIS bit set with
 bit 6 clear: a player walking around free whom /paralyze refuses as "already paralyzed" and only
 /unparalyze can reset. Routing all four callers through here makes it impossible by construction.
 
@@ -1994,7 +1994,7 @@ void RP_ClearDownedState( gentity_t *ent )
 
 	// GalaxyRP fix: [Death System] and the invulnerability that comes with an ADMIN paralysis, which
 	// RP_EnterDownedState() sets to run for the whole punishment. Tested before the bits are cleared,
-	// exactly like FL_NOTARGET above, and gated on bit 26 so this never strips the flag from a player
+	// exactly like FL_NOTARGET above, and gated on the ADMIN_PARALYSIS bit so this never strips the flag from a player
 	// who has it for another reason -- a fresh spawn, a duel-tournament placement, or the three
 	// seconds a combat knockdown gets. Putting it here rather than in RP_ReleaseFromDownedState()
 	// covers every exit: /unparalyze, the countdown's auto-release, /killother, and a death the
@@ -2185,7 +2185,7 @@ void help_up(gentity_t* ent, gentity_t* target) {
 		//GalaxyRP (Alex): [Death System] No longer paralyzed.
 		
 		// GalaxyRP fix: [Death System] through the shared clear. This used to zero bit 6, the
-		// countdown and FL_NOTARGET by hand and leave bit 26 behind -- harmless only because
+		// countdown and FL_NOTARGET by hand and leave the ADMIN_PARALYSIS bit behind -- harmless only because
 		// can_player_get_up() refuses an admin paralysis above, a guarantee held at the call site
 		// rather than here. See RP_ClearDownedState().
 		RP_ClearDownedState( target );
@@ -3091,42 +3091,6 @@ void update_chars_table_row_with_current_values(gentity_t* ent) {
 	return;
 }
 
-// GalaxyRP (Alex): [Database] DELETE This method deletes a characters table row which is associated with the ID given.
-void delete_chars_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-
-	char delete_char_query[] = "DELETE FROM Characters WHERE CharID='%i'";
-
-	run_db_query(va(delete_char_query, id), db, zErrMsg, rc, stmt);
-
-	return;
-}
-
-// GalaxyRP (Alex): [Database] DELETE This method deletes a characters table row which is associated with the name given.
-void delete_chars_table_row_with_name(gentity_t* ent, char* charName, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-
-	// GalaxyRP fix: [security] this used to go through run_db_query() with the character name
-	// spliced straight into the DELETE text via va("...%s..."). Currently unreachable (no command
-	// calls this function today -- /char remove goes through remove_character() instead, which
-	// deletes by CharID), but fixed for consistency/safety with the rest of the DB layer in case
-	// it's wired up later.
-	rc = sqlite3_prepare_v2(db, "DELETE FROM Characters WHERE Name = ? COLLATE NOCASE", -1, &stmt, NULL);
-	if (rc != SQLITE_OK)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return;
-	}
-	sqlite3_bind_text(stmt, 1, charName, -1, SQLITE_TRANSIENT);
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE)
-	{
-		trap->Print("SQL error: %s\n", sqlite3_errmsg(db));
-	}
-	sqlite3_finalize(stmt);
-
-	return;
-}
-
 /*
 ----SKILLS TABLE----
 */
@@ -3240,16 +3204,6 @@ void update_skills_table_row_with_current_values(gentity_t* ent) {
 		ent->client->pers.CharID), db, zErrMsg, rc, stmt);
 
 	sqlite3_close(db);
-
-	return;
-}
-
-// GalaxyRP (Alex): [Database] DELETE This method deletes a skills table row which is associated with the ID given.
-void delete_skills_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-
-	char delete_skills_query[] = "DELETE FROM Skills WHERE CharID='%i'";
-
-	run_db_query(va(delete_skills_query, id), db, zErrMsg, rc, stmt);
 
 	return;
 }
@@ -3903,16 +3857,6 @@ void update_weapons_table_row_with_current_values(gentity_t* ent) {
 	), db, zErrMsg, rc, stmt);
 
 	sqlite3_close(db);
-
-	return;
-}
-
-// GalaxyRP (Alex): [Database] DELETE This method deletes a weapons table row which is associated with the ID given.
-void delete_weapons_table_row_with_id(gentity_t* ent, int id, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt) {
-
-	char delete_weapons_query[] = "DELETE FROM Weapons WHERE CharID='%i'";
-
-	run_db_query(va(delete_weapons_query, id), db, zErrMsg, rc, stmt);
 
 	return;
 }
@@ -4783,7 +4727,7 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// GalaxyRP fix: [Account] borrowed from a newer fork of this mod -- call initialize_rpg_skills()
 	// directly here, synchronously, instead of relying solely on the G_Kill() respawn below to trigger
 	// it (via ClientSpawn). This closes two real gaps in the old kill-only approach: (1) G_Kill() silently
-	// no-ops for a paralyzed target (see its own player_statuses bit 6 check) and in GT_DUEL/GT_POWERDUEL
+	// no-ops for a paralyzed target (see its own PLAYER_STATUS_DOWNED check) and in GT_DUEL/GT_POWERDUEL
 	// when g_allowDuelSuicide is off, so a player who is paralyzed or mid-duel when running /new or
 	// /char use would otherwise never get this character's force powers/weapons applied at all; (2) even
 	// when G_Kill() does succeed, the respawn it triggers is deferred until the client's next spawn tick,
@@ -5196,7 +5140,7 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// player_settings are reset above.
 		// GalaxyRP fix: [Scale] this reset used to run *after* do_scale() (a few lines below, where the
 		// old comment on this line used to sit, right before "sess.amrpgmode = 2") instead of before it.
-		// do_scale() sets player_statuses bit 4 ("player is scaled") as one of its side effects, so
+		// do_scale() sets PLAYER_STATUS_SCALED ("player is scaled") as one of its side effects, so
 		// resetting the whole field afterward silently cleared that bit again moments after it was set.
 		// pers.player_scale itself stayed correct (do_scale() also sets that field, and this reset never
 		// touched it directly), so the custom scale still applied visually right here on login -- but
@@ -7011,13 +6955,13 @@ void Cmd_KillOther_f( gentity_t *ent )
 	//
 	// RP_ClearDownedState() rather than a flag threaded through G_Kill(): it is the existing
 	// primitive for exactly this, clearing all four fields of the state together -- player_statuses
-	// bits 6 and 26, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no message,
+	// the DOWNED and ADMIN_PARALYSIS bits, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no message,
 	// no grace period. It needs no guard of its own either, being a no-op on a player who is not
 	// downed (FL_NOTARGET is only touched when bit 6 was actually set), and player_die() calls it
 	// again on the way through, which is idempotent. Calling it here also guarantees no stale
 	// downedTime or FL_NOTARGET can survive the kill.
 	//
-	// This ends an admin paralysis too, since bit 26 goes with bit 6. Deliberate: /killother already
+	// This ends an admin paralysis too, since the ADMIN_PARALYSIS bit goes with the DOWNED bit. Deliberate: /killother already
 	// sits behind ADM_KICK, and anyone holding that bit could /unparalyze the player instead, so it
 	// is one admin overriding another rather than a player escaping a countdown -- which is the
 	// thing /getup and /helpup refuse, and the only reason they refuse it.
@@ -7499,7 +7443,7 @@ void Cmd_Team_f( gentity_t *ent ) {
 	}
 
 	// GalaxyRP fix: [Death System] a downed player may not change team. SetTeam() below respawns
-	// them through ClientBegin()/ClientSpawn(), and the downed state survives that (bits 6 and 26 and
+	// them through ClientBegin()/ClientSpawn(), and the downed state survives that (the DOWNED and ADMIN_PARALYSIS bits and
 	// pers.downedTime all live in pers) -- so this was a free full-health respawn without ending the
 	// countdown, and "/team spectator" additionally parked them somewhere ClientThink_real() returns
 	// before the countdown tick, which used to freeze an admin paralysis outright. Both root causes
@@ -10597,28 +10541,6 @@ extern void DismembermentByNum(gentity_t *self, int num);
 extern void G_SetVehDamageFlags( gentity_t *veh, int shipSurf, int damageLevel );
 #endif
 
-// zyk: displays the yellow bar that shows the cooldown time between magic powers
-void display_yellow_bar(gentity_t *ent, int duration)
-{
-	gentity_t *te = NULL;
-
-	te = G_TempEntity( ent->client->ps.origin, EV_LOCALTIMER );
-	te->s.time = level.time;
-	te->s.time2 = duration;
-	te->s.owner = ent->client->ps.clientNum;
-}
-
-// zyk: returns the max amount of Magic Power this player can have
-int zyk_max_magic_power(gentity_t *ent)
-{
-	int max_mp = ent->client->pers.level * 3;
-
-	// GalaxyRP fix: [Classes] the rpg_class==8 (Magic Master) branch granting extra Magic Power used to
-	// be here. rpg_class is permanently 0 now that character classes are gone, so this was unreachable.
-
-	return max_mp;
-}
-
 // GalaxyRP fix: [Magic] zyk_show_magic_in_chat() and zyk_set_magic_power_cooldown_time() removed
 // outright. Both lost their only callers when the Ultimate Power (Ultra Drain/Immunity Power/Chaos
 // Power/Time Power) and Magic Power (Ultra Strength/Ultra Resistance/Enemy Weakening) branches were
@@ -10626,14 +10548,16 @@ int zyk_max_magic_power(gentity_t *ent)
 // existed (zyk_show_magic_in_chat() printed the "X used power!" chat line for them, and
 // zyk_set_magic_power_cooldown_time() set their shared cooldown timer), and both gates that would
 // ever let those branches fire (pers.defeated_guardians and pers.universe_quest_progress/
-// universe_quest_counter) can never become nonzero -- see the matching fix comment on TryGrapple()'s
-// old dispatch logic below for the full explanation. Grepped the whole tree first to confirm neither
-// function has any other caller.
+// universe_quest_counter) can never become nonzero: nothing anywhere in the codebase ever wrote
+// those fields -- no quest completion, admin command or database load -- so they sat at the zero
+// ClientConnect's memset gave them, and both have since been removed from clientPersistant_t.
+// Grepped the whole tree first to confirm neither function has any other caller.
 
 // GalaxyRP fix: [Magic] thirty-four "extern void <effect>(...)" declarations used to be here. They
 // existed only to feed the player-facing magic dispatch in TryGrapple() below, which was removed as
-// permanently unreachable; not one of them had a call anywhere in this file afterwards. Seven of the
-// thirty-four named functions have since been removed outright as well (see g_main.c).
+// permanently unreachable; not one of them had a call anywhere in this file afterwards. All
+// thirty-four named functions have since been removed outright as well (see g_main.c), and the
+// RPG branch of TryGrapple() -- by then only a cooldown message for a timer nothing set -- with them.
 // GalaxyRP fix: [Magic] removed magic_master_has_this_power() extern here — this function was never
 // actually called from TryGrapple() below (or anywhere reachable), and has been removed as dead
 // along with the rest of the magic-power selection system it gated (see g_main.c).
@@ -10677,48 +10601,6 @@ qboolean TryGrapple(gentity_t *ent)
 		}
 		ent->client->ps.weaponTime = ent->client->ps.torsoTimer;
 		ent->client->dangerTime = level.time;
-		
-		if (ent->client->sess.amrpgmode == 2)
-		{ // zyk: if this is a RPG player, tests if he can use a magic power
-			if (ent->client->pers.quest_power_usage_timer < level.time)
-			{
-				// GalaxyRP fix: [Magic] the rightmove/forwardmove power-selection dispatch (use_this_power),
-				// the magic_disabled_powers sanity check, the Magic Improvement mp-cost-factor perk
-				// (universe_mp_cost_factor), and the Ultimate Power (Ultra Drain/Immunity Power/Chaos Power/
-				// Time Power) and Magic Power (Ultra Strength/Ultra Resistance/Enemy Weakening) branches
-				// themselves used to be here. All seven powers they could ever trigger turned out to be
-				// permanently unreachable: every one of them is gated on pers.defeated_guardians and/or
-				// pers.universe_quest_progress/universe_quest_counter being nonzero, and NOTHING anywhere in
-				// the codebase ever writes those fields at all -- no quest completion, admin command, or
-				// database load advances them, and they are simply left at the zero that
-				// memset(client, 0, sizeof(*client)) in ClientConnect (g_client.c) gives them. This comment
-				// used to name add_new_char() as their one writer; that function has since been removed as
-				// dead itself (see its old location further down this file), which only strengthens the case
-				// for the deletion below. Removed the
-				// whole dead dispatch outright, including the now-pointless use_this_power/
-				// universe_mp_cost_factor locals that existed solely to feed it. zyk_show_magic_in_chat() and
-				// zyk_set_magic_power_cooldown_time() lost their only callers here and have been removed too
-				// (see their old location above). The effect functions in g_main.c were left alone at the time,
-				// because the NPC "custom quest npc" random-power block there still called them. That block has
-				// since been removed as unreachable in its own right, which orphaned twelve of them --
-				// ultra_drain() and time_power() among them -- and they went with it. The twenty-seven the
-				// quest_mage chain called are still there, but that chain has since been removed as well and
-				// they are kept deliberately as zero-caller reference code.
-
-				// GalaxyRP fix: [Dead Code] the Magic Boost branch used to be here, shortening the magic
-				// cooldown by 3000ms. It needed pers.universe_quest_progress == NUM_OF_UNIVERSE_QUEST_OBJ
-				// (22) and universe_quest_counter bit 1; neither field is ever written anywhere in the
-				// tree, so both are permanently 0 and the test could never pass.
-
-				display_yellow_bar(ent,(ent->client->pers.quest_power_usage_timer - level.time));
-			}
-			else
-			{
-				trap->SendServerCommand( ent->s.number, va("chat \"^3Magic Power: ^7%d seconds left!\"", ((ent->client->pers.quest_power_usage_timer - level.time)/1000)));
-			}
-
-			send_rpg_events(2000);
-		}
 
 		return qtrue;
 	}
@@ -10823,33 +10705,6 @@ void Cmd_AddBot_f( gentity_t *ent ) {
 }
 
 // zyk: new functions
-
-// zyk: send the rpg events to the client-side game to all players so players who connect later than one already in the map
-//      will receive the events of the one in the map
-void send_rpg_events(int send_event_timer)
-{
-	int i = 0;
-	gentity_t *player_ent = NULL;
-
-	for (i = 0; i < level.maxclients; i++)
-	{
-		player_ent = &g_entities[i];
-
-		if (player_ent && player_ent->client && player_ent->client->pers.connected == CON_CONNECTED && 
-			player_ent->client->sess.sessionTeam != TEAM_SPECTATOR)
-		{
-			player_ent->client->pers.send_event_timer = level.time + send_event_timer;
-			player_ent->client->pers.send_event_interval = level.time + 100;
-			// GalaxyRP fix: [Dead Code] two clears sat here, for PLAYER_STATUS_SENT_RADAR_EVENT and
-			// PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT. Both bits lost their setter and their reader
-			// when the radar flags and the jetpack-flame cascade step were retired -- the flame rides
-			// the entity state as EF_RPG_JETPACK_UPGRADE now -- leaving each with exactly one write,
-			// this clear, and nothing anywhere that could observe it. The two timer writes above are
-			// the whole of what this function still does: they reopen the window the event cascade in
-			// ClientTimerActions() runs inside.
-		}
-	}
-}
 
 // zyk: sets the Max HP a player can have in RPG Mode
 void set_max_health(gentity_t *ent)
@@ -11616,23 +11471,6 @@ void initialize_rpg_skills(gentity_t *ent)
 		ent->client->pers.thermal_vision = qfalse;
 		ent->client->pers.thermal_vision_cooldown_time = 0;
 
-		ent->client->pers.quest_power_status = 0;
-
-		ent->client->pers.magic_power = zyk_max_magic_power(ent);
-
-		// GalaxyRP fix: [Skills] cg.magic_power (cgame's mirror of this, drawn by CG_DrawMagicPower)
-		// only updates when it receives this event -- normally sent by the periodic per-player sync
-		// cascade in g_active.c's ClientThink, which can take several ticks to get back around to
-		// resending it, or may not run again at all this life if its window already closed. That let
-		// the Magic Power bar keep showing a stale (sometimes near-empty) value from the player's
-		// previous life right after login/character-select/respawn, even though the real value was
-		// already reset to full above. Send the correct value (always 100% here) immediately instead
-		// of waiting on the cascade.
-		G_AddEvent(ent, EV_USE_ITEM13, 100);
-
-		ent->client->pers.monk_unique_timer = 0;
-		ent->client->pers.unique_skill_duration = 0;
-
 		ent->client->pers.credits_modifier = 0;
 		ent->client->pers.score_modifier = 0;
 
@@ -11780,9 +11618,6 @@ void initialize_rpg_skills(gentity_t *ent)
 		// zyk: loading initial shield of the player
 		set_max_shield(ent);
 		ent->client->ps.stats[STAT_ARMOR] = ent->client->pers.max_rpg_shield;
-
-		// zyk: update the rpg stuff info at the client-side game
-		send_rpg_events(10000);
 	}
 }
 
@@ -12191,9 +12026,6 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// Enlightenment pickup once this player is logged out again).
 	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
-	// zyk: update the rpg stuff info at the client-side game
-	send_rpg_events(10000);
-			
 	trap->SendServerCommand(-1, va("chat \"^3%s ^2logged out\n\"", ent->client->pers.netname));
 
 	trap->SendServerCommand(ent - g_entities, "print \"^2You have sucessfully logged out.\n\"");
@@ -20875,7 +20707,7 @@ void Cmd_ShakeScreen_f(gentity_t* ent)
 }
 
 // GalaxyRP: [nofight] Cmd_NoFight_f() used to sit here -- the "/nofight" command (added by Zyk in
-// 2017 and never modified since), which toggled player_statuses bit 26 to make a player unable to
+// 2017 and never modified since), which toggled the PLAYER_STATUS_ADMIN_PARALYSIS bit to make a player unable to
 // damage other players and, more importantly, unable to be damaged BY them. It has been removed
 // entirely, along with every check that read that bit: the two in zyk_can_hit_target() (g_main.c),
 // the sentry-gun one in G_Damage() (g_combat.c), and the "cannot join X while being in nofight
@@ -21049,54 +20881,6 @@ void Cmd_Music_f(gentity_t* ent) {
 	trap->SetConfigstring(CS_MUSIC, audioPath);
 
 	return;
-}
-
-qboolean Is_Char_Name_Valid(char charName[MAX_STRING_CHARS]) {
-
-	char forbiddenCharacters[MAX_STRING_CHARS] = " ?!�$%^&*()-+=][{}#~';:/>.<,|";
-
-	for (int i = 0; i < strlen(charName); i++) {
-		for (int j = 0; j < strlen(forbiddenCharacters); j++) {
-			if (charName[i] == forbiddenCharacters[j]) {
-				return qfalse;
-			}
-		}
-	}
-
-	return qtrue;
-}
-
-/*
-==================
-Cmd_CustomQuest_f
-==================
-*/
-void save_quest_file(int quest_number)
-{
-	FILE *quest_file = NULL;
-	int i = 0;
-
-	zyk_create_dir("customquests");
-
-	quest_file = fopen(va("GalaxyRP/customquests/%d.txt", quest_number), "w");
-	fprintf(quest_file, "%s;%s;%s;\n", level.zyk_custom_quest_main_fields[quest_number][0], level.zyk_custom_quest_main_fields[quest_number][1], level.zyk_custom_quest_main_fields[quest_number][2]);
-
-	for (i = 0; i < level.zyk_custom_quest_mission_count[quest_number]; i++)
-	{
-		int j = 0;
-
-		for (j = 0; j < level.zyk_custom_quest_mission_values_count[quest_number][i]; j += 2)
-		{
-			fprintf(quest_file, "%s;%s;", level.zyk_custom_quest_missions[quest_number][i][j], level.zyk_custom_quest_missions[quest_number][i][j + 1]);
-		}
-
-		if (j > 0)
-		{ // zyk: break line if the mission had at least one key/value pair to save
-			fprintf(quest_file, "\n");
-		}
-	}
-
-	fclose(quest_file);
 }
 
 // GalaxyRP fix: [validation] the old inline check was content[strlen(content) - 1] == '\n' with no

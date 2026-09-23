@@ -11165,8 +11165,8 @@ void CG_Player( centity_t *cent ) {
 	// turned out to collide with g_active.c's unrelated periodic per-player status-sync signal of the same value --
 	// see the fix comment in cg_event.c.)
 	// GalaxyRP fix: [Skills] Cmd_Unique_f has since been removed entirely (the /unique command was dead, disabled
-	// code), along with the only other eventParm-105 sender (g_active.c's Unique Skill branch) -- see the fix
-	// comment in cg_event.c for what that leaves permanently unreachable.
+	// code), along with the only other eventParm-105 sender (g_active.c's Unique Skill branch), and with the
+	// magic cleanup the server stopped sending EV_USE_ITEM13 altogether -- see the fix comment in cg_event.c.
 
 	if (cent->currentState.powerups & (1 << PW_FORCE_BOON))
 	{

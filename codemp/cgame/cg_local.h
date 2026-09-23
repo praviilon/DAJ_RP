@@ -1056,24 +1056,9 @@ Ghoul2 Insert End
 	// is long gone -- so every reader of it in CG_DrawRadar was a permanently-false test. With both
 	// bits gone the field had no users left.
 
-	// zyk: current amount of Magic Power (MP) of this RPG player
-	int magic_power;
-
-	int immunity_power_duration;
-	int ultra_strength_duration;
-	int ultra_resistance_duration;
-
-	// zyk: Unique Skill cooldown timer
-	int unique_cooldown_timer;
-	int unique_cooldown_duration;
-	int unique_duration_timer;
-	int unique_duration;
-
-	// zyk: used to control in which moment the Unique duration must be set so it does not reset when a new server command sends the unique duration again
-	int unique_duration_control;
-
-	// zyk: used to change the Unique bar timer
-	int using_unique_boost;
+	// GalaxyRP fix: [Magic] magic_power, the immunity / ultra strength / ultra resistance durations
+	// and the unique-skill cooldown / duration fields used to be here, behind the RPG HUD bars in
+	// cg_draw.c. The server no longer has any of those systems, so the bars and their state went.
 
 	// GalaxyRP fix: [RPG Class] removed unused client-side rpg_class array (server-side pers.rpg_class never varied meaningfully)
 

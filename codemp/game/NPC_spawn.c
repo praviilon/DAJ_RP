@@ -1806,13 +1806,10 @@ finish:
 		// GalaxyRP fix: [Shop] seller_invoked_by_id initializer removed along with the field itself --
 		// it only supported the now-removed /callseller command (see g_cmds.c).
 		newent->client->pers.stun_baton_less_speed_timer = 0;
-		newent->client->pers.send_event_timer = 0;
 
 		newent->client->sess.ally1 = 0;
 		newent->client->sess.ally2 = 0;
 
-		// zyk: initializing Quest Power attributes
-		newent->client->pers.quest_power_status = 0;
 		newent->client->cloakDebReduce = 0;
 
 		// zyk: saboteur npcs start with cloak

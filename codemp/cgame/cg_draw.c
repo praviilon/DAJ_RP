@@ -5064,100 +5064,9 @@ void CG_DrawGenericTimerBar(void)
 	CG_FillRect(x+1.0f, y+1.0f, CGTIMERBAR_W-2.0f, CGTIMERBAR_H-percent, cColor);
 }
 
-#define CGUNIQUEBAR_H			50.0f
-#define CGUNIQUEBAR_W			10.0f
-#define CGUNIQUEBAR_X			(SCREEN_WIDTH-CGUNIQUEBAR_W-140.0f)
-#define CGUNIQUEBAR_Y			(SCREEN_HEIGHT-CGUNIQUEBAR_H-20.0f)
-void CG_DrawUniqueSkillTimer(void)
-{ // zyk: draws the Unique Skill cooldown timer
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = CGUNIQUEBAR_X;
-	float y = CGUNIQUEBAR_Y;
-	float percent = 0.0f;
-
-	if (cg.unique_cooldown_timer < cg.time)
-	{ // zyk: no longer draw Unique bar if unique cooldown time ends
-		cg.unique_cooldown_timer = 0;
-		cg.unique_cooldown_duration = 0;
-		cg.using_unique_boost = 0;
-		return;
-	}
-
-	if (cg.using_unique_boost == 1)
-	{
-		// zyk: applied the boost. Only becomes 0 again after unique bar run out
-		cg.using_unique_boost = 2;
-
-		cg.unique_cooldown_timer -= ((cg.unique_cooldown_timer - cg.time) / 5);
-		cg.unique_cooldown_duration -= (cg.unique_cooldown_duration / 5);
-	}
-
-	percent = ((float)(cg.unique_cooldown_timer - cg.time) / (float)cg.unique_cooldown_duration) * CGUNIQUEBAR_H;
-
-	//color of the bar
-	aColor[0] = 0.0;
-	aColor[1] = 0.2;
-	aColor[2] = 1.0;
-	aColor[3] = 1.0;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, CGUNIQUEBAR_W, CGUNIQUEBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x+1.0f, y+1.0f+(CGUNIQUEBAR_H-percent), CGUNIQUEBAR_W-2.0f, CGUNIQUEBAR_H-1.0f-(CGUNIQUEBAR_H-percent), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x+1.0f, y+1.0f, CGUNIQUEBAR_W-2.0f, CGUNIQUEBAR_H-percent, cColor);
-}
-
-#define CGUNIQUEDURATIONBAR_H			50.0f
-#define CGUNIQUEDURATIONBAR_W			10.0f
-#define CGUNIQUEDURATIONBAR_X			(SCREEN_WIDTH-CGUNIQUEDURATIONBAR_W-160.0f)
-#define CGUNIQUEDURATIONBAR_Y			(SCREEN_HEIGHT-CGUNIQUEDURATIONBAR_H-20.0f)
-void CG_DrawUniqueSkillDurationTimer(void)
-{ // zyk: draws the Unique Skill cooldown timer
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = CGUNIQUEDURATIONBAR_X;
-	float y = CGUNIQUEDURATIONBAR_Y;
-	float percent = ((float)(cg.unique_duration_timer - cg.time) / (float)cg.unique_duration) * CGUNIQUEDURATIONBAR_H;
-
-	if (cg.unique_duration_timer < cg.time || cg.snap->ps.stats[STAT_HEALTH] < 1)
-	{ // zyk: no longer draw Unique duration bar if unique duration time ends
-		cg.unique_duration_timer = 0;
-		cg.unique_duration = 0;
-		cg.unique_duration_control = 0;
-		return;
-	}
-
-	//color of the bar
-	aColor[0] = 0.0;
-	aColor[1] = 1.0;
-	aColor[2] = 1.0;
-	aColor[3] = 1.0;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, CGUNIQUEDURATIONBAR_W, CGUNIQUEDURATIONBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x + 1.0f, y + 1.0f + (CGUNIQUEDURATIONBAR_H - percent), CGUNIQUEDURATIONBAR_W - 2.0f, CGUNIQUEDURATIONBAR_H - 1.0f - (CGUNIQUEDURATIONBAR_H - percent), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x + 1.0f, y + 1.0f, CGUNIQUEDURATIONBAR_W - 2.0f, CGUNIQUEDURATIONBAR_H - percent, cColor);
-}
+// GalaxyRP fix: [Skills] CG_DrawUniqueSkillTimer() and CG_DrawUniqueSkillDurationTimer() used to be
+// here, the Unique Skill cooldown and duration bars. Nothing has sent the events that armed them
+// (EV_USE_ITEM13 parm 105 and the duration control) since /unique and the class abilities went.
 
 /*
 =================
@@ -7407,149 +7316,10 @@ void CG_DrawEWebHealth(void)
 	CG_FillRect(x+1.0f, y+1.0f, EWEBHEALTH_W-1.0f, EWEBHEALTH_H-percent, cColor);
 }
 
-#define RPG_BAR_Y 180.0
-#define RPG_BAR_WIDTH 10.0
-// zyk: draws the magic power bar
-void CG_DrawMagicPower(void)
-{
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = 10.0;
-	float y = RPG_BAR_Y;
-	float scaled_magic_power = cg.magic_power;
-
-	//color of the bar
-	aColor[0] = 0.0f;
-	aColor[1] = 0.7f;
-	aColor[2] = 0.0f;
-	aColor[3] = 0.8f;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, RPG_BAR_WIDTH, JPFUELBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x+1.0f, y+1.0f+(JPFUELBAR_H-scaled_magic_power), RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-1.0f-(JPFUELBAR_H-scaled_magic_power), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x+1.0f, y+1.0f, RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-scaled_magic_power, cColor);
-}
-
-// zyk: draws the Immunity Power bar
-void CG_DrawImmunityPower(void)
-{
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = 25.0;
-	float y = RPG_BAR_Y;
-	float scaled_duration = (((cg.immunity_power_duration - cg.time) * 1.0)/25000) * 100.0;
-
-	if (scaled_duration < 0.0 || cg.snap->ps.stats[STAT_HEALTH] < 1)
-	{
-		cg.immunity_power_duration = 0;
-		return;
-	}
-
-	//color of the bar
-	aColor[0] = 0.9f;
-	aColor[1] = 0.9f;
-	aColor[2] = 0.9f;
-	aColor[3] = 0.8f;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, RPG_BAR_WIDTH, JPFUELBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x+1.0f, y+1.0f+(JPFUELBAR_H-scaled_duration), RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-1.0f-(JPFUELBAR_H-scaled_duration), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x+1.0f, y+1.0f, RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-scaled_duration, cColor);
-}
-
-// zyk: draws the Ultra Strength bar
-void CG_DrawUltraStrength(void)
-{
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = 40.0;
-	float y = RPG_BAR_Y;
-	float scaled_duration = (((cg.ultra_strength_duration - cg.time) * 1.0)/30000) * 100.0;
-
-	if (scaled_duration < 0.0 || cg.snap->ps.stats[STAT_HEALTH] < 1)
-	{
-		cg.ultra_strength_duration = 0;
-		return;
-	}
-
-	//color of the bar
-	aColor[0] = 0.9f;
-	aColor[1] = 0.1f;
-	aColor[2] = 0.1f;
-	aColor[3] = 0.8f;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, RPG_BAR_WIDTH, JPFUELBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x+1.0f, y+1.0f+(JPFUELBAR_H-scaled_duration), RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-1.0f-(JPFUELBAR_H-scaled_duration), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x+1.0f, y+1.0f, RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-scaled_duration, cColor);
-}
-
-// zyk: draws the Ultra Resistance bar
-void CG_DrawUltraResistance(void)
-{
-	vec4_t aColor;
-	vec4_t cColor;
-	float x = 55.0;
-	float y = RPG_BAR_Y;
-	float scaled_duration = (((cg.ultra_resistance_duration - cg.time) * 1.0)/30000) * 100.0;
-
-	if (scaled_duration < 0.0 || cg.snap->ps.stats[STAT_HEALTH] < 1)
-	{
-		cg.ultra_resistance_duration = 0;
-		return;
-	}
-
-	//color of the bar
-	aColor[0] = 0.1f;
-	aColor[1] = 0.1f;
-	aColor[2] = 0.9f;
-	aColor[3] = 0.8f;
-
-	//color of greyed out "missing fuel"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.1f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, RPG_BAR_WIDTH, JPFUELBAR_H, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x+1.0f, y+1.0f+(JPFUELBAR_H-scaled_duration), RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-1.0f-(JPFUELBAR_H-scaled_duration), aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x+1.0f, y+1.0f, RPG_BAR_WIDTH-1.0f, JPFUELBAR_H-scaled_duration, cColor);
-}
+// GalaxyRP fix: [Magic] CG_DrawMagicPower(), CG_DrawImmunityPower(), CG_DrawUltraStrength() and
+// CG_DrawUltraResistance() used to be here: the magic power bar and the three power timers, fed by
+// EV_USE_ITEM13 parms 0-103. The server no longer has a magic power pool or those powers, so it
+// never sends them.
 
 //draw meter showing cloak fuel when it's not full
 #define CLFUELBAR_H			100.0f
@@ -8601,38 +8371,9 @@ static void CG_Draw2D( void ) {
 		}
 	}
 
-	if (cg_drawStatus.integer && cg.snap->ps.stats[STAT_MAX_HEALTH] > 100)
-	{
-		// GalaxyRP fix: [Skills] added the same STAT_HEALTH < 1 guard the Immunity/Ultra Strength/Ultra
-		// Resistance bars right below already have, so this bar hides while dead instead of lingering
-		// on screen (possibly showing a stale value) between a kill and the respawn that follows it.
-		if (cg.magic_power < 100 && cg.snap->ps.stats[STAT_HEALTH] > 0)
-		{ // zyk: draw magic power bar if it is not full and it is a rpg player
-			CG_DrawMagicPower();
-		}
-
-		// zyk: draw magic power duration bars
-		if (cg.immunity_power_duration > 0)
-		{
-			CG_DrawImmunityPower();
-		}
-		if (cg.ultra_strength_duration > 0)
-		{
-			CG_DrawUltraStrength();
-		}
-		if (cg.ultra_resistance_duration > 0)
-		{
-			CG_DrawUltraResistance();
-		}
-		if (cg.unique_cooldown_duration > 0)
-		{
-			CG_DrawUniqueSkillTimer();
-		}
-		if (cg.unique_duration_control > 0)
-		{
-			CG_DrawUniqueSkillDurationTimer();
-		}
-	}
+	// GalaxyRP fix: [Magic] the RPG bars used to be drawn here for a player with more than 100 max
+	// health: magic power, the Immunity / Ultra Strength / Ultra Resistance timers and the Unique
+	// Skill cooldown and duration bars. All of their triggers are gone from the server.
 
 	// Draw this before the text so that any text won't get clipped off
 	CG_DrawZoomMask();

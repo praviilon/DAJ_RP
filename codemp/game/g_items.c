@@ -2907,7 +2907,6 @@ Touch_Item
 void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	int			respawn;
 	qboolean	predict;
-	qboolean	zyk_bounty_sentry_validation = qfalse; // zyk: used to test if the player is a Bounty Hunter with Upgrade, which can grab more sentry guns
 
 	if (ent->genericValue10 > level.time &&
 		other &&
@@ -2991,10 +2990,11 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	}
 
 	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade extra-sentry-grab
-	// block gated on pers.rpg_class == 2, which is permanently 0 now.
+	// block gated on pers.rpg_class == 2, which is permanently 0 now -- and, later, the
+	// zyk_bounty_sentry_validation flag it used to set, which nothing else ever set.
 
 	// the same pickup rules are used for client side and server side
-	if ( !BG_CanItemBeGrabbed( level.gametype, &ent->s, &other->client->ps ) && zyk_bounty_sentry_validation == qfalse) {
+	if ( !BG_CanItemBeGrabbed( level.gametype, &ent->s, &other->client->ps ) ) {
 		return;
 	}
 

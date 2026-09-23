@@ -3092,29 +3092,10 @@ void fx_runner_link( gentity_t *ent )
 			ent->s.modelindex2 = FX_STATE_CONTINUOUS;
 			ent->nextthink = level.time + 100; // wait a small bit, then start working
 		}
-		else if (Q_stricmp(ent->targetname, "zyk_quest_effect_enemy_nerf") == 0)
-		{ // zyk: starts the enemy weakening effect right now
-			ent->s.modelindex2 = FX_STATE_CONTINUOUS;
-			ent->nextthink = level.time + 100; // wait a small bit, then start working
-		}
-		else if (Q_stricmp(ent->targetname, "zyk_quest_effect_magic_disable") == 0)
-		{ // zyk: starts the magic disable effect right now
-			ent->s.modelindex2 = FX_STATE_CONTINUOUS;
-			ent->nextthink = level.time + 100; // wait a small bit, then start working
-		}
-		else if (Q_stricmp(ent->targetname, "zyk_quest_effect_rockfall") == 0)
-		{ // zyk: Rockfall power. Starts the effect imediately but damages a bit later
-			ent->s.modelindex2 = FX_STATE_CONTINUOUS;
-			ent->nextthink = level.time + 1500;
-		}
-		else if (Q_stricmp(ent->targetname, "zyk_quest_effect_watersplash") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_sleeping") == 0 || 
-				 Q_stricmp(ent->targetname, "zyk_quest_effect_time") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_poison") == 0 || 
-				 Q_stricmp(ent->targetname, "zyk_quest_effect_sand") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_immunity") == 0 || 
-				 Q_stricmp(ent->targetname, "zyk_quest_effect_flaming_area_hit") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_chaos") == 0)
-		{ // zyk: starts the effect imediately for these magic powers
-			ent->s.modelindex2 = FX_STATE_CONTINUOUS;
-			ent->nextthink = level.time + 200; // wait a small bit, then start working
-		}
+		// GalaxyRP fix: [Magic] the zyk_quest_effect_* targetnames (enemy_nerf, magic_disable,
+		// rockfall, watersplash, sleeping, time, poison, sand, immunity, flaming_area_hit, chaos)
+		// used to get their own start cadence here. Only zyk_quest_effect_spawn() ever created an
+		// fx_runner with one of those names, and it is gone with the magic engine.
 		else
 		{
 			ent->nextthink = level.time + 200; // wait a small bit, then start working
@@ -3177,11 +3158,9 @@ void SP_fx_runner( gentity_t *ent )
 	ent->think = fx_runner_link;
 
 	// zyk: no need to wait 400 ms with these effects
+	// GalaxyRP fix: [Magic] the six zyk_quest_effect_* names have left this list too (see fx_runner_link).
 	if (Q_stricmp(ent->targetname, "zyk_super_beam") == 0 || Q_stricmp(ent->targetname, "zyk_force_storm") == 0 || 
-		Q_stricmp(ent->targetname, "zyk_effect_force_dash") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_enemy_nerf") == 0 || 
-		Q_stricmp(ent->targetname, "zyk_quest_effect_magic_disable") == 0 || Q_stricmp(ent->targetname, "zyk_vertical_dfa") == 0 || 
-		Q_stricmp(ent->targetname, "zyk_quest_effect_poison") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_immunity") == 0 ||
-		Q_stricmp(ent->targetname, "zyk_quest_effect_flaming_area_hit") == 0 || Q_stricmp(ent->targetname, "zyk_quest_effect_chaos") == 0)
+		Q_stricmp(ent->targetname, "zyk_effect_force_dash") == 0 || Q_stricmp(ent->targetname, "zyk_vertical_dfa") == 0)
 	{
 		// GalaxyRP fix: [Entity System] these used to link on the very next frame. The newer Zyk mod
 		// gives its own equivalent list a 100ms delay instead of zero; adopted here. This only moves
@@ -3386,14 +3365,13 @@ spawnflags:
 1 -  regens health
 2 -  regens shield
 4 -  regens force
-8 -  regens mp (magic)
+8 -  used to regen magic power; the magic system is gone, so this flag does nothing now
 
 "count" amount to regen
 "wait" amount of time between regens (in miliseconds)
 "mins" bounding box
 "maxs" bounding box
 */
-extern int zyk_max_magic_power(gentity_t *ent);
 void zyk_regen_unit_think(gentity_t *ent)
 {
 	gentity_t *this_ent = NULL;
@@ -3456,22 +3434,6 @@ void zyk_regen_unit_think(gentity_t *ent)
 					this_ent->client->ps.fd.forcePower += ent->count;
 				else
 					this_ent->client->ps.fd.forcePower = this_ent->client->ps.fd.forcePowerMax;
-			}
-
-			if (ent->spawnflags & 8 && this_ent->client->sess.amrpgmode == 2)
-			{
-				int max_magic_power = zyk_max_magic_power(this_ent);
-
-				if (((long long)this_ent->client->pers.magic_power + ent->count) < max_magic_power)
-				{
-					this_ent->client->pers.magic_power += ent->count;
-					send_rpg_events(2000);
-				}
-				else if (this_ent->client->pers.magic_power < max_magic_power)
-				{
-					this_ent->client->pers.magic_power = max_magic_power;
-					send_rpg_events(2000);
-				}
 			}
 		}
 

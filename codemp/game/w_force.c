@@ -594,13 +594,6 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 
 	// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, boss-battle check unreachable
 
-	if (other && other->client && (other->NPC || other->client->sess.amrpgmode == 2) &&
-		(forcePower == FP_PUSH || forcePower == FP_PULL || forcePower == FP_GRIP) && 
-		other->client->pers.quest_power_status & (1 << 11))
-	{ // zyk: Magic Shield protects against some force powers
-		return 0;
-	}
-
 	// GalaxyRP fix: [Dead Code] rpg_class permanently 0, Force User Unique Skill / Force Guardian Force Armor checks unreachable
 
 	// GalaxyRP fix: [Settings] a guard used to sit here, blocking a hostile force power between allies
@@ -861,12 +854,6 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 		return qfalse;
 	}
 
-	// zyk: Time Power affected players cannot use force powers
-	if (self->client->pers.quest_power_status & (1 << 2))
-	{
-		return qfalse;
-	}
-
 	if ( (self->client->ps.fd.forcePowersActive & ( 1 << forcePower )) )
 	{//already using this power
 		if (forcePower != FP_LEVITATION)
@@ -1042,11 +1029,6 @@ void WP_ForcePowerRegenerate( gentity_t *self, int overrideAmt )
 	// zyk: if hit by the Duelist Unique Skill, cannot regen force
 	if (self->client->ps.powerups[PW_QUAD] > level.time)
 	{
-		return;
-	}
-
-	if (self->client->pers.quest_power_status & (1 << 2))
-	{ // zyk: hit by Time Power. Cannot regen force
 		return;
 	}
 
@@ -6092,7 +6074,7 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		self->client->ps.weaponstate = WEAPON_READY;
 	}
 	// GalaxyRP fix: [Death System] never run the knockdown get-up machine for a downed player. This
-	// block is precisely the thing that must not happen while player_statuses bit 6 is set, and until
+	// block is precisely the thing that must not happen while the PLAYER_STATUS_DOWNED bit is set, and until
 	// now nothing said so: the downed state was enforced only by ClientThink_real() holding
 	// forceHandExtendTime permanently in the future, which starves this "else if" of its second
 	// condition. Starvation is not a guarantee. ClientThink_real() skips that refresh whenever the

@@ -1327,15 +1327,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		}
 	}
 
-	// zyk: initializing quest_map value
-	level.quest_map = 0;
-	level.custom_quest_map = -1;
-	level.zyk_custom_quest_effect_id = -1;
-
 	// GalaxyRP fix: [Guardian] level.quest_effect_id init removed here — the quest_effect_id field
 	// itself (g_local.h) was deleted as dead (its sole reader/writer, clean_effect(), is gone).
-
-	level.chaos_portal_id = -1;
 
 	// GalaxyRP fix: [Guardian] level.boss_battle_music_reset_timer init removed here — field removed as dead (see g_local.h)
 
@@ -1372,13 +1365,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.load_entities_timer = 0;
 	strcpy(level.load_entities_file,"");
 
-	if (1)
 	{
-		FILE *quest_file = NULL;
-		char content[8192];
 		int zyk_iterator = 0;
-
-		strcpy(content, "");
 
 		for (zyk_iterator = 0; zyk_iterator < MAX_CLIENTS; zyk_iterator++)
 		{ // zyk: initializing duelist scores
@@ -1404,99 +1392,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		{
 			level.ignored_players[zyk_iterator][0] = 0;
 			level.ignored_players[zyk_iterator][1] = 0;
-		}
-
-		for (zyk_iterator = 0; zyk_iterator < MAX_CUSTOM_QUESTS; zyk_iterator++)
-		{ // zyk: initializing custom quest values
-			level.zyk_custom_quest_mission_count[zyk_iterator] = -1;
-
-			quest_file = fopen(va("GalaxyRP/customquests/%d.txt", zyk_iterator), "r");
-			if (quest_file)
-			{
-				// zyk: initializes amount of quest missions
-				level.zyk_custom_quest_mission_count[zyk_iterator] = 0;
-
-				// zyk: reading the first line, which contains the main quest fields
-				if (fgets(content, sizeof(content), quest_file) != NULL)
-				{
-					int j = 0;
-					int k = 0; // zyk: current spawn string position
-					char field[256];
-
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
-
-					while (content[k] != '\0')
-					{
-						int l = 0;
-
-						// zyk: getting the field
-						while (content[k] != ';')
-						{
-							field[l] = content[k];
-
-							l++;
-							k++;
-						}
-						field[l] = '\0';
-						k++;
-
-						level.zyk_custom_quest_main_fields[zyk_iterator][j] = G_NewString(field);
-
-						j++;
-					}
-				}
-
-				while (fgets(content, sizeof(content), quest_file) != NULL)
-				{
-					int j = 0; // zyk: the current key/value being used
-					int k = 0; // zyk: current spawn string position
-
-					if (content[strlen(content) - 1] == '\n')
-						content[strlen(content) - 1] = '\0';
-
-					while (content[k] != '\0')
-					{
-						int l = 0;
-						char zyk_key[256];
-						char zyk_value[256];
-
-						// zyk: getting the key
-						while (content[k] != ';')
-						{
-							zyk_key[l] = content[k];
-
-							l++;
-							k++;
-						}
-						zyk_key[l] = '\0';
-						k++;
-
-						// zyk: getting the value
-						l = 0;
-						while (content[k] != ';')
-						{
-							zyk_value[l] = content[k];
-
-							l++;
-							k++;
-						}
-						zyk_value[l] = '\0';
-						k++;
-
-						// zyk: copying the key and value to the fields array
-						level.zyk_custom_quest_missions[zyk_iterator][level.zyk_custom_quest_mission_count[zyk_iterator]][j] = G_NewString(zyk_key);
-						level.zyk_custom_quest_missions[zyk_iterator][level.zyk_custom_quest_mission_count[zyk_iterator]][j + 1] = G_NewString(zyk_value);
-
-						j += 2;
-					}
-
-					level.zyk_custom_quest_mission_values_count[zyk_iterator][level.zyk_custom_quest_mission_count[zyk_iterator]] = j;
-					level.zyk_custom_quest_mission_count[zyk_iterator]++;
-				}
-
-				fclose(quest_file);
-			}
 		}
 	}
 
@@ -1555,10 +1450,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "yavin1b", 8) == 0)
-			level.quest_map = 1;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -1577,10 +1468,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "yavin2") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "yavin2", 7) == 0)
-			level.quest_map = 10;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -1601,10 +1488,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "hoth2", 6) == 0)
-			level.quest_map = 5;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -1620,10 +1503,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "hoth3") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "hoth3", 6) == 0)
-			level.quest_map = 20;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -1648,10 +1527,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t1_danger", 10) == 0)
-			level.quest_map = 18;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -1667,10 +1542,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "t1_fatal") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t1_fatal", 9) == 0)
-			level.quest_map = 13;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -1746,10 +1617,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t1_sour") == 0)
 	{
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t1_sour", 8) == 0)
-			level.quest_map = 2;
-
 		zyk_create_info_player_deathmatch(9828,-5521,153,90);
 		zyk_create_info_player_deathmatch(9845,-5262,153,153);
 	}
@@ -1757,10 +1624,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 		qboolean found_bugged_switch = qfalse;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t1_surprise", 12) == 0)
-			level.quest_map = 3;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -1837,10 +1700,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "t2_rogue") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t2_rogue", 9) == 0)
-			level.quest_map = 7;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -1926,10 +1785,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "t2_trip") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t2_trip", 8) == 0)
-			level.quest_map = 17;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -2088,10 +1943,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t3_hevil", 9) == 0)
-			level.quest_map = 8;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -2105,10 +1956,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	}
 	else if (Q_stricmp(zyk_mapname, "t3_bounty") == 0)
 	{
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t3_bounty", 10) == 0)
-			level.quest_map = 6;
-
 		zyk_create_info_player_deathmatch(-3721,-726,73,75);
 		zyk_create_info_player_deathmatch(-3198,-706,73,90);
 
@@ -2179,10 +2026,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "t3_rift", 8) == 0)
-			level.quest_map = 4;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -2211,10 +2054,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "taspir1") == 0)
 	{
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "taspir1", 8) == 0)
-			level.quest_map = 25;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -2259,10 +2098,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		gentity_t *ent;
 
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "kor1", 5) == 0)
-			level.quest_map = 9;
-
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
@@ -2283,31 +2118,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		zyk_create_info_player_deathmatch(2977,3137,-2526,0);
 		zyk_create_info_player_deathmatch(3072,2992,-2526,0);
 	}
-	else if (Q_stricmp(zyk_mapname, "mp/duel5") == 0 && g_gametype.integer == GT_FFA)
-	{
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "mp/duel5", 9) == 0)
-			level.quest_map = 11;
-	}
-	else if (Q_stricmp(zyk_mapname, "mp/duel8") == 0 && g_gametype.integer == GT_FFA)
-	{
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "mp/duel8", 9) == 0)
-			level.quest_map = 14;
-	}
-	else if (Q_stricmp(zyk_mapname, "mp/duel9") == 0 && g_gametype.integer == GT_FFA)
-	{
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "mp/duel9", 9) == 0)
-			level.quest_map = 15;
-	}
 	else if (Q_stricmp(zyk_mapname, "mp/siege_korriban") == 0 && g_gametype.integer == GT_FFA)
 	{ // zyk: if its a FFA game, then remove some entities
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "mp/siege_korriban", 18) == 0)
-			level.quest_map = 12;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -2325,10 +2138,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	else if (Q_stricmp(zyk_mapname, "mp/siege_desert") == 0 && g_gametype.integer == GT_FFA)
 	{ // zyk: if its a FFA game, then remove the shield in the final part
 		gentity_t *ent;
-
-		// zyk: making case sensitive comparing so only low case quest map names will be set to play quests. This allows building these maps without conflicting with quests
-		if (Q_strncmp(zyk_mapname, "mp/siege_desert", 16) == 0)
-			level.quest_map = 24;
 
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
@@ -2389,13 +2198,17 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	if (Q_stricmp(level.default_map_music, "") == 0)
 	{ // zyk: if the default map music is empty (the map has no music) then set a default music
-		if (level.quest_map == 1)
+		// GalaxyRP fix: [Quests] this used to key off level.quest_map, the number the map blocks
+		// above gave each quest map (case-sensitively, so a "Yavin1b" build would not count).
+		// The quest engine is gone and quest_map with it; the four maps that had their own music
+		// keep it, matched the same way.
+		if (Q_strncmp(zyk_mapname, "yavin1b", 8) == 0)
 			strcpy(level.default_map_music,"music/yavin1/swamp_explore.mp3");
-		else if (level.quest_map == 7)
+		else if (Q_strncmp(zyk_mapname, "t2_rogue", 9) == 0)
 			strcpy(level.default_map_music,"music/t2_rogue/narshaada_explore.mp3");
-		else if (level.quest_map == 10)
+		else if (Q_strncmp(zyk_mapname, "yavin2", 7) == 0)
 			strcpy(level.default_map_music,"music/yavin2/yavtemp2_explore.mp3");
-		else if (level.quest_map == 13)
+		else if (Q_strncmp(zyk_mapname, "t1_fatal", 9) == 0)
 			strcpy(level.default_map_music,"music/t1_fatal/tunnels_explore.mp3");
 		else
 			strcpy(level.default_map_music,"music/hoth2/hoth2_explore.mp3");
@@ -5150,30 +4963,6 @@ void zyk_TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 	}
 }
 
-// zyk: function to kill npcs with the name as parameter
-void zyk_NPC_Kill_f( char *name )
-{
-	int	n = 0;
-	gentity_t *player = NULL;
-
-	for ( n = level.maxclients; n < level.num_entities; n++) 
-	{
-		player = &g_entities[n];
-		if ( player && player->NPC && player->client )
-		{
-			if( (Q_stricmp( name, player->NPC_type ) == 0 || Q_stricmp( name, "all" ) == 0) )
-			{ // GalaxyRP fix: [Guardian] "do not kill guardians" exclusion removed here — guardian_invoked_by_id is permanently -1 (spawn_boss has no callers)
-				player->health = 0;
-				player->client->ps.stats[STAT_HEALTH] = 0;
-				if (player->die)
-				{
-					player->die(player, player, player, 100, MOD_UNKNOWN);
-				}
-			}
-		}
-	}
-}
-
 // zyk: tests if ent has other as ally
 /*
 GalaxyRP fix: [Ally] the raw bitfield test, with no other conditions attached.
@@ -5517,77 +5306,6 @@ qboolean zyk_minigame_forces_death(gentity_t *ent)
 	return qfalse;
 }
 
-void zyk_quest_effect_spawn(gentity_t *ent, gentity_t *target_ent, char *targetname, char *spawnflags, char *effect_path, int start_time, int damage, int radius, int duration)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	if (!strstr(effect_path, ".md3"))
-	{// zyk: effect power
-		zyk_set_entity_field(new_ent, "classname", "fx_runner");
-		zyk_set_entity_field(new_ent, "spawnflags", spawnflags);
-		zyk_set_entity_field(new_ent, "targetname", targetname);
-
-		if (Q_stricmp(targetname, "zyk_effect_scream") == 0)
-			zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)target_ent->r.currentOrigin[0], (int)target_ent->r.currentOrigin[1], (int)target_ent->r.currentOrigin[2] + 50));
-		else
-			zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)target_ent->r.currentOrigin[0], (int)target_ent->r.currentOrigin[1], (int)target_ent->r.currentOrigin[2]));
-
-		new_ent->s.modelindex = G_EffectIndex(effect_path);
-
-		zyk_spawn_entity(new_ent);
-
-		if (damage > 0)
-			new_ent->splashDamage = damage;
-
-		if (radius > 0)
-			new_ent->splashRadius = radius;
-
-		if (start_time > 0)
-			new_ent->nextthink = level.time + start_time;
-
-		// GalaxyRP fix: [Magic] the two level.special_power_effects[] writes that recorded the owner
-		// and the expiry used to be here; both arrays are gone. The "duration" parameter is now
-		// unused and is kept only so the 19 call sites need no edit.
-
-		if (Q_stricmp(targetname, "zyk_quest_effect_drain") == 0)
-			G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/arc_lp.wav"));
-
-		if (Q_stricmp(targetname, "zyk_quest_effect_sand") == 0)
-			ent->client->pers.quest_power_effect1_id = new_ent->s.number;
-	}
-	else
-	{ // zyk: model power
-		zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-		zyk_set_entity_field(new_ent, "spawnflags", spawnflags);
-
-		if (Q_stricmp(targetname, "zyk_tree_of_life") == 0)
-			zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)target_ent->r.currentOrigin[0], (int)target_ent->r.currentOrigin[1], (int)target_ent->r.currentOrigin[2] + 350));
-		else
-			zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)target_ent->r.currentOrigin[0], (int)target_ent->r.currentOrigin[1], (int)target_ent->r.currentOrigin[2]));
-
-		zyk_set_entity_field(new_ent, "model", effect_path);
-
-		zyk_set_entity_field(new_ent, "targetname", targetname);
-
-		zyk_spawn_entity(new_ent);
-
-		// GalaxyRP fix: [Magic] the matching owner/expiry writes for the model branch went here too.
-	}
-}
-
-// zyk: if this player or npc has immunity power, returns qtrue and shows Immunity effect
-qboolean zyk_check_immunity_power(gentity_t *ent)
-{
-	if (ent && ent->client && ent->client->pers.quest_power_status & (1 << 0))
-	{
-		zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_immunity", "0", "scepter/invincibility", 0, 0, 0, 300);
-
-		return qtrue;
-	}
-
-	return qfalse;
-}
-
 // GalaxyRP fix: [Guardian] removed zyk_can_hit_boss_battle_target() here — it was a stub always
 // returning qtrue (its condition used to gate on being in a boss battle; guardian_mode was already
 // permanently 0). Its 3 call sites in this file and g_active.c were simplified to drop the
@@ -5627,7 +5345,7 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 			return qfalse;
 		}
 
-		// GalaxyRP: [nofight] the two player_statuses bit 26 checks that used to sit here -- "used
+		// GalaxyRP: [nofight] the two PLAYER_STATUS_ADMIN_PARALYSIS checks that used to sit here -- "used
 		// nofight command, cannot hit anyone" and "cannot be hit by anyone" -- are gone along with
 		// the /nofight command itself; see the note where Cmd_NoFight_f used to live in g_cmds.c.
 		// The second of the two was the one that actually produced the reported invulnerability: it
@@ -5643,251 +5361,6 @@ qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target)
 	return qtrue;
 }
 
-qboolean npcs_on_same_team(gentity_t *attacker, gentity_t *target)
-{
-	if (attacker->NPC && target->NPC && attacker->client->playerTeam == target->client->playerTeam)
-	{
-		return qtrue;
-	}
-
-	return qfalse;
-}
-
-qboolean zyk_unique_ability_can_hit_target(gentity_t *attacker, gentity_t *target)
-{
-	int i = target->s.number;
-
-	if (attacker && target && attacker->s.number != i && target->client && target->health > 0 && zyk_can_hit_target(attacker, target) == qtrue &&
-		(i > MAX_CLIENTS || (target->client->pers.connected == CON_CONNECTED && target->client->sess.sessionTeam != TEAM_SPECTATOR &&
-			target->client->ps.duelInProgress == qfalse)))
-	{ // zyk: target is a player or npc that can be hit by the attacker
-		int is_ally = 0;
-
-		if (i < level.maxclients && !attacker->NPC &&
-			zyk_is_ally(attacker, target) == qtrue)
-		{ // zyk: allies will not be hit by this power
-			is_ally = 1;
-		}
-
-		if (OnSameTeam(attacker, target) == qtrue || npcs_on_same_team(attacker, target) == qtrue)
-		{ // zyk: if one of them is npc, also check for allies
-			is_ally = 1;
-		}
-
-		// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(attacker, target) conjunct
-		// here — the function was a stub always returning qtrue.
-		if (is_ally == 0)
-		{ // zyk: Unique-using npcs can hit everyone that are not their allies
-			return qtrue;
-		}
-	}
-
-	return qfalse;
-}
-
-// zyk: tests if the target entity can be hit by the attacker special power
-qboolean zyk_special_power_can_hit_target(gentity_t *attacker, gentity_t *target, int i, int min_distance, int max_distance, qboolean hit_breakable, int *targets_hit)
-{
-	if ((*targets_hit) >= zyk_max_special_power_targets.integer)
-		return qfalse;
-
-	if (attacker->s.number != i && target && target->client && target->health > 0 && zyk_can_hit_target(attacker, target) == qtrue && 
-		(i > MAX_CLIENTS || (target->client->pers.connected == CON_CONNECTED && target->client->sess.sessionTeam != TEAM_SPECTATOR && 
-		 target->client->ps.duelInProgress == qfalse)))
-	{ // zyk: target is a player or npc that can be hit by the attacker
-		int player_distance = (int)Distance(attacker->client->ps.origin,target->client->ps.origin);
-
-		if (player_distance > min_distance && player_distance < max_distance)
-		{
-			int is_ally = 0;
-
-			if (i < level.maxclients && !attacker->NPC && 
-				zyk_is_ally(attacker,target) == qtrue)
-			{ // zyk: allies will not be hit by this power
-				is_ally = 1;
-			}
-
-			if (OnSameTeam(attacker, target) == qtrue || npcs_on_same_team(attacker, target) == qtrue)
-			{ // zyk: if one of them is npc, also check for allies
-				is_ally = 1;
-			}
-
-			// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(attacker, target)
-			// conjunct here — the function was a stub always returning qtrue.
-			if (is_ally == 0 && !(zyk_check_immunity_power(target)))
-			{ // zyk: Cannot hit target with Immunity Power. Magic-using npcs can hit everyone that are not their allies
-				(*targets_hit)++;
-
-				return qtrue;
-			}
-		}
-	}
-	else if (i >= MAX_CLIENTS && hit_breakable == qtrue && target && !target->client && target->health > 0 && target->takedamage == qtrue)
-	{
-		int entity_distance = (int)Distance(attacker->client->ps.origin,target->r.currentOrigin);
-
-		if (entity_distance > min_distance && entity_distance < max_distance)
-		{
-			(*targets_hit)++;
-
-			return qtrue;
-		}
-	}
-
-	return qfalse;
-}
-
-// zyk: Earthquake
-void earthquake(gentity_t *ent, int stun_time, int strength, int distance)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-		distance += (distance/2);
-
-	for ( i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			if (player_ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
-			{ // zyk: player can only be hit if he is on floor
-				// zyk: if using Meditate taunt, remove it
-				if (player_ent->client->ps.legsAnim == BOTH_MEDITATE && player_ent->client->ps.torsoAnim == BOTH_MEDITATE)
-				{
-					player_ent->client->ps.legsAnim = player_ent->client->ps.torsoAnim = BOTH_MEDITATE_END;
-				}
-
-				player_ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-				player_ent->client->ps.forceHandExtendTime = level.time + stun_time;
-				player_ent->client->ps.velocity[2] += strength;
-				player_ent->client->ps.forceDodgeAnim = 0;
-				player_ent->client->ps.quickerGetup = qtrue;
-
-				G_Damage(player_ent,ent,ent,NULL,NULL,strength/5,0,MOD_UNKNOWN);
-			}
-
-			if (i < level.maxclients)
-			{
-				G_ScreenShake(player_ent->client->ps.origin, player_ent,  10.0f, 4000, qtrue);
-			}
-			
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/stone_break1.mp3"));
-		}
-	}
-}
-
-// zyk: Flame Burst
-void flame_burst(gentity_t *ent, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 3000;
-	}
-
-	ent->client->pers.flame_thrower = level.time + duration;
-	ent->client->pers.quest_power_status |= (1 << 12);
-}
-
-// zyk: Blowing Wind
-void blowing_wind(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 200;
-	}
-
-	ent->client->pers.quest_debounce1_timer = 0;
-
-	for ( i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_user3_id = ent->s.number;
-			player_ent->client->pers.quest_power_status |= (1 << 8);
-			player_ent->client->pers.quest_target6_timer = level.time + duration;
-
-			// zyk: gives fall kill to the owner of this power
-			player_ent->client->ps.otherKiller = ent->s.number;
-			player_ent->client->ps.otherKillerTime = level.time + duration;
-			player_ent->client->ps.otherKillerDebounceTime = level.time + 100;
-							
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/vacuum.mp3"));
-		}
-	}
-}
-
-// zyk: Reverse Wind
-void reverse_wind(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 200;
-	}
-
-	ent->client->pers.quest_debounce1_timer = 0;
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_user3_id = ent->s.number;
-			player_ent->client->pers.quest_power_status |= (1 << 20);
-			player_ent->client->pers.quest_target6_timer = level.time + duration;
-
-			// zyk: gives fall kill to the owner of this power
-			player_ent->client->ps.otherKiller = ent->s.number;
-			player_ent->client->ps.otherKillerTime = level.time + duration;
-			player_ent->client->ps.otherKillerDebounceTime = level.time + 100;
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/vacuum.mp3"));
-		}
-	}
-}
-
-// zyk: Poison Mushrooms
-void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-		min_distance = 0;
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, min_distance, max_distance, qfalse, &targets_hit) == qtrue && 
-			(i < MAX_CLIENTS || player_ent->client->NPC_class != CLASS_VEHICLE))
-		{
-			player_ent->client->pers.quest_power_user2_id = ent->s.number;
-			player_ent->client->pers.quest_power_status |= (1 << 4);
-			player_ent->client->pers.quest_target3_timer = level.time + 200;
-			player_ent->client->pers.quest_power_hit_counter = 40;
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/air_burst.mp3"));
-		}
-	}
-}
-
 
 // GalaxyRP fix: [Magic] magic_sense() removed. The player-facing magic dispatch in
 // Cmd_ForceUse_f()/the grab-anim block in g_cmds.c was deleted earlier as permanently
@@ -5897,8 +5370,9 @@ void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
 // character creation; that function has since been removed as dead too, see g_cmds.c. Both fields
 // have since been removed from clientPersistant_t outright, for exactly that reason), and that
 // deletion took magic_sense()'s only call site with it. Its siblings magic_shield() and
-// magic_disable() survive as zero-caller reference code (the quest_mage chain that used to call
-// them went with the magic engine -- see the note in G_RunFrame);
+// magic_disable() survived for a while as zero-caller reference code (the quest_mage chain that
+// used to call them went with the magic engine -- see the note in G_RunFrame) and have since been
+// deleted with the rest of the effect functions;
 // magic_explosion() has since gone the same way as magic_sense(), when the custom-quest-NPC block
 // that was its last caller was removed. Nothing anywhere called magic_sense(). It also wrote
 // pers.skill_levels[4] straight into forcePowerLevel[FP_SEE] with no amrpgmode guard while
@@ -5907,55 +5381,6 @@ void poison_mushrooms(gentity_t *ent, int min_distance, int max_distance)
 // from g_xcvar.h with it.
 
 
-// zyk: Ultra Strength. Increases damage and resistance to damage
-void ultra_strength(gentity_t *ent, int duration)
-{
-	ent->client->pers.quest_power_status |= (1 << 3);
-	ent->client->pers.quest_power2_timer = level.time + duration;
-
-	if (ent->s.number < level.maxclients)
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/ambience/thunder1.mp3"));
-}
-
-// zyk: Ultra Resistance. Increases resistance to damage
-void ultra_resistance(gentity_t *ent, int duration)
-{
-	ent->client->pers.quest_power_status |= (1 << 7);
-	ent->client->pers.quest_power3_timer = level.time + duration;
-
-	if (ent->s.number < level.maxclients)
-		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/player/enlightenment.mp3"));
-}
-
-
-// zyk: Enemy Weakening
-void enemy_nerf(gentity_t *ent, int distance)
-{
-	int i = 0;
-	int targets_hit = 0;
-	int duration = 12000;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 4000;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_target7_timer = level.time + duration;
-			player_ent->client->pers.quest_power_status |= (1 << 21);
-
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_enemy_nerf", "0", "force/kothos_beam", 0, 0, 0, 1000);
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh10.mp3"));
-		}
-	}
-}
 
 // GalaxyRP fix: [Magic] zyk_vertical_dfa_effect() used to be here -- the Duelist Vertical DFA
 // impact effect, which spawned an fx_runner with targetname "zyk_vertical_dfa". It had no callers
@@ -5974,66 +5399,6 @@ void enemy_nerf(gentity_t *ent, int distance)
 // Nothing else creates either targetname; the one remaining test for the explosion, in
 // g_combat.c's radius-damage exclusion list, is left in place with the rest of that block.
 
-void zyk_ice_bomb_ice_think(gentity_t *ent)
-{
-	ent->nextthink = level.time + 100;
-
-	// GalaxyRP fix: [RPG Class] ice trap hit-detection loop removed — rpg_class is permanently 0, this body was unreachable (its inner check also relied on a dead guardian_mode tautology)
-}
-
-void zyk_spawn_ice_bomb_ice(gentity_t *ent, int x_offset, int y_offset)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "0");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0] + x_offset, (int)ent->r.currentOrigin[1] + y_offset, (int)ent->r.currentOrigin[2]));
-
-	zyk_set_entity_field(new_ent, "angles", "-89 0 0");
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/rift/crystal_wall.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_ice_bomb_ice");
-
-	new_ent->parent = ent->parent;
-	new_ent->think = zyk_ice_bomb_ice_think;
-	new_ent->nextthink = level.time + 100;
-
-	zyk_spawn_entity(new_ent);
-
-	// zyk: ice duration
-	new_ent->wait = level.time + 4000;
-}
-
-void zyk_ice_bomb_think(gentity_t *ent)
-{
-	ent->nextthink = level.time + 100;
-
-	// GalaxyRP fix: [RPG Class] Bounty Hunter ice bomb detonation logic removed — rpg_class is permanently 0, this body was unreachable
-}
-
-// zyk: Bounty Hunter Ice Bomb
-void zyk_ice_bomb(gentity_t *ent)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "0");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0], (int)ent->r.currentOrigin[1], (int)ent->r.currentOrigin[2] - 22));
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/imperial/cargo_sm.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_ice_bomb");
-
-	new_ent->parent = ent;
-	new_ent->think = zyk_ice_bomb_think;
-	new_ent->nextthink = level.time + 100;
-
-	zyk_spawn_entity(new_ent);
-
-	G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/cloth1.mp3"));
-}
-
 // GalaxyRP fix: [Magic] zyk_spawn_ice_element() used to be here -- it ringed a player with four
 // crystal_wall models named "zyk_elemental_ice". Its last caller went with elemental_attack() in
 // the custom-quest-NPC dispatch removal, as the note further down this file records. Nothing else
@@ -6051,607 +5416,6 @@ extern void Jedi_DecloakPair(gentity_t *self);
 // them, and pers.fast_dash_timer -- written only by those two -- went with it. Nothing else
 // creates the "zyk_effect_force_dash" targetname; the two sites in g_misc.c that still test for
 // it are left alone here, with the rest of that list.
-
-// zyk: Healing Water
-void healing_water(gentity_t *ent, int heal_amount)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-		heal_amount += 30;
-
-	if ((ent->health + heal_amount) < ent->client->ps.stats[STAT_MAX_HEALTH])
-		ent->health += heal_amount;
-	else
-		ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-
-	G_Sound( ent, CHAN_ITEM, G_SoundIndex("sound/weapons/force/heal.wav") );
-}
-
-// zyk: Sleeping Flowers
-void sleeping_flowers(gentity_t *ent, int stun_time, int distance)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 100;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			// zyk: removing emotes to prevent exploits
-			if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_EMOTE))
-			{
-				player_ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_EMOTE);
-				player_ent->client->ps.forceHandExtendTime = level.time;
-			}
-
-			// zyk: if using Meditate taunt, remove it
-			if (player_ent->client->ps.legsAnim == BOTH_MEDITATE && player_ent->client->ps.torsoAnim == BOTH_MEDITATE)
-			{
-				player_ent->client->ps.legsAnim = player_ent->client->ps.torsoAnim = BOTH_MEDITATE_END;
-			}
-
-			player_ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-			player_ent->client->ps.forceHandExtendTime = level.time + stun_time;
-			player_ent->client->ps.velocity[2] += 150;
-			player_ent->client->ps.forceDodgeAnim = 0;
-			player_ent->client->ps.quickerGetup = qtrue;
-
-			player_ent->client->pers.quest_power_status |= (1 << 24);
-			player_ent->client->pers.quest_target9_timer = level.time + stun_time;
-
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_sleeping", "0", "force/heal2", 0, 0, 0, 800);
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/air_burst.mp3"));
-		}
-	}
-}
-
-// zyk: Water Attack
-void water_attack(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		damage += 10;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_acid", "4", "env/water_impact", 200, damage, 40, 9000);
-		}
-	}
-}
-
-// zyk Shifting Sand
-void shifting_sand(gentity_t *ent, int distance)
-{
-	int time_to_teleport = 1800;
-	int i = 0;
-	int targets_hit = 0;
-	int min_distance = distance;
-	int enemy_dist = 0;
-	gentity_t *this_enemy = NULL;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance *= 1.5;
-		min_distance = distance;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{ // zyk: teleport to the nearest enemy
-			enemy_dist = Distance(ent->client->ps.origin, player_ent->client->ps.origin);
-
-			if (enemy_dist < min_distance)
-			{
-				min_distance = enemy_dist;
-				this_enemy = player_ent;
-			}
-		}
-	}
-
-	if (this_enemy)
-	{ // zyk: found an enemy
-		ent->client->pers.quest_power_status |= (1 << 17);
-
-		ent->client->pers.quest_power_user4_id = this_enemy->s.number;
-
-		// zyk: used to bring the player back if he gets stuck
-		VectorCopy(ent->client->ps.origin, ent->client->pers.teleport_angles);
-	}
-
-	ent->client->pers.quest_power5_timer = level.time + time_to_teleport;
-	zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_sand", "0", "env/sand_spray", 0, 0, 0, time_to_teleport);
-}
-
-extern void display_yellow_bar(gentity_t *ent, int duration);
-
-// zyk: Water Splash. Damages the targets and heals the user
-void water_splash(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		damage += 5;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_watersplash", "4", "world/waterfall3", 0, damage, 200, 2500);
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/ambience/yavin/waterfall_medium_lp.wav"));
-		}
-	}
-}
-
-// zyk: Rockfall
-void rock_fall(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += (distance/2);
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qtrue, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_rockfall", "4", "env/rockfall_noshake", 0, damage, 100, 8000);
-		}
-	}
-}
-
-// zyk: Dome of Damage
-void dome_of_damage(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 100;
-		zyk_quest_effect_spawn(ent, ent, "zyk_quest_effect_dome", "4", "env/dome", 1000, damage, 290, 8000);
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qtrue, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_dome", "4", "env/dome", 1000, damage, 290, 8000);
-		}
-	}
-}
-
-// zyk: Magic Shield
-void magic_shield(gentity_t *ent, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 1500;
-	}
-
-	ent->client->pers.quest_power_status |= (1 << 11);
-	ent->client->pers.quest_power4_timer = level.time + duration;
-	ent->client->invulnerableTimer = level.time + duration;
-}
-
-// zyk: Tree of Life
-void tree_of_life(gentity_t *ent)
-{
-	ent->client->pers.quest_power_status |= (1 << 19);
-	ent->client->pers.quest_power6_timer = level.time;
-	ent->client->pers.quest_power_hit2_counter = 4;
-
-	zyk_quest_effect_spawn(ent, ent, "zyk_tree_of_life", "1", "models/map_objects/yavin/tree10_b.md3", 0, 0, 0, 4000);
-}
-
-// zyk: Magic Disable
-void magic_disable(gentity_t *ent, int distance)
-{
-	int i = 0;
-	int targets_hit = 0;
-	int duration = 6000;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 2000;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_magic_disable", "0", "env/small_electricity2", 0, 0, 0, 1500);
-
-			if (i < MAX_CLIENTS)
-			{ // zyk: player hit by this power
-				if (player_ent->client->pers.quest_power_usage_timer < level.time)
-				{
-					player_ent->client->pers.quest_power_usage_timer = level.time + duration;
-				}
-				else
-				{ // zyk: already used a power, so increase the cooldown time
-					player_ent->client->pers.quest_power_usage_timer += duration;
-				}
-
-				display_yellow_bar(player_ent, (player_ent->client->pers.quest_power_usage_timer - level.time));
-			}
-			// GalaxyRP fix: [Quests] an else branch sat here for npcs and bosses. It bumped
-			// light_quest_timer and universe_quest_timer (and, before the last pass, guardian_timer) by
-			// half the duration. All three were write-only fields no reader ever consulted, so the branch
-			// did nothing observable; the fields are gone from clientPersistant_t now, and so is it.
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh10.mp3"));
-		}
-	}
-}
-
-// zyk: Ice Stalagmite
-void ice_stalagmite(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-	int min_distance = 50;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		damage += 30;
-		min_distance = 0;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, min_distance, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_ice_stalagmite", "0", "models/map_objects/hoth/stalagmite_small.md3", 0, 0, 0, 2000);
-
-			G_Damage(player_ent,ent,ent,NULL,player_ent->client->ps.origin,damage,DAMAGE_NO_PROTECTION,MOD_UNKNOWN);
-		}
-	}
-}
-
-// zyk: Ice Boulder
-void ice_boulder(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 50;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 50, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_ice_boulder", "1", "models/map_objects/hoth/rock_b.md3", 0, 20, 50, 4000);
-
-			G_Damage(player_ent,ent,ent,NULL,player_ent->client->ps.origin,damage,DAMAGE_NO_PROTECTION,MOD_UNKNOWN);
-
-			player_ent->client->pers.quest_power_status |= (1 << 25);
-			player_ent->client->pers.quest_target10_timer = level.time + 4000;
-		}
-	}
-}
-
-void zyk_spawn_ice_block(gentity_t *ent, int duration, int pitch, int yaw, int x_offset, int y_offset, int z_offset)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "65537");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0], (int)ent->r.currentOrigin[1], (int)ent->r.currentOrigin[2]));
-
-	zyk_set_entity_field(new_ent, "angles", va("%d %d 0", pitch, yaw));
-
-	if (x_offset == 0 && y_offset != 0)
-	{
-		zyk_set_entity_field(new_ent, "mins", va("%d -50 %d", y_offset * -1, y_offset * -1));
-		zyk_set_entity_field(new_ent, "maxs", va("%d 50 %d", y_offset, y_offset));
-	}
-	else if (x_offset != 0 && y_offset == 0)
-	{
-		zyk_set_entity_field(new_ent, "mins", va("-50 %d %d", x_offset * -1, x_offset * -1));
-		zyk_set_entity_field(new_ent, "maxs", va("50 %d %d", x_offset, x_offset));
-	}
-	else if (x_offset == 0 && y_offset == 0)
-	{
-		zyk_set_entity_field(new_ent, "mins", va("%d %d -50", z_offset * -1, z_offset * -1));
-		zyk_set_entity_field(new_ent, "maxs", va("%d %d 50", z_offset, z_offset));
-	}
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/rift/crystal_wall.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_ice_block");
-
-	zyk_set_entity_field(new_ent, "zykmodelscale", "200");
-
-	zyk_spawn_entity(new_ent);
-
-	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
-	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
-}
-
-// zyk: Ice Block
-void ice_block(gentity_t *ent, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 1000;
-	}
-
-	zyk_spawn_ice_block(ent, duration, 0, 0, -140, 0, 0);
-	zyk_spawn_ice_block(ent, duration, 0, 90, 140, 0, 0);
-	zyk_spawn_ice_block(ent, duration, 0, 179, 0, -140, 0);
-	zyk_spawn_ice_block(ent, duration, 0, -90, 0, 140, 0);
-	zyk_spawn_ice_block(ent, duration, 90, 0, 0, 0, -140);
-	zyk_spawn_ice_block(ent, duration, -90, 0, 0, 0, 140);
-
-	ent->client->pers.quest_power_status |= (1 << 22);
-	ent->client->pers.quest_power7_timer = level.time + duration;
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/glass_tumble3.wav"));
-}
-
-
-
-
-// zyk: Slow Motion
-void slow_motion(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 3000;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_status |= (1 << 6);
-			player_ent->client->pers.quest_target5_timer = level.time + duration;
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh10.mp3"));
-		}
-	}
-}
-
-// zyk: Ultra Speed
-void ultra_speed(gentity_t *ent, int duration)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 3000;
-	}
-
-	ent->client->pers.quest_power_status |= (1 << 9);
-	ent->client->pers.quest_power3_timer = level.time + duration;
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh1.mp3"));
-}
-
-// zyk: Fast and Slow
-void fast_and_slow(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		duration += 2000;
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_status |= (1 << 6);
-			player_ent->client->pers.quest_target5_timer = level.time + duration;
-
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh10.mp3"));
-		}
-	}
-
-	ent->client->pers.quest_power_status |= (1 << 9);
-	ent->client->pers.quest_power3_timer = level.time + duration;
-
-	G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/effects/woosh1.mp3"));
-}
-
-// zyk: spawns the circle of fire around the player
-void ultra_flame_circle(gentity_t *ent, char *targetname, char *spawnflags, char *effect_path, int start_time, int damage, int radius, int duration, int xoffset, int yoffset)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent,"classname","fx_runner");
-	zyk_set_entity_field(new_ent,"spawnflags",spawnflags);
-	zyk_set_entity_field(new_ent,"targetname",targetname);
-	zyk_set_entity_field(new_ent,"origin",va("%d %d %d",(int)ent->r.currentOrigin[0] + xoffset,(int)ent->r.currentOrigin[1] + yoffset,(int)ent->r.currentOrigin[2]));
-
-	new_ent->s.modelindex = G_EffectIndex( effect_path );
-
-	zyk_spawn_entity(new_ent);
-
-	if (damage > 0)
-		new_ent->splashDamage = damage;
-
-	if (radius > 0)
-		new_ent->splashRadius = radius;
-
-	if (start_time > 0) 
-		new_ent->nextthink = level.time + start_time;
-
-	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
-	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
-}
-
-// zyk: Ultra Flame
-void ultra_flame(gentity_t *ent, int distance, int damage)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		ultra_flame_circle(ent,"zyk_quest_effect_flame","4", "env/flame_jet", 200, damage, 35, 5000, 30, 30);
-		ultra_flame_circle(ent,"zyk_quest_effect_flame","4", "env/flame_jet", 200, damage, 35, 5000, -30, 30);
-		ultra_flame_circle(ent,"zyk_quest_effect_flame","4", "env/flame_jet", 200, damage, 35, 5000, 30, -30);
-		ultra_flame_circle(ent,"zyk_quest_effect_flame","4", "env/flame_jet", 200, damage, 35, 5000, -30, -30);
-	}
-
-	for (i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			zyk_quest_effect_spawn(ent, player_ent, "zyk_quest_effect_flame", "4", "env/flame_jet", 200, damage, 35, 20000);
-		}
-	}
-}
-
-// zyk: spawns the flames around the player
-void flaming_area_flames(gentity_t *ent, char *targetname, char *spawnflags, char *effect_path, int start_time, int damage, int radius, int duration, int xoffset, int yoffset)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "fx_runner");
-	zyk_set_entity_field(new_ent, "spawnflags", spawnflags);
-	zyk_set_entity_field(new_ent, "targetname", targetname);
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", (int)ent->r.currentOrigin[0] + xoffset, (int)ent->r.currentOrigin[1] + yoffset, (int)ent->r.currentOrigin[2]));
-
-	new_ent->s.modelindex = G_EffectIndex(effect_path);
-
-	zyk_spawn_entity(new_ent);
-
-	if (damage > 0)
-		new_ent->splashDamage = damage;
-
-	if (radius > 0)
-		new_ent->splashRadius = radius;
-
-	if (start_time > 0)
-		new_ent->nextthink = level.time + start_time;
-
-	G_Sound(new_ent, CHAN_AUTO, G_SoundIndex("sound/effects/fire_lp.wav"));
-
-	// GalaxyRP fix: [Magic] the level.special_power_effects[] owner/expiry writes were here; both
-	// arrays are gone, and "duration" is now an unused parameter kept for the call sites.
-}
-
-// zyk: Flaming Area
-void flaming_area(gentity_t *ent, int damage)
-{
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		damage *= 1.4;
-	}
-
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, -60, -60);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, -60, 0);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, -60, 60);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 0, -60);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 0, 0);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 0, 60);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 50, -60);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 60, 0);
-	flaming_area_flames(ent, "zyk_quest_effect_flaming_area", "4", "env/fire", 0, damage, 60, 6000, 60, 60);
-}
-
-// zyk: Hurricane
-void hurricane(gentity_t *ent, int distance, int duration)
-{
-	int i = 0;
-	int targets_hit = 0;
-
-	// zyk: Universe Power
-	if (ent->client->pers.quest_power_status & (1 << 13))
-	{
-		distance += 100;
-		duration += 1000;
-	}
-
-	ent->client->pers.quest_debounce1_timer = 0;
-
-	for ( i = 0; i < level.num_entities; i++)
-	{
-		gentity_t *player_ent = &g_entities[i];
-
-		if (zyk_special_power_can_hit_target(ent, player_ent, i, 0, distance, qfalse, &targets_hit) == qtrue)
-		{
-			player_ent->client->pers.quest_power_status |= (1 << 5);
-			player_ent->client->pers.quest_power_hit_counter = -179;
-			player_ent->client->pers.quest_target4_timer = level.time + duration;
-
-			// zyk: gives fall kill to the owner of this power
-			player_ent->client->ps.otherKiller = ent->s.number;
-			player_ent->client->ps.otherKillerTime = level.time + duration;
-			player_ent->client->ps.otherKillerDebounceTime = level.time + 100;
-							
-			G_Sound(player_ent, CHAN_AUTO, G_SoundIndex("sound/effects/vacuum.mp3"));
-		}
-	}
-}
 
 // zyk: fires the Boba Fett flame thrower
 void Player_FireFlameThrower( gentity_t *self )
@@ -6674,12 +5438,6 @@ void Player_FireFlameThrower( gentity_t *self )
 	float radius = 144;
 
 	self->client->cloakDebReduce = level.time + zyk_flame_thrower_cooldown.integer;
-
-	// zyk: Flame Burst magic power has more damage
-	if (self->client->pers.quest_power_status & (1 << 12))
-	{
-		damage += 2;
-	}
 
 	origin[0] = self->r.currentOrigin[0];
 	origin[1] = self->r.currentOrigin[1];
@@ -6741,11 +5499,6 @@ void Player_FireFlameThrower( gentity_t *self )
 			{ //only bother with arc rules if the victim is a client
 				entityList[e] = ENTITYNUM_NONE;
 			}
-			else if (traceEnt->client && (traceEnt->client->sess.amrpgmode == 2 || traceEnt->NPC) && 
-					 self->client->pers.quest_power_status & (1 << 12) && zyk_check_immunity_power(traceEnt))
-			{ // zyk: Immunity Power protects from Flame Burst
-				entityList[e] = ENTITYNUM_NONE;
-			}
 		}
 		traceEnt = &g_entities[entityList[e]];
 		if (traceEnt && traceEnt != self)
@@ -6767,76 +5520,6 @@ void Player_FireFlameThrower( gentity_t *self )
 // "no". Its removal also ends a latent hazard: G_FreeEntity() never reset the array, so an effect
 // entity freed by any other path before its timer expired left a live owner id behind, and the
 // next entity to take that slot number would have been treated as that player's magic effect.
-
-// zyk: shows a text message from the file based on the language set by the player.
-// GalaxyRP fix: [Text messages] this used to accept "additional arguments to concat in the
-// final string" via "...", but the "..." parameter is kept only for source/binary
-// compatibility with its one caller and any future one -- see the fix comment further down for
-// why it's no longer actually used to substitute anything into the loaded text.
-void zyk_text_message(gentity_t *ent, char *filename, qboolean show_in_chat, qboolean broadcast_message, ...)
-{
-	char content[MAX_STRING_CHARS];
-	static char string[MAX_STRING_CHARS];
-	char language[128];
-	char console_cmd[64];
-	int client_id = -1;
-	FILE *text_file = NULL;
-	size_t content_len;
-
-	strcpy(content, "");
-	strcpy(string, "");
-	strcpy(console_cmd, "print");
-
-	if (broadcast_message == qfalse)
-		client_id = ent->s.number;
-
-	if (show_in_chat == qtrue)
-		strcpy(console_cmd, "chat");
-
-	if (ent->client->pers.player_settings & (1 << 5))
-	{
-		strcpy(language, "custom");
-	}
-	else
-	{
-		strcpy(language, "english");
-	}
-
-	text_file = fopen(va("GalaxyRP/textfiles/%s/%s.txt", language, filename), "r");
-	if (text_file)
-	{
-		fgets(content, sizeof(content), text_file);
-		// GalaxyRP fix: [Text messages] a file that exists but is completely empty leaves
-		// fgets() unable to read anything, so content stays the empty string set above --
-		// strlen(content) is then 0, and "strlen(content) - 1" (an unsigned size_t
-		// subtraction) underflowed to SIZE_MAX, making content[strlen(content) - 1] an
-		// out-of-bounds read. Only strip a trailing newline when there's actually a
-		// character to look at.
-		content_len = strlen(content);
-		if (content_len > 0 && content[content_len - 1] == '\n')
-			content[content_len - 1] = '\0';
-
-		fclose(text_file);
-	}
-	else
-	{
-		strcpy(content, "^1File could not be open!");
-	}
-
-	// GalaxyRP fix: [Text messages] content is translator/admin-authored text loaded straight
-	// from a GalaxyRP/textfiles/<language>/*.txt file, and was being used directly as the
-	// format string for Q_vsnprintf() against whatever variadic arguments this function's
-	// caller happened to pass -- its one current caller (the new-player tutorial) passes none.
-	// Since content has no guarantee of containing exactly as many %-conversions as arguments
-	// were actually supplied, any accidental literal '%' in a message file (very easy to
-	// introduce in ordinary text -- "100% complete", "a 50% chance", etc) would make
-	// Q_vsnprintf() read a nonexistent argument as a pointer and crash the server, exactly like
-	// the /c and /low chat-modifier crash fixed earlier. content is now sent verbatim instead
-	// of being interpreted as a format string.
-	Q_strncpyz(string, content, sizeof(string));
-
-	trap->SendServerCommand(client_id, va("%s \"%s\n\"", console_cmd, string));
-}
 
 // GalaxyRP fix: [Magic] magic_master_has_this_power(), zyk_print_special_power(),
 // zyk_number_of_enabled_magic_powers(), and zyk_show_magic_master_powers()/
@@ -6899,52 +5582,6 @@ void poison_dart_hits(gentity_t *ent)
 		// zyk: no more do poison damage if counter is 0
 		if (ent->client->pers.poison_dart_hit_counter == 0)
 			ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_POISON_DART_HIT);
-	}
-}
-
-void zyk_print_custom_quest_info(gentity_t *ent)
-{
-	// zyk: show mission fields when player uses /customquest to print mission fields
-	if (ent->client->pers.custom_quest_print > 0 && ent->client->pers.custom_quest_print_timer < level.time)
-	{
-		char mission_content[MAX_STRING_CHARS];
-		int i = 2 * MAX_MISSION_FIELD_LINES * (ent->client->pers.custom_quest_print - 1);
-		int number_of_lines = MAX_MISSION_FIELD_LINES * (ent->client->pers.custom_quest_print - 1);
-		int quest_number = ent->client->pers.custom_quest_quest_number;
-		int mission_number = ent->client->pers.custom_quest_mission_number;
-		qboolean stop_printing = qtrue;
-
-		strcpy(mission_content, "");
-
-		while (i < level.zyk_custom_quest_mission_values_count[quest_number][mission_number])
-		{
-			if (number_of_lines == MAX_MISSION_FIELD_LINES * ent->client->pers.custom_quest_print)
-			{ // zyk: max of mission field lines per string array index
-				stop_printing = qfalse;
-				break;
-			}
-
-			strcpy(mission_content, va("%s^3%s: ^7%s\n", mission_content, level.zyk_custom_quest_missions[quest_number][mission_number][i], level.zyk_custom_quest_missions[quest_number][mission_number][i + 1]));
-			number_of_lines++;
-
-			i += 2;
-		}
-
-		if (stop_printing == qtrue)
-		{ // zyk: all info was printed, stop printing
-			ent->client->pers.custom_quest_print = 0;
-		}
-		else
-		{
-			ent->client->pers.custom_quest_print++;
-		}
-
-		// zyk: sends all mission info to client if there is info to print
-		if (Q_stricmp(mission_content, "") != 0)
-			trap->SendServerCommand(ent->s.number, va("print \"%s\"", mission_content));
-
-		// zyk: interval between each time part of the info is sent
-		ent->client->pers.custom_quest_print_timer = level.time + 200;
 	}
 }
 
@@ -7940,110 +6577,6 @@ void melee_battle_winner()
 	}
 }
 
-gentity_t *zyk_quest_item(char *item_path, int x, int y, int z, char *mins, char *maxs)
-{
-	gentity_t *new_ent = G_Spawn();
-
-	if (!strstr(item_path, ".md3"))
-	{// zyk: effect
-		zyk_set_entity_field(new_ent, "classname", "fx_runner");
-		zyk_set_entity_field(new_ent, "targetname", "zyk_quest_models");
-		zyk_set_entity_field(new_ent, "origin", va("%d %d %d", x, y, z));
-
-		new_ent->s.modelindex = G_EffectIndex(item_path);
-
-		zyk_spawn_entity(new_ent);
-	}
-	else
-	{ // zyk: model
-		zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-		zyk_set_entity_field(new_ent, "targetname", "zyk_quest_models");
-		zyk_set_entity_field(new_ent, "origin", va("%d %d %d", x, y, z));
-
-		if (Q_stricmp(mins, "") != 0 && Q_stricmp(maxs, "") != 0)
-		{
-			zyk_set_entity_field(new_ent, "spawnflags", "65537");
-			zyk_set_entity_field(new_ent, "mins", mins);
-			zyk_set_entity_field(new_ent, "maxs", maxs);
-		}
-
-		if (z == -10000)
-		{ // zyk: catwalk in t3_rift quest missions. Must scale it
-			zyk_set_entity_field(new_ent, "zykmodelscale", "150");
-		}
-
-		zyk_set_entity_field(new_ent, "model", item_path);
-
-		zyk_spawn_entity(new_ent);
-	}
-
-	return new_ent;
-}
-
-// zyk: remaps quest items to the values passed as args
-void zyk_remap_quest_item(char *old_remap, char *new_remap)
-{
-	float f = level.time * 0.001;
-
-	AddRemap(old_remap, new_remap, f);
-	trap->SetConfigstring(CS_SHADERSTATE, BuildShaderStateConfig());
-}
-
-void zyk_trial_room_models()
-{
-	gentity_t *new_ent = G_Spawn();
-
-	// zyk: catwalk to block entrance
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "65537");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", -3770, 4884, 120));
-
-	zyk_set_entity_field(new_ent, "angles", va("%d %d 0", 90, 0));
-
-	zyk_set_entity_field(new_ent, "mins", "-24 -192 -192");
-	zyk_set_entity_field(new_ent, "maxs", "24 192 192");
-	zyk_set_entity_field(new_ent, "zykmodelscale", "300");
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_quest_models");
-
-	zyk_spawn_entity(new_ent);
-
-	// zyk: adding catwalks to block the central lava
-	new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "65537");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", -4470, 4628, -65));
-
-	zyk_set_entity_field(new_ent, "mins", "-256 -256 -32");
-	zyk_set_entity_field(new_ent, "maxs", "256 256 32");
-	zyk_set_entity_field(new_ent, "zykmodelscale", "400");
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_quest_models");
-
-	zyk_spawn_entity(new_ent);
-
-	new_ent = G_Spawn();
-
-	zyk_set_entity_field(new_ent, "classname", "misc_model_breakable");
-	zyk_set_entity_field(new_ent, "spawnflags", "65537");
-	zyk_set_entity_field(new_ent, "origin", va("%d %d %d", -4470, 5140, -65));
-
-	zyk_set_entity_field(new_ent, "mins", "-256 -256 -32");
-	zyk_set_entity_field(new_ent, "maxs", "256 256 32");
-	zyk_set_entity_field(new_ent, "zykmodelscale", "400");
-
-	zyk_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
-
-	zyk_set_entity_field(new_ent, "targetname", "zyk_quest_models");
-
-	zyk_spawn_entity(new_ent);
-}
-
 
 
 /*
@@ -8069,9 +6602,7 @@ extern void set_max_health(gentity_t *ent);
 extern void set_max_shield(gentity_t *ent);
 extern void duel_show_table(gentity_t *ent);
 extern void WP_DisruptorAltFire(gentity_t *ent);
-extern int zyk_max_magic_power(gentity_t *ent);
 extern void G_Kill( gentity_t *ent );
-extern void save_quest_file(int quest_number);
 
 /*
 ================
@@ -9502,22 +8033,10 @@ void G_RunFrame( int levelTime ) {
 
 			poison_dart_hits(ent);
 
-			// zyk: tutorial, which teaches the player the RPG Mode features
-			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_RPG_TUTORIAL) && ent->client->pers.tutorial_timer < level.time)
-			{
-				if (ent->client->pers.tutorial_step > 1)
-				{ // zyk: after last message, tutorial ends
-					ent->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_RPG_TUTORIAL);
-				}
-				else
-				{
-					zyk_text_message(ent, va("tutorial/%d", ent->client->pers.tutorial_step), qtrue, qfalse);
-				}
-
-				// zyk: interval between messages
-				ent->client->pers.tutorial_step++;
-				ent->client->pers.tutorial_timer = level.time + 7000;
-			}
+			// GalaxyRP fix: [Dead Code] the RPG tutorial stepper used to be here, paced by
+			// pers.tutorial_timer and gated on PLAYER_STATUS_RPG_TUTORIAL -- a bit nothing set since
+			// the account-creation path that started the tutorial went. zyk_text_message(), whose only
+			// caller it was, went with it.
 
 			if (ent->client->sess.amrpgmode == 2 && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
 			{ // zyk: RPG Mode skills and quests actions. Must be done if player is not at Spectator Mode
@@ -9631,7 +8150,8 @@ void G_RunFrame( int levelTime ) {
 			// magic_explosion, time_power, ultra_drain, zyk_force_storm, zyk_no_attack and
 			// zyk_super_beam. This block was their only caller; the quest_mage chain that used to sit just
 			// below called twenty-seven OTHER effect functions and none of these twelve (that chain has
-			// since gone too, and the twenty-seven are kept as zero-caller reference code). None of the
+			// since gone too, and the twenty-seven, kept for a while as reference code, are now deleted
+			// as well). None of the
 			// twelve was ever taken by address (the zyk_force_storm / zyk_super_beam matches elsewhere are entity
 			// targetname strings that happen to share the names, not function pointers).
 			//
@@ -9653,7 +8173,7 @@ void G_RunFrame( int levelTime ) {
 			// entity -- so the handler ran with a NULL parent and dereferenced it. See the guard and
 			// the full account in fx_runner_think() (g_misc.c).
 
-			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here — guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) are kept, but are now zero-caller — see the note below
+			// GalaxyRP fix: [Guardian] quest guardians special abilities dispatch removed here -- guardian_mode/guardian_invoked_by_id are permanently dead (spawn_boss has no callers); the ~40 magic-power helper functions it called (healing_water, water_splash, ultra_strength, ice_block, earthquake, magic_shield, etc.) were kept as zero-caller code for a while and have since been deleted -- see the note below
 
 			// GalaxyRP fix: [Guardian] ymir_boss and thor_boss ability sub-chains were removed here earlier,
 			// and the quest_mage chain that used to follow them has now gone too -- 115 lines picking one of
@@ -9665,18 +8185,12 @@ void G_RunFrame( int levelTime ) {
 			// the condition could never be true again. This chain was the last live entry point into the
 			// magic effect system.
 			//
-			// The twenty-seven effect functions themselves are KEPT, deliberately, as material to repurpose
-			// (a weapon upgrade, say). They are now zero-caller. Two things they relied on have gone with the
-			// chain, so they are reference code rather than working powers: level.special_power_effects[] no
-			// longer records who owns an effect, and clear_special_power_effect() -- the only thing that ever
-			// freed the entities they spawn -- is gone too. Reviving one means giving it its own owner link
-			// and its own lifetime first.
-			//
-			// Consequences, all of them dead weight already: quest_power_status bit 12 (Flame Burst) loses its
-			// only setter, flame_burst(), so the bit-12 branch in Player_FireFlameThrower() and the one in
-			// quest_power_events() can no longer be entered -- the stun baton flame thrower is driven by
-			// pers.flame_thrower from g_weapon.c and is completely unaffected. guardian_timer loses its only
-			// reader but keeps a writer in a kept power, so the field stays.
+			// The twenty-seven effect functions themselves were kept for a while as material to repurpose,
+			// then deleted in the magic cleanup along with the quest_power_status bitfield they wrote and
+			// every reader of it (G_Damage, ClientThink_real, the force-power checks, the flame thrower's
+			// Flame Burst bonus). Anyone reviving one of those powers starts from the git history, and
+			// needs to give it an owner link and a lifetime first: level.special_power_effects[] and
+			// clear_special_power_effect(), which used to do that, went with the chain.
 		}
 
 		// zyk: added check for mind control on npcs here. NPCs being mind controlled cant think

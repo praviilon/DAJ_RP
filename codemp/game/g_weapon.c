@@ -279,42 +279,6 @@ static void WP_FireBryarPistol( gentity_t *ent, qboolean altFire, int weapon )
 	missile->bounceCount = 8;
 }
 
-// zyk: used by Wrist Shot ability
-void zyk_WP_FireBryarPistol(gentity_t *ent)
-//---------------------------------------------------------
-{
-	int damage = zyk_blaster_pistol_damage.integer * 8;
-	int count = 5;
-	float boxSize = BRYAR_ALT_SIZE*(2.5);
-
-	vec3_t zyk_origin, dir, zyk_forward;
-
-	VectorSet(dir, ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], 0);
-	VectorSet(zyk_origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 34);
-
-	AngleVectors(dir, zyk_forward, NULL, NULL);
-
-	gentity_t	*missile = CreateMissile(zyk_origin, zyk_forward, zyk_blaster_pistol_velocity.integer, 10000, ent, qtrue);
-
-	missile->classname = "bryar_proj";
-	missile->s.weapon = WP_BRYAR_PISTOL;
-
-	missile->s.generic1 = count; // The missile will then render according to the charge level.
-
-	VectorSet(missile->r.maxs, boxSize, boxSize, boxSize);
-	VectorSet(missile->r.mins, -boxSize, -boxSize, -boxSize);
-
-	missile->damage = damage;
-	missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-
-	missile->methodOfDeath = MOD_BRYAR_PISTOL_ALT;
-
-	missile->clipmask = MASK_SHOT | CONTENTS_LIGHTSABER;
-
-	// we don't want it to bounce forever
-	missile->bounceCount = 8;
-}
-
 /*
 ======================================================================
 
@@ -1557,7 +1521,7 @@ static void WP_FireDEMP2( gentity_t *ent, qboolean altFire )
 // damage think for the Lightning Dome. See the note at zyk_lightning_dome_detonate() below: that
 // function was its only setter and had no callers of its own. The two externs that stood here --
 // npcs_on_same_team() and zyk_check_immunity_power() -- existed solely for it and went with it;
-// both functions themselves survive, with callers in other files.
+// both functions have since been deleted with the rest of the magic engine.
 
 //---------------------------------------------------------
 // GalaxyRP fix: [Magic] zyk_lightning_dome_detonate() used to be here. It had no callers anywhere
@@ -2073,68 +2037,6 @@ static void WP_FireRocket( gentity_t *ent, qboolean altFire )
 	missile->bounceCount = 0;
 }
 
-// zyk: used by Homing Rocket ability
-//---------------------------------------------------------
-void zyk_WP_FireRocket(gentity_t *ent)
-//---------------------------------------------------------
-{
-	int	damage = zyk_rocket_damage.integer * 2.1;
-	int splash_damage = zyk_rocket_splash_damage.integer * 2.1;
-	int	vel = zyk_rocket_velocity.integer * 1.2;
-	gentity_t *missile;
-	vec3_t zyk_origin, dir, zyk_forward;
-
-	// zyk: subtracts 90 to make rocket go up before targetting the enemy
-	VectorSet(dir, ent->client->ps.viewangles[0] - 90, ent->client->ps.viewangles[1], 0);
-	VectorSet(zyk_origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 20);
-
-	AngleVectors(dir, zyk_forward, NULL, NULL);
-
-	missile = CreateMissile(zyk_origin, zyk_forward, vel, 30000, ent, qfalse);
-
-	// zyk: sets the target
-	if (ent->client && ent->client->ps.rocketLockIndex != ENTITYNUM_NONE)
-	{
-		missile->enemy = &g_entities[ent->client->ps.rocketLockIndex];
-
-		missile->angle = 0.5f;
-		missile->think = rocketThink;
-		missile->nextthink = level.time + ROCKET_ALT_THINK_TIME;
-
-		ent->client->ps.rocketLockIndex = ENTITYNUM_NONE;
-		ent->client->ps.rocketLockTime = 0;
-		ent->client->ps.rocketTargetTime = 0;
-	}
-
-	missile->classname = "rocket_proj";
-	missile->s.weapon = WP_ROCKET_LAUNCHER;
-
-	// Make it easier to hit things
-	VectorSet(missile->r.maxs, ROCKET_SIZE, ROCKET_SIZE, ROCKET_SIZE);
-	VectorScale(missile->r.maxs, -1, missile->r.mins);
-
-	missile->damage = damage;
-	missile->dflags = DAMAGE_DEATH_KNOCKBACK;
-
-	missile->methodOfDeath = MOD_ROCKET_HOMING;
-	missile->splashMethodOfDeath = MOD_ROCKET_HOMING_SPLASH;
-
-	//===testing being able to shoot rockets out of the air==================================
-	missile->health = 10;
-	missile->takedamage = qtrue;
-	missile->r.contents = MASK_SHOT;
-	missile->die = RocketDie;
-	//===testing being able to shoot rockets out of the air==================================
-
-	missile->clipmask = MASK_SHOT;
-
-	missile->splashDamage = splash_damage;
-	missile->splashRadius = ROCKET_SPLASH_RADIUS;
-
-	// we don't want it to ever bounce
-	missile->bounceCount = 0;
-}
-
 /*
 ======================================================================
 
@@ -2287,79 +2189,6 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	VectorCopy (start, bolt->r.currentOrigin);
 
 	VectorCopy( start, bolt->pos2 );
-
-	bolt->bounceCount = -5;
-
-	return bolt;
-}
-
-// zyk: used by Thermal Throw ability
-gentity_t *zyk_WP_FireThermalDetonator(gentity_t *ent, int yaw)
-//---------------------------------------------------------
-{
-	gentity_t	*bolt;
-	vec3_t		dir, start;
-	float chargeAmount = 1.0f; // default of full charge
-
-	vec3_t zyk_origin, zyk_forward;
-
-	VectorSet(dir, ent->client->ps.viewangles[PITCH], yaw, 0);
-	VectorSet(zyk_origin, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 30);
-	AngleVectors(dir, zyk_forward, NULL, NULL);
-
-	VectorCopy(zyk_forward, dir);
-	VectorCopy(zyk_origin, start);
-
-	bolt = G_Spawn();
-
-	bolt->physicsObject = qtrue;
-
-	bolt->classname = "thermal_detonator";
-	bolt->think = thermalThinkStandard;
-	bolt->nextthink = level.time;
-	bolt->touch = touch_NULL;
-
-	// How 'bout we give this thing a size...
-	VectorSet(bolt->r.mins, -3.0f, -3.0f, -3.0f);
-	VectorSet(bolt->r.maxs, 3.0f, 3.0f, 3.0f);
-	bolt->clipmask = MASK_SHOT;
-
-	W_TraceSetStart(ent, start, bolt->r.mins, bolt->r.maxs);//make sure our start point isn't on the other side of a wall
-
-	// normal ones bounce, alt ones explode on impact
-	bolt->genericValue5 = level.time + TD_TIME; // How long 'til she blows
-	bolt->s.pos.trType = TR_GRAVITY;
-	bolt->parent = ent;
-	bolt->r.ownerNum = ent->s.number;
-	VectorScale(dir, zyk_thermal_velocity.integer * chargeAmount, bolt->s.pos.trDelta);
-
-	if (ent->health >= 0)
-	{
-		bolt->s.pos.trDelta[2] += 120;
-	}
-
-	bolt->s.loopSound = G_SoundIndex("sound/weapons/thermal/thermloop.wav");
-	bolt->s.loopIsSoundset = qfalse;
-
-	bolt->damage = zyk_thermal_damage.integer * 1.05;
-	bolt->dflags = 0;
-	bolt->splashDamage = zyk_thermal_splash_damage.integer * 1.05;
-	bolt->splashRadius = 160;
-
-	bolt->s.eType = ET_MISSILE;
-	bolt->r.svFlags = SVF_USE_CURRENT_ORIGIN;
-	bolt->s.weapon = WP_THERMAL;
-
-	bolt->methodOfDeath = MOD_THERMAL;
-	bolt->splashMethodOfDeath = MOD_THERMAL_SPLASH;
-
-	bolt->s.pos.trTime = level.time;		// move a bit on the very first frame
-	VectorCopy(start, bolt->s.pos.trBase);
-
-	SnapVector(bolt->s.pos.trDelta);			// save net bandwidth
-	VectorCopy(start, bolt->r.currentOrigin);
-
-	VectorCopy(start, bolt->pos2);
 
 	bolt->bounceCount = -5;
 

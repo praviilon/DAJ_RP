@@ -635,46 +635,11 @@ typedef struct clientSession_s {
 
 	char rpgchar[32]; // zyk: file name of the RPG char
 
-	// zyk: current power selected by Magic Master to use
-	// 1 - Magic Sense
-	// 2 - Healing Water
-	// 3 - Water Splash
-	// 4 - Earthquake
-	// 5 - Rockfall
-	// 6 - Sleeping Flowers
-	// 7 - Poison Mushrooms
-	// 8 - Magic Shield
-	// 9 - Dome of Damage
-	// 10 - Ultra Speed
-	// 11 - Slow Motion
-	// 12 - Flame Burst
-	// 13 - Ultra Flame
-	// 14 - Blowing Wind
-	// 15 - Hurricane
-	// 16 - Ultra Resistance
-	// 17 - Ultra Strength
-	// 18 - Ice Stalagmite
-	// 19 - Ice Boulder
-	// 20 - Healing Area
-	int selected_special_power;
-
-	// zyk: same as above but selects power to be used with A + melee kata
-	int selected_left_special_power;
-
-	// zyk: same as above but selects power to be used with D + melee kata
-	int selected_right_special_power;
-	
-	// zyk: activates Magic Fist types
-	// Possible values are:
-	// 0 - Magic Fist
-	// 1 - Fist Charged Attack
-	// 2 - Fist Spray Attack
-	// 3 - No fist attacks
-	int magic_fist_selection;
-
-	// zyk: magic powers that will not be shown in Magic power selection
-	int magic_disabled_powers;
-	int magic_more_disabled_powers;
+	// GalaxyRP fix: [Magic] selected_special_power, selected_left_special_power,
+	// selected_right_special_power, magic_fist_selection, magic_disabled_powers and
+	// magic_more_disabled_powers used to be here: the Magic Master's power selection. They were
+	// only ever saved and restored with the session (never read), and the magic system is gone,
+	// so they went; the session string is six numbers shorter (see g_session.c).
 
 	// zyk: vote timer, used to avoid vote spam
 	int vote_timer;
@@ -698,23 +663,21 @@ typedef struct clientSession_s {
 
 
 // GalaxyRP: [cleanup] names for the player_statuses bitfield below, adopted from the New Zyk Mod's
-// PLAYER_STATUS_* idea but numbered to OUR layout, not his. That distinction matters: his enum has
-// 16 entries and puts DUEL_TOURNAMENT_LOSS at bit 11, where ours has always been bit 27. Taking his
-// enum verbatim would have silently remapped every bit in the mod. Every value below is the bit
-// index this mod already used, so the generated code is unchanged -- only the spelling is.
+// PLAYER_STATUS_* idea but numbered to OUR layout, not his. Use as (1 << PLAYER_STATUS_X).
 //
-// Use as (1 << PLAYER_STATUS_X). Bits marked "unreachable" are still read somewhere but nothing
-// sets them any more: the features that did (the quest crystals, the unique abilities, the ice
-// bomb, the RPG tutorial, the custom-quest NPCs) were removed in earlier cleanups. They are named
-// rather than deleted so the numbering stays stable and a future cleanup can find the dead readers.
-// Bits marked "dead" go one step further: neither read nor written anywhere. They are kept for the
-// same reason -- renumbering PLAYER_STATUS_* shifts every bit above the gap, which is a decision of
-// its own and not something a cleanup of the last reader should make on the way past.
+// GalaxyRP fix: [Dead Code] seventeen bits nothing set any more, or whose only reader was a
+// client that ignored the result, have been dropped and the rest renumbered: SENT_RADAR_EVENT,
+// SENT_JETPACK_FLAME_EVENT, SABER_ARMOR, GUN_ARMOR, HEALING_CRYSTAL, ENERGY_CRYSTAL,
+// SENT_FORCE_USER_EVENT, SENDING_MAGIC_POWER_EVENT, SENDING_IMMUNITY_EVENT,
+// SENDING_ULTRA_STRENGTH_EVENT, SENDING_ULTRA_RESISTANCE_EVENT, UNIQUE_ABILITY_1/2/3,
+// ICE_BOMB_HIT, RPG_TUTORIAL and CUSTOM_QUEST_NPC, whose features (the quest crystals, the RPG
+// event cascade, the unique abilities, the ice bomb, the RPG tutorial, the custom-quest NPCs)
+// are all gone. Renumbering is
+// safe: player_statuses is never saved anywhere -- not in the session string, the account database
+// or an entity file -- and both ClientConnect and ClientDisconnect zero the whole field.
 typedef enum {
 	PLAYER_STATUS_SILENCED = 0,              // silenced by an admin
 	PLAYER_STATUS_EMOTE,                     // using an emote
-	PLAYER_STATUS_SENT_RADAR_EVENT,          // dead: announced the Bounty Hunter radar upgrade
-	PLAYER_STATUS_SENT_JETPACK_FLAME_EVENT,  // dead: announced the Jetpack blue-flame upgrade
 	PLAYER_STATUS_SCALED,                    // /scale set a model scale other than 100
 	PLAYER_STATUS_CHAT_PROTECTION,           // chat protection is active for this player
 	// Downed: lying incapacitated and unable to act. Set both by the Death System (a lethal hit that
@@ -722,33 +685,18 @@ typedef enum {
 	// says which -- this bit alone is a combat knockdown, this bit plus that one is an admin
 	// paralysis. Read it through G_PlayerIsDowned().
 	PLAYER_STATUS_DOWNED,
-	PLAYER_STATUS_SENT_FORCE_USER_EVENT,     // told client-side whether to render the Force Shield effect
-	PLAYER_STATUS_SABER_ARMOR,               // unreachable: nothing sets it
-	PLAYER_STATUS_GUN_ARMOR,                 // unreachable: nothing sets it
-	PLAYER_STATUS_HEALING_CRYSTAL,           // unreachable: nothing sets it
-	PLAYER_STATUS_ENERGY_CRYSTAL,            // unreachable: nothing sets it
 	PLAYER_STATUS_ADM_GIVE_FORCE,            // /admgive force handed this player force powers
 	PLAYER_STATUS_ADM_GIVE_GUNS,             // /admgive guns handed this player weapons
-	PLAYER_STATUS_SENDING_MAGIC_POWER_EVENT, // magic power bar event queued for client-side
-	PLAYER_STATUS_SENDING_IMMUNITY_EVENT,    // unreachable: nothing sets it
-	PLAYER_STATUS_SENDING_ULTRA_STRENGTH_EVENT,   // unreachable: nothing sets it
-	PLAYER_STATUS_SENDING_ULTRA_RESISTANCE_EVENT, // unreachable: nothing sets it
 	PLAYER_STATUS_NPC_ORDER_GUARD,           // NPC has the guard order
 	PLAYER_STATUS_NPC_ORDER_COVER,           // NPC has the cover order
 	PLAYER_STATUS_POISON_DART_HIT,           // taking poison dart damage over time
-	PLAYER_STATUS_UNIQUE_ABILITY_1,          // unreachable: nothing sets it
-	PLAYER_STATUS_UNIQUE_ABILITY_2,          // unreachable: nothing sets it
-	PLAYER_STATUS_UNIQUE_ABILITY_3,          // unreachable: nothing sets it
-	PLAYER_STATUS_ICE_BOMB_HIT,              // unreachable: nothing sets it
-	PLAYER_STATUS_RPG_TUTORIAL,              // unreachable: nothing sets it
 	// Paralyzed by an admin, as opposed to downed in combat. Always set together with
 	// PLAYER_STATUS_DOWNED, never on its own, so /getup and /helpup can revive a combat knockdown
 	// while refusing an admin punishment. Reused from the removed /nofight command; safe because
 	// nothing read the old bit any more, and both ClientConnect and ClientDisconnect zero the whole
 	// field, so no stale bit survives a rejoin. Read it through G_PlayerIsAdminParalyzed().
 	PLAYER_STATUS_ADMIN_PARALYSIS,
-	PLAYER_STATUS_DUEL_TOURNAMENT_LOSS,      // has just lost his duel in the Duel Tournament
-	PLAYER_STATUS_CUSTOM_QUEST_NPC           // unreachable: nothing sets it
+	PLAYER_STATUS_DUEL_TOURNAMENT_LOSS       // has just lost his duel in the Duel Tournament
 } playerStatus_t;
 
 // client data that stays across multiple respawns, but is cleared
@@ -852,18 +800,8 @@ typedef struct clientPersistant_s {
 	// not the deadline -- see the block in ClientTimerActions() for why. Reset to 0 by ClientSpawn().
 	int chat_protection_timer;
 
-	// zyk: used to print all mission fields when editing a Custom Quest
-	int custom_quest_print;
-	int custom_quest_print_timer;
-	int custom_quest_quest_number;
-	int custom_quest_mission_number;
-
 	// GalaxyRP fix: [Shop] seller_invoked_by_id removed -- it only supported Cmd_CallSeller_f
 	// (/callseller), which has itself been removed for good (see g_cmds.c).
-
-	// zyk: timer to send events to client game
-	int send_event_timer;
-	int send_event_interval;
 
 	// zyk: point marked in map so player can teleport to this point
 	vec3_t teleport_point;
@@ -872,8 +810,8 @@ typedef struct clientPersistant_s {
 	int	bitvalue; // zyk: player is considered as admin if bitvalue is > 0, because he has at least 1 admin command
 	
 	int level; // zyk: RPG mode level
-	// GalaxyRP fix: [Dead Fields] level_up_score used to be here -- declaration-only. Note the live
-	// UI cvar ui_zyk_rpg_level_up_score (ui_xcvar.h) is unrelated and is NOT affected.
+	// GalaxyRP fix: [Dead Fields] level_up_score used to be here -- declaration-only. (The UI cvar
+	// ui_zyk_rpg_level_up_score, unrelated, has since gone too: nothing read or wrote it.)
 	int xp;
 	int skillpoints; // zyk: RPG mode skillpoints
 
@@ -955,14 +893,7 @@ typedef struct clientPersistant_s {
 	// GalaxyRP fix: [RPG Class] rpg_class field (and its class-value documentation) removed here —
 	// it is permanently 0 with zero live readers/writers left anywhere in the codebase.
 
-	// zyk: this is the cooldown timer of the Unique Skill used by some RPG classes
-	int unique_skill_timer;
 
-	// zyk: used to set the duration that some unique skills or unique abilities are active
-	int unique_skill_duration;
-
-	// zyk: Monk Spin Kick ability interval between hits. Also used by Monk Meditation Drain ability as interval between hits
-	int monk_unique_timer;
 
 	// zyk: used by Fast Dash ability
 	// GalaxyRP fix: [Magic] fast_dash_timer used to be here. Its only writers were zyk_force_dash()
@@ -1064,8 +995,6 @@ typedef struct clientPersistant_s {
 	int credits; // zyk: the amount of credits (RPG Mode currency) this player has now
 	int CharID;
 
-	int tutorial_step; // zyk: sets the current tutorial step, to display the correct message to hthe player
-	int tutorial_timer; // zyk: used by the tutorial to set the interval between messages
 
 	// GalaxyRP: [Race Mode] race_position used to be declared here -- the racer's starting-grid slot,
 	// written only by Cmd_RaceMode_f and read only by the race handlers. Removed with Race Mode.
@@ -1146,90 +1075,14 @@ typedef struct clientPersistant_s {
 	// npc branch. Their readers all tested negative sentinels (-10000, -2000) that nothing ever wrote.
 	// Those readers were removed in earlier passes; the writers and the fields go in this one.
 
-	// zyk: bitvalue. Sets the power this player is using or the power that is affecting this player
-	// Possible values are:
-	//  0 - using Immunity Power
-	//  1 - hit by Chaos Power
-	//  2 - hit by Time Power
-	//  3 - using Ultra Strength
-	//  4 - hit by Poison Mushrooms
-	//  5 - hit by Hurricane
-	//  6 - hit by Slow Motion
-	//  7 - using Ultra Resistance
-	//  8 - hit by Blowing Wind
-	//  9 - using Ultra Speed
-	// 10 - using Resurrection Power
-	// 11 - using Magic Shield
-	// 12 - using Flame Burst
-	// 13 - using Universe Power
-	// 14 - using Light Power
-	// 15 - using Dark Power
-	// 16 - using Eternity Power
-	// 17 - using Shifting Sand
-	// 18 - Shifting Sand after teleport
-	// 19 - using Tree of Life
-	// 20 - hit by Reverse Wind
-	// 21 - hit by Enemy Nerf
-	// 22 - using Ice Block
-	// 23 - hit by Flaming Area
-	// 24 - hit by Sleeping Flowers
-	// 25 - hit by Ice Boulder
-	// 26 - hit by Elemental Attack
-	int quest_power_status;
-
-	// zyk: cooldown between quest power uses
-	int quest_power_usage_timer;
-
-	// zyk: powers that hits the target player more than once need a hit counter
-	int quest_power_hit_counter;
-	int quest_power_hit2_counter;
-	// GalaxyRP fix: [Magic] quest_power_hit3_counter and quest_power_hit4_counter used to be here,
-	// counting the remaining Chaos Power and Flaming Area ticks on this player. Both were read and
-	// written only inside the quest_power_events blocks that went with the magic engine.
-
-	// zyk: timers of the quest powers used by this player
-	// GalaxyRP fix: [Magic] quest_power1_timer used to head this group. Its last two sites were the
-	// Immunity Power set in duel_tournament_prepare() and the clear in the removed
-	// quest_power_events(); its siblings 2-7 survive, each still written by one of the kept effect
-	// functions.
-	int quest_power2_timer;
-	int quest_power3_timer;
-	int quest_power4_timer;
-	int quest_power5_timer;
-	int quest_power6_timer;
-	int quest_power7_timer;
-
-	// zyk: timers used by the quest powers hitting this player
-	// GalaxyRP fix: [Magic] quest_target1_timer (Chaos Power) used to head this group; its only
-	// sites were in the quest_power_events blocks that went with the magic engine.
-	int quest_target2_timer;
-	int quest_target3_timer;
-	int quest_target4_timer;
-	int quest_target5_timer;
-	int quest_target6_timer;
-	int quest_target7_timer;
-	// GalaxyRP fix: [Magic] quest_target8_timer (Flaming Area) went the same way.
-	int quest_target9_timer;
-	int quest_target10_timer;
-	// GalaxyRP fix: [Magic] quest_target11_timer (Elemental Attack) went the same way.
-
-	// zyk: quest powers debounce timer, for example, like Wind powers
-	int quest_debounce1_timer;
-
-	// zyk: player ids which are hitting the target player
-	// GalaxyRP fix: [Magic] quest_power_user1_id (Chaos Power) used to head this group; read only
-	// by the quest_power_events block that went with the magic engine.
-	int quest_power_user2_id;
-	int quest_power_user3_id;
-	int quest_power_user4_id;
-	// GalaxyRP fix: [Magic] quest_power_user5_id (Flaming Area) went the same way. It had lost its
-	// last writer one commit earlier, with the G_RadiusDamage magic block.
-
-	// zyk: sets the id of the effect of the magic used by this player
-	int quest_power_effect1_id;
-
-	// zyk: magic power, required to use Special Powers
-	int magic_power;
+	// GalaxyRP fix: [Magic] the quest-power state used to live here: quest_power_status (the
+	// "using / hit by power N" bitfield), quest_power_usage_timer, the hit counters, the
+	// quest_power*_timer / quest_target*_timer / quest_power_user*_id groups,
+	// quest_debounce1_timer, quest_power_effect1_id and magic_power itself. Every writer other
+	// than a reset lived in the magic effect functions, which have been deleted; every reader
+	// in live code tested a bit nothing could set any more and has been simplified away (G_Damage,
+	// ClientThink_real, ClientTimerActions, PM_CheckJump, PmoveSingle, the force-power checks in
+	// w_force.c, Player_FireFlameThrower, TryGrapple).
 
 	// GalaxyRP fix: [Quests] light_quest_messages and light_quest_timer used to be declared here,
 	// driving the Light Quest's timed events. Both were write-only by the end -- reset to 0 in
@@ -1273,7 +1126,7 @@ typedef struct clientPersistant_s {
 
 	// GalaxyRP fix: [Death System] seconds left on a downed player's countdown, decremented once per
 	// second by ClientTimerActions() (g_active.c). This lives in pers, not in gclient_s, because it is
-	// one half of a state whose other half -- player_statuses bits 6 and 26 -- is already here.
+	// one half of a state whose other half -- the PLAYER_STATUS_DOWNED and ADMIN_PARALYSIS bits -- is already here.
 	// ClientSpawn() preserves pers wholesale but memsets everything else, so while the two were split
 	// a respawn kept the "downed" bits and silently zeroed the countdown. That let a downed player skip
 	// the remainder of their timer by changing team (SetTeam -> ClientBegin -> ClientSpawn), and it
@@ -1922,15 +1775,9 @@ typedef struct level_locals_s {
 	// deleted as unreachable dead code (see the GalaxyRP fix comments in g_cmds.c, g_main.c, and
 	// g_utils.c). Removed outright.
 
-	// zyk: sets the map in which the player must complete a quest objective
-	int quest_map;
-
 	// GalaxyRP fix: [Guardian] quest_effect_id field removed here — its sole reader/writer,
 	// clean_effect() in g_cmds.c, was already deleted as unreachable; the matching level.quest_effect_id
 	// init line in g_main.c is removed alongside this one.
-
-	// zyk: id of the portal effect entity at last universe quest mission, so players can go through the teleport
-	int chaos_portal_id;
 
 	// zyk: default map music. After a boss battle, resets music to this one
 	char default_map_music[128];
@@ -2040,53 +1887,12 @@ typedef struct level_locals_s {
 	int zyk_weather_layer_count;
 	char zyk_weather_layers[ZYK_WEATHER_MAX_LAYERS][ZYK_WEATHER_CMD_LENGTH];
 
-	// zyk: Custom Quests, missions and fields
-	char *zyk_custom_quest_missions[MAX_CUSTOM_QUESTS][MAX_CUSTOM_QUEST_MISSIONS][MAX_CUSTOM_QUEST_FIELDS];
-
-	// zyk: amounf of keys and values stored for each mission of each quest
-	int zyk_custom_quest_mission_values_count[MAX_CUSTOM_QUESTS][MAX_CUSTOM_QUEST_MISSIONS];
-
-	// zyk: amount of missions of each custom quest
-	int zyk_custom_quest_mission_count[MAX_CUSTOM_QUESTS];
-
-	// zyk: saves the current mission number of the quest loaded for the current map
-	int zyk_custom_quest_current_mission;
-
-	// zyk: custom quest timer
-	int zyk_custom_quest_timer;
-
-	// zyk: custom quest counter, used for keys that can have multiple values (text1, text2, etc)
-	int zyk_custom_quest_counter;
-
-	// zyk: origin point of the quest mission
-	vec3_t zyk_quest_mission_origin;
-
-	// zyk: radius from the quest mission origin point the player must be within for the mission to start
-	int zyk_quest_radius;
-
-	// zyk: do not pass the mission until a certain event has happened (e.g killing all quest npcs)
-	qboolean zyk_hold_quest_mission;
-
-	// zyk: amount of custom quest npcs still alive to be defeated
-	int zyk_quest_npc_count;
-
-	// zyk: amount of ally npcs
-	int zyk_quest_ally_npc_count;
-
-	// zyk: amount of items to get in the mission
-	int zyk_quest_item_count;
-
-	// zyk: if qfalse, any place in the map starts the quest mission
-	qboolean zyk_quest_test_origin;
-
-	// zyk: set an effect on the quest origin point
-	int zyk_custom_quest_effect_id;
-
-	// zyk: custom quest main fields. It will saved in the first quest file line. Order of fields: name, active (value: on or off), count (integer value, number of completed missions)
-	char* zyk_custom_quest_main_fields[MAX_CUSTOM_QUESTS][4];
-
-	// zyk: used to test if the current map is a custom quest one. Sets the custom quest id who will first be played in this map
-	int custom_quest_map;
+	// GalaxyRP fix: [Quests] the custom-quest level state used to be here: the
+	// zyk_custom_quest_missions / _main_fields tables, their counts, the mission origin, radius and
+	// hold flags, the npc / ally / item counters, zyk_custom_quest_effect_id and custom_quest_map,
+	// plus quest_map (which map's quest this is) and chaos_portal_id above. G_InitGame filled the
+	// tables from the GalaxyRP/customquests/ files and nothing ever read them; the quest engine that did
+	// is long gone. The loader went with them.
 
 	// zyk: current map name without the path from maps folder
 	char zykmapname[128];
@@ -2228,7 +2034,7 @@ void SaveRegisteredItems( void );
 //
 // g_utils.c
 //
-// GalaxyRP fix: [Death System] qtrue while the player is downed (player_statuses bit 6).
+// GalaxyRP fix: [Death System] qtrue while the player is downed (the PLAYER_STATUS_DOWNED bit).
 // See the long comment on the definition in g_utils.c for why the state blocks nothing by itself.
 // GalaxyRP fix: [Death System] rp_downed_timer 0 switches the downed system off entirely -- see
 // RP_DownedSystemEnabled() in g_utils.c. The cvar is CVAR_LATCH, so this cannot change mid-map.
@@ -2249,15 +2055,15 @@ qboolean zyk_load_remap_file( const char *file_path );
 // definition in g_utils.c for why it sends the configstring twice and in that order.
 int zyk_clear_all_remaps( void );
 qboolean G_PlayerIsDowned( gentity_t *ent );
-// GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (player_statuses bit 26, always
+// GalaxyRP fix: [Death System] qtrue only for an ADMIN paralysis (the PLAYER_STATUS_ADMIN_PARALYSIS bit, always
 // accompanied by bit 6). G_PlayerIsDowned() stays true for both states -- everything that merely
 // asks "can this player act?" wants that one; only the revive paths care which it is.
 qboolean G_PlayerIsAdminParalyzed( gentity_t *ent );
 // GalaxyRP fix: [Death System] clears the downed state's four fields together -- player_statuses
-// bits 6 and 26, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no messages, no
+// the DOWNED and ADMIN_PARALYSIS bits, pers.downedTime and FL_NOTARGET -- and nothing else: no animation, no messages, no
 // grace period. Every exit from the state goes through it (RP_ReleaseFromDownedState() and help_up()
 // in g_cmds.c, player_die() and G_Damage()'s finish-off branch in g_combat.c) so none of them can
-// clear one field and forget another, which is how bit 26 used to be left behind. FL_NOTARGET is
+// clear one field and forget another, which is how the ADMIN_PARALYSIS bit used to be left behind. FL_NOTARGET is
 // only touched when bit 6 was actually set, so a /notarget cheat on an undowned player survives.
 void RP_ClearDownedState( gentity_t *ent );
 // GalaxyRP fix: [Death System] ends a downed state: clears both status bits and the countdown,

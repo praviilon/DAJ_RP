@@ -384,18 +384,16 @@ XCVAR_DEF( zyk_allow_melee_battle, "1",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART
 // pers.universe_quest_progress/universe_quest_counter, fields nothing anywhere ever writes. With the
 // dispatch gone the cvars had no readers left at all, in any module or asset.
 //
-// This changes nothing in game. The magic effect functions in g_main.c (earthquake(), hurricane(),
+// This changed nothing in game. The magic effect functions in g_main.c (earthquake(), hurricane(),
 // ...) were called only by the quest_mage NPC's random-power chain, with hardcoded arguments and
 // never through a cvar, and an zyk_enable_* switch only ever gated a PLAYER's access to a power a
-// player can no longer invoke. That chain has since been removed with the magic engine and the
-// twenty-seven surviving effect functions are kept as zero-caller reference code.
+// player can no longer invoke. That chain went with the magic engine, and the effect functions
+// themselves -- kept for a while as zero-caller reference code -- have now been deleted too, along
+// with zyk_max_special_power_targets, the one cvar they still read (it capped how many entities
+// one effect could hit, through zyk_special_power_can_hit_target()).
 //
 // zyk_magic_fist_velocity and zyk_magic_fist_mp_cost went with magic_fist_velocity() in g_weapon.c,
 // their sole reader, which had no callers of its own (see the note at its old location there).
-//
-// NOT removed, and not to be confused with these: zyk_max_special_power_targets, which is live --
-// it caps how many entities one effect may hit and is read by zyk_special_power_can_hit_target(),
-// the filter all 21 of those effect call sites go through.
 //
 // GalaxyRP fix: [Quests] zyk_enable_light_power, zyk_enable_dark_power, zyk_enable_eternity_power,
 // and zyk_enable_universe_power used to be defined here. Their only consumers were the /settings 1-4
@@ -470,7 +468,6 @@ XCVAR_DEF( zyk_server_empty_change_map_time, "0",		NULL,				CVAR_ARCHIVE|CVAR_NO
 // entities and the ZYK_ENTITY_RESERVE guards). The unconditional vjun3 protocol_imp/r2d2_imp drop
 // that lived beside it has been folded in here; both types are on the list.
 XCVAR_DEF( zyk_sp_npc_fix,					"0",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( zyk_max_special_power_targets,	"16",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_scale_siege_damage,		"0.7",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Shop] renamed from zyk_allow_stun_baton_upgrade -- this only ever gated the Stun
 // Baton Upgrade's door-unlock effect (its speed-debuff effect was never gated by it), so the old

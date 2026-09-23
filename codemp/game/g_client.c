@@ -2624,8 +2624,6 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 
 	// zyk: initializing player_statuses value
 	client->pers.player_statuses = 0;
-	client->pers.custom_quest_print = 0;
-	client->pers.custom_quest_print_timer = 0;
 
 	// read or initialize the session data
 	if ( firstTime || level.newSession ) {
@@ -2805,13 +2803,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 	client->pers.mind_controlled1_id = -1;
 	// GalaxyRP fix: [Guardian] guardian_invoked_by_id init removed - field is permanently -1, sole writer spawn_boss() had zero callers
 
-	// zyk: cooldown time between magic powers
-	client->pers.quest_power_usage_timer = 0;
-
-	// zyk: cooldown time between unique skills and unique abilities
-	client->pers.unique_skill_timer = 0;
-	client->pers.unique_skill_duration = 0;
-
 	// zyk: duelist went to spec. Reset him from duels
 	// GalaxyRP: [Force Duel] the private-duel type goes with them. It is only ever read while
 	// ps.duelInProgress is set and every path that sets that writes it first, so a stale value is
@@ -2891,10 +2882,6 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		melee_battle_end();
 		trap->SendServerCommand(-1, "chat \"^3Melee Battle: ^7No players left! Melee Battle is over!\"");
 	}
-
-	// zyk: sending events to client game
-	client->pers.send_event_timer = level.time + 3000;
-	client->pers.send_event_interval = level.time + 100;
 
 	client->pers.skill_counter = 0;
 
@@ -3502,7 +3489,6 @@ extern void zyk_add_guns( gentity_t *ent );
 extern void zyk_remove_force_powers( gentity_t *ent );
 extern void zyk_remove_guns( gentity_t *ent );
 extern void do_scale(gentity_t *ent, int new_size);
-extern int zyk_max_magic_power(gentity_t *ent);
 extern void zyk_load_common_settings(gentity_t *ent);
 extern void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zErrMsg, int rc, sqlite3_stmt* stmt);
 void ClientSpawn(gentity_t *ent) {
@@ -4235,9 +4221,6 @@ void ClientSpawn(gentity_t *ent) {
 	// zyk: initializing flame thrower timer
 	ent->client->pers.flame_thrower = 0;
 
-	// zyk: initializing Quest Power attributes
-	ent->client->pers.quest_power_status = 0;
-
 	// zyk: No Attack ability timer
 	ent->client->pers.no_attack_timer = 0;
 
@@ -4277,7 +4260,7 @@ void ClientSpawn(gentity_t *ent) {
 	}
 
 	// GalaxyRP fix: [gameplay/exploit] clear the chat-protection flag alongside its timer. Resetting
-	// only the timer left player_statuses bit 5 -- the flag G_Damage checks to skip all damage -- set
+	// only the timer left the PLAYER_STATUS_CHAT_PROTECTION bit -- the flag G_Damage checks to skip all damage -- set
 	// on a player who respawned while chat-protected, and with the timer back at 0 the clear branch in
 	// ClientThink_real() could never fire for them again, so they stayed permanently invulnerable
 	// while fully able to fight. See the matching comment on that block in g_active.c.
@@ -4343,7 +4326,7 @@ void ClientSpawn(gentity_t *ent) {
 			if (ent->client->pers.player_statuses & (1 << PLAYER_STATUS_DOWNED))
 			{
 				// GalaxyRP fix: [Death System] and keeps him untargetable with it. The downed state
-				// itself survives a respawn -- player_statuses bits 6 and 26 and pers.downedTime all
+				// itself survives a respawn -- the PLAYER_STATUS_DOWNED and ADMIN_PARALYSIS bits and pers.downedTime all
 				// live in pers, which ClientSpawn() preserves wholesale -- but FL_NOTARGET does not:
 				// it sits on ent->flags, which this function clears outright with "ent->flags = 0"
 				// further up. So a downed player who respawned (a team change is the reachable route,

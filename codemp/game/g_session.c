@@ -89,12 +89,6 @@ void G_WriteClientSessionData( gclient_t *client )
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.duelTeam ) );
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.siegeDesiredTeam ) );
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.amrpgmode ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.selected_special_power ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.selected_left_special_power ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.selected_right_special_power ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.magic_fist_selection ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.magic_disabled_powers ) );
-	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.magic_more_disabled_powers));
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.ally1 ) );
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.ally2 ) );
 	Q_strcat( s, sizeof( s ), va( "%i ", client->sess.vote_timer ) );
@@ -152,7 +146,11 @@ void G_ReadSessionData( gclient_t *client )
 	// mismatched-type pointer regardless -- now goes through a temp int and a cast-assignment
 	// afterward, matching the existing tempSessionTeam/tempSpectatorState/tempTeamLeader pattern
 	// used for the other enum/qboolean fields in this same sscanf() call.
-	sscanf( s, "%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %s %s %s",
+	// GalaxyRP fix: [Magic] six magic-selection fields used to sit between amrpgmode and ally1 in
+	// this string (see the sessionData_t note in g_local.h); the write side above dropped them
+	// too, so the two stay in step. The session cvars only live for one server run, and swapping
+	// the game module means restarting the server, so no string in the old layout is ever read.
+	sscanf( s, "%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %s %s %s",
 		&tempSessionTeam, //&client->sess.sessionTeam,
 		&client->sess.spectatorNum,
 		&tempSpectatorState, //&client->sess.spectatorState,
@@ -166,12 +164,6 @@ void G_ReadSessionData( gclient_t *client )
 		&client->sess.duelTeam,
 		&client->sess.siegeDesiredTeam,
 		&client->sess.amrpgmode,
-		&client->sess.selected_special_power,
-		&client->sess.selected_left_special_power,
-		&client->sess.selected_right_special_power,
-		&client->sess.magic_fist_selection,
-		&client->sess.magic_disabled_powers,
-		&client->sess.magic_more_disabled_powers,
 		&client->sess.ally1,
 		&client->sess.ally2,
 		&client->sess.vote_timer,
@@ -330,13 +322,6 @@ void G_InitSessionData( gclient_t *client, char *userinfo, qboolean isBot ) {
 	sess->amrpgmode = 0;
 	strcpy(sess->filename,"");
 	strcpy(sess->rpgchar, "");
-
-	sess->magic_fist_selection = 0;
-	sess->magic_disabled_powers = 0;
-	sess->magic_more_disabled_powers = 0;
-	sess->selected_special_power = MAGIC_MAGIC_SENSE;
-	sess->selected_left_special_power = MAGIC_MAGIC_SENSE;
-	sess->selected_right_special_power = MAGIC_MAGIC_SENSE;
 
 	// zyk: initializing ally attributes
 	sess->ally1 = 0;

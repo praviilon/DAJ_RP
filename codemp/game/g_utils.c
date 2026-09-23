@@ -1799,11 +1799,6 @@ void G_FreeEntity( gentity_t *ed ) {
 		EjectAll(ed->m_pVehicle);
 	}
 
-	if (level.chaos_portal_id != -1 && level.chaos_portal_id == ed->s.number)
-	{
-		level.chaos_portal_id = -1;
-	}
-
 	// GalaxyRP: [Grapple Hook] the same idea as the three id fields around this: a hook's owner holds a
 	// bare pointer to it (client->hook), and G_Spawn() recycles a freed slot after a second. Any free
 	// that does not go through Weapon_HookFree() -- /entremove, the duel-tournament arena sweep in
@@ -1863,9 +1858,10 @@ void G_FreeEntity( gentity_t *ed ) {
 	// exactly as long as the entity does.
 	level.zyk_spawn_strings_values_count[ed->s.number] = 0;
 
-	// GalaxyRP fix: [Entity System] and the fourth level field that holds an entity reference.
+	// GalaxyRP fix: [Entity System] and the third level field that holds an entity reference
+	// (a fourth, chaos_portal_id, went with the quest engine).
 	//
-	// The three above -- chaos_portal_id, duel_tournament_model_id, melee_model_id -- are cleared
+	// The two above -- duel_tournament_model_id, melee_model_id -- are cleared
 	// here for exactly this reason, and level.last_spawned_entity was missed in that pass. It is
 	// the /entundo target, written by /entadd, /spawnplatform and /spawndummy, and it was only ever
 	// cleared by /entundo itself and by G_InitGame. Anything else that freed the entity left a
@@ -3585,7 +3581,7 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 // is deliberately independent of this cvar (its own RP_PARALYZE_MIN/MAX_SECONDS, its own release
 // path) and can still put a player down while the gameplay system is off. Without that half, a
 // lethal hit on a paralysed player would reach targ->die() without RP_ClearDownedState(), and
-// player_die()'s early returns would leave status bits 6 and 26 set on a corpse -- a player whom
+// player_die()'s early returns would leave the DOWNED and ADMIN_PARALYSIS status bits set on a corpse -- a player whom
 // /paralyze afterwards refuses as "already paralyzed" and only /unparalyze can reset.
 //
 // Nothing else needs a test. With the system off nobody is ever downed, so /getup and /helpup
@@ -3630,7 +3626,7 @@ qboolean G_PlayerIsDowned( gentity_t *ent )
 // GalaxyRP fix: [Death System] bit 6 alone cannot tell a combat knockdown from an admin paralysis --
 // it was named "Paralyzed by an admin" before the Death System was built on top of it, and both
 // features have set it ever since. /getup and /helpup must free the first and refuse the second, so
-// /paralyze now also sets bit 26 and this answers which state a player is in. Bit 26 is never set
+// /paralyze now also sets the ADMIN_PARALYSIS bit and this answers which state a player is in. The ADMIN_PARALYSIS bit is never set
 // without bit 6, so a caller that only wants "can this player act?" should use G_PlayerIsDowned().
 qboolean G_PlayerIsAdminParalyzed( gentity_t *ent )
 {

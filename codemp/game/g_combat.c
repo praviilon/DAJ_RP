@@ -2198,7 +2198,6 @@ extern qboolean g_noPDuelCheck;
 qboolean g_bookkeepingDeath = qfalse;
 extern void update_weapons_table_row_with_current_values(gentity_t *ent);
 extern void remove_credits(gentity_t *ent, int credits);
-extern void zyk_NPC_Kill_f( char *name );
 // GalaxyRP fix: [Guardian] an extern for Zyk_NPC_SpawnType() used to be here. That function was
 // removed with the quest guardians (see the note at its old site in g_main.c); the declaration was
 // left behind and had no call site in this file or anywhere else.
@@ -2297,15 +2296,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	// by hand; it is one shared call now. See RP_ClearDownedState() in g_cmds.c.
 	RP_ClearDownedState( self );
 
-	// zyk: remove any quest_power status from this player
-	self->client->pers.quest_power_status = 0;
 	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_POISON_DART_HIT);
-	self->client->pers.unique_skill_duration = 0;
-
-	// zyk: stoping Unique Abilities when player dies
-	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_1);
-	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_2);
-	self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_UNIQUE_ABILITY_3);
 
 	// GalaxyRP fix: [Dead Code] removed boss-battle-music-reset guardian logic (guardian_invoked_by_id/guardian_mode always dead)
 
@@ -2363,17 +2354,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	// GalaxyRP fix: [Quests] removed dead universe_quest_messages==-10000 sentinel block here (Ymir/Thor/guardian_of_universe death handling) and its sibling universe_quest_artifact_holder_id!=-1 branch (quest_ragnos artifact-guardian handling) -- neither sentinel is ever assigned a matching value anywhere in the codebase (ymir_boss/thor_boss ability chains that used to set universe_quest_messages==-10000 conditions were themselves removed as dead code; universe_quest_artifact_holder_id is only ever reset to -1), so both branches were permanently unreachable. quest_player local var (only used inside this block) removed too.
 	
-	if (self->client->sess.amrpgmode == 2)
-	{
-		// GalaxyRP fix: [Dead Code] removed guardian_mode>0 reset (guardian_mode always 0)
-
-		// zyk: removing the crystals from the player
-		self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_HEALING_CRYSTAL);
-		self->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_ENERGY_CRYSTAL);
-
-		// GalaxyRP fix: [Challenge Mode] removed Resurrection Power grant (universe_quest_progress could never
-		// reach NUM_OF_UNIVERSE_QUEST_OBJ, and it was Challenge-Mode-only via universe_quest_counter bit 29)
-	}
+	// GalaxyRP fix: [Dead Code] an amrpgmode == 2 block used to sit here. By the end it only cleared
+	// PLAYER_STATUS_HEALING_CRYSTAL and PLAYER_STATUS_ENERGY_CRYSTAL, two bits nothing set; the
+	// guardian reset and the Challenge Mode Resurrection Power grant it once held went earlier.
 
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
@@ -4889,7 +4872,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	}
 
 	// GalaxyRP: [nofight] an "if attacker has nofight, cannot damage sentries" check used to sit
-	// here, reading player_statuses bit 26. It went with the /nofight command -- see the note where
+	// here, reading the PLAYER_STATUS_ADMIN_PARALYSIS bit. It went with the /nofight command -- see the note where
 	// Cmd_NoFight_f used to live in g_cmds.c. Nothing else guarded sentry guns, so a player can now
 	// damage another player's sentry exactly as they could before ever using /nofight.
 
@@ -5026,31 +5009,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			damage = (int)ceil(damage * 1.15);
 	}
 
-	if (attacker && attacker->client && (attacker->NPC || attacker->client->sess.amrpgmode == 2) && attacker->client->pers.quest_power_status & (1 << 3))
-	{ // zyk: Ultra Strength bonus damage
-		// zyk: Universe Power
-		if (attacker->client->pers.quest_power_status & (1 << 13))
-			damage = (int)ceil(damage * 1.12);
-		else
-			damage = (int)ceil(damage * 1.08);
-	}
-
 	// GalaxyRP fix: [Skills] this block used to add a +3%-per-level damage bonus based on
 	// pers.skill_levels[55] (Improvements) here (originally the "Free Warrior" RPG-class bonus, from
 	// back when rpg_class still varied; the class check itself had already been dropped as dead code
 	// since rpg_class is permanently 0). Improvements is now a reserved/unused skill (see the matching
 	// fix comment in do_upgrade_skill() in g_cmds.c), so this bonus has been removed outright rather
 	// than left keyed off a skill players can no longer gain or lose levels in.
-
-	if (attacker && attacker->client && (attacker->NPC || attacker->client->sess.amrpgmode == 2) && attacker->client->pers.quest_power_status & (1 << 15))
-	{ // zyk: Dark Power increases damage of every attack
-		damage = (int)ceil(damage*1.1);
-	}
-
-	if (attacker && attacker->client && attacker->client->pers.quest_power_status & (1 << 21))
-	{ // zyk: Enemy Weakening decreases damage
-		damage = (int)ceil(damage*0.92);
-	}
 
 	if (level.gametype == GT_SIEGE)
 	{
@@ -5068,58 +5032,6 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 
 	// GalaxyRP fix: [Challenge Mode] removed the +15% damage-taken Challenge Mode penalty (already dead via
 	// can_play_quest, and doubly dead now that Challenge Mode itself is removed)
-
-	if (targ && targ->client && (targ->NPC || targ->client->sess.amrpgmode == 2) && targ->client->pers.quest_power_status & (1 << 16))
-	{ // zyk: Eternity Power reduces damage of every attack
-		damage = (int)ceil(damage*0.9);
-	}
-
-	if (targ && targ->client && targ->client->pers.quest_power_status & (1 << 21))
-	{ // zyk: Enemy Weakening increases damage taken
-		damage = (int)ceil(damage*1.08);
-	}
-
-	if (targ && targ->client && targ->client->pers.quest_power_status & (1 << 25))
-	{ // zyk: Ice Boulder decreases damage taken
-		damage = (int)ceil(damage*0.6);
-	}
-
-	if (targ && targ->client && targ->client->pers.quest_power_status & (1 << 26))
-	{ // zyk: Elemental Attack Ice decreases damage taken
-		damage = (int)ceil(damage*0.4);
-	}
-
-	if (targ && targ->client && (targ->NPC || targ->client->sess.amrpgmode == 2) && targ->client->pers.quest_power_status & (1 << 22))
-	{ // zyk: Ice Block decreases damage taken
-		damage = (int)ceil(damage*0.2);
-	}
-
-	// zyk: player or npc with Magic Shield takes little damage
-	if (targ && targ->client && (targ->client->sess.amrpgmode == 2 || targ->NPC) && targ->client->pers.quest_power_status & (1 << 11))
-	{
-		damage = (int)ceil(damage * 0.1);
-	}
-
-	// zyk: hit by Time Power. Receive less damage
-	if (targ && targ->client && targ->client->pers.quest_power_status & (1 << 2))
-	{
-		damage = (int)ceil(damage * 0.1);
-	}
-
-	if (targ && targ->client && (targ->client->sess.amrpgmode == 2 || targ->NPC) && targ->client->pers.quest_power_status & (1 << 7))
-	{ // zyk: Ultra Resistance bonus resistance
-		// zyk: Universe Power
-		if (targ->client->pers.quest_power_status & (1 << 13))
-			damage = (int)ceil(damage * 0.88);
-		else
-			damage = (int)ceil(damage * 0.92);
-	}
-
-	if (targ && targ->client && targ->client->pers.quest_power_status & (1 << 24))
-	{ // zyk: target hit by Sleeping Flowers. if he takes damage, he can get up
-		targ->client->ps.forceHandExtendTime = level.time;
-		targ->client->pers.quest_target9_timer = 0;
-	}
 
 	if (targ && targ->client && targ->client->sess.amrpgmode == 2)
 	{ 
@@ -5600,8 +5512,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			{
 				targ->client->ps.eFlags &= ~EF_INVULNERABLE;
 			}
-			else if (!((targ->client->sess.amrpgmode == 2 || targ->NPC) && targ->client->pers.quest_power_status & (1 << 11)))
-			{ // zyk: added condition to not consider clients using Magic Shield
+			else
+			{
 				return;
 			}
 		}
@@ -5694,13 +5606,13 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	if (check_shield == 1 && targ && targ->client && take > 0)  
 	{ // zyk: check shields if the damage is greater than 0
 		int scaled_damage = take;
-		float bounty_hunter_shield_resistance = 0.0;
 
 		if (targ->client->sess.amrpgmode == 2) // zyk: Shield Strength skill
 		{
-			// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter shield-resistance bonus (rpg_class always 0)
+			// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter shield-resistance bonus (rpg_class always 0),
+			// and later the always-0.0 bounty_hunter_shield_resistance term it left in this formula.
 
-			scaled_damage = (int)ceil(take * (1.0 - bounty_hunter_shield_resistance - (0.07 * targ->client->pers.skill_levels[31])));
+			scaled_damage = (int)ceil(take * (1.0 - (0.07 * targ->client->pers.skill_levels[31])));
 		}
 
 		if (targ->client->ps.stats[STAT_ARMOR] >= scaled_damage)
@@ -6528,11 +6440,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 				if (G_PlayerIsDowned(targ)
 					|| (targ->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)) {
 					// GalaxyRP fix: [Death System] clear the whole state, not just bit 6. This used
-					// to zero that one bit and leave pers.downedTime and bit 26 to player_die() --
+					// to zero that one bit and leave pers.downedTime and the ADMIN_PARALYSIS bit to player_die() --
 					// which returns early, above its own cleanup, on an intermission or a NULL
 					// attacker. G_Damage() normalises a NULL attacker to the world entity long before
 					// this point so that half was unreachable, but the intermission half was not, and
-					// the residue is bit 26 set with bit 6 clear: a player walking around free whom
+					// the residue is the ADMIN_PARALYSIS bit set with the DOWNED bit clear: a player walking around free whom
 					// /paralyze then refuses as "already paralyzed". Clearing here is also the right
 					// order -- it must happen before targ->die(), because several checks (the respawn
 					// gate in ClientThink_real(), the PM_DEAD assignment) read bit 6.
@@ -6661,7 +6573,7 @@ G_RadiusDamage
 // GalaxyRP fix: [Magic] the externs for npcs_on_same_team(), zyk_unique_ability_can_hit_target()
 // and zyk_check_immunity_power() used to be here. They existed only for the two
 // special_power_effects blocks inside this function, which went with the array. All three
-// functions themselves survive in g_main.c.
+// functions have since been deleted from g_main.c with the rest of the magic engine.
 qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, float radius,
 					 gentity_t *ignore, gentity_t *missile, int mod) {
 	float		points, dist;
@@ -6700,22 +6612,13 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 		radius = 1;
 	}
 
+	// GalaxyRP fix: [Magic] the Rockfall and Dome of Damage effects used to get their own bounding
+	// boxes and distance rule here, keyed on the attacker's targetname. Only the magic engine's
+	// zyk_quest_effect_spawn() ever made an entity with those names; it is gone, so the vanilla box
+	// applies to everything again.
 	for ( i = 0 ; i < 3 ; i++ ) {
-		if (i == 2 && attacker && Q_stricmp(attacker->targetname, "zyk_quest_effect_rockfall") == 0)
-		{ // zyk: Rockfall quest power calculates the bounding box in a different way
-			mins[i] = origin[i] - radius;
-			maxs[i] = origin[i] + radius + 1000;
-		}
-		else if (i == 2 && attacker && Q_stricmp(attacker->targetname, "zyk_quest_effect_dome") == 0)
-		{ // zyk: Dome of Damage quest power calculates the bounding box in a different way
-			mins[i] = origin[i] - 20;
-			maxs[i] = origin[i] + radius - 150;
-		}
-		else
-		{
-			mins[i] = origin[i] - radius;
-			maxs[i] = origin[i] + radius;
-		}
+		mins[i] = origin[i] - radius;
+		maxs[i] = origin[i] + radius;
 	}
 
 	numListedEntities = trap->EntitiesInBox( mins, maxs, entityList, MAX_GENTITIES );
@@ -6730,19 +6633,12 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 
 		// find the distance from the edge of the bounding box
 		for ( i = 0 ; i < 3 ; i++ ) {
-			if (i == 2 && attacker && Q_stricmp(attacker->targetname, "zyk_quest_effect_rockfall") == 0)
-			{ // zyk: Rockfall quest power will consider only the distance in x and y axis
+			if ( origin[i] < ent->r.absmin[i] ) {
+				v[i] = ent->r.absmin[i] - origin[i];
+			} else if ( origin[i] > ent->r.absmax[i] ) {
+				v[i] = origin[i] - ent->r.absmax[i];
+			} else {
 				v[i] = 0;
-			}
-			else
-			{
-				if ( origin[i] < ent->r.absmin[i] ) {
-					v[i] = ent->r.absmin[i] - origin[i];
-				} else if ( origin[i] > ent->r.absmax[i] ) {
-					v[i] = origin[i] - ent->r.absmax[i];
-				} else {
-					v[i] = 0;
-				}
 			}
 		}
 

@@ -1936,17 +1936,6 @@ static qboolean PM_CheckJump( void )
 	{//in knockdown
 		return qfalse;
 	}
-	else
-	{
-#if defined (_GAME)
-		gentity_t *player_ent = &g_entities[pm->ps->clientNum];
-
-		if (player_ent && player_ent->client && player_ent->client->pers.quest_power_status & (1 << 2))
-		{
-			return qfalse;
-		}
-#endif
-	}
 
 	if ( pm->ps->weapon == WP_SABER )
 	{
@@ -6705,10 +6694,6 @@ rest:
 #define BOWCASTER_CHARGE_UNIT	200.0f	// bowcaster charging gives us one more unit every 200ms--if you change this, you'll have to do the same in g_weapon
 #define BRYAR_CHARGE_UNIT		200.0f	// bryar charging gives us one more unit every 200ms--if you change this, you'll have to do the same in g_weapon
 
-#if defined( _GAME )
-extern int zyk_max_magic_power(gentity_t *ent);
-#endif
-
 int PM_ItemUsable(playerState_t *ps, int forcedUse)
 {
 	vec3_t fwd, fwdorg, dest, pos;
@@ -11457,21 +11442,11 @@ void PmoveSingle (pmove_t *pmove) {
 	*/
 
 #if defined( _GAME )
-	// GalaxyRP fix: [RPG classes] rewritten from the local rpg_class mirror (which could only
-	// ever be 0 when amrpgmode == 2, or -1 otherwise, since pers.rpg_class is server-side-only
-	// and permanently 0) to test the live amrpgmode condition it actually stood in for
-	if (player_ent->client->sess.amrpgmode == 2 &&
-		player_ent->client->pers.unique_skill_duration > level.time && player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_UNIQUE_ABILITY_2))
-	{ // zyk: Free Warrior Super Beam ability does not allow him to move
-		stiffenedUp = qtrue;
-	}
-	// GalaxyRP fix: [RPG classes] removed dead rpg_class == 1 / 4 / 9 branches (Force User,
-	// Monk, Force Guardian) - the local rpg_class mirror could never hold those values
-	else if (player_ent->client->pers.player_statuses & (1 << PLAYER_STATUS_ICE_BOMB_HIT))
-	{ // zyk: hit by Ice Bomb
-		stiffenedUp = qtrue;
-	}
-	else if (level.duel_tournament_mode == 4 && player_ent && player_ent->s.number < MAX_CLIENTS && duel_tournament_is_duelist(player_ent) == qtrue && 
+	// GalaxyRP fix: [RPG classes] the Free Warrior Super Beam (PLAYER_STATUS_UNIQUE_ABILITY_2) and
+	// Ice Bomb (PLAYER_STATUS_ICE_BOMB_HIT) freezes used to head this chain, on bits nothing has
+	// set since the class abilities and the magic engine went. The rpg_class == 1 / 4 / 9
+	// branches (Force User, Monk, Force Guardian) went earlier, for the same reason.
+	if (level.duel_tournament_mode == 4 && player_ent && player_ent->s.number < MAX_CLIENTS && duel_tournament_is_duelist(player_ent) == qtrue && 
 			 (level.duel_tournament_timer - level.time) > (zyk_duel_tournament_duel_time.integer - DUEL_TOURNAMENT_PROTECT_TIME))
 	{ // zyk: Duel Tournament duelist that has just been placed in arena. Wait some time before moving
 		stiffenedUp = qtrue;
@@ -11710,13 +11685,6 @@ void PmoveSingle (pmove_t *pmove) {
 	if (pm->ps->pm_type == PM_FREEZE) {
 		return;		// no movement at all
 	}
-
-#if defined( _GAME )
-	if (player_ent && player_ent->NPC && player_ent->client && player_ent->client->pers.quest_power_status & (1 << 2))
-	{ // zyk: npc hit by Time Power
-		return;
-	}
-#endif
 
 	if ( pm->ps->pm_type == PM_INTERMISSION || pm->ps->pm_type == PM_SPINTERMISSION) {
 		return;		// no movement at all
