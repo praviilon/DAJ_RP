@@ -4797,6 +4797,62 @@ void SpectatorClientEndFrame( gentity_t *ent ) {
 
 /*
 ==============
+G_PublishMaxArmor
+
+GalaxyRP fix: [Shield] publish the shield ceiling so BG_CanItemBeGrabbed() -- which cgame runs
+too -- refuses a shield the server is going to refuse. See STAT_MAX_ARMOR in bg_public.h for the
+bug this closes; in short, an RPG player's cap is pers.max_rpg_shield, which is server-only and
+is zero without the Max Shield skill, so the shared predicate was comparing against the wrong
+number and every shield was consumed for nothing and respawned a second later.
+
+NPCs: they have clients and do pick shields up (Touch_Item only needs other->client, and their
+amrpgmode is 0). ClientEndFrame() only ever runs for player slots, though -- G_RunFrame's end-of-
+frame loop stops at level.maxclients -- so an NPC's ceiling stayed at zero and it could never pick
+a shield up again. GalaxyRP fix: [Shield] this was a block inside ClientEndFrame(); it is a function
+now so G_RunFrame can run it for NPCs too, before they move and touch items.
+
+In ClientEndFrame it is called above the spectator early-return, for the same reason STAT_USE_HINT
+is: SpectatorClientEndFrame() copies the followed player's whole playerState over a follower's, this
+stat included.
+
+Written unconditionally every frame rather than only when it changes, because zero is a
+LEGITIMATE ceiling here -- it is exactly the case being fixed -- so it cannot double as a "not
+published yet" sentinel. Writing it always also means it tracks /skillup, login, logout and
+respawn with no extra bookkeeping, and the playerState delta only spends bits when it moves.
+A ceiling changed mid-frame is seen one frame late, which costs at most a single frame of a
+just-upgraded player being refused a shield.
+
+Non-RPG players and NPCs get STAT_MAX_HEALTH, which is precisely what the predicate compared
+against before this change -- their behaviour is unchanged to the bit.
+
+The three arms mirror Pickup_Armor()'s (g_items.c) one for one, including the last. sess.amrpgmode
+only ever holds 0 or 2, so that arm is unreachable today -- but Pickup_Armor's else gives nothing
+for any other value, and a ceiling of 0 is what makes this predicate agree with it there too.
+Matching its shape rather than its reachable cases is the cheap way to keep "grabbable" and
+"actually gives something" exact complements whatever amrpgmode turns out to hold.
+==============
+*/
+void G_PublishMaxArmor( gentity_t *ent )
+{
+	if ( ent->client )
+	{
+		if ( ent->client->sess.amrpgmode == 2 )
+		{
+			ent->client->ps.stats[STAT_MAX_ARMOR] = ent->client->pers.max_rpg_shield;
+		}
+		else if ( ent->client->sess.amrpgmode < 2 )
+		{
+			ent->client->ps.stats[STAT_MAX_ARMOR] = ent->client->ps.stats[STAT_MAX_HEALTH];
+		}
+		else
+		{
+			ent->client->ps.stats[STAT_MAX_ARMOR] = 0;
+		}
+	}
+}
+
+/*
+==============
 ClientEndFrame
 
 Called at the end of each server frame for each connected client
@@ -4847,49 +4903,8 @@ void ClientEndFrame( gentity_t *ent ) {
 	}
 
 	// GalaxyRP fix: [Shield] publish the shield ceiling so BG_CanItemBeGrabbed() -- which cgame runs
-	// too -- refuses a shield the server is going to refuse. See STAT_MAX_ARMOR in bg_public.h for the
-	// bug this closes; in short, an RPG player's cap is pers.max_rpg_shield, which is server-only and
-	// is zero without the Max Shield skill, so the shared predicate was comparing against the wrong
-	// number and every shield was consumed for nothing and respawned a second later.
-	//
-	// DELIBERATELY OUTSIDE the "s.number < MAX_CLIENTS" block above. That block is for player-HUD
-	// concerns and excludes NPCs on purpose -- but NPCs have clients and do pick shields up
-	// (Touch_Item only needs other->client, and their amrpgmode is 0), so publishing this in there
-	// would leave every NPC on a ceiling of zero and silently stop them collecting shields forever.
-	//
-	// Above the spectator early-return below for the same reason STAT_USE_HINT is: SpectatorClientEndFrame()
-	// copies the followed player's whole playerState over a follower's, this stat included.
-	//
-	// Written unconditionally every frame rather than only when it changes, because zero is a
-	// LEGITIMATE ceiling here -- it is exactly the case being fixed -- so it cannot double as a "not
-	// published yet" sentinel. Writing it always also means it tracks /skillup, login, logout and
-	// respawn with no extra bookkeeping, and the playerState delta only spends bits when it moves.
-	// A ceiling changed mid-frame is seen one frame late, which costs at most a single frame of a
-	// just-upgraded player being refused a shield.
-	//
-	// Non-RPG players and NPCs get STAT_MAX_HEALTH, which is precisely what the predicate compared
-	// against before this change -- their behaviour is unchanged to the bit.
-	//
-	// The three arms mirror Pickup_Armor()'s (g_items.c) one for one, including the last. sess.amrpgmode
-	// only ever holds 0 or 2, so that arm is unreachable today -- but Pickup_Armor's else gives nothing
-	// for any other value, and a ceiling of 0 is what makes this predicate agree with it there too.
-	// Matching its shape rather than its reachable cases is the cheap way to keep "grabbable" and
-	// "actually gives something" exact complements whatever amrpgmode turns out to hold.
-	if ( ent->client )
-	{
-		if ( ent->client->sess.amrpgmode == 2 )
-		{
-			ent->client->ps.stats[STAT_MAX_ARMOR] = ent->client->pers.max_rpg_shield;
-		}
-		else if ( ent->client->sess.amrpgmode < 2 )
-		{
-			ent->client->ps.stats[STAT_MAX_ARMOR] = ent->client->ps.stats[STAT_MAX_HEALTH];
-		}
-		else
-		{
-			ent->client->ps.stats[STAT_MAX_ARMOR] = 0;
-		}
-	}
+	// too -- refuses a shield the server is going to refuse. See G_PublishMaxArmor() above.
+	G_PublishMaxArmor( ent );
 
 	// GalaxyRP fix: [Weapons] publish whether this player may alt-fire what they are holding, so the
 	// button strip in PM_Weapon() -- which cgame runs too -- refuses the same shot the server refuses.

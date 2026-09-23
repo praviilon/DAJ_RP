@@ -339,6 +339,9 @@ XCVAR_DEF( zyk_ammo_respawn_time,	"40",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,
 XCVAR_DEF( zyk_shield_respawn_time,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_health_respawn_time,	"30",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( zyk_holdable_item_respawn_time,	"60",		NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP fix: [Items] Force Enlightenment, Force Boon and Ysalamiri; was a fixed 90 (RESPAWN_POWERUP). Not
+// shortened by g_adaptRespawn, as vanilla never did. See G_ItemRespawnTime in g_items.c.
+XCVAR_DEF( zyk_powerup_respawn_time,	"90",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [Quests] zyk_allow_guardian_quest and zyk_allow_bounty_quest used to be defined here.
 // Their only consumers, Cmd_GuardianQuest_f and Cmd_BountyQuest_f, were deleted as unreachable dead
 // code (see the GalaxyRP fix comment in g_cmds.c), leaving these cvars orphaned. Removed outright.

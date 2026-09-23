@@ -39,7 +39,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #define	RESPAWN_TEAM_WEAPON	30
-#define	RESPAWN_POWERUP		90 // zyk: default 120
+// GalaxyRP fix: [Items] RESPAWN_POWERUP (90) is now the default of the zyk_powerup_respawn_time cvar
 
 // Item Spawn flags
 #define ITMSF_SUSPEND		1
@@ -86,7 +86,11 @@ int adjustRespawnTime(float preRespawnTime, int itemType, int itemTag)
 		}
 		else if (level.numPlayingClients > 12)
 		{	// From 12-32, scale from 0.5 to 0.25;
-			respawnTime *= 20.0 / (float)(level.numPlayingClients + 8);
+			// GalaxyRP fix: [Items] was 20.0 / (n + 8), inherited from vanilla: that is 0.95 at 13
+			// players against 0.5 at 12 -- respawns nearly DOUBLED when the 13th player joined -- and only
+			// got back down to 0.5 at 32, so the 1/4 floor this comment promises was never reached.
+			// 10.0 / (n + 8) meets the band below at 12 (0.5) and reaches 0.25 at 32, as documented.
+			respawnTime *= 10.0 / (float)(level.numPlayingClients + 8);
 		}
 		else
 		{	// From 4-12, scale from 1.0 to 0.5;
@@ -100,6 +104,77 @@ int adjustRespawnTime(float preRespawnTime, int itemType, int itemTag)
 	}
 
 	return ((int)respawnTime);
+}
+
+/*
+================
+G_ItemRespawnTime
+
+GalaxyRP fix: [Items] the one place that says how long an item takes to come back, in seconds, by
+category -- the Pickup_* functions return it, and Force Push/Pull uses it for how long a moved item
+stays away from its spot (see G_ItemPushReturnTime). Before this each pickup computed its own value
+and the push code had a second, different copy that skipped g_adaptRespawn, the team-FFA weapon
+time and the thermal/trip mine/det pack exception, and gave powerups 60s instead of 90.
+
+	weapon		g_weaponRespawn (RESPAWN_TEAM_WEAPON in team FFA)	adapted
+	ammo		zyk_ammo_respawn_time								adapted
+	shield		zyk_shield_respawn_time							adapted
+	health		zyk_health_respawn_time							adapted
+	holdable	zyk_holdable_item_respawn_time (jetpack too)		adapted
+	powerup		zyk_powerup_respawn_time							NOT adapted, as vanilla never did
+	other		60													adapted
+
+"adapted" is adjustRespawnTime(), which also sends the thermal/trip mine/det pack weapons to the ammo
+time. A map item's own "wait"/"random" and dropped items are handled by Touch_Item, not here.
+================
+*/
+int G_ItemRespawnTime( const gentity_t *ent )
+{
+	const gitem_t *item = ent->item;
+
+	if ( !item )
+	{
+		return 0;
+	}
+
+	switch ( item->giType )
+	{
+	case IT_WEAPON:
+		if ( level.gametype == GT_TEAM )
+		{ // team deathmatch has slow weapon respawns
+			return adjustRespawnTime(RESPAWN_TEAM_WEAPON, item->giType, item->giTag);
+		}
+		return adjustRespawnTime(g_weaponRespawn.integer, item->giType, item->giTag);
+	case IT_AMMO:
+		return adjustRespawnTime(zyk_ammo_respawn_time.integer, item->giType, item->giTag);
+	case IT_ARMOR:
+		return adjustRespawnTime(zyk_shield_respawn_time.integer, item->giType, item->giTag);
+	case IT_HEALTH:
+		return adjustRespawnTime(zyk_health_respawn_time.integer, item->giType, item->giTag);
+	case IT_HOLDABLE:
+		return adjustRespawnTime(zyk_holdable_item_respawn_time.integer, item->giType, item->giTag);
+	case IT_POWERUP:
+		return zyk_powerup_respawn_time.integer;
+	default:
+		return adjustRespawnTime(60, item->giType, item->giTag);
+	}
+}
+
+/*
+================
+G_ItemPushReturnTime
+
+GalaxyRP fix: [Items] how long a map item moved by Force Push/Pull stays away before it goes back to
+its spot: the map's own "wait" if it has one, else its category time above -- never under a second,
+so a pushed item always comes back (a 0 or negative cvar used to leave it at the push spot for good,
+or snap it back the next frame).
+================
+*/
+int G_ItemPushReturnTime( const gentity_t *ent )
+{
+	int seconds = ( ent->wait > 0 ) ? (int)ent->wait : G_ItemRespawnTime( ent );
+
+	return ( seconds < 1 ) ? 1 : seconds;
 }
 
 
@@ -2434,7 +2509,7 @@ int Pickup_Powerup( gentity_t *ent, gentity_t *other ) {
 		// anti-reward
 		client->ps.persistant[PERS_PLAYEREVENTS] ^= PLAYEREVENT_DENIEDREWARD;
 	}
-	return RESPAWN_POWERUP;
+	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] zyk_powerup_respawn_time, see G_ItemRespawnTime
 }
 
 //======================================================================
@@ -2447,7 +2522,7 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 	G_LogWeaponItem(other->s.number, ent->item->giTag);
 
-	return adjustRespawnTime(zyk_holdable_item_respawn_time.integer, ent->item->giType, ent->item->giTag);
+	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
 }
 
 
@@ -2554,7 +2629,7 @@ int Pickup_Ammo (gentity_t *ent, gentity_t *other)
 		Add_Ammo (other, ent->item->giTag, (int)ceil(quantity * zyk_add_ammo_scale.value)); // zyk: cvar to scale the add ammo amount
 	}
 
-	return adjustRespawnTime(zyk_ammo_respawn_time.integer, ent->item->giType, ent->item->giTag);
+	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
 }
 
 //======================================================================
@@ -2605,13 +2680,8 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other) {
 
 	G_LogWeaponPickup(other->s.number, ent->item->giTag);
 
-	// team deathmatch has slow weapon respawns
-	if ( level.gametype == GT_TEAM )
-	{
-		return adjustRespawnTime(RESPAWN_TEAM_WEAPON, ent->item->giType, ent->item->giTag);
-	}
-
-	return adjustRespawnTime(g_weaponRespawn.integer, ent->item->giType, ent->item->giTag);
+	// GalaxyRP fix: [Items] team deathmatch's slow weapon respawns moved into G_ItemRespawnTime
+	return G_ItemRespawnTime(ent);
 }
 
 
@@ -2645,7 +2715,7 @@ int Pickup_Health (gentity_t *ent, gentity_t *other) {
 		return zyk_holdable_item_respawn_time.integer;
 	}
 
-	return adjustRespawnTime(zyk_health_respawn_time.integer, ent->item->giType, ent->item->giTag);
+	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
 }
 
 //======================================================================
@@ -2671,7 +2741,7 @@ int Pickup_Armor( gentity_t *ent, gentity_t *other )
 			other->client->ps.stats[STAT_ARMOR] = other->client->pers.max_rpg_shield;
 		}
 
-		return adjustRespawnTime(zyk_shield_respawn_time.integer, ent->item->giType, ent->item->giTag);
+		return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
 	}
 	else if (other->client->sess.amrpgmode < 2 && other->client->ps.stats[STAT_ARMOR] < (other->client->ps.stats[STAT_MAX_HEALTH] * ent->item->giTag))
 	{ // zyk: player who is not in RPG Mode
@@ -2681,7 +2751,7 @@ int Pickup_Armor( gentity_t *ent, gentity_t *other )
 			other->client->ps.stats[STAT_ARMOR] = other->client->ps.stats[STAT_MAX_HEALTH] * ent->item->giTag;
 		}
 
-		return adjustRespawnTime(zyk_shield_respawn_time.integer, ent->item->giType, ent->item->giTag);
+		return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
 	}
 	else
 	{
@@ -2690,6 +2760,67 @@ int Pickup_Armor( gentity_t *ent, gentity_t *other )
 }
 
 //======================================================================
+
+/*
+===============
+G_ItemMoveHome
+
+GalaxyRP fix: [Items] puts a map item that Force Push/Pull moved back on its spot. Split out of
+RespawnItem so G_ReturnPushedItem can share it, and taught about suspended items: those were given
+TR_GRAVITY like any other and dropped to the floor the first time they came back. A suspended item is
+put back stationary, standing on the world (G_RunItem turns an item with no ground entity back into a
+falling one), and compared on height too, since a straight pull down moves it on z only. Everything
+else keeps the old rule: compared on x and y, and let fall from its spawn point to the floor.
+===============
+*/
+static qboolean G_ItemMoveHome( gentity_t *ent )
+{
+	const qboolean suspended = ( ent->spawnflags & ITMSF_SUSPEND ) ? qtrue : qfalse;
+
+	if ( ent->r.currentOrigin[0] == ent->s.origin[0] && ent->r.currentOrigin[1] == ent->s.origin[1]
+		&& ( !suspended || ent->r.currentOrigin[2] == ent->s.origin[2] ) )
+	{
+		return qfalse; // zyk: already home
+	}
+
+	G_SetOrigin( ent, ent->s.origin );
+
+	if ( suspended )
+	{
+		ent->s.groundEntityNum = ENTITYNUM_WORLD;
+	}
+	else
+	{
+		ent->s.pos.trType = TR_GRAVITY;
+		ent->s.pos.trTime = level.time;
+	}
+
+	return qtrue;
+}
+
+/*
+===============
+G_ReturnPushedItem
+
+GalaxyRP fix: [Items] think for a map item Force Push/Pull moved and nobody picked up: back to its
+spot after G_ItemPushReturnTime. The push used to set RespawnItem for this, which for an item in a
+"team" group picks a RANDOM member to bring back -- so the pushed one could stay where it was pushed
+while another appeared. This moves only this item. If someone picks it up first, Touch_Item replaces
+this think with RespawnItem, which brings it home when it respawns.
+===============
+*/
+void G_ReturnPushedItem( gentity_t *ent )
+{
+	ent->nextthink = 0;
+
+	if ( !G_ItemMoveHome( ent ) )
+	{
+		return; // zyk: pushed, but it came to rest on its own spot
+	}
+
+	trap->LinkEntity( (sharedEntity_t *)ent );
+	G_AddEvent( ent, EV_ITEM_RESPAWN, 0 ); // zyk: the respawn effect, so players see it return
+}
 
 /*
 ===============
@@ -2717,12 +2848,8 @@ void RespawnItem( gentity_t *ent ) {
 			;
 	}
 
-	if (ent->r.currentOrigin[0] != ent->s.origin[0] || ent->r.currentOrigin[1] != ent->s.origin[1])
-	{ // zyk: if a player pushed/pulled this item, make it return to its default origin
-		G_SetOrigin(ent, ent->s.origin);
-		ent->s.pos.trType = TR_GRAVITY;
-		ent->s.pos.trTime = level.time;
-	}
+	// zyk: if a player pushed/pulled this item, make it return to its default origin
+	(void)G_ItemMoveHome(ent);
 
 	ent->r.contents = CONTENTS_TRIGGER;
 	//ent->s.eFlags &= ~EF_NODRAW;

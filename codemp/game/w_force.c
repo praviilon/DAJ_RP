@@ -4277,6 +4277,18 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					continue;
 				}
 
+				// GalaxyRP fix: [Items] only an item someone could pick up right now. A taken map item is
+				// still an entity -- hidden, or a weapon's see-through placeholder, with no contents --
+				// waiting on RespawnItem, and pushing it used to overwrite that timer with the push one,
+				// so a push could bring an item back early or hold it back late. The contents test also
+				// skips an item that has not finished spawning (FinishSpawningItem sets them).
+				if (!push_list[x]->item ||
+					(push_list[x]->s.eFlags & (EF_NODRAW | EF_ITEMPLACEHOLDER)) ||
+					!(push_list[x]->r.contents & CONTENTS_TRIGGER))
+				{
+					continue;
+				}
+
 				// zyk: it must be the current origin, or the pushDir will use the original origin
 				VectorCopy(push_list[x]->r.currentOrigin, thispush_org);
 
@@ -4314,23 +4326,22 @@ void ForceThrow( gentity_t *self, qboolean pull )
 				push_list[x]->s.angles[PITCH] = 0;
 
 				push_list[x]->physicsObject = qtrue;
-				if (push_list[x]->item)
+
+				// GalaxyRP fix: [Items] a map item goes back to its spot after G_ItemPushReturnTime -- the
+				// same category time a pickup gets (g_adaptRespawn, the team-FFA weapon time and the
+				// thermal/trip mine/det pack rule included), or the map's own "wait" -- through
+				// G_ReturnPushedItem, which moves only this item. This used to be the raw category cvar
+				// (60s for powerups) and RespawnItem.
+				//
+				// A DROPPED item keeps its own think: the G_FreeEntity LaunchItem gave it (5 minutes). This
+				// used to replace that with the respawn one, and a dropped item has no spawn spot -- its
+				// s.origin was never set -- so it was sent to the map's 0 0 0 and then kept there for good,
+				// an entity that was never freed.
+				if (!(push_list[x]->flags & FL_DROPPED_ITEM))
 				{
-					if (push_list[x]->item->giType == IT_WEAPON)
-						push_list[x]->nextthink = level.time + g_weaponRespawn.integer * 1000;
-					else if (push_list[x]->item->giType == IT_AMMO)
-						push_list[x]->nextthink = level.time + zyk_ammo_respawn_time.integer * 1000;
-					else if (push_list[x]->item->giType == IT_HOLDABLE)
-						push_list[x]->nextthink = level.time + zyk_holdable_item_respawn_time.integer * 1000;
-					else if (push_list[x]->item->giType == IT_ARMOR)
-						push_list[x]->nextthink = level.time +zyk_shield_respawn_time.integer * 1000;
-					else if (push_list[x]->item->giType == IT_HEALTH)
-						push_list[x]->nextthink = level.time + zyk_health_respawn_time.integer * 1000;
-					else
-						push_list[x]->nextthink = level.time + 60 * 1000;
-						
+					push_list[x]->nextthink = level.time + G_ItemPushReturnTime(push_list[x]) * 1000;
+					push_list[x]->think = G_ReturnPushedItem;
 				}
-				push_list[x]->think = RespawnItem;
 
 				trap->LinkEntity ((sharedEntity_t *)push_list[x]);
 			}
@@ -5863,8 +5874,7 @@ static gentity_t *zyk_sense_health_find_target(gentity_t *self)
 
 // zyk: builds the "sensehp" command for this target at this skill level. Arguments, in order:
 // level, health, max health, shield, max shield, force, max force, type (0 not logged in,
-// 1 logged-in player, 2 NPC), "name" -- -1 (or an empty name) for anything the level does not show,
-// max shield -1 also when the target has no known maximum. The name goes last, bounded, with any
+// 1 logged-in player, 2 NPC), "name" -- -1 (or an empty name) for anything the level does not show. The name goes last, bounded, with any
 // double quote turned into a single one: a player name may contain '"', which would end the quoted
 // argument early on the client.
 static void zyk_sense_health_command(const gentity_t *target, int level, char *out, int out_size)
@@ -5898,6 +5908,12 @@ static void zyk_sense_health_command(const gentity_t *target, int level, char *o
 		force = target->client->ps.fd.forcePower;
 		max_force = target->client->ps.fd.forcePowerMax;
 
+		// GalaxyRP fix: [Skills] the shield ceiling everyone is actually held to, published every frame
+		// by G_PublishMaxArmor(): max_rpg_shield for a logged-in player, max health for anyone else,
+		// NPCs included. The earlier rework sent no maximum for NPCs and logged-out players, on the
+		// mistaken belief they had none.
+		max_shield = target->client->ps.stats[STAT_MAX_ARMOR];
+
 		if (target->NPC)
 		{
 			type = 2;
@@ -5905,7 +5921,6 @@ static void zyk_sense_health_command(const gentity_t *target, int level, char *o
 		else if (target->client->sess.amrpgmode == 2)
 		{
 			type = 1;
-			max_shield = target->client->pers.max_rpg_shield;
 		}
 		else
 		{

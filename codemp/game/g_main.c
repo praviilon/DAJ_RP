@@ -9577,6 +9577,12 @@ void G_RunFrame( int levelTime ) {
 		else if (ent->s.eType == ET_NPC)
 		{
 			int j;
+
+			// GalaxyRP fix: [Shield] NPCs never reach ClientEndFrame(), which published their shield
+			// ceiling -- so it stayed 0 and BG_CanItemBeGrabbed() refused them every shield. Before they
+			// think (and so move and touch items) below.
+			G_PublishMaxArmor( ent );
+
 			// turn off any expired powerups
 			for ( j = 0 ; j < MAX_POWERUPS ; j++ ) {
 				if ( ent->client->ps.powerups[ j ] < level.time ) {
