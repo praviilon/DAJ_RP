@@ -1095,6 +1095,25 @@ Ghoul2 Insert End
 	// zeroed in CG_Init and nothing re-announced it.
 	int ally1;
 	int ally2;
+
+	// GalaxyRP: [Skills] the last Sense Health reading, from the "sensehp" server command (see
+	// CG_SenseHealth_f and CG_DrawSenseHealth). time is cg.time when it arrived, 0 for none; -1 in
+	// any value means the sensing player's skill level does not show it (maxShield also when the
+	// target has no known maximum). type: 0 not logged in, 1 logged-in player, 2 NPC, -1 hidden.
+	struct {
+		int		time;
+		int		level;
+		int		health, maxHealth;
+		int		shield, maxShield;
+		int		force, maxForce;
+		int		type;
+		char	name[64];
+	} senseHealth;
+
+	// GalaxyRP: [Skills] where CG_DrawCrosshair last drew the crosshair (centre x, and y just below
+	// it and any bars it drew underneath), and on which cg.time -- the Sense Health readout sits there
+	int crosshairAnchorTime;
+	float crosshairAnchorX, crosshairAnchorY;
 } cg_t;
 
 #define MAX_TICS	14

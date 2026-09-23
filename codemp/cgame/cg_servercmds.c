@@ -1720,6 +1720,37 @@ static void CG_AllyUpdate_f(void)
 	cg.ally2 = atoi(CG_Argv(2));
 }
 
+// GalaxyRP: [Skills] a Sense Health reading: level, health, max health, shield, max shield, force,
+// max force, type, "name" -- see zyk_sense_health_command() in w_force.c. The server sends it every
+// half second while the skill has a target; CG_DrawSenseHealth shows it under the crosshair and lets
+// it fade when they stop. Anything short or out of range is ignored rather than half-applied.
+static void CG_SenseHealth_f(void)
+{
+	int level;
+
+	if (trap->Cmd_Argc() < 10)
+	{
+		return;
+	}
+
+	level = atoi(CG_Argv(1));
+	if (level < 1 || level > 3)
+	{
+		return;
+	}
+
+	cg.senseHealth.level = level;
+	cg.senseHealth.health = atoi(CG_Argv(2));
+	cg.senseHealth.maxHealth = atoi(CG_Argv(3));
+	cg.senseHealth.shield = atoi(CG_Argv(4));
+	cg.senseHealth.maxShield = atoi(CG_Argv(5));
+	cg.senseHealth.force = atoi(CG_Argv(6));
+	cg.senseHealth.maxForce = atoi(CG_Argv(7));
+	cg.senseHealth.type = atoi(CG_Argv(8));
+	Q_strncpyz(cg.senseHealth.name, CG_Argv(9), sizeof(cg.senseHealth.name));
+	cg.senseHealth.time = cg.time ? cg.time : 1;
+}
+
 // GalaxyRP: [Radar] one place knows the ally1/ally2 split on this side, mirroring
 // zyk_ally_bit_set() in g_main.c. Out-of-range slots answer "not an ally" rather than indexing
 // anything.
@@ -2029,6 +2060,7 @@ static serverCommand_t	commands[] = {
 	{ "sb",					CG_SiegeBriefingDisplay_f },
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },
+	{ "sensehp",			CG_SenseHealth_f },	// GalaxyRP: [Skills] Sense Health
 	{ "spc",				CG_SiegeProfileMenu_f },
 	{ "supdateally",		CG_AllyUpdate_f },	// GalaxyRP: [Radar]
 	{ "supdateloggedin",	CG_LoggedInUpdate_f },	// GalaxyRP: [Profile UI]

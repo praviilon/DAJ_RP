@@ -5761,61 +5761,174 @@ qboolean G_SpecialRollGetup(gentity_t *self)
 	return rolled;
 }
 
-void sense_health_info(gentity_t *self, gentity_t *target)
+// GalaxyRP fix: [Skills] Sense Health, reworked.
+//
+// Targeting: the skill used to read ps.lookTarget, which is not "who you are looking at" but a side
+// product of the saber auto-block routine (WP_SaberStartMissileBlockCheck): the nearest visible
+// player/NPC within 256 units, and only on frames that routine got far enough to pick one -- never
+// while your weapon was busy, while knocked down, or at all with a saber that cannot actively block.
+// It also went unchecked from one frame to the next. The skill now picks its own target: whoever is
+// under the crosshair within ZYK_SENSE_HEALTH_AIM_RANGE, else the nearest visible one within
+// ZYK_SENSE_HEALTH_NEAR_RANGE (what it effectively did before). ps.lookTarget itself is untouched --
+// head turning and /npc still use it.
+//
+// Display: it used to be a "cp" -- the big centre-print font, 30% down the screen, held for
+// cg_centerTime (3s) and overwriting every other centre print twice a second while Sight was on.
+// It is now a "sensehp" server command that the mod's cgame draws small, under the crosshair
+// (CG_DrawSenseHealth in cg_draw.c). Only the values the sensing player's skill level shows are
+// sent; the rest go out as -1, so a modified client cannot read more than its level allows.
+#define ZYK_SENSE_HEALTH_AIM_RANGE		1024
+#define ZYK_SENSE_HEALTH_NEAR_RANGE		256
+#define ZYK_SENSE_HEALTH_NAME_LENGTH	64
+
+// zyk: who Sense Health may report on -- the set the old look target allowed, now checked every time
+static qboolean zyk_sense_health_valid_target(const gentity_t *self, const gentity_t *target)
 {
-	int client_health = 0;
-	int client_armor = 0;
-	int client_max_armor = 0;
-	char client_name[64];
-	int magic_power = 0;
-	int max_magic_power = 0;
-	char player_type[32];
-	int skill_number = 35; // zyk: skill index of Sense Health skill
+	if (!target || target == self || !target->inuse || !target->client)
+		return qfalse;
 
-	if (!target || !target->client)
-	{ // zyk: for some reason, this guy has no client structure. Happens to quest_ragnos npc
-		return;
+	if (target->s.eType != ET_PLAYER && target->s.eType != ET_NPC)
+		return qfalse;
+
+	if (target->s.eType == ET_NPC && target->s.NPC_class == CLASS_VEHICLE)
+		return qfalse; // zyk: vehicles are not sensed, as before
+
+	if (target->client->sess.sessionTeam == TEAM_SPECTATOR || (target->client->ps.pm_flags & PMF_FOLLOW))
+		return qfalse;
+
+	if (target->health <= 0)
+		return qfalse;
+
+	return qtrue;
+}
+
+// zyk: the one under the crosshair, else the nearest one in sight. NULL if there is nobody.
+static gentity_t *zyk_sense_health_find_target(gentity_t *self)
+{
+	int entity_list[MAX_GENTITIES];
+	int num_listed = 0;
+	int i = 0;
+	vec3_t eyes, forward, end, mins, maxs, diff;
+	trace_t tr;
+	gentity_t *best = NULL;
+	float best_dist = 0.0f;
+
+	VectorCopy(self->client->ps.origin, eyes);
+	eyes[2] += self->client->ps.viewheight;
+
+	AngleVectors(self->client->ps.viewangles, forward, NULL, NULL);
+	VectorMA(eyes, ZYK_SENSE_HEALTH_AIM_RANGE, forward, end);
+
+	trap->Trace(&tr, eyes, NULL, NULL, end, self->s.number, MASK_SHOT, qfalse, 0, 0);
+
+	if (tr.entityNum >= 0 && tr.entityNum < ENTITYNUM_WORLD && zyk_sense_health_valid_target(self, &g_entities[tr.entityNum]))
+	{
+		return &g_entities[tr.entityNum];
 	}
 
-	strcpy(player_type, "Normal Player"); // zyk: by default, consider the target as player that is not logged in his account
+	for (i = 0; i < 3; i++)
+	{
+		mins[i] = self->r.currentOrigin[i] - ZYK_SENSE_HEALTH_NEAR_RANGE;
+		maxs[i] = self->r.currentOrigin[i] + ZYK_SENSE_HEALTH_NEAR_RANGE;
+	}
 
-	client_health = target->health;
-	client_armor = target->client->ps.stats[STAT_ARMOR];
-	client_max_armor = target->client->ps.stats[STAT_MAX_HEALTH];
+	num_listed = trap->EntitiesInBox(mins, maxs, entity_list, MAX_GENTITIES);
 
-	if (target->NPC)
+	for (i = 0; i < num_listed; i++)
 	{
-		strcpy(client_name, target->NPC_type);
+		gentity_t *ent = &g_entities[entity_list[i]];
+		float dist = 0.0f;
+
+		if (!zyk_sense_health_valid_target(self, ent))
+			continue;
+
+		VectorSubtract(self->client->ps.origin, ent->client->ps.origin, diff);
+		dist = VectorLength(diff);
+
+		if (best && dist >= best_dist)
+			continue;
+
+		// zyk: in sight, the test the old look target used
+		trap->Trace(&tr, eyes, NULL, NULL, ent->client->ps.origin, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+
+		if (tr.fraction == 1.0f || tr.entityNum == ent->s.number)
+		{
+			best = ent;
+			best_dist = dist;
+		}
 	}
-	else
+
+	return best;
+}
+
+// zyk: builds the "sensehp" command for this target at this skill level. Arguments, in order:
+// level, health, max health, shield, max shield, force, max force, type (0 not logged in,
+// 1 logged-in player, 2 NPC), "name" -- -1 (or an empty name) for anything the level does not show,
+// max shield -1 also when the target has no known maximum. The name goes last, bounded, with any
+// double quote turned into a single one: a player name may contain '"', which would end the quoted
+// argument early on the client.
+static void zyk_sense_health_command(const gentity_t *target, int level, char *out, int out_size)
+{
+	char name[ZYK_SENSE_HEALTH_NAME_LENGTH];
+	int health = target->health > 0 ? target->health : 0;
+	int max_health = -1, shield = -1, max_shield = -1, force = -1, max_force = -1, type = -1;
+	int i = 0;
+
+	name[0] = '\0';
+
+	if (level > 3)
+		level = 3;
+
+	if (level >= 2)
 	{
-		strcpy(client_name, target->client->pers.netname);
+		Q_strncpyz(name, (target->NPC && target->NPC_type) ? target->NPC_type : target->client->pers.netname, sizeof(name));
+
+		for (i = 0; name[i]; i++)
+		{
+			if (name[i] == '"')
+				name[i] = '\'';
+		}
+
+		shield = target->client->ps.stats[STAT_ARMOR];
 	}
-	
-	if (self->client->pers.skill_levels[skill_number] == 1)
+
+	if (level >= 3)
 	{
-		trap->SendServerCommand(self->s.number, va("cp \"^1%d\n\"", client_health));
-	}
-	else if (self->client->pers.skill_levels[skill_number] == 2)
-	{
-		trap->SendServerCommand(self->s.number, va("cp \"%s\n\n^1%d^3/^2%d\n\"", client_name, client_health, client_armor));
-	}
-	else if (self->client->pers.skill_levels[skill_number] == 3)
-	{
+		max_health = target->client->ps.stats[STAT_MAX_HEALTH];
+		force = target->client->ps.fd.forcePower;
+		max_force = target->client->ps.fd.forcePowerMax;
+
 		if (target->NPC)
 		{
-			strcpy(player_type, "NPC");
+			type = 2;
 		}
 		else if (target->client->sess.amrpgmode == 2)
 		{
-			strcpy(player_type, "Player");
-
-			// zyk: calculating the max armor of this player
-			client_max_armor = target->client->pers.max_rpg_shield;
+			type = 1;
+			max_shield = target->client->pers.max_rpg_shield;
 		}
-
-		trap->SendServerCommand(self->s.number, va("cp \"%s\n^1%d^3/^1%d  ^2%d^3/^2%d\n^5%d^3/^5%d \n^7%s\n\"", client_name, client_health, target->client->ps.stats[STAT_MAX_HEALTH], client_armor, client_max_armor, target->client->ps.fd.forcePower, target->client->ps.fd.forcePowerMax, player_type));
+		else
+		{
+			type = 0;
+		}
 	}
+
+	Com_sprintf(out, out_size, "sensehp %d %d %d %d %d %d %d %d \"%s\"",
+		level, health, max_health, shield, max_shield, force, max_force, type, name);
+}
+
+void sense_health_info(gentity_t *self, gentity_t *target)
+{
+	char command[MAX_STRING_CHARS];
+	const int level = self->client->pers.skill_levels[35]; // zyk: skill index of Sense Health skill
+
+	if (level < 1 || !zyk_sense_health_valid_target(self, target))
+	{
+		return;
+	}
+
+	zyk_sense_health_command(target, level, command, sizeof(command));
+	trap->SendServerCommand(self->s.number, command);
 }
 
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
@@ -6285,10 +6398,11 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 			// zyk: using Sense Health skill of RPG Mode
 			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, rpg_class==8 disjunct always false
 			else if (i == FP_SEE && self->client->sess.amrpgmode == 2 && (self->client->pers.skill_levels[35] > 0) &&
-					 self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) && self->client->pers.sense_health_timer < level.time && self->client->ps.hasLookTarget)
+					 self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) && self->client->pers.sense_health_timer < level.time)
 			{
-				// zyk: if you are looking at someone (player or npc), this will be the client id
-				sense_health_info(self, &g_entities[self->client->ps.lookTarget]);
+				// GalaxyRP fix: [Skills] the skill picks its own target now (crosshair, else nearest in
+				// sight) instead of ps.lookTarget -- see zyk_sense_health_find_target() above
+				sense_health_info(self, zyk_sense_health_find_target(self));
 
 				// GalaxyRP (Alex): [Force Powers] Update health display every half a second
 				self->client->pers.sense_health_timer = level.time + 500;

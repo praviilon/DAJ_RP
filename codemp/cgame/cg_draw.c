@@ -5570,6 +5570,12 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 		}
 	}
 
+	// GalaxyRP: [Skills] remember where the crosshair went (it follows the aim point with a dynamic
+	// crosshair, and any health bars pushed chY down), so the Sense Health readout can sit under it
+	cg.crosshairAnchorTime = cg.time;
+	cg.crosshairAnchorX = chX + w * 0.5f;
+	cg.crosshairAnchorY = chY + h;
+
 	if (cg.predictedPlayerState.hackingTime)
 	{ //hacking something
 		CG_DrawHaqrBar(chX, chY, w, h);
@@ -8428,6 +8434,79 @@ static void CG_DrawUseHint( void )
 	CG_DrawPic( 520, 296, 48, 48, cgs.media.useableHintShader );
 }
 
+// GalaxyRP: [Skills] the Sense Health readout -- the last "sensehp" reading (CG_SenseHealth_f),
+// drawn in the chat font just under the crosshair. It replaced a centre print, which used the big
+// font 30% down the screen, stayed for cg_centerTime and overwrote every other centre print while
+// the skill was on. Fully visible for SENSE_HEALTH_HOLD ms after each reading (the server sends one
+// every 500ms while there is a target), then fades out over SENSE_HEALTH_FADE ms.
+#define SENSE_HEALTH_HOLD		700
+#define SENSE_HEALTH_FADE		300
+#define SENSE_HEALTH_SCALE		0.65f	// CG_ChatBox_DrawStrings' fontScale
+#define SENSE_HEALTH_GAP		6.0f
+
+static void CG_DrawSenseHealth( void ) {
+	const int age = cg.time - cg.senseHealth.time;
+	vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	char lines[2][256];
+	int numLines = 0, i;
+	float x, y;
+
+	if ( !cg.senseHealth.time || age < 0 || age >= SENSE_HEALTH_HOLD + SENSE_HEALTH_FADE ) {
+		return; // nothing, too old -- or from before a map restart set cg.time back
+	}
+
+	if ( age > SENSE_HEALTH_HOLD ) {
+		color[3] = 1.0f - (float)(age - SENSE_HEALTH_HOLD) / SENSE_HEALTH_FADE;
+	}
+
+	if ( cg.senseHealth.level >= 2 ) {
+		static const char *types[3] = { "Normal Player", "Player", "NPC" };
+
+		if ( cg.senseHealth.level >= 3 && cg.senseHealth.type >= 0 && cg.senseHealth.type <= 2 ) {
+			Com_sprintf( lines[numLines++], sizeof( lines[0] ), "%s^7  (%s)", cg.senseHealth.name, types[cg.senseHealth.type] );
+		}
+		else {
+			Com_sprintf( lines[numLines++], sizeof( lines[0] ), "%s", cg.senseHealth.name );
+		}
+	}
+
+	if ( cg.senseHealth.level == 1 ) {
+		Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d", cg.senseHealth.health );
+	}
+	else if ( cg.senseHealth.level == 2 ) {
+		Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d   ^2SH %d", cg.senseHealth.health, cg.senseHealth.shield );
+	}
+	else {
+		char shield[32];
+
+		if ( cg.senseHealth.maxShield >= 0 ) {
+			Com_sprintf( shield, sizeof( shield ), "%d/%d", cg.senseHealth.shield, cg.senseHealth.maxShield );
+		}
+		else {
+			Com_sprintf( shield, sizeof( shield ), "%d", cg.senseHealth.shield );
+		}
+
+		Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d/%d   ^2SH %s   ^5FP %d/%d",
+			cg.senseHealth.health, cg.senseHealth.maxHealth, shield, cg.senseHealth.force, cg.senseHealth.maxForce );
+	}
+
+	if ( cg.crosshairAnchorTime == cg.time ) {
+		x = cg.crosshairAnchorX;
+		y = cg.crosshairAnchorY + SENSE_HEALTH_GAP;
+	}
+	else { // no crosshair drawn this frame (cg_drawCrosshair 0, scoped, ...): where it would be
+		x = 320.0f + cg_crosshairX.integer;
+		y = 240.0f + cg_crosshairY.integer + cg_crosshairSize.value * 0.5f + SENSE_HEALTH_GAP;
+	}
+
+	for ( i = 0; i < numLines; i++ ) {
+		const float w = CG_Text_Width( lines[i], SENSE_HEALTH_SCALE, FONT_SMALL );
+
+		CG_Text_Paint( x - w * 0.5f, y, SENSE_HEALTH_SCALE, color, lines[i], 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_SMALL );
+		y += CHATBOX_FONT_HEIGHT * SENSE_HEALTH_SCALE;
+	}
+}
+
 static void CG_Draw2D( void ) {
 	float			inTime = cg.invenSelectTime+WEAPON_SELECT_TIME;
 	float			wpTime = cg.weaponSelectTime+WEAPON_SELECT_TIME;
@@ -8865,6 +8944,7 @@ static void CG_Draw2D( void ) {
 	// don't draw center string if scoreboard is up
 	cg.scoreBoardShowing = CG_DrawScoreboard();
 	if ( !cg.scoreBoardShowing) {
+		CG_DrawSenseHealth();	// GalaxyRP: [Skills]
 		CG_DrawCenterString();
 	}
 
