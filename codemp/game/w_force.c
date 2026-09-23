@@ -5792,7 +5792,15 @@ qboolean G_SpecialRollGetup(gentity_t *self)
 #define ZYK_SENSE_HEALTH_NEAR_RANGE		256
 #define ZYK_SENSE_HEALTH_NAME_LENGTH	64
 
-// zyk: who Sense Health may report on -- the set the old look target allowed, now checked every time
+// GalaxyRP: [Skills] a vehicle Sense Health can read: a live vehicle NPC with its vehicle data
+static qboolean zyk_sense_health_is_vehicle(const gentity_t *ent)
+{
+	return (ent->s.eType == ET_NPC && ent->s.NPC_class == CLASS_VEHICLE) ? qtrue : qfalse;
+}
+
+// zyk: who Sense Health may report on, checked every time. GalaxyRP: [Skills] vehicles included now
+// (they were excluded, as the old saber look target excluded them) -- but never the vehicle the
+// sensing player is riding, and only with their vehicle data in place.
 static qboolean zyk_sense_health_valid_target(const gentity_t *self, const gentity_t *target)
 {
 	if (!target || target == self || !target->inuse || !target->client)
@@ -5801,8 +5809,14 @@ static qboolean zyk_sense_health_valid_target(const gentity_t *self, const genti
 	if (target->s.eType != ET_PLAYER && target->s.eType != ET_NPC)
 		return qfalse;
 
-	if (target->s.eType == ET_NPC && target->s.NPC_class == CLASS_VEHICLE)
-		return qfalse; // zyk: vehicles are not sensed, as before
+	if (zyk_sense_health_is_vehicle(target))
+	{
+		if (!target->m_pVehicle || !target->m_pVehicle->m_pVehicleInfo)
+			return qfalse;
+
+		if (self->client->ps.m_iVehicleNum == target->s.number)
+			return qfalse; // zyk: your own vehicle
+	}
 
 	if (target->client->sess.sessionTeam == TEAM_SPECTATOR || (target->client->ps.pm_flags & PMF_FOLLOW))
 		return qfalse;
@@ -5813,7 +5827,31 @@ static qboolean zyk_sense_health_valid_target(const gentity_t *self, const genti
 	return qtrue;
 }
 
-// zyk: the one under the crosshair, else the nearest one in sight. NULL if there is nobody.
+// GalaxyRP: [Skills] someone aboard a vehicle -- its pilot, a passenger, or the droid it carries. The
+// nearby search leaves them out: they sit inside the ship (a fighter's are hidden), so standing next to
+// an X-wing would otherwise show its droid or pilot rather than the ship.
+static qboolean zyk_sense_health_is_aboard(const gentity_t *ent)
+{
+	return (!zyk_sense_health_is_vehicle(ent) && (ent->client->ps.m_iVehicleNum || ent->s.m_iVehicleNum)) ? qtrue : qfalse;
+}
+
+// zyk: a trace from the sensing player's eyes that looks past their own vehicle. The first trace skips
+// only the player; if it stops on the vehicle they are riding (always, from inside a fighter), it is
+// run again skipping the vehicle instead -- the rider of a fighter is not solid, so nothing is lost.
+static void zyk_sense_health_trace(gentity_t *self, trace_t *tr, vec3_t start, vec3_t end, int mask)
+{
+	const int own_vehicle = self->client->ps.m_iVehicleNum;
+
+	trap->Trace(tr, start, NULL, NULL, end, self->s.number, mask, qfalse, 0, 0);
+
+	if (own_vehicle > 0 && own_vehicle < ENTITYNUM_WORLD && tr->entityNum == own_vehicle)
+	{
+		trap->Trace(tr, start, NULL, NULL, end, own_vehicle, mask, qfalse, 0, 0);
+	}
+}
+
+// zyk: whoever is under the crosshair; else, within reach and in sight, the nearest player, or if
+// there is none the nearest NPC, or if there is none the nearest vehicle. NULL if there is nobody.
 static gentity_t *zyk_sense_health_find_target(gentity_t *self)
 {
 	int entity_list[MAX_GENTITIES];
@@ -5821,8 +5859,8 @@ static gentity_t *zyk_sense_health_find_target(gentity_t *self)
 	int i = 0;
 	vec3_t eyes, forward, end, mins, maxs, diff;
 	trace_t tr;
-	gentity_t *best = NULL;
-	float best_dist = 0.0f;
+	gentity_t *best[3] = { NULL, NULL, NULL }; // zyk: nearest player, NPC, vehicle -- in that order of preference
+	float best_dist[3] = { 0.0f, 0.0f, 0.0f };
 
 	VectorCopy(self->client->ps.origin, eyes);
 	eyes[2] += self->client->ps.viewheight;
@@ -5830,7 +5868,7 @@ static gentity_t *zyk_sense_health_find_target(gentity_t *self)
 	AngleVectors(self->client->ps.viewangles, forward, NULL, NULL);
 	VectorMA(eyes, ZYK_SENSE_HEALTH_AIM_RANGE, forward, end);
 
-	trap->Trace(&tr, eyes, NULL, NULL, end, self->s.number, MASK_SHOT, qfalse, 0, 0);
+	zyk_sense_health_trace(self, &tr, eyes, end, MASK_SHOT);
 
 	if (tr.entityNum >= 0 && tr.entityNum < ENTITYNUM_WORLD && zyk_sense_health_valid_target(self, &g_entities[tr.entityNum]))
 	{
@@ -5849,32 +5887,37 @@ static gentity_t *zyk_sense_health_find_target(gentity_t *self)
 	{
 		gentity_t *ent = &g_entities[entity_list[i]];
 		float dist = 0.0f;
+		int kind = 0;
 
-		if (!zyk_sense_health_valid_target(self, ent))
+		if (!zyk_sense_health_valid_target(self, ent) || zyk_sense_health_is_aboard(ent))
 			continue;
+
+		kind = zyk_sense_health_is_vehicle(ent) ? 2 : (ent->s.eType == ET_NPC ? 1 : 0);
 
 		VectorSubtract(self->client->ps.origin, ent->client->ps.origin, diff);
 		dist = VectorLength(diff);
 
-		if (best && dist >= best_dist)
+		if (best[kind] && dist >= best_dist[kind])
 			continue;
 
 		// zyk: in sight, the test the old look target used
-		trap->Trace(&tr, eyes, NULL, NULL, ent->client->ps.origin, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+		zyk_sense_health_trace(self, &tr, eyes, ent->client->ps.origin, MASK_PLAYERSOLID);
 
 		if (tr.fraction == 1.0f || tr.entityNum == ent->s.number)
 		{
-			best = ent;
-			best_dist = dist;
+			best[kind] = ent;
+			best_dist[kind] = dist;
 		}
 	}
 
-	return best;
+	return best[0] ? best[0] : (best[1] ? best[1] : best[2]);
 }
 
 // zyk: builds the "sensehp" command for this target at this skill level. Arguments, in order:
 // level, health, max health, shield, max shield, force, max force, type (0 not logged in,
-// 1 logged-in player, 2 NPC), "name" -- -1 (or an empty name) for anything the level does not show. The name goes last, bounded, with any
+// 1 logged-in player, 2 NPC, 3 empty vehicle, 4 occupied vehicle), "name" -- -1 (or an empty name)
+// for anything the level does not show. For a vehicle, health is its hull and shield its shields
+// (the maxima from its .veh data), and force is never shown. The name goes last, bounded, with any
 // double quote turned into a single one: a player name may contain '"', which would end the quoted
 // argument early on the client.
 static void zyk_sense_health_command(const gentity_t *target, int level, char *out, int out_size)
@@ -5902,7 +5945,15 @@ static void zyk_sense_health_command(const gentity_t *target, int level, char *o
 		shield = target->client->ps.stats[STAT_ARMOR];
 	}
 
-	if (level >= 3)
+	if (level >= 3 && zyk_sense_health_is_vehicle(target))
+	{ // GalaxyRP: [Skills] a vehicle: hull, shields, empty or occupied -- no Force
+		const Vehicle_t *veh = target->m_pVehicle;
+
+		max_health = target->client->ps.stats[STAT_MAX_HEALTH];
+		max_shield = veh->m_pVehicleInfo->shields;
+		type = (veh->m_pPilot || veh->m_iNumPassengers > 0) ? 4 : 3;
+	}
+	else if (level >= 3)
 	{
 		max_health = target->client->ps.stats[STAT_MAX_HEALTH];
 		force = target->client->ps.fd.forcePower;

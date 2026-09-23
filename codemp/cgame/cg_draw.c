@@ -8460,9 +8460,10 @@ static void CG_DrawSenseHealth( void ) {
 	}
 
 	if ( cg.senseHealth.level >= 2 ) {
-		static const char *types[3] = { "Normal Player", "Player", "NPC" };
+		// GalaxyRP: [Skills] 3 and 4 are vehicles, empty or occupied (anyone aboard, player or NPC)
+		static const char *types[5] = { "Normal Player", "Player", "NPC", "Vehicle, empty", "Vehicle, occupied" };
 
-		if ( cg.senseHealth.level >= 3 && cg.senseHealth.type >= 0 && cg.senseHealth.type <= 2 ) {
+		if ( cg.senseHealth.level >= 3 && cg.senseHealth.type >= 0 && cg.senseHealth.type <= 4 ) {
 			Com_sprintf( lines[numLines++], sizeof( lines[0] ), "%s^7  (%s)", cg.senseHealth.name, types[cg.senseHealth.type] );
 		}
 		else {
@@ -8486,8 +8487,14 @@ static void CG_DrawSenseHealth( void ) {
 			Com_sprintf( shield, sizeof( shield ), "%d", cg.senseHealth.shield );
 		}
 
-		Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d/%d   ^2SH %s   ^5FP %d/%d",
-			cg.senseHealth.health, cg.senseHealth.maxHealth, shield, cg.senseHealth.force, cg.senseHealth.maxForce );
+		if ( cg.senseHealth.type >= 3 ) { // GalaxyRP: [Skills] a vehicle: hull and shields, no Force
+			Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d/%d   ^2SH %s",
+				cg.senseHealth.health, cg.senseHealth.maxHealth, shield );
+		}
+		else {
+			Com_sprintf( lines[numLines++], sizeof( lines[0] ), "^1HP %d/%d   ^2SH %s   ^5FP %d/%d",
+				cg.senseHealth.health, cg.senseHealth.maxHealth, shield, cg.senseHealth.force, cg.senseHealth.maxForce );
+		}
 	}
 
 	if ( cg.crosshairAnchorTime == cg.time ) {
