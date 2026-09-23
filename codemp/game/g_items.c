@@ -3662,6 +3662,21 @@ be on an entity that hasn't spawned yet.
 void G_SpawnItem (gentity_t *ent, gitem_t *item) {
 	int wDisable = 0;
 
+	// GalaxyRP fix: [Items] a placed weapon_melee spawns as a stun baton. The two items share one world
+	// model (baton_w.glm), so a melee pickup looks exactly like a stun baton on its pad -- but every
+	// player always owns melee, and melee has no ammo (AMMO_NONE, whose cap is 0), so
+	// BG_CanItemBeGrabbed() refused it to everyone, forever: a "stun baton" nobody could pick up. Swap
+	// the item here, before the weapon-disable test below, so g_weaponDisable, g_duelWeaponDisable and
+	// disable_weapon_stun_baton judge the weapon the pickup actually gives. Every placed item comes
+	// through this function (map load, /entadd, /entload, /entedit); /entsave writes the entity's
+	// original spawn strings, not this classname, so a saved preset keeps weapon_melee and is swapped
+	// again on every load.
+	if ( item->giType == IT_WEAPON && item->giTag == WP_MELEE )
+	{
+		item = BG_FindItemForWeapon( WP_STUN_BATON );
+		ent->classname = item->classname;
+	}
+
 	G_SpawnFloat( "random", "0", &ent->random );
 
 	// zyk: this spawnflags allow setting wait with entadd command
