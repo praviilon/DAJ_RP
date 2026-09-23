@@ -96,6 +96,26 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define MAX_NEWS_CHANNELS 16
 #define MAX_NEWS_CHANNEL_LENGTH 32
 
+// GalaxyRP fix: [Attributes] how long a character description set with /attributes may be, and what
+// an empty /attributes "" puts back.
+//
+// The length was not bounded by the mod before; the only limit was the engine's. A default TaystJK
+// server cuts every command argument to 255 characters and strips line breaks from it
+// (sv_filterCommands, via Cmd_Args_Sanitize in the engine), and does so silently -- but that is a
+// server setting, and with it off a description could run to the full 1023 characters trap->Argv()
+// allows. /examine sent the whole thing as one print, which SV_SendServerCommand drops WHOLE past
+// 1022 characters, so a long enough description came out as a header and footer with nothing
+// between them. 255 is the engine's own default, so on a default server nothing a player can type
+// changes; the cap makes it the mod's rule rather than a side effect of a setting. It counts raw
+// characters, colour codes included, because that is how the engine counts. It bounds new
+// descriptions only: a longer one already in the database stays readable in /examine.
+//
+// The default is the text a new character is created with. It is written into two INSERT
+// statements in this file and one in g_main.c as a literal inside the SQL, so it cannot use this
+// constant there; unpar/test_attributes.py checks that all three still match it.
+#define MAX_DESCRIPTION_LENGTH 255
+#define RP_DEFAULT_DESCRIPTION "Nothing to show."
+
 // GalaxyRP fix: [Chat] how many characters of payload a single SendServerCommand may carry.
 // SV_SendServerCommand silently drops the entire message -- not the tail, the whole thing -- once
 // the formatted command passes 1022 characters, and the wrapper around a printed line
@@ -3955,6 +3975,26 @@ static void zyk_db_column_string(char *dest, int dest_size, sqlite3_stmt *stmt, 
 }
 
 /*
+GalaxyRP fix: [Database] the two saber-model columns, read through zyk_db_column_string() above,
+come back empty for a NULL column. Neither select_player_character() nor the login restore expects
+that: both hand the pair straight to update_saber(), and both decide "one saber or two" by comparing
+the second model with "none" -- so an empty second model counted as a second saber with no model at
+all. An empty value is put back to what a row the mod writes itself would hold: saber_1 for the first
+(the saberOneModel column's DEFAULT in InitializeGalaxyRpTables(), g_main.c) and "none" for the
+second (what insert_chars_table_row() and create_new_character() write -- that column's DEFAULT
+is saber_1 too, but "none" is what a character without a second saber actually has). A non-empty
+value is never touched, whatever it says.
+*/
+static void zyk_default_empty_saber_models(char *saber1, int saber1_size, char *saber2, int saber2_size)
+{
+	if (saber1 && saber1_size > 0 && saber1[0] == '\0')
+		Q_strncpyz(saber1, "saber_1", saber1_size);
+
+	if (saber2 && saber2_size > 0 && saber2[0] == '\0')
+		Q_strncpyz(saber2, "none", saber2_size);
+}
+
+/*
 GalaxyRP fix: [Database] print a line of unknown length, splitting it rather than losing it.
 
 display_news() sent a whole news entry as one print, and select_news_channels() sent a whole
@@ -4552,11 +4592,20 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		// back to Accounts.DefaultChar on every save, is what /list shows, and is what the "switched
 		// to" broadcast below prints. select_account_and_default_character_data() -- the login path --
 		// already reads its copy from the row; this brings the /char use path into line with it.
-		Q_strncpyz(ent->client->sess.rpgchar, (const char *)sqlite3_column_text(stmt, 5), sizeof(ent->client->sess.rpgchar));
+		//
+		// GalaxyRP fix: [Database] every TEXT read in this block goes through zyk_db_column_string()
+		// (see its definition, near the news code). Some of these were plain strcpy() with no bound at
+		// all; the rest were Q_strncpyz(), which bounds the length but still dereferences the NULL
+		// that sqlite3_column_text() returns for a NULL column -- Q_strncpyz only assert()s its source,
+		// and asserts are compiled out of a release build. None of these columns is NULL or oversized
+		// in a row the mod wrote itself; a row edited by hand or by another tool is what this guards
+		// against, and the cost of not guarding was the server going down on every /char use of that
+		// character. A normal row reads exactly as before.
+		zyk_db_column_string(ent->client->sess.rpgchar, sizeof(ent->client->sess.rpgchar), stmt, 5);
 		ent->client->pers.skillpoints = sqlite3_column_int(stmt, 6);
-		strcpy(ent->client->pers.description, sqlite3_column_text(stmt, 7));
-		strcpy(displayName, sqlite3_column_text(stmt, 8));
-		strcpy(modelName, sqlite3_column_text(stmt, 9));
+		zyk_db_column_string(ent->client->pers.description, sizeof(ent->client->pers.description), stmt, 7);
+		zyk_db_column_string(displayName, sizeof(displayName), stmt, 8);
+		zyk_db_column_string(modelName, sizeof(modelName), stmt, 9);
 
 		// GalaxyRP (Alex): [XP System] Grab XP value from database.
 		ent->client->pers.xp = sqlite3_column_int(stmt, 10);
@@ -4569,10 +4618,13 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		// check against the value read from the Characters table -- a saber-model name of 30+
 		// characters in the database (whether from a corrupted row or a maliciously edited one)
 		// would overflow the buffer. Q_strncpyz() bounds the copy to the destination's size instead.
-		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 11), sizeof(saber1Model));
+		// GalaxyRP fix: [Database] now zyk_db_column_string(), which is NULL-safe as well as bounded,
+		// and an empty result is put back to the default -- see zyk_default_empty_saber_models().
+		zyk_db_column_string(saber1Model, sizeof(saber1Model), stmt, 11);
 		saber1Color = sqlite3_column_int(stmt, 12);
-		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 13), sizeof(saber2Model));
+		zyk_db_column_string(saber2Model, sizeof(saber2Model), stmt, 13);
 		saber2Color = sqlite3_column_int(stmt, 14);
+		zyk_default_empty_saber_models(saber1Model, sizeof(saber1Model), saber2Model, sizeof(saber2Model));
 
 		// GalaxyRP: [Saber RGB] restore the character's custom blade colours and blade styles. These
 		// two columns were read into unused locals before this feature existed -- they now actually
@@ -5042,17 +5094,22 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// argument size at that call site. Bound to sizeof(ent->client->sess.filename) (32) instead:
 		// the true minimum safe size across every real caller, since this value is ultimately copied
 		// into that same 32-byte field a few lines below regardless of which caller reached here.
-		Q_strncpyz(password, sqlite3_column_text(stmt, 3), sizeof(password));
-		Q_strncpyz(username, sqlite3_column_text(stmt, 4), sizeof(ent->client->sess.filename));
+		//
+		// GalaxyRP fix: [Database] and every TEXT read in this block goes through
+		// zyk_db_column_string(), for the reasons given at the matching block in
+		// select_player_character(): NULL-safe as well as bounded. The username keeps the 32-byte
+		// bound explained above -- only the helper around it changed.
+		zyk_db_column_string(password, sizeof(password), stmt, 3);
+		zyk_db_column_string(username, sizeof(ent->client->sess.filename), stmt, 4);
 		charID = sqlite3_column_int(stmt, 7);
 		credits = sqlite3_column_int(stmt, 8);
 		level = sqlite3_column_int(stmt, 9);
 		modelScale = sqlite3_column_int(stmt, 10);
-		strcpy(name, sqlite3_column_text(stmt, 11));
+		zyk_db_column_string(name, sizeof(name), stmt, 11);
 		skillpoints = sqlite3_column_int(stmt, 12);
-		strcpy(description, sqlite3_column_text(stmt, 13));
-		strcpy(netName, sqlite3_column_text(stmt, 14));
-		strcpy(modelName, sqlite3_column_text(stmt, 15));
+		zyk_db_column_string(description, sizeof(description), stmt, 13);
+		zyk_db_column_string(netName, sizeof(netName), stmt, 14);
+		zyk_db_column_string(modelName, sizeof(modelName), stmt, 15);
 
 		// GalaxyRP (Alex): [XP System] Grab XP value from database.
 		ent->client->pers.xp = sqlite3_column_int(stmt, 16);
@@ -5063,10 +5120,12 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		int saber2Color;
 		// GalaxyRP fix: [security] same fixed-size stack-buffer overflow as select_player_character()
 		// above -- bound the copy to the destination's size instead of trusting the DB value's length.
-		Q_strncpyz(saber1Model, sqlite3_column_text(stmt, 17), sizeof(saber1Model));
+		// GalaxyRP fix: [Database] NULL-safe too now, with the same empty-model default -- see there.
+		zyk_db_column_string(saber1Model, sizeof(saber1Model), stmt, 17);
 		saber1Color = sqlite3_column_int(stmt, 18);
-		Q_strncpyz(saber2Model, sqlite3_column_text(stmt, 19), sizeof(saber2Model));
+		zyk_db_column_string(saber2Model, sizeof(saber2Model), stmt, 19);
 		saber2Color = sqlite3_column_int(stmt, 20);
+		zyk_default_empty_saber_models(saber1Model, sizeof(saber1Model), saber2Model, sizeof(saber2Model));
 
 		// GalaxyRP fix: [Account] apply the loaded account/character fields to ent->client, and mark
 		// the session logged in, here -- before update_saber() below -- instead of after it (which
@@ -5134,7 +5193,9 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		// username at registration time -- see insert_chars_table_row()).
 		Q_strncpyz(ent->client->sess.rpgchar, name, sizeof(ent->client->sess.rpgchar));
 		ent->client->pers.skillpoints = skillpoints;
-		strcpy(ent->client->pers.description, description);
+		// GalaxyRP fix: [Database] bounded, like every other copy out of this row. Both buffers are
+		// MAX_STRING_CHARS today, so this could not overflow -- but only because they happen to match.
+		Q_strncpyz(ent->client->pers.description, description, sizeof(ent->client->pers.description));
 
 		// GalaxyRP: [Saber RGB] restore this character's custom blade colours and blade styles. Part
 		// of this same pre-update_saber() block for exactly the reason spelled out above: the
@@ -5290,14 +5351,15 @@ qboolean create_new_character(gentity_t* ent, char char_name[MAX_STRING_CHARS], 
 		return qfalse;
 	}
 
-	// GalaxyRP: [security] sess.rpgchar (this name, once accepted) is later spliced raw into
-	// description_add()'s fopen() call elsewhere in this file, so an unvalidated character name could
-	// escape the folder that's meant to stay inside. (zyk_config_filename() and zyk_remove_configs()'s
-	// system() calls used to be cited here too -- both removed as dead code, see the GalaxyRP fix:
-	// [Dead Code] comments where they used to live. description_add() itself currently has no callers
-	// either, per the same dead-code sweep, but is left in place rather than removed here since that
-	// wasn't part of this pass -- flagged separately.) This also subsumes the '&' check above, but
-	// that one is left in place for its own, more specific message.
+	// GalaxyRP: [security] letters and numbers only. This was written because sess.rpgchar (this
+	// name, once accepted) used to be spliced raw into file paths -- description_add()'s fopen(), and
+	// before that zyk_config_filename() and zyk_remove_configs()'s system() calls -- where an
+	// unvalidated name could escape the folder it was meant to stay inside. All three are gone now
+	// (see the GalaxyRP fix: [Dead Code] and [Attributes] comments where they used to live), and the
+	// rule stays: the name is still stored in the database, written back to Accounts.DefaultChar,
+	// shown in the character-select UI and printed in broadcasts, and none of those is a place for
+	// anything but a plain name. This also subsumes the '&' check above, but that one is left in
+	// place for its own, more specific message.
 	if (zyk_check_user_input(char_name, strlen(char_name)) == qfalse) {
 		trap->SendServerCommand(ent - g_entities, "print \"^1Character name can only contain letters and numbers.\n\"");
 		return qfalse;
@@ -11778,6 +11840,14 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// character's saved ammo. Clearing it means the update matches no row instead.
 	ent->client->pers.CharID = 0;
 
+	// GalaxyRP fix: [Attributes] and the character's description. Nothing else cleared it: the
+	// respawn keeps pers, and only /login, /char use and a reconnect overwrite it. So a logged-out
+	// player went on showing their last character's description to anyone who ran /examine on them,
+	// which told everyone nearby exactly who they had been playing. Emptied rather than reset to the
+	// default text: a logged-out player has no character, and /examine now says so. Below the
+	// save_account() call above, so the character's own saved description is not touched.
+	ent->client->pers.description[0] = '\0';
+
 	// GalaxyRP fix: [Guardian] removed the `if (can_play_quest == 1) { boss_battle_music_reset_timer
 	// = ...; }` block here -- can_play_quest can no longer become 1 anywhere (see the GalaxyRP fix
 	// comment on quest_get_new_player's old location further up in this file), and
@@ -12112,7 +12182,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/changepassword <new password>: ^7Changes the account password.\n\
 ^3/settings <number (optional)>: ^7Turns on or off account settings. Run with no arguments to list your settings.\n\n\
 ^3--------Character--------\n\
-^3/attributes <description>: ^7Sets your character's description. Can be viewed by others with ^3/ex ^7command.\n\
+^3/attributes <description>: ^7Sets your character's description, up to 255 characters. Put it in double quotes; empty double quotes reset it. Others can view it with ^3/ex ^7command.\n\
 ^3/examine ^7or ^3/ex <player name>: ^7Displays someone's character description.\n\
 ^3/char <new/use/remove (optional)> <character name (optional)>: ^7Creates/switches to/deletes a character. Run with no arguments to list your characters.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Admin Commands--------\n\
@@ -20290,22 +20360,53 @@ void description_display_end(gentity_t *ent) {
 	trap->SendServerCommand(ent->s.number, "print \"^2================================================================================\n\"");
 }
 
-void description_add(gentity_t *ent, char description_to_add[MAX_STRING_CHARS]) {
-	FILE *description_file = NULL;
+// GalaxyRP fix: [Attributes] description_add() used to be here. It wrote a description to
+// GalaxyRP/descriptions/<character name>.txt with fopen(), and nothing had called it since
+// descriptions moved into the Characters table -- /attributes saves through
+// update_chars_table_row_with_current_values() and /examine reads pers.description. Removed rather
+// than left as a file writer keyed on a player-chosen name that the next person might wire back up.
 
-	description_file = fopen(va("GalaxyRP/descriptions/%s.txt", ent->client->sess.rpgchar), "w+");
+// GalaxyRP fix: [Attributes] put a description into the shape it is stored and shown in: every
+// control character (line breaks, tabs, anything below a space, and DEL) becomes a space, and
+// leading and trailing spaces are trimmed. Colour codes are ordinary characters and are kept, and
+// so are bytes above 127 -- the engine's own MSG_ReadString stopped filtering those so players
+// could write in European languages, and a description is exactly where they would.
+//
+// Line breaks are the reason this exists. /examine prints a description into the examiner's
+// console, and one containing a line break could append lines of its own that look like anything
+// -- an admin message, a server notice. A default server strips them before the mod ever sees the
+// text (sv_filterCommands), but that is a setting; this makes it the mod's rule. It runs when a
+// description is set AND when one is shown, so a row written by hand or by an older build is
+// cleaned on the way out too.
+//
+// Works in place and returns the resulting length.
+static int zyk_clean_description(char *text)
+{
+	char *p = NULL;
+	char *start = NULL;
+	int len = 0;
 
-	if (description_file != NULL) {
-		fputs(va("%s\n", description_to_add), description_file);
-		fclose(description_file);
-		trap->SendServerCommand(ent->s.number, "print \"Description set sucessfully.\n\"");
-	}
-	else
+	if (!text)
+		return 0;
+
+	for (p = text; *p; p++)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"File not found.\n\"");
+		if ((unsigned char)*p < ' ' || (unsigned char)*p == 0x7f)
+			*p = ' ';
 	}
 
-	return;
+	start = text;
+	while (*start == ' ')
+		start++;
+
+	if (start != text)
+		memmove(text, start, strlen(start) + 1);
+
+	len = (int)strlen(text);
+	while (len > 0 && text[len - 1] == ' ')
+		text[--len] = '\0';
+
+	return len;
 }
 
 /*
@@ -20315,6 +20416,9 @@ Cmd_Examine_f
 */
 void Cmd_Examine_f(gentity_t *ent) {
 	char player_name[MAX_STRING_CHARS];
+	char description[MAX_STRING_CHARS];
+	gentity_t *target = NULL;
+	int player_id = -1;
 
 	if (trap->Argc() != 2) {
 		trap->SendServerCommand(ent->s.number, "print \"Usage: /examine <playername>\n\"");
@@ -20322,32 +20426,55 @@ void Cmd_Examine_f(gentity_t *ent) {
 	}
 
 	trap->Argv(1, player_name, sizeof(player_name));
-	int player_id = ClientNumberFromString(ent, player_name, qfalse);
+	player_id = ClientNumberFromString(ent, player_name, qfalse);
 
 	//player not found, no point in going on
 	if (player_id == -1) {
 		return;
 	}
 
+	target = &g_entities[player_id];
+
 	// GalaxyRP fix: [cleanup] see the identical fix/comment where this same line appears above.
-	if (Distance(ent->client->ps.origin, g_entities[player_id].client->ps.origin) > 1000) {
+	if (Distance(ent->client->ps.origin, target->client->ps.origin) > 1000) {
 		trap->SendServerCommand(ent->s.number, "print \"You are too far away from that person.\n\"");
 		return;
 	}
 
-	if (trap->Argc())
-	{
-
-		// GalaxyRP fix: [cleanup] same "extra &" pattern as the Distance() calls above --
-		// pers.netname is already a char[]; MSVC flagged the pointer-to-array this produced
-		// (C4047/C4024) against description_display_beginning()'s char* parameter.
-		description_display_beginning(ent, g_entities[player_id].client->pers.netname);
-		trap->SendServerCommand(ent->s.number, va("print \"%s\n\"", &g_entities[player_id].client->pers.description));
-		description_display_end(ent);
-
+	// GalaxyRP fix: [Attributes] a player who is not logged in has no character, so there is no
+	// description to show. Before /logout started emptying pers.description this printed whatever
+	// their last character had written; checked on amrpgmode, the same field the CMD_LOGGEDIN gate
+	// uses, so "logged in" means one thing throughout.
+	if (target->client->sess.amrpgmode == 0) {
+		trap->SendServerCommand(ent->s.number, va("print \"%s^7 is not logged in.\n\"", target->client->pers.netname));
 		return;
 	}
-	return;
+
+	// GalaxyRP fix: [Attributes] shown from a cleaned copy -- see zyk_clean_description() -- so a
+	// description that reached the database by some other road cannot put line breaks into this
+	// console either. The stored text is left as it is.
+	Q_strncpyz(description, target->client->pers.description, sizeof(description));
+
+	if (zyk_clean_description(description) == 0) {
+		trap->SendServerCommand(ent->s.number, va("print \"%s^7 has no description.\n\"", target->client->pers.netname));
+		return;
+	}
+
+	// GalaxyRP fix: [cleanup] the body used to sit inside an "if (trap->Argc())" that could never be
+	// false by this point (it had just been required to be exactly 2), and passed
+	// &pers.description -- a pointer to the array, the same stray & already fixed for pers.netname
+	// in the call just below.
+	//
+	// GalaxyRP fix: [cleanup] same "extra &" pattern as the Distance() calls above --
+	// pers.netname is already a char[]; MSVC flagged the pointer-to-array this produced
+	// (C4047/C4024) against description_display_beginning()'s char* parameter.
+	description_display_beginning(ent, target->client->pers.netname);
+	// GalaxyRP fix: [Attributes] through the news system's line splitter rather than one print.
+	// SV_SendServerCommand drops a message past 1022 characters whole, not truncated; nothing
+	// /attributes accepts now comes near that (MAX_DESCRIPTION_LENGTH), but a longer description
+	// already in the database is still shown -- in pieces, instead of as an empty gap.
+	zyk_print_long_line(ent, "", description);
+	description_display_end(ent);
 }
 
 /*
@@ -20355,21 +20482,62 @@ void Cmd_Examine_f(gentity_t *ent) {
 Cmd_Attributes_f
 ==================
 */
+// GalaxyRP fix: [Attributes] in order: the usage line for anything but exactly one argument; the
+// text cleaned (zyk_clean_description); nothing left means reset to RP_DEFAULT_DESCRIPTION; past
+// MAX_DESCRIPTION_LENGTH is refused; the same text as now is not saved again; anything else is
+// stored and saved. Every outcome now says what happened -- this used to print nothing at all, not
+// even on success.
+//
+// One argument, not the rest of the line, is deliberate and unchanged: the description has to be
+// quoted, and the usage line and the /list commands entry now say so. The "unchanged" test saves a
+// database round trip -- update_chars_table_row_with_current_values() opens the database and
+// rewrites the whole character row on every call.
 void Cmd_Attributes_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
+	int len = 0;
 
 	if (trap->Argc() != 2) {
-		trap->SendServerCommand(ent->s.number, "print \"Usage: /attributes <text>\n\"");
+		trap->SendServerCommand(ent->s.number, va("print \"Usage: /attributes <description>\nPut your description in double quotes if it has more than one word (up to %d characters). Empty double quotes reset it.\n\"", MAX_DESCRIPTION_LENGTH));
 		return;
 	}
 
 	trap->Argv(1, arg1, sizeof(arg1));
 
-	strcpy(ent->client->pers.description, arg1);
+	len = zyk_clean_description(arg1);
 
+	if (len == 0) {
+		if (strcmp(ent->client->pers.description, RP_DEFAULT_DESCRIPTION) == 0) {
+			trap->SendServerCommand(ent->s.number, "print \"Your description is already reset.\n\"");
+			return;
+		}
+
+		Q_strncpyz(ent->client->pers.description, RP_DEFAULT_DESCRIPTION, sizeof(ent->client->pers.description));
+		update_chars_table_row_with_current_values(ent);
+		trap->SendServerCommand(ent->s.number, "print \"Description reset.\n\"");
+		return;
+	}
+
+	if (len > MAX_DESCRIPTION_LENGTH) {
+		trap->SendServerCommand(ent->s.number, va("print \"Descriptions are limited to %d characters (yours is %d).\n\"", MAX_DESCRIPTION_LENGTH, len));
+		return;
+	}
+
+	if (strcmp(ent->client->pers.description, arg1) == 0) {
+		trap->SendServerCommand(ent->s.number, "print \"That is already your description.\n\"");
+		return;
+	}
+
+	Q_strncpyz(ent->client->pers.description, arg1, sizeof(ent->client->pers.description));
 	update_chars_table_row_with_current_values(ent);
 
-	return;
+	// Exactly at the limit is the one length that cannot be told apart from a longer description the
+	// engine cut down on the way in (see MAX_DESCRIPTION_LENGTH), so say so.
+	if (len == MAX_DESCRIPTION_LENGTH) {
+		trap->SendServerCommand(ent->s.number, va("print \"Description set. (%d characters is the limit; anything longer was cut off.)\n\"", MAX_DESCRIPTION_LENGTH));
+	}
+	else {
+		trap->SendServerCommand(ent->s.number, "print \"Description set.\n\"");
+	}
 }
 
 /*
