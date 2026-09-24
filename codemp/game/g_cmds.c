@@ -15221,52 +15221,97 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	}
 }
 
-// GalaxyRP fix: [Entity System] which live NPCs /entsave leaves out, and why. It used to write
-// every NPC as an npc_spawner line, which went wrong three ways:
-//  - a vehicle: the NPC loader refuses a vehicle type from anything but an NPC_Vehicle spawner
-//    ("Tried to spawn a vehicle NPC ... without using NPC_Vehicle"), so the line never produced
-//    anything. Vehicles come back from their own spawners.
-//  - the droid riding in a vehicle: it came back on its own, standing where the vehicle had been.
-//    The vehicle spawns its droid again itself.
+// GalaxyRP fix: [Entity System] which live NPCs and vehicles /entsave leaves out, and why. It used to
+// write every NPC as an npc_spawner line and skip every vehicle, which went wrong in these ways:
 //  - an NPC whose spawner is being saved as well: the spawner makes it again on load, so it came
 //    back twice -- and since every line this writes loads back as such a spawner, any NPC in a
 //    preset doubled on each save and reload. The spawner recreates it the way the map does at
 //    start (the admin accepted that a moved NPC returns to its spawner, and that a triggered
 //    spawner's NPC is absent until the trigger fires again, as on a fresh map).
-// Everything else -- /npc spawn NPCs, whose one-frame spawner is never saved, NPC pilots, an NPC
-// whose spawner was removed -- is saved as before. When the spawner link cannot be confirmed the
-// NPC is saved, so the worst this can do is what /entsave did before.
+//  - the droid riding in a vehicle: it came back on its own, standing where the vehicle had been.
+//    The vehicle spawns its droid again itself.
+//  - a vehicle: it cannot be an npc_spawner line (the NPC loader refuses a vehicle type from
+//    anything but an NPC_Vehicle spawner, "Tried to spawn a vehicle NPC ... without using
+//    NPC_Vehicle"), so every vehicle was skipped on the belief that its NPC_Vehicle spawner would
+//    bring it back. Usually it cannot: NPC_Spawn_Do() frees a spawner as soon as its use runs out,
+//    and SP_NPC_Vehicle() never gives an untargeted spawner a use at all, so a map vehicle's
+//    spawner is gone the moment the vehicle exists -- and so is the one-frame spawner behind
+//    "/npc spawn vehicle". /entload frees everything before it reads the file, so those vehicles
+//    simply vanished. A vehicle is now written as an NPC_Vehicle line of its own (see
+//    create_vehicle_spawner_for_vehicle() below), unless its spawner is alive and saved.
+//  - DAJ_RP: a corpse, or a vehicle already counting down to its explosion: written out as a
+//    spawner, it came back alive and whole. NPCs have no downed step -- they die in one call -- so
+//    the corpse lies there as an ordinary "NPC" entity until it is removed.
+//  - DAJ_RP: an NPC riding a vehicle as pilot or passenger. Now that the vehicle is saved too,
+//    both would come back at the same spot, the NPC inside the vehicle. The vehicle comes back
+//    empty instead. NPCs board only in rare ways (landing on an empty SUSPENDED vehicle, or being
+//    the activator when a map trigger or script uses the vehicle -- NPC_Use()), but they can.
+// Everything else -- /npc spawn NPCs, an NPC whose spawner was removed, an NPC standing near a
+// vehicle -- is saved as before. When the spawner link cannot be confirmed the NPC or vehicle is
+// saved, so the worst this can do is what /entsave did before for NPCs.
 typedef enum {
 	ZYK_ENTSAVE_NPC_SAVE = 0,
-	ZYK_ENTSAVE_NPC_VEHICLE,
+	ZYK_ENTSAVE_NPC_SAVE_VEHICLE,
+	ZYK_ENTSAVE_NPC_DEAD,
 	ZYK_ENTSAVE_NPC_DROID,
+	ZYK_ENTSAVE_NPC_RIDER,
 	ZYK_ENTSAVE_NPC_FROM_SPAWNER
 } zyk_entsave_npc_t;
+
+static qboolean zyk_entsave_is_vehicle(const gentity_t *npc)
+{
+	return (npc->m_pVehicle || npc->s.NPC_class == CLASS_VEHICLE || (npc->client && npc->client->NPC_class == CLASS_VEHICLE)) ? qtrue : qfalse;
+}
 
 static zyk_entsave_npc_t zyk_entsave_npc_skip_reason(gentity_t *npc)
 {
 	const gentity_t *spawner = npc->zyk_npc_spawner;
+	const qboolean is_vehicle = zyk_entsave_is_vehicle(npc);
 	const int veh_num = npc->s.m_iVehicleNum;
 
-	if (npc->m_pVehicle || npc->s.NPC_class == CLASS_VEHICLE || (npc->client && npc->client->NPC_class == CLASS_VEHICLE))
+	// zyk: dead, or a vehicle already counting down to its explosion (StartDeathDelay() sets
+	// m_iDieTime, and nothing but the vehicle's reset clears it)
+	if (npc->health <= 0 || (npc->s.eFlags & EF_DEAD) || (npc->client && npc->client->ps.pm_type == PM_DEAD) ||
+		(npc->m_pVehicle && npc->m_pVehicle->m_iDieTime != 0))
 	{
-		return ZYK_ENTSAVE_NPC_VEHICLE;
+		return ZYK_ENTSAVE_NPC_DEAD;
 	}
 
-	// zyk: only a droid its vehicle is actually carrying -- the vehicle names it as m_pDroidUnit
-	if (veh_num > 0 && veh_num < ENTITYNUM_WORLD)
+	// zyk: a droid or a rider is only ever a non-vehicle. A vehicle's own m_iVehicleNum holds its
+	// PILOT's number (plus one), so the tests below must never be asked about a vehicle.
+	if (!is_vehicle && veh_num > 0 && veh_num < ENTITYNUM_WORLD)
 	{
 		const gentity_t *veh = &g_entities[veh_num];
 
-		if (veh->inuse && veh->m_pVehicle && veh->m_pVehicle->m_pDroidUnit == (bgEntity_t *)npc)
+		if (veh->inuse && veh->m_pVehicle)
 		{
-			return ZYK_ENTSAVE_NPC_DROID;
+			int k;
+
+			// zyk: only a droid its vehicle is actually carrying -- the vehicle names it as m_pDroidUnit
+			if (veh->m_pVehicle->m_pDroidUnit == (bgEntity_t *)npc)
+			{
+				return ZYK_ENTSAVE_NPC_DROID;
+			}
+
+			// zyk: and only a rider the vehicle actually has, as its pilot or in a passenger seat
+			if (veh->m_pVehicle->m_pPilot == (bgEntity_t *)npc)
+			{
+				return ZYK_ENTSAVE_NPC_RIDER;
+			}
+
+			for (k = 0; k < VEH_MAX_PASSENGERS; k++)
+			{
+				if (veh->m_pVehicle->m_ppPassengers[k] == (bgEntity_t *)npc)
+				{
+					return ZYK_ENTSAVE_NPC_RIDER;
+				}
+			}
 		}
 	}
 
-	// zyk: the spawner must still be the one that made this NPC (same slot, same id -- a freed and
-	// reused slot is zeroed, so its id cannot match) and must have a record, i.e. /entsave is writing
-	// it out too. The /npc spawn command's one-frame spawner never has a record.
+	// zyk: the spawner must still be the one that made this NPC or vehicle (same slot, same id -- a
+	// freed and reused slot is zeroed, so its id cannot match) and must have a record, i.e. /entsave
+	// is writing it out too. The /npc spawn command's one-frame spawner never has a record.
 	if (spawner && spawner != npc && npc->zyk_npc_spawner_id != 0 && spawner->inuse &&
 		spawner->zyk_spawner_id == npc->zyk_npc_spawner_id &&
 		level.zyk_spawn_strings_values_count[spawner->s.number] > 0)
@@ -15274,7 +15319,29 @@ static zyk_entsave_npc_t zyk_entsave_npc_skip_reason(gentity_t *npc)
 		return ZYK_ENTSAVE_NPC_FROM_SPAWNER;
 	}
 
-	return ZYK_ENTSAVE_NPC_SAVE;
+	return is_vehicle ? ZYK_ENTSAVE_NPC_SAVE_VEHICLE : ZYK_ENTSAVE_NPC_SAVE;
+}
+
+// DAJ_RP: the vehicle's counterpart of create_npc_spawner_for_npc() below -- an NPC_Vehicle spawner
+// line at the vehicle's current position and heading. On load that spawner makes the vehicle and
+// frees itself (see the comment above), so the next /entsave writes the vehicle again from wherever
+// it then is: a vehicle driven somewhere else is saved there, and nothing piles up. Only the type,
+// position and heading survive; any other keys the original spawner had died with it.
+char *create_vehicle_spawner_for_vehicle(gentity_t *ent) {
+	static char escaped_type[ZYK_ENTITY_FILE_ENCODED_LENGTH];
+
+	if (!ent->NPC_type || zyk_entity_file_encode(ent->NPC_type, escaped_type, sizeof(escaped_type)) == qfalse)
+	{
+		G_LogPrintf("entsave: vehicle %d (%s) not saved: its type is missing or does not fit in %d characters once escaped\n",
+			ent->s.number, ent->NPC_type ? ent->NPC_type : "no type", (int)sizeof(escaped_type) - 1);
+
+		return NULL;
+	}
+
+	// zyk: SP_NPC_Vehicle() and G_VehicleSpawn() use only the yaw, so pitch and roll go out as 0
+	return va("classname;NPC_Vehicle;NPC_type;%s;origin;%f %f %f;angles;0 %f 0;\n", escaped_type,
+		ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2],
+		ent->client->ps.vehOrientation[YAW]);
 }
 
 // GalaxyRP (Alex): Builds an npc spawner string based on an npc entity.
@@ -15323,8 +15390,11 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	int not_encodable = 0;
 	// GalaxyRP fix: [Entity System] live NPCs left out on purpose -- see zyk_entsave_npc_skip_reason()
 	int npcs_left_to_spawners = 0;
-	int vehicles_skipped = 0;
-	char skipped_note[128] = {0};
+	int riders_skipped = 0;
+	// DAJ_RP: corpses and exploding vehicles left out, and vehicles written as NPC_Vehicle lines
+	int dead_skipped = 0;
+	int vehicles_saved = 0;
+	char skipped_note[256] = {0};
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15476,22 +15546,35 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 				{
 					npcs_left_to_spawners++;
 				}
-				else if (skip != ZYK_ENTSAVE_NPC_SAVE)
+				else if (skip == ZYK_ENTSAVE_NPC_DEAD)
 				{
-					vehicles_skipped++;
+					dead_skipped++;
+					G_LogPrintf("entsave: %s %d (%s) not saved: dead or being destroyed\n",
+						zyk_entsave_is_vehicle(this_ent) ? "vehicle" : "NPC", this_ent->s.number,
+						this_ent->NPC_type ? this_ent->NPC_type : "no type");
+				}
+				else if (skip == ZYK_ENTSAVE_NPC_DROID || skip == ZYK_ENTSAVE_NPC_RIDER)
+				{
+					riders_skipped++;
 					G_LogPrintf("entsave: %s %d (%s) not saved: %s\n",
-						skip == ZYK_ENTSAVE_NPC_VEHICLE ? "vehicle" : "droid", this_ent->s.number,
+						skip == ZYK_ENTSAVE_NPC_DROID ? "droid" : "NPC", this_ent->s.number,
 						this_ent->NPC_type ? this_ent->NPC_type : "no type",
-						skip == ZYK_ENTSAVE_NPC_VEHICLE ? "vehicles come back from their NPC_Vehicle spawners"
-						                                : "its vehicle spawns it again");
+						skip == ZYK_ENTSAVE_NPC_DROID ? "its vehicle spawns it again"
+						                              : "it is riding a vehicle, which is saved empty");
 				}
 				else
 				{
-					const char *npc_line = create_npc_spawner_for_npc(this_ent);
+					const char *npc_line = (skip == ZYK_ENTSAVE_NPC_SAVE_VEHICLE) ?
+						create_vehicle_spawner_for_vehicle(this_ent) : create_npc_spawner_for_npc(this_ent);
 
 					// zyk: NULL means the type did not encode in full, and it has already logged why
 					if (npc_line)
+					{
 						fprintf(this_file, "%s", npc_line);
+
+						if (skip == ZYK_ENTSAVE_NPC_SAVE_VEHICLE)
+							vehicles_saved++;
+					}
 					else
 						not_encodable++;
 				}
@@ -15506,10 +15589,15 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	// detail -- which entity, and why -- is in the log, where it cannot flood a connection.
 	// GalaxyRP fix: [Entity System] one extra line when live NPCs were left out on purpose, in the
 	// same single message -- never one per NPC (see above for why).
-	if (npcs_left_to_spawners > 0 || vehicles_skipped > 0)
+	if (npcs_left_to_spawners > 0 || riders_skipped > 0 || dead_skipped > 0)
 	{
-		Com_sprintf(skipped_note, sizeof(skipped_note), "^7Not written, as their spawners recreate them: %d NPC(s) and %d vehicle(s)/droid(s).\n",
-			npcs_left_to_spawners, vehicles_skipped);
+		Com_sprintf(skipped_note, sizeof(skipped_note), "^7Not written: %d NPC(s)/vehicle(s) their spawners recreate, %d rider(s)/droid(s), %d dead or exploding.\n",
+			npcs_left_to_spawners, riders_skipped, dead_skipped);
+	}
+
+	if (vehicles_saved > 0)
+	{
+		Q_strcat(skipped_note, sizeof(skipped_note), va("^7Vehicles saved at their current positions: %d.\n", vehicles_saved));
 	}
 
 	if (over_long > 0 || not_encodable > 0)
