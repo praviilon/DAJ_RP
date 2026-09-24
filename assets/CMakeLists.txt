@@ -109,7 +109,7 @@ add_custom_command(TARGET assets POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove -f "${TMPFILE}"
 )
 
-# GalaxyRP fix: [packaging] copy the server-side content (database/, duelarena/, textfiles/, the
+# GalaxyRP fix: [packaging] copy the server-side content (database/, duelarena/, the
 # .cfg/.html/.bat helper files) straight into the per-config build output
 # (${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>, e.g. build-x64/Release) as part of the plain
 # build, the same way the pk3 above already lands there via add_zip_command -- unlike assets/client
@@ -135,7 +135,7 @@ endforeach()
 
 # GalaxyRP fix: [packaging] assemble the actual distributable "GalaxyRP" mod folder -- the pk3
 # built above, plus the server-side content that ships alongside it (database/, duelarena/,
-# textfiles/, the .cfg/.html/.bat helper files) from assets/server. This is what previously had
+# the .cfg/.html/.bat helper files) from assets/server. This is what previously had
 # to be put together by hand; jampgame/cgame/ui are installed here too (see their own
 # CMakeLists.txt -- NOT packed inside the pk3, all three ship as loose files next to it, same as
 # the old release layout). Deliberately does NOT depend on BuildMPEngine/BuildMPRdVanilla/
@@ -162,7 +162,7 @@ endforeach()
 # the new .sh/.command scripts -- Linux's `./galaxyrp_play.sh` and macOS Finder's double-click both
 # require the execute bit to actually be set. Force it back on explicitly for just the launcher
 # files being installed (everything else under assets/server -- the .cfg/.html/.txt content,
-# database/, textfiles/ -- has no reason to be executable).
+# database/ -- has no reason to be executable).
 set(GalaxyRPLauncherFilePermissions)
 foreach(GalaxyRPLauncherFile ${GalaxyRPLauncherFiles})
 	list(APPEND GalaxyRPLauncherFilePermissions

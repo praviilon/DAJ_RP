@@ -6794,7 +6794,11 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 			}
 			// zyk: using Sense Health skill of RPG Mode
 			// GalaxyRP fix: [Dead Code] rpg_class permanently 0, rpg_class==8 disjunct always false
+			// DAJ_RP: [Settings] and only while the Sense Health Toggle (/settings 1, player_settings bit 5,
+			// inverted: set == OFF) is on. Nothing else sends "sensehp", so with it off the readout is
+			// simply never sent, and one already on screen fades out by itself within a second.
 			else if (i == FP_SEE && self->client->sess.amrpgmode == 2 && (self->client->pers.skill_levels[35] > 0) &&
+					 !(self->client->pers.player_settings & (1 << 5)) &&
 					 self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) && self->client->pers.sense_health_timer < level.time)
 			{
 				// GalaxyRP fix: [Skills] the skill picks its own target now (crosshair, else nearest in

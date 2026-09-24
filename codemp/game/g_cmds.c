@@ -2597,8 +2597,8 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	// for the actual PlayerSettings-never-saved bug -- those bind the real value because they update
 	// an EXISTING row for the CURRENTLY logged-in player, where pers.player_settings is guaranteed
 	// current.
-	// GalaxyRP fix: [Settings] that hardcoded default is no longer plain 0 -- bit 5 (Language) stays
-	// clear (English, the correct default), but bit 13 (Admin Protect) is now set. Bit 13 is inverted
+	// GalaxyRP fix: [Settings] that hardcoded default is no longer plain 0 -- bit 13 (Admin Protect) is
+	// now set (bit 5, then "Language", was left clear for English; see below for its new use). Bit 13 is inverted
 	// (clear == ON, set == OFF -- see the status-line block in Cmd_Settings_f), so a brand new account
 	// used to come out of this INSERT with Admin Protect showing ON by default, which made no sense:
 	// a fresh account has no admin permissions at all (AdminLevel comes from
@@ -2622,7 +2622,9 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	// feature ships as. Note this covers accounts created by /new only: the built-in "admin" account
 	// created by InitializeGalaxyRpTables() (g_main.c) still inserts PlayerSettings '0' literally and
 	// is deliberately left that way, so it keeps starting with both Admin Protect and the Use Hint ON.
-	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6)); // Admin Protect + Use Hint OFF by default; Language (bit 5) stays clear/English
+	// DAJ_RP: [Settings] and bit 5 (Sense Health Toggle, /settings 1) for the same reason: inverted, and
+	// meant to start OFF. It used to be "Language", left clear here for English.
+	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6) | (1 << 5)); // Admin Protect + Use Hint + Sense Health Toggle OFF by default
 	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	// GalaxyRP fix: [stability] this used to never check the INSERT's own result -- an error here (most
@@ -13804,13 +13806,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// GCC already flagged this with -Wrestrict. Fixed by writing to message+len instead, so each
 		// call's destination no longer overlaps anything it reads, and tracking the appended length in
 		// len rather than re-reading it back out of message.
+		// DAJ_RP: [Settings] setting 1 used to be "Language" (English/Custom) on this bit. Its only
+		// reader, zyk_text_message(), went with the RPG tutorial it served, so it did nothing at all.
+		// Bit 5 is reused for the Sense Health Toggle: whether the Sense Health readout is sent while
+		// Sense is active (see the gate at the Sense Health trigger in w_force.c). Inverted like every
+		// other toggle here (clear == ON, set == OFF), and new accounts are created with the bit SET so
+		// it starts OFF -- see insert_accounts_table_row(). Forward only: an existing account that had
+		// "English" (bit clear) comes out ON, one that had "Custom" comes out OFF.
 		if (ent->client->pers.player_settings & (1 << 5))
 		{
-			len += sprintf(message + len, "\n^3 1 - Language - ^1Custom");
+			len += sprintf(message + len, "\n^3 1 - Sense Health Toggle (Requires Sense Health) - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 1 - Language - ^3English");
+			len += sprintf(message + len, "\n^3 1 - Sense Health Toggle (Requires Sense Health) - ^2ON");
 		}
 
 		// GalaxyRP fix: [Settings] the status line for setting 2 (Allow Force Powers from allies) used
@@ -13963,19 +13972,13 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		{
 			ent->client->pers.player_settings &= ~(1 << value);
 
-			if (value == 5)
-				strcpy(new_status, "^3English^7");
-			else
-				strcpy(new_status,"^2ON^7");
+			strcpy(new_status,"^2ON^7");
 		}
 		else
 		{
 			ent->client->pers.player_settings |= (1 << value);
 
-			if (value == 5)
-				strcpy(new_status, "^1Custom^7");
-			else
-				strcpy(new_status,"^1OFF^7");
+			strcpy(new_status,"^1OFF^7");
 		}
 		// GalaxyRP fix: [Settings] the old setting 3, "Starting Single Saber Style", used to have a
 		// value==8 special case here alongside the generic toggle above, cycling player_settings bits
@@ -13993,7 +13996,17 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// 0 is now rejected above as an invalid settings value.
 		if (value == 5)
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Language %s\n\"", new_status) );
+			// DAJ_RP: [Settings] the Sense Health Toggle can be switched on without the skill -- it just
+			// has nothing to show until the skill is bought -- so say so rather than refusing.
+			// skill_levels[35] is the Sense Health skill; /settings is logged-in only, so it is current.
+			if (!(ent->client->pers.player_settings & (1 << 5)) && ent->client->pers.skill_levels[35] < 1)
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Sense Health Toggle %s\n^3You don't have the Sense Health skill, so this has no effect until you do.\n\"", new_status) );
+			}
+			else
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Sense Health Toggle %s\n\"", new_status) );
+			}
 		}
 		// GalaxyRP fix: [Settings] the value==6 (Allow Force Powers from allies), value==8 (Starting
 		// Single Saber Style), value==9 (Allow Screen Message) and value==10 (Use healing force only at

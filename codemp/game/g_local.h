@@ -848,7 +848,10 @@ typedef struct clientPersistant_s {
 	// "disable" them; this doc update is the only thing marking them retired here.
 	// 3 - Eternity Power
 	// 4 - Universe Power
-	// 5 - Custom Language (/settings 1)
+	// 5 - Sense Health Toggle (/settings 1). Used to be "Custom Language", whose only reader went with
+	//     the RPG tutorial; reused rather than retired. Inverted (clear == ON, set == OFF), and new
+	//     accounts are created with it SET so it starts OFF -- see insert_accounts_table_row() (g_cmds.c).
+	//     Existing accounts keep whatever the old Language choice left: English (clear) reads as ON.
 	// GalaxyRP fix: [Settings] bit 6 used to be "Allow Force Powers from allies" -- that setting was
 	// removed from /settings entirely (force powers between allies are now always allowed, see the fix
 	// comment at its old gate in w_force.c's ForcePowerUsableOn()), freeing the bit for reuse rather
