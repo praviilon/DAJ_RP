@@ -1427,8 +1427,35 @@ void WP_AddToClientBitflags(gentity_t *ent, int entNum)
 // GalaxyRP fix: [Force] the most NPC targets of one cast that are sent a visual/sound event (see
 // RP_TeamPowerNPCEffect). Every NPC in range is still healed or energized; only the effect stops
 // here. Each event is a temp entity, and one per target is exactly the "many g_sound events at
-// once" the original code folded into a single bitflag event to avoid.
+// once" the original code folded into a single bitflag event to avoid. These events are also
+// limited by RP_TeamPowerEffectBudget() below, which keeps them out of the entity reserve.
 #define RP_TEAM_POWER_MAX_NPC_EFFECTS	16
+
+/*
+GalaxyRP fix: [Force] how many optional effect temp entities one Team Heal / Team Energize cast may
+still create: the NPC visual events (RP_TeamPowerNPCEffect) and Team Shield Heal's pickup sound
+(G_Sound -> G_SoundTempEntity), one per shielded player.
+
+Every temp entity takes a real entity slot through G_Spawn() for about 300ms, and G_Spawn() cannot
+fail politely: with every slot in use it calls trap->Error(ERR_DROP), which ends a dedicated server
+(see ZYK_ENTITY_RESERVE in g_local.h). A cast used to create one temp entity; with an NPC squad and
+Team Shield Heal it could create up to 1 + 16 + 31, all of them cosmetic, so on a map already near
+the limit the cast itself could be the allocation that took the server down. Player- and
+admin-driven spawns keep ZYK_ENTITY_RESERVE slots back for the allocations nothing can refuse (see
+G_EntitySlotsAvailable in g_utils.c); these effects now do the same.
+
+One count per cast rather than a G_EntitySlotsAvailable(1) call per effect: each temp entity lowers
+G_FreeEntityCount() by exactly one, so counting down from a single scan gives the same answer
+without rescanning the entity table up to 47 times. The 1 held back is the cast's own
+EV_TEAM_POWER event, created in the same loop and deliberately NOT budgeted -- it predates this
+change, it is the one effect players rely on, and it is exactly the kind of single, unavoidable
+allocation the reserve is kept for. The result can be zero or negative; the callers then create no
+optional effects, while every heal, shield and energize is still applied.
+*/
+static int RP_TeamPowerEffectBudget( void )
+{
+	return G_FreeEntityCount() - ZYK_ENTITY_RESERVE - 1;
+}
 
 /*
 GalaxyRP fix: [Force] who Team Heal, Team Shield Heal and Team Energize may affect.
@@ -1551,7 +1578,8 @@ The shared EV_TEAM_POWER event names its targets in a bitflag that only has room
 slots, so an NPC target never showed the green/blue shell or played the sound. Each NPC target now
 gets its own EV_TEAM_POWER at the NPC, with no bitflags set, the NPC's number in otherEntityNum and
 TEAM_POWER_NPC_TARGET (bg_public.h) in generic1. A cgame that predates this sees an event with no
-bits set and does nothing, so nothing breaks for players on the old plugin.
+bits set and does nothing, so nothing breaks for players on the old plugin. Callers send it only
+while RP_TeamPowerEffectBudget() leaves room above the entity reserve.
 */
 static void RP_TeamPowerNPCEffect( gentity_t *npc, int eventParm )
 {
@@ -1572,6 +1600,7 @@ void ForceTeamHeal( gentity_t *self )
 	int pl[RP_TEAM_POWER_MAX_TARGETS];
 	int healthadd = 0;
 	int npc_effects = 0;
+	int effect_budget = 0;
 	qboolean shield_heal = qfalse;
 	gentity_t *te = NULL;
 
@@ -1672,6 +1701,7 @@ void ForceTeamHeal( gentity_t *self )
 	}
 
 	self->client->ps.fd.forcePowerDebounce[FP_TEAM_HEAL] = level.time + 2000;
+	effect_budget = RP_TeamPowerEffectBudget();
 	i = 0;
 
 	while (i < numpl)
@@ -1695,7 +1725,14 @@ void ForceTeamHeal( gentity_t *self )
 					if (target->client->ps.stats[STAT_ARMOR] > max_shield)
 						target->client->ps.stats[STAT_ARMOR] = max_shield;
 
-					G_Sound(target, CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
+					// GalaxyRP fix: [Force] the sound is a temp entity per player -- up to 31 in one
+					// cast -- so it is left out once the entity reserve is reached; the shield is not.
+					// See RP_TeamPowerEffectBudget().
+					if (effect_budget > 0)
+					{
+						G_Sound(target, CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
+						effect_budget--;
+					}
 				}
 			}
 
@@ -1729,10 +1766,11 @@ void ForceTeamHeal( gentity_t *self )
 				WP_AddToClientBitflags(te, pl[i]);
 				//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
 			}
-			else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS)
+			else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS && effect_budget > 0)
 			{
 				RP_TeamPowerNPCEffect(target, 1);
 				npc_effects++;
+				effect_budget--;
 			}
 		}
 		i++;
@@ -1749,6 +1787,7 @@ void ForceTeamForceReplenish( gentity_t *self )
 	int pl[RP_TEAM_POWER_MAX_TARGETS];
 	int poweradd = 0;
 	int npc_effects = 0;
+	int effect_budget = 0;
 	gentity_t *te = NULL;
 
 	if ( self->health <= 0 )
@@ -1852,6 +1891,7 @@ void ForceTeamForceReplenish( gentity_t *self )
 
 	BG_ForcePowerDrain( &self->client->ps, FP_TEAM_FORCE, forcePowerNeeded[self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE]][FP_TEAM_FORCE] );
 
+	effect_budget = RP_TeamPowerEffectBudget();
 	i = 0;
 
 	while (i < numpl)
@@ -1889,10 +1929,11 @@ void ForceTeamForceReplenish( gentity_t *self )
 			WP_AddToClientBitflags(te, pl[i]);
 			//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
 		}
-		else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS)
+		else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS && effect_budget > 0)
 		{
 			RP_TeamPowerNPCEffect(target, 2);
 			npc_effects++;
+			effect_budget--;
 		}
 
 		i++;
