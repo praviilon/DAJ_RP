@@ -150,6 +150,49 @@ void RP_CVU_flameThrowerCooldown(void)
 	RP_ClampNonNegativeCvar(&rp_flame_thrower_cooldown, "rp_flame_thrower_cooldown");
 }
 
+// DAJ_RP: [Corpses] the three corpse and limb lifetimes (see g_xcvar.h). Negative values would put the
+// removal time in the past, and very large ones keep corpses and limbs around long enough to fill the
+// entity table in a big fight, so each is snapped into 0..RP_CORPSE_TIME_MAX the moment it changes.
+static void RP_ClampCorpseTimeCvar(vmCvar_t* cvar, const char* cvarName)
+{
+	if (cvar->integer < 0)
+	{
+		RP_SnapCvar(cvar, cvarName, 0, "minimum is 0");
+	}
+	else if (cvar->integer > RP_CORPSE_TIME_MAX)
+	{
+		RP_SnapCvar(cvar, cvarName, RP_CORPSE_TIME_MAX, "maximum is 200");
+	}
+}
+
+void RP_CVU_npcCorpseTime(void)
+{
+	RP_ClampCorpseTimeCvar(&rp_npc_corpse_time, "rp_npc_corpse_time");
+}
+
+void RP_CVU_limbLifetime(void)
+{
+	RP_ClampCorpseTimeCvar(&rp_limb_lifetime, "rp_limb_lifetime");
+}
+
+void RP_CVU_playerCorpseTime(void)
+{
+	RP_ClampCorpseTimeCvar(&rp_player_corpse_time, "rp_player_corpse_time");
+}
+
+// Seconds to milliseconds for the three readers, clamped again so the result is always 0..200000
+// whatever the cvar holds -- the callbacks above run on change and at registration, but this keeps
+// the timers safe on their own.
+int RP_CorpseSecondsToMs(int seconds)
+{
+	if (seconds < 0)
+		seconds = 0;
+	else if (seconds > RP_CORPSE_TIME_MAX)
+		seconds = RP_CORPSE_TIME_MAX;
+
+	return seconds * 1000;
+}
+
 // GalaxyRP fix: [validation] rp_list_cmds_results_per_page is read as results_per_page in both
 // Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c), where it gates both pagination loop bounds:
 // results_per_page*(page-1) and results_per_page*page. When results_per_page is 0 (or negative),

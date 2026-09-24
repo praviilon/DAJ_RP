@@ -407,6 +407,20 @@ XCVAR_DEF( rp_screen_message,	"",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,				
 // GalaxyRP fix: [validation] RP_CVU_screenMessageTimer (g_cvar.c) clamps a negative value back to
 // 0 -- see its comment for why.
 XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// DAJ_RP: [Corpses] how long, in seconds, the dead stay around -- used to be three hard-coded timers.
+// The defaults are exactly the old values. Each is held to 0..RP_CORPSE_TIME_MAX (g_local.h) by its
+// update callback in g_cvar.c and again where it is read (RP_CorpseSecondsToMs()), since corpses and
+// limbs that never leave pile up and use up entity slots. Not latched: a change applies from the
+// next death -- and for NPC corpses already lying there too, since that timer is re-read every frame.
+//  - rp_npc_corpse_time: after an NPC's death animation, before its body fades out (BodyRemovalPadTime,
+//    NPC.c). Droids and similar machines are still removed at once, as before.
+//  - rp_limb_lifetime: a cut-off limb stays a random time between this and twice this (G_Dismember,
+//    g_combat.c), so the limbs from one fight do not all vanish on the same frame. Was 8-16 seconds.
+//  - rp_player_corpse_time: a player's corpse lies this long before it starts fading (BodySink,
+//    g_client.c); the server drops it 18 seconds after that, as before.
+XCVAR_DEF( rp_npc_corpse_time,		"10",			RP_CVU_npcCorpseTime,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_limb_lifetime,		"8",			RP_CVU_limbLifetime,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+XCVAR_DEF( rp_player_corpse_time,	"30",			RP_CVU_playerCorpseTime,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_listCmdsResultsPerPage (g_cvar.c) clamps a non-positive value
 // back to 1 -- see its comment for why 0 needs its own floor instead of the usual clamp-to-0 pattern.
 XCVAR_DEF( rp_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

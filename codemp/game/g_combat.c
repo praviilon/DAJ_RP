@@ -3750,7 +3750,14 @@ void G_Dismember( gentity_t *ent, gentity_t *enemy, vec3_t point, int limbType, 
 	VectorCopy( newPoint, limb->s.pos.trBase );
 	limb->think = LimbThink;
 	limb->touch = LimbTouch;
-	limb->speed = level.time + Q_irand(8000, 16000);
+	// DAJ_RP: [Corpses] was a hard-coded 8-16 seconds; now rp_limb_lifetime (seconds, default 8) to
+	// twice that, so the limbs from one fight still leave at different moments. LimbThink() frees the
+	// limb once level.time passes this.
+	{
+		const int lifetime = RP_CorpseSecondsToMs( rp_limb_lifetime.integer );
+
+		limb->speed = level.time + Q_irand( lifetime, lifetime * 2 );
+	}
 	limb->nextthink = level.time + FRAMETIME;
 
 	limb->r.svFlags = SVF_USE_CURRENT_ORIGIN;

@@ -1002,7 +1002,10 @@ BODYQUE
 =======================================================================
 */
 
-#define BODY_SINK_TIME		30000//45000
+// DAJ_RP: [Corpses] BODY_SINK_TIME (30000 ms) is now rp_player_corpse_time, in seconds, default 30. It is
+// read once, when the corpse is laid down in CopyToBodyQue(), and kept on the body in genericValue1 so a
+// change to the cvar never shifts a corpse that is already lying there -- BodySink() compares against
+// the same number the corpse was scheduled with (no other code touches genericValue1 on a body).
 
 /*
 ===============
@@ -1030,7 +1033,7 @@ After sitting around for five seconds, fall into the ground and disappear
 =============
 */
 void BodySink( gentity_t *ent ) {
-	if ( level.time - ent->timestamp > BODY_SINK_TIME + 2500 ) {
+	if ( level.time - ent->timestamp > ent->genericValue1 + 2500 ) {
 		// the body ques are never actually freed, they are just unlinked
 		trap->UnlinkEntity( (sharedEntity_t *)ent );
 		ent->physicsObject = qfalse;
@@ -1145,7 +1148,8 @@ static qboolean CopyToBodyQue( gentity_t *ent ) {
 	body->r.contents = CONTENTS_CORPSE;
 	body->r.ownerNum = ent->s.number;
 
-	body->nextthink = level.time + BODY_SINK_TIME;
+	body->genericValue1 = RP_CorpseSecondsToMs( rp_player_corpse_time.integer );
+	body->nextthink = level.time + body->genericValue1;
 	body->think = BodySink;
 
 	body->die = body_die;

@@ -272,7 +272,10 @@ int BodyRemovalPadTime( gentity_t *ent )
 		// never go away
 	//	time = Q3_INFINITE;
 		// for now I'm making default 10000
-		time = 10000;
+		// DAJ_RP: [Corpses] now rp_npc_corpse_time (seconds, default 10 -- the old 10000 ms). This is
+		// re-read every frame by the removal check in NPC_Think, so a change reaches corpses already
+		// lying there as well as new ones.
+		time = RP_CorpseSecondsToMs( rp_npc_corpse_time.integer );
 		break;
 
 	}
