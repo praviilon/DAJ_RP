@@ -481,10 +481,14 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 // its colon and its message inherited the speaker's name colour. Both now reset to ^2, which
 // matches /shout three rows below (verb in its own colour, speech in green) and matches plain say,
 // which builds name + ^7 + ": " and sends the message as COLOR_GREEN -- see the SAY_ALL case in
-// G_Say(). /all already had the green but let its colon inherit, so it takes the same ^7; /long and
-// /all now render identically to plain say, which is exactly what the help text promises them as
-// ("Normal speech at another range"). Their lack of a verb prefix is deliberate for the same reason
-// and is left alone.
+// G_Say(). /all already had the green but let its colon inherit, so it takes the same ^7 and renders
+// identically to plain say, which is exactly what the help text promises it as ("Normal speech at
+// another range"). Its lack of a verb prefix is deliberate for that reason and is left alone.
+//
+// DAJ_RP: /low and /long mark the changed voice with a yellow (^3) verb, the same colour /shout's
+// verb uses: /low's "lowers their voice" was grey (^9), and /long had no verb at all and so looked
+// exactly like plain say. /long now reads "raises their voice". /npclow's "Lowers" is lower-cased
+// to match.
 //
 // GalaxyRP fix: [Chat] trailing spaces in /my and /thought. delete_chat_command() strips only the
 // modifier token, so the text handed to va() still begins with the space that separated the two.
@@ -492,8 +496,8 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 // and rendered "Name's  hat" and "is thinking:  text" with a doubled space. The literal's space is
 // dropped -- the one arriving with the text does the job.
 const chat_modifiers_t chat_modifiers[] = {
-	{"/low",		"chat \"%s^9 lowers their voice:^2%s\n\"",			VOICE_DISTANCE_LOW	},
-	{"/long",		"chat \"%s^7:^2%s\n\"",								VOICE_DISTANCE_LONG	},
+	{"/low",		"chat \"%s^3 lowers their voice:^2%s\n\"",			VOICE_DISTANCE_LOW	},
+	{"/long",		"chat \"%s^3 raises their voice:^2%s\n\"",			VOICE_DISTANCE_LONG	},
 	{"/all",		"chat \"%s^7:^2%s\n\"",								BROADCAST_DISTANCE	},
 	{"/melow",		"chat \"%s^3%s\n\"",								ACTION_DISTANCE_LOW	},
 	{"/meall",		"chat \"%s^3%s\n\"",								BROADCAST_DISTANCE	},
@@ -521,7 +525,7 @@ const chat_modifiers_t chat_modifiers[] = {
 	{"/catharese",	"chat \"%s ^3(Catharese):^2%s\n\"",					VOICE_DISTANCE		},
 	{"/mando",		"chat \"%s ^3(Mando'a):^2%s\n\"",					VOICE_DISTANCE		},
 	{"/npc",		"chat \"^3(%s^3) NPC:^4%s\n\"",						VOICE_DISTANCE		},
-	{"/npclow",		"chat \"^3(%s^3) NPC Lowers their voice:^4%s\n\"",	VOICE_DISTANCE_LOW	},
+	{"/npclow",		"chat \"^3(%s^3) NPC lowers their voice:^4%s\n\"",	VOICE_DISTANCE_LOW	},
 	{"/npcall",		"chat \"^3(%s^3) NPC:^4%s\n\"",						BROADCAST_DISTANCE	},
 	{"/comm",		"chat \"^6<%s^6>^3 -C-^2%s\n\"",					BROADCAST_DISTANCE	},
 	{"/c",			"chat \"^6<%s^6>^3 -C-^2%s\n\"",					BROADCAST_DISTANCE	},
@@ -12575,12 +12579,12 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^7Speech ranges: ^3low ^765, normal 700, ^3shout ^71500, ^3long ^72000, ^3all ^7server-wide.\n\
 ^7Action ranges: ^3low ^7200, normal 1200, ^3long ^72000, ^3all ^7server-wide.\n\
 \n\"");
-				trap->SendServerCommand(ent - g_entities, "print \"^3/me <action>: ^7Actions. ^3/melow /melong /meall\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3/low ^7or ^3/long ^7or ^3/all <text>: ^7Normal speech at another range.\n\
+^3/me <action>: ^7Actions. ^3/melow /melong /meall\n\
 ^3/do <text>: ^7Descriptions of the world around you. ^3/dolow /dolong /doall\n\
 ^3/my <text>: ^7Descriptions of something of yours. ^3/mylow /mylong /myall\n\
 ^3/force <action>: ^7Force actions. ^3/forcelow /forcelong /forceall\n\
 ^3/shout <text>: ^7Shouting, 1500 units. ^3/shoutlong /shoutall ^7(no low variant)\n\
-^3/low ^7or ^3/long ^7or ^3/all <text>: ^7Normal speech at another range.\n\
 ^3/npc <text>: ^7Speak as an NPC, 600 units. ^3/npclow /npcall ^7(no long variant)\n\
 ^3/c ^7or ^3/comm <text>: ^7Comlink message. Server-wide.\n\
 ^3/thought <text>: ^7A thought. Server-wide.\n\
