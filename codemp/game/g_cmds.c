@@ -154,22 +154,22 @@ extern void initialize_rpg_skills(gentity_t *ent);
 const skill_t skills[] = {
 	{5, "Jump",					"makes you use the force to jump higher. Level 5 has no height limit, you can continue jumping up until you run out of force, and it also lets you jump out of water",																																			"force",	"neutral",	FP_LEVITATION},
 	{5, "Push",					"pushes the opponent forward",																																																																					"force",	"neutral",	FP_PUSH},
-	{5, "Pull",					"pulls the opponent towards you",																																																																				"force",	"neutral",	FP_PULL},
-	{5, "Speed",				"increases your speed. Level 1 is 1.5 times normal speed. Level 2 is 2.0, level 3 is 2.5 times and level 4 is 3.0 times",																																														"force",	"neutral",	FP_SPEED},
-	{3, "Sense",				"allows you to see people through walls, invisible people or cloaked people and you can dodge disruptor shots. Represents your mind strength to resist Mind Control if your sense level is equal or higher than the enemy's mind trick level",																	"force",	"neutral",	FP_SEE},
-	{5, "Saber Attack",			"gives you the saber. If you are using Single Saber, gives you the saber styles. If using duals or staff, increases saber damage, which is increased by 20 per cent for each level.",																															"force",	"neutral",	FP_SABER_OFFENSE},
+	{5, "Pull",					"pulls the opponents towards you. Also can pull a gun out of their hands",																																																																				"force",	"neutral",	FP_PULL},
+	{5, "Speed",				"increases the speed of your movement",																																														"force",	"neutral",	FP_SPEED},
+	{3, "Sense",				"allows you to see people through obstacles and see cloaked or invisible people. You can also dodge Disruptor shots and resist Mind Trick",																	"force",	"neutral",	FP_SEE},
+	{5, "Saber Attack",			"gives you Lightsaber weapon. Each level gives more saber forms",																															"force",	"neutral",	FP_SABER_OFFENSE},
 	{5, "Saber Defense",		"increases your ability to block, parry enemy saber attacks or enemy shots",																																																									"force",	"neutral",	FP_SABER_DEFENSE},
 	{5, "Saber Throw",			"throws your saber at enemy and gets it back. Each level increases max distance and saber throw speed.",																																																		"force",	"neutral",	FP_SABERTHROW},
 	{5, "Absorb",				"allows you to absorb force power attacks done to you",																																																															"force",	"light",	FP_ABSORB},
 	// GalaxyRP fix: [Skills audit] description gave 5/10/25 hp for levels 1-3; ForceHeal() in w_force.c
 	// restores 10/20/30/40/50 hp for levels 1-5.
 	{5, "Heal",					"restores your health. Level 1 restores 10 hp, level 2 - 20 hp, level 3 - 30 hp, level 4 - 40 hp and level 5 - 50 hp",																																																				"force",	"light",	FP_HEAL},
-	{5, "Protect",				"decreases damage done to you by non-force power attacks. At level 4 decreases force consumption when receiving damage",																																														"force",	"light",	FP_PROTECT},
+	{5, "Protect",				"decreases damage done to you at the cost of your Force power",																																														"force",	"light",	FP_PROTECT},
 	// GalaxyRP fix: [Skills audit] description no longer references the "Force User class can mind
 	// control a player or npc" sub-feature -- rpg_class is permanently 0 (see the "Dead Code"
 	// comments in w_force.c), so that ability was removed in an earlier, unrelated RPG-class
 	// cleanup and the description text was simply never updated to match.
-	{5, "Mind Trick",			"makes yourself invisible to the players affected by this force power. Level 1 has a duration of 20 seconds, level 2 is 25 seconds and level 3 is 30 seconds",																								"force",	"neutral",	FP_TELEPATHY},
+	{5, "Mind Trick",			"makes yourself invisible to the players you aim at. Higher levels affect more players around you",																								"force",	"neutral",	FP_TELEPATHY},
 	// GalaxyRP fix: [Skills audit] "players near you" -- ForceTeamHeal() reaches only the caster's allies
 	// and friendly npcs (RP_TeamPowerTargetValid in w_force.c).
 	{5, "Team Heal",			"restores health to your allies and friendly npcs near you. The range and HP restored grow with each level",																																																																		"force",	"light",	FP_TEAM_HEAL},
@@ -180,7 +180,7 @@ const skill_t skills[] = {
 	// regen force when taking damage" sub-feature -- that class/behavior was removed in an earlier,
 	// unrelated RPG-class cleanup (see the "Dead Code" comment in g_combat.c) and the description
 	// text was simply never updated to match.
-	{5, "Rage",					"makes you 1.3 times faster, increases your saber attack speed and damage and makes you get less damage",															"force",	"dark",		FP_RAGE},
+	{5, "Rage",					"makes you faster, reduces damage taken and increases your saber attack speed and damage, all at the cost of your HP",															"force",	"dark",		FP_RAGE},
 	// GalaxyRP fix: [Skills audit] description no longer references the "If Improvements skill is at
 	// least at level 1, regens blaster pack and power cell ammo of the target players" sub-feature --
 	// that ammo-regen branch (gated on the since-removed Improvements skill) was already stripped out
@@ -205,7 +205,7 @@ const skill_t skills[] = {
 	{4, "Health Strength",		"Each level increases your health resistance by 7 per cent",																																																													"protect",	"merc",		0},
 	{1, "Drain Shield",			"When using Drain force power, and your health is full, restores some shield. It also makes Drain suck hp/shield from the enemy to restore your hp/shield",																																						"force",	"merc",		0},
 	{3, "Jetpack",				"the jetpack, used by Boba Fett. Allows you to fly. To use it, jump and press the Use key (usually R) while in the middle of the jump. Each level uses less fuel, allowing you to fly for a longer time",																										"items",	"merc",		HI_JETPACK},
-	{3, "Sense Health",			"allows you to see info about someone, including npcs and vehicles. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force (a vehicle shows hull and shields, and whether it is empty or occupied). To use it, use ^3Sense ^7force power and aim at someone; if you aim at nobody, it shows the nearest player, else the nearest npc, else the nearest vehicle",		"force",	"light",	0},
+	{3, "Sense Health",			"allows you to see information about player, NPC or vehicle you aim at or who is near you. Requires Sense Force power",		"force",	"light",	0},
 	// GalaxyRP fix: [Skills audit] Shield Heal only runs inside ForceHeal(), so it needs the Heal skill
 	// and costs a heal's Force -- neither was stated, and without Heal the skill silently did nothing.
 	{3, "Shield Heal",			"restores some of your shield. To use it, use Heal force power when you have full HP. Requires the Heal skill, and costs the same Force as a Heal",																																											"force",	"merc",		0},
