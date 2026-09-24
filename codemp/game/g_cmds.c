@@ -2624,7 +2624,8 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	// is deliberately left that way, so it keeps starting with both Admin Protect and the Use Hint ON.
 	// DAJ_RP: [Settings] and bit 5 (Sense Health Toggle, /settings 1) for the same reason: inverted, and
 	// meant to start OFF. It used to be "Language", left clear here for English.
-	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6) | (1 << 5)); // Admin Protect + Use Hint + Sense Health Toggle OFF by default
+	// DAJ_RP: [Settings] and bit 16 (Ignore Chat Distance, /settings 5), inverted too and meant to start OFF.
+	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6) | (1 << 5) | (1 << 16)); // Admin Protect + Use Hint + Sense Health Toggle + Ignore Chat Distance OFF by default
 	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	// GalaxyRP fix: [stability] this used to never check the INSERT's own result -- an error here (most
@@ -8337,6 +8338,30 @@ static qboolean zyk_chat_is_ignored( gentity_t *ent, gentity_t *other )
 	return (level.ignored_players[other->s.number][1] & (1 << (ent->s.number - 31))) ? qtrue : qfalse;
 }
 
+/*
+==================
+zyk_ignores_chat_distance
+
+DAJ_RP: [Settings] whether other hears range-limited chat from anywhere on the map: it needs both the
+"Ignore Chat Distance" admin power AND the Ignore Chat Distance toggle ON (/settings 5, player_settings
+bit 16, inverted like every /settings toggle: clear == ON, set == OFF). The toggle lets an admin who is
+in the world hear chat by distance like anyone else, e.g. while roleplaying. Spectators are a separate
+clause at each caller and always hear everything, toggle or not. Both fields are cleared on logout and
+on disconnect, so neither can outlive the account that set it.
+
+The one test shared by all three range-limited chat senders: plain chat and the RP modifier loop in
+G_Say(), and zyk_send_chat_within_distance() (/roll, /flipcoin).
+==================
+*/
+static qboolean zyk_ignores_chat_distance( const gentity_t *other )
+{
+	if ( !other || !other->client )
+		return qfalse;
+
+	return ( (other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE)) &&
+		!(other->client->pers.player_settings & (1 << 16)) ) ? qtrue : qfalse;
+}
+
 static void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, const char *name, const char *message, char *locMsg )
 {
 	if (!other) {
@@ -8594,7 +8619,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 				// at any distance, exactly as it does for the chat G_SayTo() delivers.
 				if (zyk_chat_is_ignored(ent, other))
 					continue;
-				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[best].distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
+				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= chat_modifiers[best].distance || zyk_ignores_chat_distance(other) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 				{
 					// GalaxyRP fix: [Chat] send to j, not other->client->ps.clientNum. A recipient
 					// must be addressed by their own entity index: SpectatorClientEndFrame
@@ -8704,7 +8729,7 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 				// (g_entities[i].client is assigned for every slot in G_InitGame, so it is never NULL),
 				// but an unoccupied slot reads TEAM_FREE rather than TEAM_SPECTATOR, and G_SayTo()
 				// below rejects any slot that is not inuse/connected before sending anything.
-				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance || other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
+				if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance || zyk_ignores_chat_distance(other) || other->client->sess.sessionTeam == TEAM_SPECTATOR)
 				{
 					if (ooc_flag == 1) {
 						G_SayTo(ent, other, mode, color, name, ooc_text, locMsg);
@@ -11171,7 +11196,8 @@ static qboolean zyk_parse_dice_arg(const char *arg, int *number_of_dice, int *ma
 // every /me, /do, /my and /shout variant in chat_modifiers[] above is distance-scoped. This sends an
 // already-formatted chat line to the players who would have received a /me from this player, and
 // matches the receiver rules the chat_modifiers dispatch in G_Say uses: an admin holding
-// ADM_IGNORECHATDISTANCE hears everything, and spectators always hear everything. G_Say's own loops
+// ADM_IGNORECHATDISTANCE with /settings 5 ON hears everything (see zyk_ignores_chat_distance()), and
+// spectators always hear everything. G_Say's own loops
 // are deliberately left in place -- this is a third caller of the same rules, not a refactor of them.
 // All three now agree on both clauses; plain chat was the last to gain the spectator one.
 static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const char *message)
@@ -11193,7 +11219,7 @@ static void zyk_send_chat_within_distance(gentity_t *ent, int distance, const ch
 			continue;
 
 		if (Distance(ent->client->ps.origin, other->client->ps.origin) <= distance ||
-			other->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE) ||
+			zyk_ignores_chat_distance(other) ||
 			other->client->sess.sessionTeam == TEAM_SPECTATOR)
 		{
 			// GalaxyRP fix: [Dice] send to i, not other->client->ps.clientNum. A spectator following
@@ -13902,6 +13928,20 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			len += sprintf(message + len, "\n^3 4 - Use Hint - ^2ON");
 		}
 
+		// DAJ_RP: [Settings] new setting on bit 16, one of the bits no setting has ever used, so every
+		// account that predates it holds a 0 there -- read as ON under the inversion (clear == ON, set
+		// == OFF), which keeps existing admins hearing everything exactly as before. New accounts are
+		// created with it SET (OFF) -- see insert_accounts_table_row(). Only means anything with the
+		// "Ignore Chat Distance" admin power -- see zyk_ignores_chat_distance().
+		if (ent->client->pers.player_settings & (1 << 16))
+		{
+			len += sprintf(message + len, "\n^3 5 - Ignore Chat Distance (Requires Ignore Chat Distance admin power) - ^1OFF");
+		}
+		else
+		{
+			len += sprintf(message + len, "\n^3 5 - Ignore Chat Distance (Requires Ignore Chat Distance admin power) - ^2ON");
+		}
+
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
 		// (Difficulty/Challenge Mode) used to be printed here. Both settings have been removed below
 		// (see the range-check comment further down) since everything downstream of Challenge Mode
@@ -13937,7 +13977,8 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// GalaxyRP: [Use hint] /settings 4 added -- "Use Hint" -- reusing bit 6, freed by the old
 		// "Allow Force Powers from allies" toggle. Another brand new player-facing number that just
 		// happens to land on a previously-used bit because that bit was already free.
-		static const int settings_number_to_bit[] = { 0, 5, 13, 11, 6 }; // index 0 unused (rejected below)
+		// DAJ_RP: [Settings] /settings 5 added -- "Ignore Chat Distance" -- on bit 16, never used before.
+		static const int settings_number_to_bit[] = { 0, 5, 13, 11, 6, 16 }; // index 0 unused (rejected below)
 
 		if (value <= 0 || value >= (int)ARRAY_LEN(settings_number_to_bit))
 		{
@@ -14033,6 +14074,19 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		else if (value == 6)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Use Hint %s\n\"", new_status) );
+		}
+		else if (value == 16)
+		{
+			// DAJ_RP: [Settings] allowed without the admin power -- it just does nothing until the power
+			// is granted -- so warn rather than refuse, as the Sense Health Toggle does
+			if (!(ent->client->pers.player_settings & (1 << 16)) && !(ent->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE)))
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Ignore Chat Distance %s\n^3You don't have the Ignore Chat Distance admin power, so this has no effect.\n\"", new_status) );
+			}
+			else
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Ignore Chat Distance %s\n\"", new_status) );
+			}
 		}
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music) and value==15 (Difficulty)
 		// print branches used to be here. Removed since 14 and 15 are now rejected above as invalid
@@ -16601,7 +16655,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_IGNORECHATDISTANCE)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nWith this flag a player can see all chats on the server no matter the distance\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nWith this flag a player hears every range-limited chat (speech, RP modifiers, rolls) on the map, whatever the distance. Can be turned off with ^3/settings 5^7\n\n\"");
 		}
 		else if (command_number == ADM_XP)
 		{

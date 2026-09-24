@@ -866,8 +866,9 @@ typedef struct clientPersistant_s {
 	// feature hold whatever that player last set, not zero. In practice a pre-existing account starts
 	// with the hint ON or OFF depending on a choice its owner made about an unrelated setting years
 	// ago. That is accepted here rather than migrated (a deliberate call), and /settings 4 reports and
-	// changes the current state either way. Bits 16-25 and 30-31 have never been used by any setting
+	// changes the current state either way. Bits 17-25 and 30-31 have never been used by any setting
 	// in this mod's history and are the ones to reach for when a predictable default actually matters.
+	// (Bit 16 was one of them until /settings 5 took it -- see 16 below.)
 	// 6 - Use Hint (/settings 4)
 	// 7 - Show magic cast in chat
 	// GalaxyRP fix: [Settings] bit 9 ("Allow Screen Message") documentation removed here -- that
@@ -888,6 +889,10 @@ typedef struct clientPersistant_s {
 	// removed from the game entirely (its bit was only ever read back by its own status line, never by
 	// anything gating actual jetpack availability).
 	// 13 - Admin Protect (/settings 2)
+	// 16 - Ignore Chat Distance (/settings 5). DAJ_RP: never used before, so every older account holds a
+	//      0 here and reads as ON (inverted: clear == ON, set == OFF) -- existing admins keep hearing
+	//      everything. New accounts are created with it SET (OFF). Only has an effect together with the
+	//      ADM_IGNORECHATDISTANCE admin power; see zyk_ignores_chat_distance() (g_cmds.c).
 	// GalaxyRP fix: [Settings] bits 14 ("Boss Battle Music") and 15 ("Difficulty") documentation
 	// removed here — those settings have been removed from the game entirely.
 	// GalaxyRP fix: [Settings] bits 26-29 ("Starting Single Saber Style") documentation removed here
