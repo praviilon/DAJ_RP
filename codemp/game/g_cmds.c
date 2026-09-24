@@ -432,6 +432,9 @@ const char anim_headers[MAX_EMOTE_CATEGORIES][50] = {
 #define VOICE_DISTANCE_LONG 2000
 #define VOICE_DISTANCE_LOW 65
 #define SHOUT_DISTANCE 1500
+// DAJ_RP: /whisper and /whisperlow, the quiet counterpart of /shout.
+#define WHISPER_DISTANCE 65
+#define WHISPER_DISTANCE_LOW 50
 #define ACTION_DISTANCE 1200
 #define ACTION_DISTANCE_LOW 200
 #define ACTION_DISTANCE_LONG 2000
@@ -506,6 +509,8 @@ const chat_modifiers_t chat_modifiers[] = {
 	{"/shoutlong",	"chat \"%s ^3shouts:^2%s\n\"",						VOICE_DISTANCE_LONG	},
 	{"/shoutall",	"chat \"%s ^3shouts:^2%s\n\"",						BROADCAST_DISTANCE	},
 	{"/shout",		"chat \"%s ^3shouts:^2%s\n\"",						SHOUT_DISTANCE		},
+	{"/whisperlow",	"chat \"%s ^3whispers:^2%s\n\"",						WHISPER_DISTANCE_LOW},
+	{"/whisper",	"chat \"%s ^3whispers:^2%s\n\"",						WHISPER_DISTANCE	},
 	{"/dolow",		"chat \"^3(%s^3)%s\n\"",							ACTION_DISTANCE_LOW	},
 	{"/dolong",		"chat \"^3(%s^3)%s\n\"",							ACTION_DISTANCE_LONG},
 	{"/doall",		"chat \"^3(%s^3)%s\n\"",							BROADCAST_DISTANCE	},
@@ -8521,8 +8526,8 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 		//     shorter modifier must be listed after every longer one it prefixes -- had to hold by
 		//     hand, and it did not: /npc preceded /npclow and /npcall, making both unreachable
 		//     ("/npclow psst" spoke at 600 units as "low psst"). Taking the LONGEST prefix makes
-		//     table order irrelevant, so that class of mistake cannot come back. All 34 entries
-		//     resolve to themselves under this rule; the 19 prefix pairs (/c before /catharese and
+		//     table order irrelevant, so that class of mistake cannot come back. All 36 entries
+		//     resolve to themselves under this rule; the 20 prefix pairs (/c before /catharese and
 		//     /comm, /me before /melow..., /ryl before /ryl2, and the rest) are all decided by
 		//     length, not position.
 		//
@@ -12574,9 +12579,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Chat Modifiers--------\n\
 ^7Type a modifier at the start of a chat box message: ^3/me draws a blaster.\n\
 ^7Modifiers work on normal speech only - the chat box, or ^3/say^7.\n\
-^7Most take a range suffix: ^3low ^7to whisper, ^3long ^7to carry further, ^3all ^7for server-wide.\n\
+^7Most take a range suffix: ^3low ^7to speak quietly, ^3long ^7to carry further, ^3all ^7for server-wide.\n\
 \n\
-^7Speech ranges: ^3low ^765, normal 700, ^3shout ^71500, ^3long ^72000, ^3all ^7server-wide.\n\
+^7Speech ranges: ^3whisper ^765, ^3low ^765, normal 700, ^3shout ^71500, ^3long ^72000, ^3all ^7server-wide.\n\
 ^7Action ranges: ^3low ^7200, normal 1200, ^3long ^72000, ^3all ^7server-wide.\n\
 \n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3/low ^7or ^3/long ^7or ^3/all <text>: ^7Normal speech at another range.\n\
@@ -12585,6 +12590,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/my <text>: ^7Descriptions of something of yours. ^3/mylow /mylong /myall\n\
 ^3/force <action>: ^7Force actions. ^3/forcelow /forcelong /forceall\n\
 ^3/shout <text>: ^7Shouting, 1500 units. ^3/shoutlong /shoutall ^7(no low variant)\n\
+^3/whisper <text>: ^7Whispering, 65 units. ^3/whisperlow ^7(50 units, no long or all variant)\n\
 ^3/npc <text>: ^7Speak as an NPC, 600 units. ^3/npclow /npcall ^7(no long variant)\n\
 ^3/c ^7or ^3/comm <text>: ^7Comlink message. Server-wide.\n\
 ^3/thought <text>: ^7A thought. Server-wide.\n\
