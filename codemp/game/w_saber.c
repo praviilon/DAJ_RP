@@ -4628,7 +4628,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		if ( !d_saberSPStyleDamage.integer//let's trying making blocks have to be blocked by a saber
 			&& g_entities[tr.entityNum].client
 			&& !unblockable
-			&& WP_SaberCanBlock(&g_entities[tr.entityNum], tr.endpos, 0, MOD_SABER, qfalse, attackStr))
+			&& WP_SaberCanBlock(&g_entities[tr.entityNum], self, tr.endpos, 0, MOD_SABER, qfalse, attackStr))
 		{//hit a client who blocked the attack (fake: didn't actually hit their saber)
 			if (dmg <= SABER_NONATTACK_DAMAGE)
 			{
@@ -5973,7 +5973,7 @@ static QINLINE qboolean CheckThrownSaberDamaged(gentity_t *saberent, gentity_t *
 
 			if (tr.fraction == 1 || tr.entityNum == ent->s.number)
 			{ //Slice them
-				if (!saberOwner->client->ps.isJediMaster && WP_SaberCanBlock(ent, tr.endpos, 0, MOD_SABER, qfalse, 999))
+				if (!saberOwner->client->ps.isJediMaster && WP_SaberCanBlock(ent, saberOwner, tr.endpos, 0, MOD_SABER, qfalse, 999))
 				{ //they blocked it
 					WP_SaberBlockNonRandom(ent, tr.endpos, qfalse);
 
@@ -7030,7 +7030,13 @@ void saberBackToOwner(gentity_t *saberent)
 		return;
 	}
 
-	if (saberOwner->health < 1 || !saberOwner->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE])
+	// GalaxyRP fix: [Death System] a downed or admin-paralyzed owner counts as dead here. They sit on
+	// RP_DOWNED_HEALTH, so the health test alone let a saber thrown just before going down keep
+	// flying -- steered by the downed player's view, homing at level 3+ and still dealing throw
+	// damage -- for the rest of its flight. This branch drops a prop saber and hands the real one
+	// back with the flight cleared; RP_EnterDownedState() (g_cmds.c) has already switched it off.
+	if (saberOwner->health < 1 || !saberOwner->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] ||
+		G_PlayerIsDowned(saberOwner) || G_PlayerIsAdminParalyzed(saberOwner))
 	{ //He's dead, just go back to our normal saber status
 		saberent->touch = SaberGotHit;
 		saberent->think = SaberUpdateSelf;
@@ -7231,7 +7237,9 @@ void saberFirstThrown(gentity_t *saberent)
 		return;
 	}
 
-	if (saberOwn->health < 1 || !saberOwn->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE])
+	// GalaxyRP fix: [Death System] downed or admin-paralyzed counts as dead -- see saberBackToOwner().
+	if (saberOwn->health < 1 || !saberOwn->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] ||
+		G_PlayerIsDowned(saberOwn) || G_PlayerIsAdminParalyzed(saberOwn))
 	{ //He's dead, just go back to our normal saber status
 		saberent->touch = SaberGotHit;
 		saberent->think = SaberUpdateSelf;
@@ -7329,24 +7337,28 @@ void saberFirstThrown(gentity_t *saberent)
 
 		if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_4) // zyk: level 4 makes it even faster
 			VectorScale(dir, 900, saberent->s.pos.trDelta );
-		else if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_5) // zyk: level 4 makes it even faster
+		else if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_5) // zyk: level 5 makes it faster still
 			VectorScale(dir, 1300, saberent->s.pos.trDelta);
 		else
 			VectorScale(dir, 500, saberent->s.pos.trDelta );
 
 		saberent->s.pos.trTime = level.time;
 
+		// GalaxyRP fix: [Force] levels 4 and 5 used to re-aim LESS often than level 3 while flying
+		// faster (500, 900, 1300 units/s), so a level 5 saber overshot what it was homing on. This
+		// function runs once per G_RunObject() think, every FRAMETIME (100ms), and the re-aim test
+		// above is a strict "speed < level.time", so the real intervals were 500/200/300/400ms for
+		// levels 2-5 -- up to ~520 units between corrections at level 5. Levels 4 and 5 now re-aim on
+		// every think (100ms: ~90 and ~130 units between corrections), the fastest this can go;
+		// levels 2 and 3 are unchanged (500ms and 200ms, ~250 and ~100 units).
 		if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_3)
 		{ //we'll treat them to a quicker update rate if their throw rank is high enough
 			saberent->speed = level.time + 100;
 		}
-		else if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_4)
-		{ //we'll treat them to a quicker update rate if their throw rank is high enough
-			saberent->speed = level.time + 200;
-		}
-		else if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_5)
-		{ //we'll treat them to a quicker update rate if their throw rank is high enough
-			saberent->speed = level.time + 300;
+		else if (saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_4 ||
+			saberOwn->client->ps.fd.forcePowerLevel[FP_SABERTHROW] == FORCE_LEVEL_5)
+		{ //re-aim on the very next think
+			saberent->speed = level.time;
 		}
 		else
 		{
@@ -9391,9 +9403,78 @@ void WP_SaberBlock( gentity_t *playerent, vec3_t hitloc, qboolean missileBlock )
 	}
 }
 
-int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr)
+/*
+GalaxyRP fix: [Combat] whether a would-be saber blocker is aiming at the attacker: the attacker's
+centre within RP_SABER_AIM_BLOCK_COS of the blocker's view direction (15 degrees), with no world
+geometry in between. Any distance.
+
+This replaces the "reticule on attacker" shortcut WP_SaberCanBlock() used to take on
+ps.hasLookTarget. That flag does not mean what the old comment said: WP_SaberStartMissileBlockCheck()
+sets it whenever ANY living client or NPC -- teammate, bystander, a downed player -- is within 256
+units and in sight, and it knows nothing about the attacker. Returning 1 on it skipped every later
+check: Saber Defense 0 blocked (and, through the level-0 fall-through in G_MissileImpact, reflected
+everything), blocking worked from behind and while channelling Grip/Lightning/Drain, and Defense 3+
+was immune to disruptor shots from any direction. hasLookTarget itself is left alone; it still drives
+head tracking.
+*/
+#define RP_SABER_AIM_BLOCK_COS	0.96592583f	// cos(15 degrees)
+
+static qboolean RP_SaberAimingAtAttacker( gentity_t *self, gentity_t *attacker )
+{
+	vec3_t eye, target, dir, fwd;
+	trace_t tr;
+
+	if ( !self || !self->client || !attacker || attacker == self || !attacker->inuse )
+	{
+		return qfalse;
+	}
+
+	VectorCopy( self->client->ps.origin, eye );
+	eye[2] += self->client->ps.viewheight;
+
+	// centre of the attacker's bounds (linked entities); its origin otherwise
+	if ( attacker->r.linked )
+	{
+		VectorAdd( attacker->r.absmin, attacker->r.absmax, target );
+		VectorScale( target, 0.5f, target );
+	}
+	else if ( attacker->client )
+	{
+		VectorCopy( attacker->client->ps.origin, target );
+	}
+	else
+	{
+		VectorCopy( attacker->r.currentOrigin, target );
+	}
+
+	VectorSubtract( target, eye, dir );
+	if ( VectorNormalize( dir ) <= 0.0f )
+	{
+		return qfalse;
+	}
+
+	AngleVectors( self->client->ps.viewangles, fwd, NULL, NULL );
+	if ( DotProduct( fwd, dir ) < RP_SABER_AIM_BLOCK_COS )
+	{
+		return qfalse;
+	}
+
+	trap->Trace( &tr, eye, NULL, NULL, target, self->s.number, MASK_SOLID, qfalse, 0, 0 );
+	if ( tr.fraction < 1.0f && tr.entityNum != attacker->s.number )
+	{
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+// GalaxyRP fix: [Combat] attacker added -- the entity whose attack is being blocked (a missile's
+// current owner, the disruptor shooter, the swinging player, the saber thrower), or NULL if unknown.
+// See RP_SaberAimingAtAttacker() above.
+int WP_SaberCanBlock(gentity_t *self, gentity_t *attacker, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr)
 {
 	qboolean thrownSaber = qfalse;
+	qboolean aimingAtAttacker = qfalse;
 	float blockFactor = 0;
 
 	if (!self || !self->client || !point)
@@ -9502,16 +9583,19 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 	*/
 
 	// GalaxyRP (Alex): [Combat] If player has reticule on attacker, block it.
-	if (self->client->ps.hasLookTarget) {
-		return 1;
-	}
+	// GalaxyRP fix: [Combat] now really the attacker under the reticule -- see
+	// RP_SaberAimingAtAttacker() above. Aiming at them waives the "saber must be idle" checks just
+	// below and the facing cone further down, and nothing else: Saber Defense 1 or higher, the block
+	// cooldown, hands free of a channelled force power, and every check above this point still apply.
+	aimingAtAttacker = RP_SaberAimingAtAttacker(self, attacker);
 
-	if (SaberAttacking(self))
+	if (!aimingAtAttacker && SaberAttacking(self))
 	{ //attacking, can't block now
 		return 0;
 	}
 
-	if (self->client->ps.saberMove != LS_READY &&
+	if (!aimingAtAttacker &&
+		self->client->ps.saberMove != LS_READY &&
 		!self->client->ps.saberBlocking)
 	{
 		return 0;
@@ -9575,7 +9659,7 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 		blockFactor -= 0.25f;
 	}
 
-	if (!InFront( point, self->client->ps.origin, self->client->ps.viewangles, blockFactor )) //orig 0.2f
+	if (!aimingAtAttacker && !InFront( point, self->client->ps.origin, self->client->ps.viewangles, blockFactor )) //orig 0.2f
 	{
 		return 0;
 	}

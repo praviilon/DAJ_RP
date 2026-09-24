@@ -648,7 +648,11 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		ent->methodOfDeath != MOD_CONC_ALT &&
 		other->client->ps.saberBlockTime < level.time &&
 		!isKnockedSaber &&
-		WP_SaberCanBlock(other, ent->r.currentOrigin, 0, 0, qtrue, 0))
+		// GalaxyRP fix: [Combat] the attacker is whoever last sent this missile (r.ownerNum, which a
+		// reflect re-points at the reflector), so WP_SaberCanBlock can tell whether the blocker is
+		// aiming at them.
+		WP_SaberCanBlock(other, (ent->r.ownerNum >= 0 && ent->r.ownerNum < ENTITYNUM_WORLD) ? &g_entities[ent->r.ownerNum] : NULL,
+			ent->r.currentOrigin, 0, 0, qtrue, 0))
 	{ //only block one projectile per 200ms (to prevent giant swarms of projectiles being blocked)
 		vec3_t fwd;
 		gentity_t *te;
@@ -676,7 +680,11 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		}
 
 		AngleVectors(other->client->ps.viewangles, fwd, NULL, NULL);
-		if (otherDefLevel == FORCE_LEVEL_1)
+		// GalaxyRP fix: [Combat] this tested == FORCE_LEVEL_1, so an effective level of 0 -- Saber
+		// Defense 1 while jumping or backpedalling (the -1 just above), or a Defense 0 block --
+		// matched none of the arms below and fell into the final else, the Defense 5 100% reflect.
+		// Level 0 now stops the shot the way level 1 does; it never reflects.
+		if (otherDefLevel <= FORCE_LEVEL_1)
 		{
 			//if def is only level 1, instead of deflecting the shot it should just die here
 		}
@@ -723,7 +731,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			other->client->ps.saberBlockTime = 0; //^_^
 		}
 
-		if (otherDefLevel == FORCE_LEVEL_1)
+		if (otherDefLevel <= FORCE_LEVEL_1)
 		{
 			goto killProj;
 		}
@@ -751,7 +759,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			int otherDefLevel = otherOwner->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE];
 
 			//in this case, deflect it even if we can't actually block it because it hit our saber
-			//WP_SaberCanBlock(otherOwner, ent->r.currentOrigin, 0, 0, qtrue, 0);
+			//WP_SaberCanBlock(otherOwner, NULL, ent->r.currentOrigin, 0, 0, qtrue, 0);
 			if (otherOwner->client && otherOwner->client->ps.weaponTime <= 0)
 			{
 				WP_SaberBlockNonRandom(otherOwner, ent->r.currentOrigin, qtrue);
@@ -779,7 +787,9 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 
 			AngleVectors(otherOwner->client->ps.viewangles, fwd, NULL, NULL);
 
-			if (otherDefLevel == FORCE_LEVEL_1)
+			// GalaxyRP fix: [Combat] same level-0 fall-through as the body block above: a Defense 0
+			// blade (or Defense 1 while jumping/backpedalling) used to reflect everything.
+			if (otherDefLevel <= FORCE_LEVEL_1)
 			{
 				//if def is only level 1, instead of deflecting the shot it should just die here
 			}
@@ -834,7 +844,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 				otherOwner->client->ps.saberBlockTime = 0; //^_^
 			}
 
-			if (otherDefLevel == FORCE_LEVEL_1)
+			if (otherDefLevel <= FORCE_LEVEL_1)
 			{
 				goto killProj;
 			}

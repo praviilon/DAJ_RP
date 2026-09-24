@@ -995,9 +995,26 @@ int WP_AbsorbConversion(gentity_t *attacked, int atdAbsLevel, gentity_t *attacke
 	// GalaxyRP fix: [Force] this was `== 4`, so Absorb 5 silently lost the bonus that Absorb 4 got
 	// while still keeping the level-4 no-upkeep-drain benefit (which tests `< FORCE_LEVEL_4`).
 	// Spending the points to go 4 -> 5 was a straight downgrade of 20 force per absorbed hit.
+	//
+	// GalaxyRP fix: [Force] at most once a second against Lightning and Drain. Those two call this
+	// on every 50ms tick of the channel (ForceLightningDamage / ForceDrainDamage) with atForceSpent 1,
+	// so the bonus meant to reward absorbing an attack was paid twenty times a second: holding Drain
+	// on an Absorb 4+ target filled their pool at about 500 force/s instead of emptying it, which made
+	// any Drain user a free refill for an Absorb 4+ ally. The timer is per victim and shared by every
+	// attacker, so two drainers do not double it. Push and Pull are single hits with their own
+	// cooldowns and keep the bonus per hit; Grip never gets here with Absorb active (ForcePowerUsableOn
+	// refuses to grip an absorbing target). The stock "at least 1 per absorbed tick" above is unchanged.
 	if (attacked->client->sess.amrpgmode == 2 && attacked->client->pers.skill_levels[8] >= FORCE_LEVEL_4)
 	{ // zyk: Absorb 4/4 and above in RPG Mode absorbs more force
-		addTot = addTot + (RP_MAX_FORCE_POWER/10);
+		if (atPower != FP_LIGHTNING && atPower != FP_DRAIN)
+		{
+			addTot = addTot + (RP_MAX_FORCE_POWER/10);
+		}
+		else if (attacked->client->absorbBonusTime <= level.time)
+		{
+			addTot = addTot + (RP_MAX_FORCE_POWER/10);
+			attacked->client->absorbBonusTime = level.time + 1000;
+		}
 	}
 
 	attacked->client->ps.fd.forcePower += addTot;
@@ -2530,6 +2547,85 @@ void ForceDrain( gentity_t *self )
 	WP_ForcePowerStart( self, FP_DRAIN, 500 );
 }
 
+/*
+GalaxyRP fix: [Force] Drain Shield's second half: "It also makes Drain suck hp/shield from the enemy
+to restore your hp/shield". zyk wrote it as a branch inside ForceDrainDamage() for a target with no
+force left, but the check wrapped around the whole drain required the target to HAVE force, and
+nothing lets force go below 0, so the branch could never run.
+
+It runs now, for a target that is alive, has no force, and is not a vehicle, when the caster is a
+logged-in character with the Drain Shield skill. Downed and admin-paralyzed targets never reach it
+(ForceDrainDamage() refuses them outright). The damage goes through G_Damage(), so every protection
+that lives there -- allies, chat protection, duels and the mini-games, invulnerability, noclip,
+Protect, Rage -- applies, and the caster is restored by exactly what the target lost in health and
+shield: nothing when the hit was refused, and never more than was taken. Health first, anything left
+over to shield, each capped at the caster's maximum.
+*/
+static qboolean RP_DrainShieldCanSteal( gentity_t *self, gentity_t *target )
+{
+	if ( !self || !self->client || self->client->sess.amrpgmode != 2 || self->client->pers.skill_levels[33] <= 0 )
+	{
+		return qfalse;
+	}
+
+	if ( !target || !target->client || target->health <= 0 || target->client->ps.fd.forcePower > 0 )
+	{
+		return qfalse;
+	}
+
+	if ( target->s.eType == ET_NPC && target->s.NPC_class == CLASS_VEHICLE )
+	{
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+// health plus shield, the two things the steal can take
+static int RP_DrainShieldPool( gentity_t *target )
+{
+	int pool = (target->health > 0) ? target->health : 0;
+
+	if ( target->client && target->client->ps.stats[STAT_ARMOR] > 0 )
+	{
+		pool += target->client->ps.stats[STAT_ARMOR];
+	}
+
+	return pool;
+}
+
+static void RP_DrainShieldRestore( gentity_t *self, int amount )
+{
+	if ( amount <= 0 || self->health <= 0 || self->client->ps.stats[STAT_HEALTH] <= 0 )
+	{
+		return;
+	}
+
+	if ( self->health < self->client->ps.stats[STAT_MAX_HEALTH] )
+	{
+		int room = self->client->ps.stats[STAT_MAX_HEALTH] - self->health;
+
+		if ( room > amount )
+		{
+			room = amount;
+		}
+
+		self->health += room;
+		self->client->ps.stats[STAT_HEALTH] = self->health;
+		amount -= room;
+	}
+
+	if ( amount > 0 && self->client->ps.stats[STAT_ARMOR] < self->client->pers.max_rpg_shield )
+	{
+		self->client->ps.stats[STAT_ARMOR] += amount;
+
+		if ( self->client->ps.stats[STAT_ARMOR] > self->client->pers.max_rpg_shield )
+		{
+			self->client->ps.stats[STAT_ARMOR] = self->client->pers.max_rpg_shield;
+		}
+	}
+}
+
 void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t impactPoint )
 {
 	gentity_t *tent;
@@ -2540,7 +2636,20 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 
 	if ( traceEnt && traceEnt->takedamage )
 	{
-		if ( traceEnt->client && (!OnSameTeam(self, traceEnt) || g_friendlyFire.integer) && self->client->ps.fd.forceDrainTime < level.time && traceEnt->client->ps.fd.forcePower )
+		// GalaxyRP fix: [Force] never a corpse, a downed player or an admin-paralyzed one. The level
+		// 1-2 beam had no health test at all (only the level 3+ cone skipped corpses), so it drained
+		// the force still sitting on a dead body; and nothing refused a downed or paralyzed target,
+		// who cannot defend or start Absorb, so they were a free heal source for the whole countdown.
+		// ForceShootDrain() already filters all three; this is the backstop for any other caller.
+		if ( traceEnt->health <= 0 || G_PlayerIsDowned( traceEnt ) || G_PlayerIsAdminParalyzed( traceEnt ) )
+		{
+			return;
+		}
+
+		// GalaxyRP fix: [Force] "|| RP_DrainShieldCanSteal" -- see the comment on that function. This
+		// test alone is what made the Drain Shield steal branch below unreachable.
+		if ( traceEnt->client && (!OnSameTeam(self, traceEnt) || g_friendlyFire.integer) && self->client->ps.fd.forceDrainTime < level.time &&
+			(traceEnt->client->ps.fd.forcePower || RP_DrainShieldCanSteal(self, traceEnt)) )
 		{//an enemy or object
 			if (!traceEnt->client && traceEnt->s.eType == ET_NPC)
 			{ //g2animent
@@ -2556,6 +2665,8 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 			{
 				int modPowerLevel = -1;
 				int	dmg = 0; //Q_irand( 1, 3 );
+				int stolen = 0; // GalaxyRP fix: [Force] health+shield taken by the Drain Shield steal
+				qboolean steal_tried = qfalse;
 				if (self->client->ps.fd.forcePowerLevel[FP_DRAIN] == FORCE_LEVEL_1)
 				{
 					dmg = 2; //because it's one-shot
@@ -2606,9 +2717,27 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 
 				if (dmg)
 				{
-					if (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[33] > 0 && traceEnt->client->ps.fd.forcePower <= 0)
+					if (RP_DrainShieldCanSteal(self, traceEnt))
 					{ // zyk: Drain Shield skill. Enemy has no force. Damages him
-						G_Damage( traceEnt, self, self, NULL, impactPoint, (dmg/2), 0, MOD_FORCE_DARK );
+						// GalaxyRP fix: [Force] measured before and after, so the caster is restored
+						// by what the target really lost (see RP_DrainShieldCanSteal). dmg is cleared
+						// so the force-drain restore further down does not also pay out.
+						const int before = RP_DrainShieldPool(traceEnt);
+
+						steal_tried = qtrue;
+
+						if (dmg / 2 > 0)
+						{
+							G_Damage( traceEnt, self, self, NULL, impactPoint, (dmg/2), 0, MOD_FORCE_DARK );
+							stolen = before - RP_DrainShieldPool(traceEnt);
+
+							if (stolen < 0)
+							{
+								stolen = 0;
+							}
+						}
+
+						dmg = 0;
 					}
 					else if (traceEnt->client->ps.fd.forcePower >= dmg)
 					{
@@ -2630,6 +2759,9 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 					traceEnt->client->ps.fd.forcePower = 0;
 				}
 
+				// GalaxyRP fix: [Force] the Drain Shield steal pays out here, health then shield
+				RP_DrainShieldRestore(self, stolen);
+
 				if (self->client->ps.stats[STAT_HEALTH] < self->client->ps.stats[STAT_MAX_HEALTH] &&
 					self->health > 0 && self->client->ps.stats[STAT_HEALTH] > 0 && dmg > 0)
 				{ // zyk: only recover hp if dmg > 0, which means enemy had force to consume
@@ -2645,7 +2777,13 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 					self->client->ps.stats[STAT_ARMOR] += 1;
 				}
 
-				traceEnt->client->ps.fd.forcePowerRegenDebounceTime = level.time + 800; //don't let the client being drained get force power back right away
+				// GalaxyRP fix: [Force] not when a Drain Shield steal was refused (an ally, chat
+				// protection, invulnerability...): a target G_Damage would not touch had its force
+				// regeneration frozen for as long as the caster held Drain on them.
+				if (!steal_tried || stolen > 0)
+				{
+					traceEnt->client->ps.fd.forcePowerRegenDebounceTime = level.time + 800; //don't let the client being drained get force power back right away
+				}
 
 				//Drain the standard amount since we just drained someone else
 
@@ -2761,6 +2899,9 @@ int ForceShootDrain( gentity_t *self )
 				continue;
 			if ( !traceEnt->client )
 				continue;
+			// GalaxyRP fix: [Force] nor the downed or the admin-paralyzed -- see ForceDrainDamage()
+			if ( G_PlayerIsDowned( traceEnt ) || G_PlayerIsAdminParalyzed( traceEnt ) )
+				continue;
 			//if ( !traceEnt->client->ps.fd.forcePower ) zyk: no longer test it here
 				//continue;
 			if (OnSameTeam(self, traceEnt) && !g_friendlyFire.integer)
@@ -2827,6 +2968,15 @@ int ForceShootDrain( gentity_t *self )
 		}
 
 		traceEnt = &g_entities[tr.entityNum];
+
+		// GalaxyRP fix: [Force] a corpse, a downed player or an admin-paralyzed one counts as a miss:
+		// nothing is drained and, like any other miss on this branch, the tick costs nothing. The cone
+		// above skips the same three.
+		if ( traceEnt->health <= 0 || G_PlayerIsDowned( traceEnt ) || G_PlayerIsAdminParalyzed( traceEnt ) )
+		{
+			return 0;
+		}
+
 		ForceDrainDamage( self, traceEnt, forward, tr.endpos );
 		gotOneOrMore = 1;
 	}

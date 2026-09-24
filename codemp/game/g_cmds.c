@@ -1869,6 +1869,8 @@ extern qboolean Jedi_PairIsCloaked( gentity_t *self );
 //
 // downedSeconds is the countdown in whole seconds; ClientTimerActions() (g_active.c) decrements it
 // once per second inside its "while (timeResidual >= 1000)" block.
+void zyk_release_mounts_for_minigame( gentity_t *ent );
+
 static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adminParalysis )
 {
 	if ( !ent || !ent->client )
@@ -1957,6 +1959,45 @@ static void RP_EnterDownedState( gentity_t *ent, int downedSeconds, qboolean adm
 	// way to switch it off, so stop it on the way down. ItemUse_Jetpack() (g_items.c) refuses to switch
 	// it back on while downed, which is what keeps this from being undone a moment later.
 	Jetpack_Off( ent );
+
+	// GalaxyRP fix: [Death System] and the lightsaber goes off. A lit blade stayed solid on a downed
+	// player (SaberUpdateSelf in w_saber.c only drops the blade's contents for a holstered saber, a
+	// dead owner or no Saber Attack), so shots meant to finish them hit the blade and were deflected
+	// or reflected -- and a reflected bolt is re-owned by the reflector, so a downed, untargetable
+	// player could kill with it. They cannot switch it back on while down: PM_Weapon returns before
+	// any weapon logic while forceHandExtend is HANDEXTEND_KNOCKDOWN, which ClientThink_real() keeps
+	// pinned for the whole downed state, and Cmd_ToggleSaber_f refuses for the same reason. After
+	// getting up the saber stays off until they light it. A saber already thrown is brought back by
+	// the downed-owner checks in saberFirstThrown()/saberBackToOwner() (w_saber.c). Admin paralysis
+	// comes through here too.
+	//
+	// A player downed while manning a map emplaced gun or their own e-web is let go of it first,
+	// through the same helper the Duel Tournament and Melee Battle use for a live player: leaving a
+	// map gun hands back the weapon held before mounting with saberHolstered forced to 0 -- a lit
+	// saber, which is exactly what this block exists to prevent -- and an e-web gives back the
+	// weapons it stashed. That e-web hand-back only happens above zero health, which is why
+	// paralyze_player() sets RP_DOWNED_HEALTH before calling in here; an admin /paralyze only
+	// accepts a living target.
+	if ( ent->client->ps.emplacedIndex || ent->client->ewebIndex )
+	{
+		zyk_release_mounts_for_minigame( ent );
+	}
+
+	if ( ent->client->ps.weapon == WP_SABER && ent->client->ps.saberHolstered != 2 )
+	{
+		const int was_holstered = ent->client->ps.saberHolstered;
+
+		ent->client->ps.saberHolstered = 2;
+
+		if ( ent->client->saber[0].soundOff )
+		{
+			G_Sound( ent, CHAN_AUTO, ent->client->saber[0].soundOff );
+		}
+		if ( was_holstered == 0 && ent->client->saber[1].soundOff && ent->client->saber[1].model[0] )
+		{
+			G_Sound( ent, CHAN_AUTO, ent->client->saber[1].soundOff );
+		}
+	}
 
 	ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 	ent->client->ps.forceHandExtendTime = level.time + 500;
@@ -2067,11 +2108,15 @@ void paralyze_player( gentity_t *ent )
 		return;
 	}
 
-	RP_EnterDownedState( ent, rp_downed_timer.integer, qfalse );
-
 	//GalaxyRP (Alex): [Death System] Set their HP so they don't die the old way instantly.
+	// GalaxyRP fix: [Death System] set before RP_EnterDownedState() rather than after it: the
+	// lethal hit has already taken health to 0 or below, and letting go of an e-web in there gives
+	// the player's stashed weapons back only while health is above zero. Nothing in
+	// RP_EnterDownedState() reads health, so the order is otherwise immaterial.
 	ent->client->ps.stats[STAT_HEALTH] = RP_DOWNED_HEALTH;
 	ent->health = RP_DOWNED_HEALTH;
+
+	RP_EnterDownedState( ent, rp_downed_timer.integer, qfalse );
 
 	// GalaxyRP fix: [Death System] a knockdown, not a death. This used to increment PERS_KILLED,
 	// which made the scoreboard's Deaths column really a knockdown count -- it charged a player who
@@ -3711,13 +3756,59 @@ void zyk_reset_fuel( gentity_t *ent )
 	ent->client->ps.cloakFuel = 100;
 }
 
+extern qboolean WP_SaberStyleValidForSaber( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int saberAnimLevel );
+extern qboolean WP_UseFirstValidSaberStyle( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int *saberAnimLevel );
+
+/*
+GalaxyRP fix: [Saber] put the saber style back to a known-good one whenever the Saber Attack level
+the style depends on may have changed without a respawn.
+
+Two ways used to carry a style past the level that allows it:
+- WP_InitForcePowers() (reached by /updateforce, and by /logout through zyk_remove_guns()) resets
+  the style from sess.saberLevel clamped to 1-3 only, never against the new
+  forcePowerLevel[FP_SABER_OFFENSE]; the one per-frame clamp is commented out (w_force.c). So a
+  logged-out player could drop Saber Attack to 1, put the points elsewhere, /updateforce and keep
+  swinging Strong -- or, at 0, keep the saber too.
+- A style change pressed mid-swing waits in saberCycleQueue and is applied when the swing ends,
+  with no level check (w_saber.c). Only ClientSpawn()'s memset ever cleared it, and seamless login
+  does not respawn, so queueing Tavion on a level 5 character and then /logout or /char use onto a
+  Saber Attack 1 one landed the Tavion style on it.
+
+The queue is cleared, a single saber goes back to Fast (what zyk_load_common_settings() gives a
+logged-in character on spawn), and staff/dual sabers get the first style valid for them -- the same
+check the spawn and /updatesaber paths use. Siege picks styles from the class, so there only the
+queue is cleared. Called from zyk_apply_character_loadout() (/login, /new, /char new, /char use),
+/logout, /updateforce, and a /skilldown of Saber Attack.
+*/
+void zyk_reset_saber_style( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	ent->client->saberCycleQueue = 0;
+
+	if (level.gametype == GT_SIEGE)
+		return;
+
+	if (!(ent->client->saber[0].model[0] && ent->client->saber[1].model[0]) && !(ent->client->saber[0].saberFlags & SFL_TWO_HANDED))
+	{ // single saber
+		ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberAnimLevel = ent->client->ps.fd.saberDrawAnimLevel = ent->client->sess.saberLevel = SS_FAST;
+	}
+
+	if (!WP_SaberStyleValidForSaber(&ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, ent->client->ps.fd.saberAnimLevel))
+	{
+		WP_UseFirstValidSaberStyle(&ent->client->saber[0], &ent->client->saber[1], ent->client->ps.saberHolstered, &ent->client->ps.fd.saberAnimLevel);
+		ent->client->ps.fd.saberAnimLevelBase = ent->client->ps.fd.saberDrawAnimLevel = ent->client->ps.fd.saberAnimLevel;
+	}
+}
+
 // GalaxyRP fix: [Account] the part of a character switch that initialize_rpg_skills() does not do.
 // /login, /new, /char new and /char use all apply the new character synchronously and then schedule a
 // kill, and the respawn that kill causes is what used to finish the job. That respawn cannot be relied
 // on: G_Kill() silently no-ops for a paralyzed player and in GT_DUEL/GT_POWERDUEL with
 // g_allowDuelSuicide off, so those players kept the previous character's leftovers indefinitely.
 //
-// Three things were left behind, all of which ClientSpawn() does and initialize_rpg_skills() does
+// Four things were left behind, all of which ClientSpawn() does and initialize_rpg_skills() does
 // not:
 //
 //  1. A running jetpack. Ownership is now cleared by initialize_rpg_skills() (see the mask there), but
@@ -3728,6 +3819,8 @@ void zyk_reset_fuel( gentity_t *ent )
 //     then melee) rather than zyk_remove_guns()'s unconditional melee, because the new character may
 //     well own a saber.
 //  3. The jetpack and flamethrower fuel -- see zyk_reset_fuel() just above.
+//  4. The saber style, and a style change queued mid-swing on the previous character -- see
+//     zyk_reset_saber_style() just above.
 //
 // Ammo is deliberately NOT handled here. Both switch paths already restore the character's saved
 // ammo counts inline, in the same SQLITE_ROW branch that sets pers.CharID -- select_player_character()
@@ -3770,6 +3863,9 @@ void zyk_apply_character_loadout( gentity_t *ent )
 
 	// 3. the fuel the respawn used to refill
 	zyk_reset_fuel(ent);
+
+	// 4. the saber style, and any style change queued mid-swing on the previous character
+	zyk_reset_saber_style(ent);
 }
 
 // GalaxyRP: [Account] does this account command still have to kill the player to take effect?
@@ -7867,6 +7963,17 @@ static qboolean force_switch_allowed(gentity_t* ent)
 		return qfalse;
 	}
 
+	// GalaxyRP fix: [Admin] an admin's /give <player> force or /give <player> guns sets this player's
+	// powers or weapons on purpose, and /updateforce rebuilt them from the player's own force profile
+	// -- undoing the admin's choice, and (with the saber now following Saber Attack in
+	// Cmd_UpdateForce_f) able to hand a "guns only" player a saber back. Respawning re-applies the
+	// admin state anyway (ClientSpawn); the admin lifts it with the same /give command.
+	if (ent->client->pers.player_statuses & ((1 << PLAYER_STATUS_ADM_GIVE_FORCE) | (1 << PLAYER_STATUS_ADM_GIVE_GUNS)))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while you have force powers or weapons given by an admin.\n\"");
+		return qfalse;
+	}
+
 	// GalaxyRP fix: [Guardian] a guardian_mode>0 guard blocking this command in boss battles used to be
 	// here. guardian_mode is permanently 0 now, so it was unreachable.
 
@@ -7894,12 +8001,42 @@ duel, Duel Tournament duelist, boss battle, and -- unlike /updatesaber -- logged
 no separate enable cvar, per design.
 ==================
 */
+void zyk_deselect_weapon_if_active(gentity_t* ent, int weapon);
+
 void Cmd_UpdateForce_f( gentity_t *ent ) {
 	if (!force_switch_allowed(ent))
 		return;
 
 	WP_InitForcePowers(ent);
 	ent->client->ps.fd.forceDoInit = 0;
+
+	// GalaxyRP fix: [Saber] the lightsaber follows the new Saber Attack level, the way ClientSpawn()
+	// and /logout (zyk_remove_guns) already decide it: owned at level 1 or higher, gone at 0. This
+	// used to rebuild the force powers only, so dropping Saber Attack to 0 left the saber in hand and
+	// raising it from 0 gave no saber until the next respawn. Siege (class weapons), Jedi Master and
+	// Holocron hand out the saber by their own rules and are left alone. So are Duel Tournament and
+	// Melee Battle participants: duel_tournament_prepare() hands every duelist a saber whatever their
+	// Saber Attack, and /updateforce is only refused once the fight itself is on, so taking it here
+	// could leave a duelist unarmed for a match; the mini-games back up and restore the loadout
+	// themselves. A saber held when it goes is put away the way a /skilldown to 0 does it; one in
+	// flight comes back by itself, since saberFirstThrown() treats Saber Attack 0 like a dead owner.
+	if (level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER && level.gametype != GT_HOLOCRON &&
+		!(level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1) &&
+		!(level.melee_mode > 0 && level.melee_players[ent->s.number] != -1))
+	{
+		if (ent->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)
+		{
+			ent->client->ps.stats[STAT_WEAPONS] |= (1 << WP_SABER);
+		}
+		else
+		{
+			ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_SABER);
+			zyk_deselect_weapon_if_active(ent, WP_SABER);
+		}
+	}
+
+	// GalaxyRP fix: [Saber] and the style, which WP_InitForcePowers() does not hold to the new level
+	zyk_reset_saber_style(ent);
 }
 
 extern qboolean WP_SaberStyleValidForSaber( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int saberAnimLevel );
@@ -11989,6 +12126,10 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// zyk_reset_fuel(). Below zyk_remove_guns() because that call switches a running jetpack off,
 	// and deliberately not inside it: it has two other callers that must not refuel.
 	zyk_reset_fuel(ent);
+
+	// GalaxyRP fix: [Saber] and the saber style, which WP_InitForcePowers() (inside zyk_remove_guns())
+	// does not hold to the logged-out Saber Attack level -- see zyk_reset_saber_style().
+	zyk_reset_saber_style(ent);
 
 	// zyk_remove_guns() always grants saber (conditional on force level) and Bryar Pistol unconditionally,
 	// with no gametype exclusion -- strip them back out for Jedi Master/Siege, matching this function's
@@ -16749,6 +16890,10 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 				// it away) until they manually switched weapons themselves. Put it away immediately.
 				zyk_deselect_weapon_if_active(ent, WP_SABER);
 			}
+
+			// GalaxyRP fix: [Saber] a lower Saber Attack level may no longer allow the style in use
+			// (or one queued mid-swing) -- see zyk_reset_saber_style().
+			zyk_reset_saber_style(ent);
 		}
 	}
 

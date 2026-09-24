@@ -1373,6 +1373,7 @@ struct gclient_s {
 	vec3_t		idleViewAngles;	//stop idling if viewangles change
 
 	int			forcePowerSoundDebounce; //if > level.time, don't do certain sound events again (drain sound, absorb sound, etc)
+	int			absorbBonusTime; // GalaxyRP fix: [Force] next level.time the Absorb 4+ bonus may be granted against a channelled power (see WP_AbsorbConversion)
 
 	char		modelname[MAX_QPATH];
 
@@ -2591,7 +2592,7 @@ gentity_t *G_PreDefSound(vec3_t org, int pdSound);
 qboolean HasSetSaberOnly(void);
 void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower );
 void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd );
-int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr);
+int WP_SaberCanBlock(gentity_t *self, gentity_t *attacker, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr);
 void WP_SaberInitBladeData( gentity_t *ent );
 void WP_InitForcePowers( gentity_t *ent );
 void WP_RegisterForceLoopSounds( void );
