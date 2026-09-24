@@ -7914,10 +7914,12 @@ argCheck:
 
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
 
-// GalaxyRP: [Force] shared restriction check for Cmd_UpdateForce_f() below -- mirrors
-// saber_switch_allowed() further down in this file (see update_saber()/Cmd_UpdateSaber_f()), same
-// three checks (private duel, Duel Tournament duelist, boss battle), kept as its own small
-// function instead of reusing that one so its name and message stay force-specific. Also gates on
+// GalaxyRP: [Force] shared restriction check for Cmd_UpdateForce_f() below -- started as a mirror
+// of saber_switch_allowed() further down in this file (see update_saber()/Cmd_UpdateSaber_f()),
+// kept as its own small function instead of reusing that one so its name and message stay
+// force-specific. The mini-game checks have since been widened here and not there: /updateforce
+// refuses anyone on a Duel Tournament or Melee Battle roster for as long as the event exists,
+// while /updatesaber still only refuses the live fight. Also gates on
 // the player being logged out: a logged-in (RPG mode) player's force powers come from their
 // account's database-driven skill levels instead of the "forcepowers" userinfo string WP_InitForcePowers()
 // reads (see the "zyk: resetting force powers" WP_InitForcePowers() call in the logout handler
@@ -7939,9 +7941,28 @@ static qboolean force_switch_allowed(gentity_t* ent)
 		return qfalse;
 	}
 
-	if (level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue)
+	// GalaxyRP fix: [Duel Tournament] refuse every roster member in every phase, not just the two
+	// players fighting in mode 4. duel_tournament_prepare() keeps Jump, Saber Attack and Saber
+	// Defense and snapshots them at the start of each match, so a free rebuild between matches let a
+	// player re-tune those three levels once they knew their next opponent -- worst in mode 3, the
+	// three seconds after their own pairing is announced, whose change went straight into the
+	// snapshot the fight is played with. In mode 5 it handed the winner their whole power set back
+	// for up to 1.5 seconds, which duel_tournament_restore_duelist() then silently overwrote.
+	//
+	// duel_players[] is cleared by duel_tournament_end(), ClientBegin() and ClientDisconnect(), so
+	// nobody stays refused once they are out of the event. Leaving is only possible in signup
+	// (Cmd_DuelMode_f), hence the two messages. The mode-4 duelist test is kept as a backstop: a
+	// duelist is always drawn from the roster, so the first test already covers them.
+	//
+	// NOT closed: changing powers in the force menu and then /kill. The menu marks forceDoInit and
+	// ClientSpawn() applies it, and dying outside one's own mode-4 fight costs nothing.
+	if ((level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1) ||
+		(level.duel_tournament_mode == 4 && duel_tournament_is_duelist(ent) == qtrue))
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while duelling in Duel Tournament.\n\"");
+		if (level.duel_tournament_mode == 1)
+			trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while signed up for the Duel Tournament. Leave it first with /duelmode.\n\"");
+		else
+			trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while taking part in the Duel Tournament.\n\"");
 		return qfalse;
 	}
 
@@ -7956,10 +7977,13 @@ static qboolean force_switch_allowed(gentity_t* ent)
 	// so melee_battle_restore() still consumes its snapshot correctly afterwards -- but the strip
 	// the battle is built on lasted only until someone typed four words.
 	//
-	// Same mode-2 scope as saber_switch_allowed(); see the comment there for why.
-	if (level.melee_mode == 2 && level.melee_players[ent->s.number] != -1)
+	// Widened from mode 2 to the whole event (signup, fight, and the winner's mode-3 exit window),
+	// the same way as the Duel Tournament check above. The slot holds the player's kill count while
+	// they are in, so the test is "!= -1", not "== 0". A player can leave at any point with
+	// /meleemode (Cmd_MeleeMode_f), and melee_battle_restore() gives the loadout back when they do.
+	if (level.melee_mode > 0 && level.melee_players[ent->s.number] != -1)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while fighting in the Melee Battle.\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"Cannot use this command while taking part in the Melee Battle. Leave it first with /meleemode.\n\"");
 		return qfalse;
 	}
 
@@ -7997,7 +8021,8 @@ Unlike a saber hilt, force powers need no diffing: WP_InitForcePowers() (in w_fo
 re-parses the player's own "forcepowers" userinfo cvar directly, so applying it here is just a
 direct call -- clearing any pending forceDoInit afterwards the same way ClientSpawn() does, since
 it's already been satisfied. See force_switch_allowed() above for the restriction checks (private
-duel, Duel Tournament duelist, boss battle, and -- unlike /updatesaber -- logged-out players only);
+duel, anyone on a Duel Tournament or Melee Battle roster, admin-given powers or weapons, and --
+unlike /updatesaber -- logged-out players only);
 no separate enable cvar, per design.
 ==================
 */
@@ -8016,9 +8041,9 @@ void Cmd_UpdateForce_f( gentity_t *ent ) {
 	// raising it from 0 gave no saber until the next respawn. Siege (class weapons), Jedi Master and
 	// Holocron hand out the saber by their own rules and are left alone. So are Duel Tournament and
 	// Melee Battle participants: duel_tournament_prepare() hands every duelist a saber whatever their
-	// Saber Attack, and /updateforce is only refused once the fight itself is on, so taking it here
-	// could leave a duelist unarmed for a match; the mini-games back up and restore the loadout
-	// themselves. A saber held when it goes is put away the way a /skilldown to 0 does it; one in
+	// Saber Attack, so taking it here could leave a duelist unarmed for a match; the mini-games back
+	// up and restore the loadout themselves. force_switch_allowed() now refuses every roster member
+	// before this point, so that part of the test is a backstop and no longer reached. A saber held when it goes is put away the way a /skilldown to 0 does it; one in
 	// flight comes back by itself, since saberFirstThrown() treats Saber Attack 0 like a dead owner.
 	if (level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER && level.gametype != GT_HOLOCRON &&
 		!(level.duel_tournament_mode > 0 && level.duel_players[ent->s.number] != -1) &&
