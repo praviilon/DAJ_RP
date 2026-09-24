@@ -2591,6 +2591,35 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		{
 			int clnum = 0;
 
+			// GalaxyRP: [Force] one npc target of Team Heal / Team Energize. The bitflags below only
+			// have room for client slots, so the server sends each npc target an event of its own,
+			// carrying the npc's number in otherEntityNum and no bitflags. See TEAM_POWER_NPC_TARGET
+			// in bg_public.h and RP_TeamPowerNPCEffect() in w_force.c.
+			if (es->generic1 == TEAM_POWER_NPC_TARGET)
+			{
+				const int npcNum = es->otherEntityNum;
+
+				if (npcNum >= MAX_CLIENTS && npcNum < ENTITYNUM_WORLD &&
+					cg_entities[npcNum].currentValid &&
+					cg_entities[npcNum].currentState.eType == ET_NPC)
+				{
+					if (es->eventParm == 1)
+					{ //eventParm 1 is heal
+						trap->S_StartSound (NULL, npcNum, CHAN_AUTO, cgs.media.teamHealSound );
+						cg_entities[npcNum].teamPowerEffectTime = cg.time + 1000;
+						cg_entities[npcNum].teamPowerType = 1;
+					}
+					else
+					{ //eventParm 2 is force regen
+						trap->S_StartSound (NULL, npcNum, CHAN_AUTO, cgs.media.teamRegenSound );
+						cg_entities[npcNum].teamPowerEffectTime = cg.time + 1000;
+						cg_entities[npcNum].teamPowerType = 0;
+					}
+				}
+
+				clnum = MAX_CLIENTS; // no bitflags on this event, skip the client walk
+			}
+
 			while (clnum < MAX_CLIENTS)
 			{
 				if (CG_InClientBitflags(es, clnum))

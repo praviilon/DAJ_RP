@@ -1110,6 +1110,13 @@ typedef enum {
 	EV_NUM_ENTITY_EVENTS
 } entity_event_t;			// There is a maximum of 256 events (8 bits transmission, 2 high bits for uniqueness)
 
+// GalaxyRP: [Force] generic1 of an EV_TEAM_POWER sent for ONE npc target of Team Heal / Team
+// Energize, whose entity number is in otherEntityNum. The ordinary event names its player targets
+// in the trickedentindex bitflags, which only have room for client slots; an npc target gets an
+// event of its own instead (RP_TeamPowerNPCEffect in w_force.c). generic1 is 0 on the ordinary
+// event, and a cgame that predates this finds no bitflags set on the npc one and ignores it.
+#define TEAM_POWER_NPC_TARGET	1
+
 
 typedef enum {
 	GTS_RED_CAPTURE,

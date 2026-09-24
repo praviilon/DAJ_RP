@@ -156,10 +156,13 @@ extern vec3_t gPainPoint;
 
 #define RP_MAX_FORCE_POWER		250
 
-// GalaxyRP: [Force] the pool a player who is not logged in gets, and the ceiling the three clamps
-// in w_force.c hold them to. Logged-out players only ever reach Force level 3, where the dearest
-// thing in forcePowerNeeded[] is Heal and Team Heal at 70, so nothing is priced out of reach at
-// this number -- it costs them burst capacity against a logged-in character, not access.
+// GalaxyRP: [Force] the pool a player who is not logged in gets, and the ceiling the two clamps
+// in w_force.c (Absorb's conversion in WP_AbsorbConversion and the lightning-absorb grant in
+// ForceLightningDamage) hold them to. Team Energize used to be a third; it caps every target at its
+// own forcePowerMax now, which for a logged-out player is this same number. Logged-out players
+// only ever reach Force level 3, where the dearest thing in forcePowerNeeded[] is Heal at 70, so
+// nothing is priced out of reach at this number -- it costs them burst capacity against a
+// logged-in character, not access.
 #define RP_MAX_FORCE_POWER_LOGGED_OUT	100
 
 // GalaxyRP fix: [Force] a logged-in character's force pool is this fraction of RP_MAX_FORCE_POWER

@@ -121,8 +121,13 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		50,//FP_RAGE,//duration
 		50,//FP_PROTECT,//duration
 		40,//FP_ABSORB,//duration
-		30,//FP_TEAM_HEAL,//instant
-		50,//FP_TEAM_FORCE,//instant
+		// GalaxyRP fix: [Force] Team Heal was 30/60/70/80/90 for levels 1-5 while levels 1-3 heal the
+		// same amounts (and 1-4 the same 40 for one target), so every upgrade cost more for the same
+		// heal. Team Energize was a flat 50 at every level, which with its fixed level 4/5 payout per
+		// target and (then) no level 5 cooldown made allied energizers a force source. Both now rise
+		// 40/50/60/70/80 across the five rows; see ForceTeamForceReplenish() in w_force.c.
+		40,//FP_TEAM_HEAL,//instant
+		40,//FP_TEAM_FORCE,//instant
 		20,//FP_DRAIN,//hold/duration
 		20,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
@@ -142,7 +147,7 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		50,//FP_RAGE,//duration
 		40,//FP_PROTECT,//duration
 		30,//FP_ABSORB,//duration
-		60,//FP_TEAM_HEAL,//instant
+		50,//FP_TEAM_HEAL,//instant
 		50,//FP_TEAM_FORCE,//instant
 		20,//FP_DRAIN,//hold/duration
 		20,//FP_SEE,//duration
@@ -163,8 +168,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		50,//FP_RAGE,//duration
 		30,//FP_PROTECT,//duration
 		20,//FP_ABSORB,//duration
-		70,//FP_TEAM_HEAL,//instant
-		50,//FP_TEAM_FORCE,//instant
+		60,//FP_TEAM_HEAL,//instant
+		60,//FP_TEAM_FORCE,//instant
 		20,//FP_DRAIN,//hold/duration
 		20,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
@@ -191,8 +196,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		60,//FP_RAGE,//duration
 		20,//FP_PROTECT,//duration
 		10,//FP_ABSORB,//duration
-		80,//FP_TEAM_HEAL,//instant
-		50,//FP_TEAM_FORCE,//instant
+		70,//FP_TEAM_HEAL,//instant
+		70,//FP_TEAM_FORCE,//instant
 		20,//FP_DRAIN,//hold/duration
 		30,//FP_SEE,//duration
 		999,//FP_SABER_OFFENSE,
@@ -213,8 +218,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		70,//FP_RAGE,//duration
 		20,//FP_PROTECT,//duration
 		5,//FP_ABSORB,//duration
-		90,//FP_TEAM_HEAL,//instant
-		50,//FP_TEAM_FORCE,//instant
+		80,//FP_TEAM_HEAL,//instant
+		80,//FP_TEAM_FORCE,//instant
 		20,//FP_DRAIN,//hold/duration
 		30,//FP_SEE,//duration
 		999,//FP_SABER_OFFENSE,

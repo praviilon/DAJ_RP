@@ -1390,22 +1390,21 @@ void ForceHeal( gentity_t *self )
 	G_Sound( self, CHAN_ITEM, G_SoundIndex("sound/weapons/force/heal.wav") );
 }
 
+// GalaxyRP fix: [Force] only client slots go in these bitflags. The receiving side,
+// EV_TEAM_POWER in cg_event.c, walks clients 0..MAX_CLIENTS-1 and nothing else, so a bit for any
+// higher entity was never read. Worse, Team Heal and Team Energize select NPC targets as well
+// (their loop runs over every entity, not just clients), and an NPC in slot 80 or above reached
+// the trickedentindex4 arm this function used to have with a shift of 32 or more -- undefined
+// behaviour in C. NPC targets get their own event now, see RP_TeamPowerNPCEffect() below.
 void WP_AddToClientBitflags(gentity_t *ent, int entNum)
 {
-	if (!ent)
+	if (!ent || entNum < 0 || entNum >= MAX_CLIENTS)
 	{
 		return;
 	}
 
-	if (entNum > 47)
-	{
-		ent->s.trickedentindex4 |= (1 << (entNum-48));
-	}
-	else if (entNum > 31)
-	{
-		ent->s.trickedentindex3 |= (1 << (entNum-32));
-	}
-	else if (entNum > 15)
+	// the trickedentindex3/4 arms that used to follow for slots 32..63 are gone with the bound above
+	if (entNum > 15)
 	{
 		ent->s.trickedentindex2 |= (1 << (entNum-16));
 	}
@@ -1415,6 +1414,154 @@ void WP_AddToClientBitflags(gentity_t *ent, int entNum)
 	}
 }
 
+// GalaxyRP fix: [Force] the most targets a single Team Heal or Team Energize can affect. Both
+// used to collect their targets into "int pl[MAX_CLIENTS]" while walking every entity on the map,
+// and friendly NPCs qualify as well as players -- so the 33rd qualifying target was written past
+// the end of the array, on the stack. An admin NPC event or an SP map with a large friendly squad
+// in range of a level 5 cast (768 units) was enough. The collection loops now stop once this many
+// are held, which is what keeps them in bounds; the number itself is a gameplay limit. Players sit
+// in slots 0..MAX_CLIENTS-1 and the loops walk in slot order, so every eligible player is always
+// taken before any NPC.
+#define RP_TEAM_POWER_MAX_TARGETS		100
+
+// GalaxyRP fix: [Force] the most NPC targets of one cast that are sent a visual/sound event (see
+// RP_TeamPowerNPCEffect). Every NPC in range is still healed or energized; only the effect stops
+// here. Each event is a temp entity, and one per target is exactly the "many g_sound events at
+// once" the original code folded into a single bitflag event to avoid.
+#define RP_TEAM_POWER_MAX_NPC_EFFECTS	16
+
+/*
+GalaxyRP fix: [Force] who Team Heal, Team Shield Heal and Team Energize may affect.
+
+The two powers used to carry their own hand-written conditions, and they had drifted into a set
+of different holes:
+
+- Team Heal's "connected and not spectating" test sat in one half of an OR whose other half
+  (playerTeam != NPCTEAM_ENEMY) is true for every real player outside Siege, so it never
+  excluded anyone.
+  Team Energize had no alive, connected or spectator test at all. A dead, spectating or
+  connecting ally in range was picked -- and a spectating ally at full health passed Team Shield
+  Heal's test too -- so the caster paid for a cast that did nothing useful.
+- Neither excluded a downed or admin-paralyzed target. WP_ForcePowerUsable() stops a downed
+  player healing THEMSELVES back to full before standing up; an ally's Team Heal (then Team
+  Shield Heal on the next cast) did the same thing for them, and bypassed an admin punishment.
+- In FFA a caster who was not logged in (amrpgmode 0) skipped the ally test entirely, on the
+  belief that such a player has no allies. /allyadd works while logged out, and the powers reach
+  logged-out players through the admin /give force and the Duel Tournament / Melee Battle
+  enlightenment prizes -- so those casters healed and energized enemy players, neutral NPCs and
+  (Team Energize had no NPC-team test) hostile NPCs.
+
+One rule for both powers now. The caller adds its own "needs it" test, the radius and the PVS
+check.
+*/
+static qboolean RP_TeamPowerTargetValid( gentity_t *self, gentity_t *ent, forcePowers_t power )
+{
+	if ( !self || !self->client || !ent || !ent->inuse || !ent->client || ent == self )
+	{
+		return qfalse;
+	}
+
+	// alive
+	if ( ent->health <= 0 || ent->client->ps.stats[STAT_HEALTH] <= 0 || (ent->client->ps.eFlags & EF_DEAD) )
+	{
+		return qfalse;
+	}
+
+	if ( ent->NPC || ent->s.eType == ET_NPC )
+	{
+		// kept from the old Team Heal test, now applied to Team Energize as well
+		if ( ent->s.NPC_class == CLASS_VEHICLE )
+		{
+			return qfalse;
+		}
+
+		// friendly npcs only, whatever the gametype. In FFA and the team gametypes OnSameTeam()
+		// below already answers every player/npc pair this way; GT_SINGLE_PLAYER and GT_POWERDUEL
+		// return from it before that point (any two non-bots, or equal duelTeam) and would
+		// otherwise let an enemy npc through. The old Team Heal test refused NPCTEAM_ENEMY npcs.
+		if ( ent->client->playerTeam != NPCTEAM_PLAYER )
+		{
+			return qfalse;
+		}
+	}
+	else
+	{
+		// a real player: in the game, not watching it
+		if ( ent->s.number >= MAX_CLIENTS ||
+			ent->client->pers.connected != CON_CONNECTED ||
+			ent->client->sess.sessionTeam == TEAM_SPECTATOR ||
+			(ent->client->ps.pm_flags & PMF_FOLLOW) ||
+			ent->client->tempSpectate >= level.time )
+		{
+			return qfalse;
+		}
+	}
+
+	// Both states set the DOWNED bit today; tested separately so neither depends on the other.
+	// NPCs are never downed (NPC_spawn.c zeroes player_statuses), so this only ever bites players.
+	if ( G_PlayerIsDowned( ent ) || G_PlayerIsAdminParalyzed( ent ) )
+	{
+		return qfalse;
+	}
+
+	// ysalamiri, duels, Duel Tournament, Melee Battle, noclip
+	if ( !ForcePowerUsableOn( self, ent, power ) )
+	{
+		return qfalse;
+	}
+
+	// teammates, and friendly NPCs (OnSameTeam treats NPCTEAM_PLAYER NPCs as the players' side in FFA)
+	if ( OnSameTeam( self, ent ) )
+	{
+		return qtrue;
+	}
+
+	// zyk: Team Heal and Team Energize can be used in FFA, on the caster's allies.
+	// GalaxyRP fix: [Settings] this used to also allow through a target who was not an ally
+	// (self->client->pers.player_settings & (1 << 10) -- the old /settings 5, "Use healing force
+	// only at allied players", set to OFF/bypass). That per-player choice has been removed (see the
+	// fix comment on settings_number_to_bit in Cmd_Settings_f), so in FFA both powers always
+	// restrict to allies -- for every caster now, the amrpgmode 0 exemption described above
+	// having gone as well.
+	if ( level.gametype == GT_FFA && zyk_is_ally( self, ent ) == qtrue )
+	{
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+// GalaxyRP fix: [Force] the shield ceiling Team Shield Heal fills a target to. The target test used
+// a hard-coded 100 for anyone not logged in while the heal itself capped at their max health, so
+// the two could disagree. G_PublishMaxArmor() is the one place that rule lives (max_rpg_shield for
+// a logged-in player, max health for anyone else); refreshing it here rather than reading the value
+// left over from the last ClientEndFrame keeps a max-shield change earlier this frame from being
+// missed.
+static int RP_TeamShieldHealMax( gentity_t *ent )
+{
+	G_PublishMaxArmor( ent );
+
+	return ent->client->ps.stats[STAT_MAX_ARMOR];
+}
+
+/*
+GalaxyRP fix: [Force] the visual and sound for one NPC target of Team Heal / Team Energize.
+
+The shared EV_TEAM_POWER event names its targets in a bitflag that only has room for client
+slots, so an NPC target never showed the green/blue shell or played the sound. Each NPC target now
+gets its own EV_TEAM_POWER at the NPC, with no bitflags set, the NPC's number in otherEntityNum and
+TEAM_POWER_NPC_TARGET (bg_public.h) in generic1. A cgame that predates this sees an event with no
+bits set and does nothing, so nothing breaks for players on the old plugin.
+*/
+static void RP_TeamPowerNPCEffect( gentity_t *npc, int eventParm )
+{
+	gentity_t *te = G_TempEntity( npc->r.currentOrigin, EV_TEAM_POWER );
+
+	te->s.eventParm = eventParm; // 1 is heal, 2 is force regen, as for the player event
+	te->s.otherEntityNum = npc->s.number;
+	te->s.generic1 = TEAM_POWER_NPC_TARGET;
+}
+
 void ForceTeamHeal( gentity_t *self )
 {
 	float radius = 256;
@@ -1422,8 +1569,10 @@ void ForceTeamHeal( gentity_t *self )
 	gentity_t *ent;
 	vec3_t a;
 	int numpl = 0;
-	int pl[MAX_CLIENTS];
+	int pl[RP_TEAM_POWER_MAX_TARGETS];
 	int healthadd = 0;
+	int npc_effects = 0;
+	qboolean shield_heal = qfalse;
 	gentity_t *te = NULL;
 
 	if ( self->health <= 0 )
@@ -1458,41 +1607,28 @@ void ForceTeamHeal( gentity_t *self )
 		radius *= 3;
 	}
 
-	// while (i < MAX_CLIENTS)  // zyk: now the condition will be the level.num_entities
-	while (i < level.num_entities)
+	// zyk: Team Shield Heal skill of RPG Mode
+	if (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[37] > 0)
 	{
-		int max_shield = 0;
+		shield_heal = qtrue;
+	}
 
+	// zyk: now the condition will be the level.num_entities, so Team Heal also reaches npcs.
+	// GalaxyRP fix: [Force] who qualifies is RP_TeamPowerTargetValid()'s decision now -- see the
+	// comment there -- and the loop stops at RP_TEAM_POWER_MAX_TARGETS so pl[] cannot overflow.
+	while (i < level.num_entities && numpl < RP_TEAM_POWER_MAX_TARGETS)
+	{
 		ent = &g_entities[i];
 
-		if (ent && ent->client)
-			max_shield = ent->client->ps.stats[STAT_MAX_HEALTH];
-
-		if (ent && ent->client && ent->client->sess.amrpgmode == 2)
-			max_shield = ent->client->pers.max_rpg_shield;
-
-		// GalaxyRP fix: [Dead Code] guardian_mode/guardian_invoked_by_id permanently 0/-1, guardian_invoked_by_id==-1 conjunct always true
-		if (ent && ent->client && self != ent &&
-			((!ent->NPC && ent->client->pers.connected == CON_CONNECTED && ent->client->sess.sessionTeam != TEAM_SPECTATOR) ||
-			 (ent->client->playerTeam != NPCTEAM_ENEMY && ent->s.NPC_class != CLASS_VEHICLE)) &&
-			 (ent->client->ps.stats[STAT_HEALTH] < ent->client->ps.stats[STAT_MAX_HEALTH] || 
-			 (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[37] > 0 && 
-			 !ent->NPC && ent->client->ps.stats[STAT_HEALTH] >= ent->client->ps.stats[STAT_MAX_HEALTH] && 
-			 ((ent->client->sess.amrpgmode < 2 && ent->client->ps.stats[STAT_ARMOR] < 100) || (ent->client->sess.amrpgmode == 2 && 
-			 ent->client->ps.stats[STAT_ARMOR] < max_shield)))) && ent->client->ps.stats[STAT_HEALTH] > 0 && ForcePowerUsableOn(self, ent, FP_TEAM_HEAL) &&
-		 	trap->InPVS(self->client->ps.origin, ent->client->ps.origin) && 
-			// GalaxyRP fix: [Settings] this used to also allow through a target who was not an ally
-			// (self->client->pers.player_settings & (1 << 10) -- the old /settings 5, "Use healing force
-			// only at allied players", set to OFF/bypass). That per-player choice has been removed (see
-			// the fix comment on settings_number_to_bit in Cmd_Settings_f) -- Team Heal in FFA now always
-			// restricts to allies, except in non-RPG mode (amrpgmode == 0), where there is no allied
-			// group to restrict to.
-			(((self->client->sess.amrpgmode == 0 || zyk_is_ally(self, ent) == qtrue) &&
-			 g_gametype.integer == GT_FFA) || OnSameTeam(self, ent)))
-		{ // zyk: Team Heal now can be used in FFA and in npcs. It will not heal enemy npcs
+		if (RP_TeamPowerTargetValid(self, ent, FP_TEAM_HEAL) &&
+			// needs health, or (Team Shield Heal) is at full health but short on shield. Npcs get
+			// health only.
+			(ent->client->ps.stats[STAT_HEALTH] < ent->client->ps.stats[STAT_MAX_HEALTH] ||
+			 (shield_heal && !ent->NPC && ent->client->ps.stats[STAT_ARMOR] < RP_TeamShieldHealMax(ent))))
+		{
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);
 
-			if (VectorLength(a) <= radius)
+			if (VectorLength(a) <= radius && trap->InPVS(self->client->ps.origin, ent->client->ps.origin))
 			{
 				pl[numpl] = i;
 				numpl++;
@@ -1540,32 +1676,43 @@ void ForceTeamHeal( gentity_t *self )
 
 	while (i < numpl)
 	{
-		if (g_entities[pl[i]].client->ps.stats[STAT_HEALTH] > 0 &&
-			g_entities[pl[i]].health > 0)
+		gentity_t *target = &g_entities[pl[i]];
+
+		if (target->client->ps.stats[STAT_HEALTH] > 0 &&
+			target->health > 0)
 		{
-			int max_shield = g_entities[pl[i]].client->ps.stats[STAT_MAX_HEALTH];
-			if (g_entities[pl[i]].client->sess.amrpgmode == 2)
-				max_shield = g_entities[pl[i]].client->pers.max_rpg_shield;
+			int max_health = target->client->ps.stats[STAT_MAX_HEALTH];
 
 			// zyk: Team Shield Heal skill of RPG Mode
-			if (self->client->sess.amrpgmode == 2 && self->client->pers.skill_levels[37] > 0 && !g_entities[pl[i]].NPC && g_entities[pl[i]].client->ps.stats[STAT_HEALTH] >= g_entities[pl[i]].client->ps.stats[STAT_MAX_HEALTH] && g_entities[pl[i]].client->ps.stats[STAT_ARMOR] < max_shield)
+			if (shield_heal && !target->NPC && target->client->ps.stats[STAT_HEALTH] >= max_health)
 			{ // zyk: can only be used on players with full health already
-				g_entities[pl[i]].client->ps.stats[STAT_ARMOR] += 3 * self->client->pers.skill_levels[37];
+				int max_shield = RP_TeamShieldHealMax(target);
 
-				if (g_entities[pl[i]].client->ps.stats[STAT_ARMOR] > max_shield)
-					g_entities[pl[i]].client->ps.stats[STAT_ARMOR] = max_shield;
+				if (target->client->ps.stats[STAT_ARMOR] < max_shield)
+				{
+					target->client->ps.stats[STAT_ARMOR] += 3 * self->client->pers.skill_levels[37];
 
-				G_Sound(&g_entities[pl[i]], CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
+					if (target->client->ps.stats[STAT_ARMOR] > max_shield)
+						target->client->ps.stats[STAT_ARMOR] = max_shield;
+
+					G_Sound(target, CHAN_AUTO, G_SoundIndex("sound/player/pickupshield.wav"));
+				}
 			}
 
-			g_entities[pl[i]].client->ps.stats[STAT_HEALTH] += healthadd;
-
-			if (g_entities[pl[i]].client->ps.stats[STAT_HEALTH] > g_entities[pl[i]].client->ps.stats[STAT_MAX_HEALTH])
+			// GalaxyRP fix: [Force] health is only added to a target below its maximum. This used to
+			// run for every target and then clamp to the maximum -- which, for a target picked by
+			// Team Shield Heal (already at full health), pulled anyone ABOVE their maximum back down.
+			if (target->client->ps.stats[STAT_HEALTH] < max_health)
 			{
-				g_entities[pl[i]].client->ps.stats[STAT_HEALTH] = g_entities[pl[i]].client->ps.stats[STAT_MAX_HEALTH];
-			}
+				target->client->ps.stats[STAT_HEALTH] += healthadd;
 
-			g_entities[pl[i]].health = g_entities[pl[i]].client->ps.stats[STAT_HEALTH];
+				if (target->client->ps.stats[STAT_HEALTH] > max_health)
+				{
+					target->client->ps.stats[STAT_HEALTH] = max_health;
+				}
+
+				target->health = target->client->ps.stats[STAT_HEALTH];
+			}
 
 			//At this point we know we got one, so add him into the collective event client bitflag
 			if (!te)
@@ -1577,8 +1724,16 @@ void ForceTeamHeal( gentity_t *self )
 				BG_ForcePowerDrain( &self->client->ps, FP_TEAM_HEAL, forcePowerNeeded[self->client->ps.fd.forcePowerLevel[FP_TEAM_HEAL]][FP_TEAM_HEAL] );
 			}
 
-			WP_AddToClientBitflags(te, pl[i]);
-			//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
+			if (pl[i] < MAX_CLIENTS)
+			{
+				WP_AddToClientBitflags(te, pl[i]);
+				//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
+			}
+			else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS)
+			{
+				RP_TeamPowerNPCEffect(target, 1);
+				npc_effects++;
+			}
 		}
 		i++;
 	}
@@ -1591,8 +1746,9 @@ void ForceTeamForceReplenish( gentity_t *self )
 	gentity_t *ent;
 	vec3_t a;
 	int numpl = 0;
-	int pl[MAX_CLIENTS];
+	int pl[RP_TEAM_POWER_MAX_TARGETS];
 	int poweradd = 0;
+	int npc_effects = 0;
 	gentity_t *te = NULL;
 
 	if ( self->health <= 0 )
@@ -1628,8 +1784,10 @@ void ForceTeamForceReplenish( gentity_t *self )
 		radius *= 3;
 	}
 
-	// while (i < MAX_CLIENTS)  // zyk: now the condition will be the level.num_entities
-	while (i < level.num_entities)
+	// zyk: now the condition will be the level.num_entities
+	// GalaxyRP fix: [Force] who qualifies is RP_TeamPowerTargetValid()'s decision now -- see the
+	// comment there -- and the loop stops at RP_TEAM_POWER_MAX_TARGETS so pl[] cannot overflow.
+	while (i < level.num_entities && numpl < RP_TEAM_POWER_MAX_TARGETS)
 	{
 		ent = &g_entities[i];
 
@@ -1640,22 +1798,12 @@ void ForceTeamForceReplenish( gentity_t *self )
 		// Improvements is now a reserved/unused skill (see the matching fix comment in
 		// do_upgrade_skill() in g_cmds.c), so that ammo-regen path -- and the target-selection branch
 		// that fed it -- have been removed outright, back to selecting only targets below full force.
-		if (ent && ent->client && self != ent &&
-			ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax &&
-			ForcePowerUsableOn(self, ent, FP_TEAM_FORCE) &&
-			trap->InPVS(self->client->ps.origin, ent->client->ps.origin) && 
-			// GalaxyRP fix: [Settings] this used to also allow through a target who was not an ally
-			// (self->client->pers.player_settings & (1 << 10) -- the old /settings 5, "Use healing force
-			// only at allied players", set to OFF/bypass). That per-player choice has been removed (see
-			// the fix comment on settings_number_to_bit in Cmd_Settings_f) -- Team Energize in FFA now
-			// always restricts to allies, except in non-RPG mode (amrpgmode == 0), where there is no
-			// allied group to restrict to.
-			(((self->client->sess.amrpgmode == 0 || zyk_is_ally(self, ent) == qtrue) &&
-			g_gametype.integer == GT_FFA) || OnSameTeam(self, ent)))
+		if (RP_TeamPowerTargetValid(self, ent, FP_TEAM_FORCE) &&
+			ent->client->ps.fd.forcePower < ent->client->ps.fd.forcePowerMax)
 		{
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);
 
-			if (VectorLength(a) <= radius)
+			if (VectorLength(a) <= radius && trap->InPVS(self->client->ps.origin, ent->client->ps.origin))
 			{
 				pl[numpl] = i;
 				numpl++;
@@ -1693,22 +1841,14 @@ void ForceTeamForceReplenish( gentity_t *self )
 		poweradd = 20;
 	}
 
-	// GalaxyRP (Alex): [Force Powers] Cooldown should go down as the ability is more advanced
-	if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_1) {
-		self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time + 2000;
-	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_2) {
-		self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time + 1500;
-	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_3) {
-		self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time + 1000;
-	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_4) {
-		self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time + 500;
-	}
-	else if (self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE] == FORCE_LEVEL_5) {
-		self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time;
-	}
+	// GalaxyRP fix: [Force] a flat 2 second cooldown at every level, the same as Team Heal. It used
+	// to shrink with the level (2000/1500/1000/500 ms) down to NONE at level 5, where only the button
+	// release (or the 300ms repeat debounce on the force_forcepowerother bind) stood between casts.
+	// Level 4 and 5 pay a fixed amount to every target for one price, so two allied level 5
+	// energizers broke even at any rate they could cast -- unlimited force for both -- and three or
+	// more gained force on every round. The cost now also rises with the level (forcePowerNeeded[] in
+	// bg_pmove.c, 40 to 80); together these end the two-player loop and bound the larger ones.
+	self->client->ps.fd.forcePowerDebounce[FP_TEAM_FORCE] = level.time + 2000;
 
 	BG_ForcePowerDrain( &self->client->ps, FP_TEAM_FORCE, forcePowerNeeded[self->client->ps.fd.forcePowerLevel[FP_TEAM_FORCE]][FP_TEAM_FORCE] );
 
@@ -1716,16 +1856,26 @@ void ForceTeamForceReplenish( gentity_t *self )
 
 	while (i < numpl)
 	{
+		gentity_t *target = &g_entities[pl[i]];
+
 		// GalaxyRP fix: [Skills] this used to branch here: if the target's force power was already
 		// full, recover their blaster pack/power cell ammo instead (scaled off the now-removed
 		// Improvements skill). Since only targets below full force power are selected above now, this
 		// branch is always taken -- restore force power unconditionally.
-		g_entities[pl[i]].client->ps.fd.forcePower += poweradd;
+		target->client->ps.fd.forcePower += poweradd;
 
-		if (g_entities[pl[i]].client->sess.amrpgmode == 2 && g_entities[pl[i]].client->ps.fd.forcePower > g_entities[pl[i]].client->pers.max_force_power)
-			g_entities[pl[i]].client->ps.fd.forcePower = g_entities[pl[i]].client->pers.max_force_power;
-		else if (g_entities[pl[i]].client->sess.amrpgmode < 2 && g_entities[pl[i]].client->ps.fd.forcePower > RP_MAX_FORCE_POWER_LOGGED_OUT) // zyk: this is the max force for a logged-out player (RP_MAX_FORCE_POWER_LOGGED_OUT, g_local.h)
-			g_entities[pl[i]].client->ps.fd.forcePower = RP_MAX_FORCE_POWER_LOGGED_OUT;
+		// GalaxyRP fix: [Force] cap at the target's own maximum. This used to cap a logged-in
+		// character at pers.max_force_power and everyone else -- npcs included -- at
+		// RP_MAX_FORCE_POWER_LOGGED_OUT (100), a second copy of a rule forcePowerMax already holds:
+		// initialize_rpg_skills() and the Force Power skill upgrade set it to pers.max_force_power,
+		// WP_SpawnInitForcePowers() and /logout set it to RP_MAX_FORCE_POWER_LOGGED_OUT, and
+		// WP_ForcePowerRegenerate() caps at it. For npcs the two copies agreed only by accident: an
+		// npc that knows force powers has its .npc "forcePowerMax" overwritten with 100 by
+		// WP_SpawnInitForcePowers() (NPC_Begin, amrpgmode 0), so the fixed 100 matched -- but any
+		// other route to an npc maximum above 100 would have had its force cut on being energized.
+		// The target test above already requires forcePower < forcePowerMax.
+		if (target->client->ps.fd.forcePower > target->client->ps.fd.forcePowerMax)
+			target->client->ps.fd.forcePower = target->client->ps.fd.forcePowerMax;
 
 		//At this point we know we got one, so add him into the collective event client bitflag
 		if (!te)
@@ -1734,8 +1884,16 @@ void ForceTeamForceReplenish( gentity_t *self )
 			te->s.eventParm = 2; //eventParm 1 is heal, eventParm 2 is force regen
 		}
 
-		WP_AddToClientBitflags(te, pl[i]);
-		//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
+		if (pl[i] < MAX_CLIENTS)
+		{
+			WP_AddToClientBitflags(te, pl[i]);
+			//Now cramming it all into one event.. doing this many g_sound events at once was a Bad Thing.
+		}
+		else if (npc_effects < RP_TEAM_POWER_MAX_NPC_EFFECTS)
+		{
+			RP_TeamPowerNPCEffect(target, 2);
+			npc_effects++;
+		}
 
 		i++;
 	}
