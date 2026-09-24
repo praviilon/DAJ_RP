@@ -2553,6 +2553,7 @@ qboolean PM_SaberMoveOkayForKata( void )
 }
 
 //GalaxyRP (Alex): [New Combat Animations] This method returns the correct parameter from the .sab file depending on the style the player is currently using.
+// DAJ_RP: Purple = Desann and Green = Tavion, matching the ready anims (getOverridenAnimationByStyle in bg_pmove.c) and the idle anims (get_idle_animation_for_style in g_active.c).
 int getCorrectKata(saberInfo_t* saber ) {
 	switch (pm->ps->fd.saberAnimLevel)
 	{
@@ -2562,9 +2563,9 @@ int getCorrectKata(saberInfo_t* saber ) {
 		return saber->kataMoveYellow;
 	case SS_STRONG:
 		return saber->kataMoveRed;
-	case SS_TAVION:
-		return saber->kataMovePurple;
 	case SS_DESANN:
+		return saber->kataMovePurple;
+	case SS_TAVION:
 		return saber->kataMoveGreen;
 	case SS_DUAL:
 		return saber->kataMoveDual;
