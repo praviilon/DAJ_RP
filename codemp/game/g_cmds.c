@@ -161,14 +161,18 @@ const skill_t skills[] = {
 	{5, "Saber Defense",		"increases your ability to block, parry enemy saber attacks or enemy shots",																																																									"force",	"neutral",	FP_SABER_DEFENSE},
 	{5, "Saber Throw",			"throws your saber at enemy and gets it back. Each level increases max distance and saber throw speed.",																																																		"force",	"neutral",	FP_SABERTHROW},
 	{5, "Absorb",				"allows you to absorb force power attacks done to you",																																																															"force",	"light",	FP_ABSORB},
-	{5, "Heal",					"recover some Health. Level 1 restores 5 hp, level 2 restores 10 hp and level 3 restores 25 hp",																																																				"force",	"light",	FP_HEAL},
+	// GalaxyRP fix: [Skills audit] description gave 5/10/25 hp for levels 1-3; ForceHeal() in w_force.c
+	// restores 10/20/30/40/50 hp for levels 1-5.
+	{5, "Heal",					"restores your health. Level 1 restores 10 hp, level 2 - 20 hp, level 3 - 30 hp, level 4 - 40 hp and level 5 - 50 hp",																																																				"force",	"light",	FP_HEAL},
 	{5, "Protect",				"decreases damage done to you by non-force power attacks. At level 4 decreases force consumption when receiving damage",																																														"force",	"light",	FP_PROTECT},
 	// GalaxyRP fix: [Skills audit] description no longer references the "Force User class can mind
 	// control a player or npc" sub-feature -- rpg_class is permanently 0 (see the "Dead Code"
 	// comments in w_force.c), so that ability was removed in an earlier, unrelated RPG-class
 	// cleanup and the description text was simply never updated to match.
 	{5, "Mind Trick",			"makes yourself invisible to the players affected by this force power. Level 1 has a duration of 20 seconds, level 2 is 25 seconds and level 3 is 30 seconds",																								"force",	"neutral",	FP_TELEPATHY},
-	{5, "Team Heal",			"restores some health to players near you",																																																																		"force",	"light",	FP_TEAM_HEAL},
+	// GalaxyRP fix: [Skills audit] "players near you" -- ForceTeamHeal() reaches only the caster's allies
+	// and friendly npcs (RP_TeamPowerTargetValid in w_force.c).
+	{5, "Team Heal",			"restores health to your allies and friendly npcs near you. The range and HP restored grow with each level",																																																																		"force",	"light",	FP_TEAM_HEAL},
 	{5, "Lightning",			"attacks with a powerful electric attack at players near you. At level 4, does more damage and pushes the enemy back",																																															"force",	"dark",		FP_LIGHTNING},
 	{5, "Grip",					"attacks a player by holding and damaging him",																																																																	"force",	"dark",		FP_GRIP},
 	{5, "Drain",				"drains force power from a player to restore your health",																																																														"force",	"dark",		FP_DRAIN},
@@ -182,7 +186,8 @@ const skill_t skills[] = {
 	// that ammo-regen branch (gated on the since-removed Improvements skill) was already stripped out
 	// of ForceTeamForceReplenish() in an earlier, unrelated fix (see the matching comments in
 	// w_force.c); the description text was simply never updated to match.
-	{5, "Team Energize",		"restores some force power to players near you",																																																																	"force",	"dark",		FP_TEAM_FORCE},
+	// GalaxyRP fix: [Skills audit] same "players near you" correction as Team Heal above.
+	{5, "Team Energize",		"restores Force power to your allies and friendly npcs near you. The range and Force restored grow with each level",																																																																	"force",	"dark",		FP_TEAM_FORCE},
 	{4, "Stun Baton",			"attacks someone with a small electric charge. Each level deals more damage. With Stun Baton Upgrade, opens doors including locked ones, moves elevators, and slows enemies for some seconds",																	"weapons",	"merc",		WP_STUN_BATON},
 	{2, "Blaster Pistol",		"the popular Star Wars pistol used by Han Solo in the movies. Alt fire is a charged shot: the longer the charge, the more damage. Level 2 unlocks the alternate fire mode.",																	"weapons",	"merc",		WP_BRYAR_PISTOL},
 	{2, "E11 Blaster Rifle",	"the rifle used by the Storm Troopers. Normal fire is a single shot, alt fire is rapid fire. Level 2 unlocks the alternate fire mode.",																																										"weapons",	"merc",		WP_BLASTER},
@@ -201,8 +206,12 @@ const skill_t skills[] = {
 	{1, "Drain Shield",			"When using Drain force power, and your health is full, restores some shield. It also makes Drain suck hp/shield from the enemy to restore your hp/shield",																																						"force",	"merc",		0},
 	{3, "Jetpack",				"the jetpack, used by Boba Fett. Allows you to fly. To use it, jump and press the Use key (usually R) while in the middle of the jump. Each level uses less fuel, allowing you to fly for a longer time",																										"items",	"merc",		HI_JETPACK},
 	{3, "Sense Health",			"allows you to see info about someone, including npcs and vehicles. Level 1 shows current health. Level 2 shows name, health and shield. Level 3 shows name, health and max health, shield and max shield, force and max force (a vehicle shows hull and shields, and whether it is empty or occupied). To use it, use ^3Sense ^7force power and aim at someone; if you aim at nobody, it shows the nearest player, else the nearest npc, else the nearest vehicle",		"force",	"light",	0},
-	{3, "Shield Heal",			"recovers 4 shield at level 1, 8 shield at level 2 and 12 shield at level 3. To use it, use Heal force power when you have full HP.",																																											"force",	"merc",		0},
-	{3, "Team Shield Heal",		"recovers 3 shield at level 1, 6 shield at level 2 and 9 shield at level 3 to players near you. To use it, when near players, use Team Heal force power. It will heal their shield after they have full HP",																									"force",	"merc",		0},
+	// GalaxyRP fix: [Skills audit] Shield Heal only runs inside ForceHeal(), so it needs the Heal skill
+	// and costs a heal's Force -- neither was stated, and without Heal the skill silently did nothing.
+	{3, "Shield Heal",			"restores some of your shield. To use it, use Heal force power when you have full HP. Requires the Heal skill, and costs the same Force as a Heal",																																											"force",	"merc",		0},
+	// GalaxyRP fix: [Skills audit] Team Shield Heal only runs inside ForceTeamHeal(): it needs the Team Heal
+	// skill, uses its range and cost, and reaches allies (not npcs) who are at full HP when it is cast.
+	{3, "Team Shield Heal",		"restores shield to your allies near you who already have full HP. To use it, use Team Heal force power. Requires the Team Heal skill, and uses its range and Force cost",																									"force",	"merc",		0},
 	// GalaxyRP fix: [Skills] index 38 below (Unique Skill) is a reserved/unused entry -- see the
 	// [Shop] fix comment right below this one -- and stays blocked in do_upgrade_skill()/
 	// do_downgrade_skill(). Its own gameplay hook (a self-heal on the Engage Duel key, in g_active.c)
