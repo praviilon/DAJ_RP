@@ -4791,10 +4791,8 @@ void NPC_Kill_f( void )
 	}
 }
 
-void NPC_PrintScore( gentity_t *ent )
-{
-	Com_Printf( "%s: %d\n", ent->targetname, ent->client->ps.persistant[PERS_SCORE] );
-}
+// GalaxyRP: [NPC System] NPC_PrintScore() used to be here -- see the note where /npc score was, in
+// Cmd_NPC_f() below.
 
 /*
 Svcmd_NPC_f
@@ -5070,17 +5068,7 @@ void Cmd_NPC_f( gentity_t *ent )
 
 	trap->Argv( 1, cmd, 1024 );
 
-	if ( !cmd[0] )
-	{ // GalaxyRP fix: [NPC System] this listing went to the server console (Com_Printf), so the admin
-	  // who typed /npc saw nothing at all. score still prints there -- see NPC_PrintScore().
-		trap->SendServerCommand( ent-g_entities, "print \"Valid NPC commands are:\n\
- spawn [NPC type (from NPCs.cfg)]\n\
- kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n\
- score [NPC targetname] (prints number of kills per NPC to the server console)\n\
- team [team (player or enemy or neutral or free)] (the NPC in your crosshair)\n\
- effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\"" );
-	}
-	else if ( Q_stricmp( cmd, "spawn" ) == 0 )
+	if ( Q_stricmp( cmd, "spawn" ) == 0 )
 	{
 		NPC_Spawn_f( ent );
 	}
@@ -5105,47 +5093,19 @@ void Cmd_NPC_f( gentity_t *ent )
 	//
 	// So the command toggled a flag nothing polled, which would have called a function that does
 	// nothing, and printed not a word either way. Removed along with the flag, the function and the
-	// one other reader (the jump-state box in NPC_BSJump, NPC_behavior.c). An unrecognised
-	// subcommand is ignored without a message, which is what this one effectively did anyway.
+	// one other reader (the jump-state box in NPC_BSJump, NPC_behavior.c). "/npc showbounds" is now
+	// an unrecognised subcommand, which gets the usage listing (the final else below).
 	//
 	// Drawing boxes in multiplayer is possible -- CG_Cube() works client-side and is live behind
 	// cg_showVehBounds, and G_TestLine() broadcasts debug lines that CG_TestLine() renders, live
 	// behind bot_wp_edit -- but it is a new feature, not a repair, so nothing is left here
 	// pretending to be one.
-	else if ( Q_stricmp ( cmd, "score" ) == 0 )
-	{
-		char		cmd2[1024];
-		gentity_t *thisent = NULL;
-
-		trap->Argv( 2, cmd2, sizeof( cmd2 ) );
-
-		if ( !cmd2[0] )
-		{//Show the score for all NPCs
-			int i;
-
-			Com_Printf( "SCORE LIST:\n" );
-			for ( i = 0; i < ENTITYNUM_WORLD; i++ )
-			{
-				thisent = &g_entities[i];
-				if ( !thisent || !thisent->client )
-				{
-					continue;
-				}
-				NPC_PrintScore( thisent );
-			}
-		}
-		else
-		{
-			if ( (thisent = G_Find( NULL, FOFS(targetname), cmd2 )) != NULL && thisent->client )
-			{
-				NPC_PrintScore( thisent );
-			}
-			else
-			{
-				Com_Printf( "ERROR: NPC score - no such NPC %s\n", cmd2 );
-			}
-		}
-	}
+	// GalaxyRP: [NPC System] "score" used to be here, with NPC_PrintScore(): Raven's debug listing of
+	// ps.persistant[PERS_SCORE] -- kills -- for every entity with a client, printed to the server
+	// console. It could only ever print 0: the kill-score line in AddScore() (g_combat.c) has been
+	// commented out since the scoreboard switched to counting deaths, and nothing else raises
+	// PERS_SCORE. It also listed every player slot, connected or not, as "(null): 0". Removed, with
+	// its lines in the usage listing, /adminlist and /list commands; "/npc score" now gets the usage.
 	else if ( Q_stricmp( cmd, "team" ) == 0 )
 	{ // zyk: new option
 		// GalaxyRP fix: [NPC System] this acted on ps.lookTarget, which is not the crosshair -- see
@@ -5212,5 +5172,15 @@ void Cmd_NPC_f( gentity_t *ent )
 	else if ( Q_stricmp( cmd, "effect" ) == 0 )
 	{
 		RP_NpcEffect_f( ent );
+	}
+	else
+	{ // GalaxyRP fix: [NPC System] no subcommand, or one that does not exist: the listing. It used to go
+	  // to the server console (Com_Printf), so the admin who typed /npc saw nothing at all, and an
+	  // unknown subcommand -- a typo, or a removed one -- was ignored in silence.
+		trap->SendServerCommand( ent-g_entities, "print \"Valid NPC commands are:\n\
+ spawn [NPC type (from NPCs.cfg)]\n\
+ kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n\
+ team [team (player or enemy or neutral or free)] (the NPC in your crosshair)\n\
+ effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\"" );
 	}
 }

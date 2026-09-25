@@ -890,7 +890,7 @@ typedef struct admin_command_description_s {
 // them, so renaming is safe. Longest is now 20 characters, well inside print_row()'s 33 columns.
 //
 // GalaxyRP: [NPC System] "NPC Spawn" -> "NPC management": the power has long covered more than
-// spawning (kill, team, score, and now /npc effect). Changed in the calculator too.
+// spawning (kill, team, and now /npc effect). Changed in the calculator too.
 const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "NPC management",			ADM_NPC					},
 	{ "No Clip",				ADM_NOCLIP				},
@@ -12635,12 +12635,12 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// almost none -- and going over SV_SendServerCommand's hard 1022 does not truncate, it
 				// silently drops the whole message.
 				//
-				// The one note under the header carries the access rule for all nine: Cmd_NPC_f is gated on
+				// The one note under the header carries the access rule for all eight: Cmd_NPC_f is gated on
 				// ADM_NPC, while /order is not gated at all. Stating it once beats repeating an (Admin only)
 				// tag on every row.
 				//
-				// With /npc effect this message is 979 bytes, 43 short of the 1022 limit: another row goes
-				// in a SendServerCommand of its own.
+				// This message is 898 bytes (with /npc effect, without the removed /npc score), 124 short of
+				// the 1022 limit: a longer addition goes in a SendServerCommand of its own.
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------NPC System--------\n\
 ^7The ^3/npc ^7commands require the ^3NPC ^7admin command. See ^3/adminlist^7.\n\
 ^3/npc spawn <type> <targetname (optional)>: ^7Spawns an npc.\n\
@@ -12650,7 +12650,6 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/npc kill team <player/enemy/neutral/free or nonally>: ^7Kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
 ^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc in your crosshair.\n\
 ^3/npc effect <holo/ghost/nonsolid/clear>: ^7Hologram, Force ghost or walk-through npc in your crosshair; ^3clear ^7undoes it.\n\
-^3/npc score <targetname (optional)>: ^7Prints npc scores to the server console.\n\
 ^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
 				// GalaxyRP: [Mini-Games] /duelmode and /meleemode were documented nowhere at all -- not
 				// here, not in /list help, not in /adminlist. The only tournament entries this page
@@ -16724,19 +16723,17 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 
 		if (command_number == ADM_NPC)
 		{
-			// GalaxyRP fix: [Admin] this listed spawn and "kill all" only. /npc also has team
-			// and score, and kill takes more forms than the one shown -- none of which
-			// appeared anywhere, here or in /list commands, so the only way to find them was to read
-			// Cmd_NPC_f(). The team names are given in their short form because that is what a player
-			// will type and what the /npc usage listing already shows; zyk_team_from_string() accepts
-			// the full NPCTEAM_* spellings too. score is called out as server-console output because
-			// NPC_PrintScore() uses Com_Printf, so the admin who runs it sees nothing client-side.
+			// GalaxyRP fix: [Admin] this listed spawn and "kill all" only. /npc also has team, and
+			// kill takes more forms than the one shown -- none of which appeared anywhere, here or in
+			// /list commands, so the only way to find them was to read Cmd_NPC_f(). The team names are
+			// given in their short form because that is what a player will type and what the /npc
+			// usage listing already shows; zyk_team_from_string() accepts the full NPCTEAM_* spellings
+			// too. (/npc score was listed here until it was removed -- see Cmd_NPC_f().)
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3/npc spawn <type> <targetname (optional)>^7: spawns an npc. ^3/npc spawn vehicle <type> <targetname (optional)>^7: spawns a vehicle.\n\
 ^3/npc kill <targetname or type>^7: kills npcs with that targetname or type. ^3/npc kill all^7: kills every npc.\n\
 ^3/npc kill team <player/enemy/neutral/free or nonally>^7: kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
 ^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc in your crosshair.\n\
-^3/npc effect <holo/ghost/nonsolid/clear>^7: gives the npc in your crosshair a hologram or Force ghost look (both walk-through) or makes it walk-through only; ^3clear ^7restores it, and makes an npc that spawned non-solid solid.\n\
-^3/npc score <targetname (optional)>^7: prints npc scores to the server console.\n\n\"" );
+^3/npc effect <holo/ghost/nonsolid/clear>^7: gives the npc in your crosshair a hologram or Force ghost look (both walk-through) or makes it walk-through only; ^3clear ^7restores it, and makes an npc that spawned non-solid solid.\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
 		{
@@ -22168,8 +22165,8 @@ command_t commands[] = {
 	// entity slots exactly as /entadd does, and every other command that places or removes entities
 	// -- the whole Entity System and shader-remap set, /spawnplatform, /spawndummy, /removepickups --
 	// has carried this flag all along. This row was the one that did not, so an admin could still
-	// spawn NPCs into a map that was already on its way out. The other subcommands (kill, score,
-	// team) have nothing to do during intermission either.
+	// spawn NPCs into a map that was already on its way out. The other subcommands (kill, team,
+	// effect) have nothing to do during intermission either.
 	{ "npc",				Cmd_NPC_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ooc",				Cmd_OOC_f,					0 },					// GalaxyRP: [Chat] out-of-character chat, forced in every gametype -- see Cmd_OOC_f for the flags
 	{ "order",				Cmd_Order_f,				CMD_ALIVE | CMD_NOINTERMISSION },
