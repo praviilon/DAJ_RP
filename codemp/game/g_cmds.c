@@ -1671,6 +1671,8 @@ argv(0) notarget
 ==================
 */
 void Cmd_Notarget_f( gentity_t *ent ) {
+	char arg1[MAX_STRING_CHARS];
+	gentity_t *target = ent;
 	char *msg = NULL;
 
 	// GalaxyRP fix: [Admin] this command had no gate of any kind. Upstream (New Zyk) carries
@@ -1680,34 +1682,112 @@ void Cmd_Notarget_f( gentity_t *ent ) {
 	// vehicle turret on the map, since all of them test FL_NOTARGET before picking a target.
 	//
 	// Gated on ADM_GOD rather than a new permission bit, the same way /killother shares Kick: the two
-	// are the same kind of self-applied invulnerability toy, so an admin trusted with one is trusted
-	// with the other, and no existing admin account needs a migration to keep working. The dispatch
-	// row also gains CMD_LOGGEDIN to match /god and /noclip -- belt and braces, since pers.bitvalue
-	// is only ever populated for a logged-in account, but it produces the right refusal message.
+	// are the same kind of invulnerability toy, so an admin trusted with one is trusted with the
+	// other, and no existing admin account needs a migration to keep working. The dispatch row also
+	// gains CMD_LOGGEDIN to match /god and /noclip -- belt and braces, since pers.bitvalue is only
+	// ever populated for a logged-in account, but it produces the right refusal message.
 	if (!check_admin_command(ent, ADM_GOD, qtrue))
 	{
 		return;
 	}
 
-	// GalaxyRP fix: [Death System] and refuse while downed, for the same reason /noclip does. This
-	// toggle is an XOR over the very flag the downed state owns: RP_EnterDownedState() sets
-	// FL_NOTARGET to make a downed player untargetable, so an admin typing this mid-countdown flips
-	// their own protection off and lies there shootable by every NPC and turret. Ordered after the
-	// permission check so a player without God Mode is told the more fundamental reason first.
-	if (G_PlayerIsDowned(ent))
+	// GalaxyRP: [Admin] /notarget <player name or ID> applies it to another player; with no name it
+	// is the admin's own toggle, exactly as before. The dispatch row no longer carries CMD_ALIVE: that
+	// flag tested the CALLER, and the checks it made now belong to the target -- below, where they
+	// still cover the caller whenever the caller is the target. An admin who is dead or spectating can
+	// therefore set it on somebody else, which is what moderating from spectator needs.
+	if ( trap->Argc() > 2 )
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/notarget ^2<player name or ID (optional)>\n^7Without a name it applies to you.\n\"" );
 		return;
 	}
 
-	ent->flags ^= FL_NOTARGET;
-	if ( !(ent->flags & FL_NOTARGET) )
+	if ( trap->Argc() == 2 )
+	{
+		int client_id;
+
+		trap->Argv( 1, arg1, sizeof( arg1 ) );
+		client_id = ClientNumberFromString( ent, arg1, qfalse );
+
+		if ( client_id == -1 )
+		{
+			return;
+		}
+
+		target = &g_entities[client_id];
+	}
+
+	if ( !target->inuse || !target->client )
+	{
+		return;
+	}
+
+	// same Admin Protect rule as /give, /scale, /teleport and the phase commands
+	if ( target != ent && target->client->sess.amrpgmode > 0 &&
+		(target->client->pers.bitvalue & (1 << ADM_ADMPROTECT)) && !(target->client->pers.player_settings & (1 << 13)) )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Target player is adminprotected\n\"" );
+		return;
+	}
+
+	// what CMD_ALIVE used to check, for the target. FL_NOTARGET is cleared by the respawn that ends a
+	// death, and a spectator is targeted by nothing, so setting it on either would mean nothing.
+	if ( target->health <= 0 || target->client->tempSpectate >= level.time || target->client->sess.sessionTeam == TEAM_SPECTATOR )
+	{
+		if ( target == ent )
+			trap->SendServerCommand( ent-g_entities, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "MUSTBEALIVE" ) ) );
+		else
+			trap->SendServerCommand( ent-g_entities, "print \"Target player must be alive and not spectating.\n\"" );
+		return;
+	}
+
+	// GalaxyRP fix: [Death System] and refuse while downed, for the same reason /noclip does. This
+	// toggle is an XOR over the very flag the downed state owns: RP_EnterDownedState() sets
+	// FL_NOTARGET to make a downed player untargetable, so toggling it mid-countdown flips that
+	// protection off and leaves the player lying there shootable by every NPC and turret. Ordered
+	// after the permission check so a player without God Mode is told the more fundamental reason
+	// first.
+	if (G_PlayerIsDowned(target))
+	{
+		if ( target == ent )
+			trap->SendServerCommand(ent - g_entities, "print \"^1You cannot do this while you are downed.\n\"");
+		else
+			trap->SendServerCommand(ent - g_entities, va("print \"^1%s ^1is downed. Notarget cannot be changed while downed.\n\"", target->client->pers.netname));
+		return;
+	}
+
+	// GalaxyRP: [Admin] and refuse a cloaked player, for the same kind of reason. The Cloak Item is
+	// FL_NOTARGET's other owner: Jedi_Cloak() sets it and Jedi_Decloak() clears it unconditionally.
+	// On a cloaked player this toggle could only switch the cloak's own flag OFF -- leaving them
+	// invisible but targetable, and saying "notarget OFF" about something they never turned on --
+	// and anything it switched ON would be wiped by the uncloak anyway. Applies to the admin's own
+	// toggle as well, which had the same problem.
+	if ( target->client->ps.powerups[PW_CLOAKED] )
+	{
+		if ( target == ent )
+			trap->SendServerCommand( ent-g_entities, "print \"^1You are cloaked. Uncloak first -- while cloaked, NPCs and turrets already ignore you.\n\"" );
+		else
+			trap->SendServerCommand( ent-g_entities, va("print \"^1%s ^1is cloaked. Notarget cannot be changed until they uncloak -- while cloaked, NPCs and turrets already ignore them.\n\"", target->client->pers.netname) );
+		return;
+	}
+
+	target->flags ^= FL_NOTARGET;
+	if ( !(target->flags & FL_NOTARGET) )
 		msg = "^1OFF";
 	else
 		msg = "^2ON";
 
-	trap->SendServerCommand( ent-g_entities, va( "print \"notarget %s\n\"", msg ) );
-	trap->SendServerCommand(-1, va("chat \"^7%s ^7turned notarget %s\n\"", ent->client->pers.netname, msg));
+	if ( target == ent )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"notarget %s\n\"", msg ) );
+		trap->SendServerCommand(-1, va("chat \"^7%s ^7turned notarget %s\n\"", ent->client->pers.netname, msg));
+	}
+	else
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"Notarget %s ^7for %s\n\"", msg, target->client->pers.netname ) );
+		trap->SendServerCommand( target-g_entities, va( "print \"An admin turned your notarget %s\n\"", msg ) );
+		trap->SendServerCommand(-1, va("chat \"^7%s ^7turned notarget %s ^7for %s\n\"", ent->client->pers.netname, msg, target->client->pers.netname));
+	}
 }
 
 
@@ -12496,7 +12576,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/skillup <player name> <skill number> <number of levels (optional)>: ^7upgrades a skill.\n\
 ^3/skilldown <player name> <skill number> <number of levels (optional)>: ^7downgrades a skill.\n\
 ^3/god: ^7Makes you invincible.\n\
-^3/notarget: ^7Makes NPCs, turrets and seekers ignore you.\n\
+^3/notarget <player name (optional)>: ^7Makes NPCs, turrets and seekers ignore you, or another player.\n\
 ^3/players <player name(optional)> <force/weapons/protect/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
 ^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
@@ -16718,7 +16798,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_GOD)
 		{
-			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/god ^7to make yourself invincible, or ^3/notarget ^7to make NPCs and turrets ignore you.\n\n\"");
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/god ^7to make yourself invincible, or ^3/notarget <player name (optional)> ^7to make NPCs and turrets ignore you or another player.\n\n\"");
 		}
 		else if (command_number == ADM_LEVELUP)
 		{
@@ -22075,7 +22155,7 @@ command_t commands[] = {
 	{ "newschannels",		Cmd_NewsChannels_f,					0 },
 	{ "newsremove",			Cmd_NewsRemove_f,					CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "noclip",				Cmd_Noclip_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "notarget",			Cmd_Notarget_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	// GalaxyRP fix: [NPC] CMD_NOINTERMISSION added. "/npc spawn" reaches NPC_Spawn_f, which takes
 	// entity slots exactly as /entadd does, and every other command that places or removes entities
 	// -- the whole Entity System and shader-remap set, /spawnplatform, /spawndummy, /removepickups --
