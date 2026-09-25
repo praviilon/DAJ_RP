@@ -923,7 +923,8 @@ const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "Remove News",			ADM_REMOVENEWS			},
 	{ "Play Music",				ADM_MUSIC				},
 	{ "Instant Revive",			ADM_GETUP				},
-	{ "Weather",				ADM_WEATHER				}
+	{ "Weather",				ADM_WEATHER				},
+	{ "Ghost/Holo/Non-solid",	ADM_PHASE				}
 };
 
 qboolean check_admin_command(gentity_t* ent, int admin_command, qboolean with_message) {
@@ -4863,6 +4864,10 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// and with the same ordering requirement -- see zyk_stop_active_holdables().
 	zyk_stop_active_holdables(ent);
 
+	// GalaxyRP: [Phase] a new login, a logout or another character ends any /admsolid, /admghost or
+	// /admholo mode -- see RP_ClearPhaseMode().
+	RP_ClearPhaseMode(ent);
+
 	// GalaxyRP fix: [Account] through the wrapper, so switching character while dead no longer
 	// stands the corpse back up -- see zyk_apply_character_skills().
 	zyk_apply_character_skills(ent);
@@ -6293,6 +6298,10 @@ void Cmd_Login_F(gentity_t * ent)
 	// GalaxyRP fix: [Account] same for the outgoing character's running holdables, and before the
 	// skills load for the same reason -- see zyk_stop_active_holdables().
 	zyk_stop_active_holdables(ent);
+
+	// GalaxyRP: [Phase] a new login, a logout or another character ends any /admsolid, /admghost or
+	// /admholo mode -- see RP_ClearPhaseMode().
+	RP_ClearPhaseMode(ent);
 
 	// GalaxyRP fix: [Account] through the wrapper, so /login while dead no longer resurrects the
 	// player where they fell -- see zyk_apply_character_skills().
@@ -12231,6 +12240,10 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// call assigns STAT_WEAPONS wholesale, so the e-web could not corrupt it from here either way.
 	zyk_stop_active_holdables(ent);
 
+	// GalaxyRP: [Phase] a new login, a logout or another character ends any /admsolid, /admghost or
+	// /admholo mode -- see RP_ClearPhaseMode().
+	RP_ClearPhaseMode(ent);
+
 	zyk_remove_guns(ent);
 
 	// GalaxyRP fix: [Account] the same fuel reset the four character/login commands get -- see
@@ -12504,7 +12517,10 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// /admweather line to the block above took it to 1093.
 				trap->SendServerCommand(ent - g_entities, "print \"^3/admweather <effect (optional)>: ^7Sets the weather for everyone on the server. Run with no arguments to see the current weather, or ^3/admweather list ^7for the effects.\n\
 ^3/admweather add <effect>: ^7Layers another effect on top of the current weather. ^3/admweather remove <number> ^7drops one, ^3/admweather default ^7restores the map's own and ^3/admweather clear ^7switches it all off.\n\
-^3/noclip: ^7Makes you able to go through walls.\n\n\" ");
+^3/noclip: ^7Makes you able to go through walls.\n\
+^3/admghost <player name (optional)>: ^7Turns a player (or you) into a Force ghost: see-through, glowing, passes through people, off the radar. Again to turn it off.\n\
+^3/admholo <player name (optional)>: ^7Turns a player (or you) into a hologram: blue, scanlines, passes through people, off the radar. Again to turn it off.\n\
+^3/admsolid <player name (optional)>: ^7Lets a player (or you) pass through other players and NPCs, with no change in look. Again to turn it off.\n\n\" ");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------RP Inventory System--------\n\
 ^3/inventory ^7or ^3/inv: ^7Displays player's RP inventory.\n\
 ^3/createitem <itemname>: ^7Creates an item with a given name. Items containing more than one word need double quotes around the argument. ^1(Admin only)\n\
@@ -16746,6 +16762,12 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 ^3/admweather default ^7puts back the weather the map was built with, ^3/admweather clear ^7switches it all off and ^3/admweather remove <number> ^7drops one layer.\n\
 Run ^3/admweather ^7on its own to see the current weather, or ^3/admweather list ^7for the effects you can use\n\n\"");
 		}
+		else if (command_number == ADM_PHASE)
+		{
+			trap->SendServerCommand(ent - g_entities, "print \"\nUse ^3/admghost^7, ^3/admholo ^7or ^3/admsolid <player name (optional)> ^7to make a player a Force ghost, a hologram or just non-solid. Without a name it applies to you.\n\
+All three let the player pass through other players and NPCs; the ghost and hologram also change how they look and hide them from the radar. The same command again turns it off, and each one replaces the others.\n\
+Damage and targeting are not affected. The ghost and hologram look is only seen by players with the client plugin.\n\n\"");
+		}
 		else
 		{
 			// GalaxyRP fix: [Admin] the numeric-help chain above had no fallback for an
@@ -18851,6 +18873,153 @@ void Cmd_AdmWeather_f( gentity_t *ent )
 		zyk_weather_total_layers(), (level.zyk_weather_use_base == qtrue) ? " (map weather included)" : "");
 
 	zyk_weather_status(ent);
+}
+
+/*
+==================
+/admsolid, /admghost, /admholo
+
+GalaxyRP: [Phase] three admin commands sharing one admin power (ADM_PHASE) and one per-player field
+(pers.phase_mode). Each toggles its own mode on the named player, or on the admin with no name: the
+same command again turns it off, a different one switches straight over, so the three are mutually
+exclusive by construction.
+
+Every mode is movement-only non-solidity -- the player walks through players and NPCs and they walk
+through the player (see RP_PhasePassesThrough() in g_active.c) -- and nothing else: a phased player
+is hit, damaged, targeted by NPCs and deals damage exactly like anyone else. /admghost and /admholo
+add the Force-ghost or hologram look and keep the player off the radar, both drawn by the client
+plugin; a client without the plugin sees a normal player. Cloak and noclip are untouched and work on
+top of any mode.
+
+The mode survives death and respawn (it lives in pers), and is cleared by a map change or reconnect
+(ClientConnect zeroes the client) and by /login, /logout, /new and /char (RP_ClearPhaseMode()).
+==================
+*/
+static const char *RP_PhaseModeName( int mode )
+{
+	switch ( mode )
+	{
+	case RP_PHASE_NONSOLID:
+		return "non-solid";
+	case RP_PHASE_GHOST:
+		return "a Force ghost";
+	case RP_PHASE_HOLO:
+		return "a hologram";
+	default:
+		return "back to normal";
+	}
+}
+
+// Turns any mode off. The player keeps passing through bodies until nothing overlaps them any more
+// (phase_releasing, finished by RP_PhaseUpdate() in g_active.c), so switching back to solid while
+// standing inside somebody never leaves two players stuck in each other.
+void RP_ClearPhaseMode( gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	if ( ent->client->pers.phase_mode != RP_PHASE_NONE )
+	{
+		ent->client->pers.phase_mode = RP_PHASE_NONE;
+		ent->client->pers.phase_releasing = qtrue;
+	}
+}
+
+static void RP_PhaseCommand( gentity_t *ent, int mode, const char *cmdName )
+{
+	char arg1[MAX_STRING_CHARS];
+	gentity_t *target = ent;
+	int newMode;
+
+	if ( !check_admin_command( ent, ADM_PHASE, qtrue ) )
+	{
+		return;
+	}
+
+	if ( trap->Argc() > 2 )
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"^1Command Usage: ^3/%s ^2<player name or ID (optional)>\n^7Without a name it applies to you. Run it again to turn it off.\n\"", cmdName) );
+		return;
+	}
+
+	if ( trap->Argc() == 2 )
+	{
+		int client_id;
+
+		trap->Argv( 1, arg1, sizeof( arg1 ) );
+		client_id = ClientNumberFromString( ent, arg1, qfalse );
+
+		if ( client_id == -1 )
+		{
+			return;
+		}
+
+		target = &g_entities[client_id];
+	}
+
+	if ( !target->inuse || !target->client )
+	{
+		return;
+	}
+
+	// same Admin Protect rule as /give, /scale and /teleport
+	if ( target != ent && target->client->sess.amrpgmode > 0 &&
+		(target->client->pers.bitvalue & (1 << ADM_ADMPROTECT)) && !(target->client->pers.player_settings & (1 << 13)) )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Target player is adminprotected\n\"" );
+		return;
+	}
+
+	if ( target->client->sess.sessionTeam == TEAM_SPECTATOR || target->client->tempSpectate >= level.time )
+	{
+		if ( target == ent )
+			trap->SendServerCommand( ent-g_entities, "print \"You cannot use this while spectating.\n\"" );
+		else
+			trap->SendServerCommand( ent-g_entities, "print \"Target player is spectating.\n\"" );
+		return;
+	}
+
+	if ( target->client->pers.phase_mode == mode )
+	{ // the same command again: back to normal
+		RP_ClearPhaseMode( target );
+	}
+	else
+	{ // off, or another mode: switch straight to this one
+		target->client->pers.phase_mode = mode;
+		target->client->pers.phase_releasing = qfalse;
+	}
+
+	newMode = target->client->pers.phase_mode;
+
+	if ( target == ent )
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"You are %s%s.\n\"", (newMode == RP_PHASE_NONE) ? "" : "now ", RP_PhaseModeName( newMode )) );
+	}
+	else
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s ^7is %s%s.\n\"", target->client->pers.netname, (newMode == RP_PHASE_NONE) ? "" : "now ", RP_PhaseModeName( newMode )) );
+		trap->SendServerCommand( target-g_entities, va("print \"An admin made you %s.\n\"", (newMode == RP_PHASE_NONE) ? "normal again" : RP_PhaseModeName( newMode )) );
+	}
+
+	G_LogPrintf( "%s: %s ^7made %s ^7%s\n", cmdName, ent->client->pers.netname, target->client->pers.netname,
+		(newMode == RP_PHASE_NONE) ? "normal" : RP_PhaseModeName( newMode ) );
+}
+
+void Cmd_AdmSolid_f( gentity_t *ent )
+{
+	RP_PhaseCommand( ent, RP_PHASE_NONSOLID, "admsolid" );
+}
+
+void Cmd_AdmGhost_f( gentity_t *ent )
+{
+	RP_PhaseCommand( ent, RP_PHASE_GHOST, "admghost" );
+}
+
+void Cmd_AdmHolo_f( gentity_t *ent )
+{
+	RP_PhaseCommand( ent, RP_PHASE_HOLO, "admholo" );
 }
 
 /*
@@ -21836,6 +22005,9 @@ command_t commands[] = {
 	{ "adminup",			Cmd_AdminUp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "admmap",				Cmd_AdmMap_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "admweather",			Cmd_AdmWeather_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "admghost",			Cmd_AdmGhost_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "admholo",			Cmd_AdmHolo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "admsolid",			Cmd_AdmSolid_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "anim",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "allyadd",			Cmd_AllyAdd_f,				CMD_NOINTERMISSION },
 	{ "allychat",			Cmd_AllyChat_f,				0 },					// GalaxyRP: [Chat] a say mode, so no flags -- see Cmd_AllyChat_f

@@ -704,6 +704,166 @@ static void SV_PMTrace( trace_t *results, const vec3_t start, const vec3_t mins,
 
 /*
 =================
+GalaxyRP: [Phase] movement-only non-solidity for /admsolid, /admghost and /admholo
+
+A phased player keeps r.contents CONTENTS_BODY. That is the whole point of doing it this way rather
+than zeroing contents: every weapon trace, saber hit, Force power, grapple and NPC still finds a
+normal body, so the player is hit, damaged and targeted exactly like anyone else. Only MOVEMENT
+collision between bodies is switched off, from three sides:
+
+  - the phased player's own Pmove drops CONTENTS_BODY from its tracemask (ClientThink_real), so they
+    walk through players and NPCs but not walls;
+  - everyone else's Pmove -- players, bots, NPCs and vehicles all move through ClientThink_real --
+    runs with the phased bodies' contents cleared for the length of the Pmove() call and put back
+    straight after (RP_PhaseHideBodies / RP_PhaseRestoreBodies). SV_ClipMoveToEntities reads
+    r.contents live, so no relink is needed, and nothing outside that window sees the change;
+  - ClientEndFrame sends phased players with s.solid 0, so every client, stock ones included,
+    predicts walking through them instead of bumping into a box the server no longer blocks with.
+=================
+*/
+qboolean RP_PhasePassesThrough( const gentity_t *ent )
+{
+	if ( !ent || !ent->client )
+	{
+		return qfalse;
+	}
+
+	return ( ent->client->pers.phase_mode != RP_PHASE_NONE || ent->client->pers.phase_releasing ) ? qtrue : qfalse;
+}
+
+static int rp_phaseHidden[MAX_CLIENTS];
+static int rp_phaseHiddenCount = 0;
+
+// Only live bodies are touched: a corpse (CONTENTS_CORPSE), a rider a vehicle has Ghost()ed
+// (contents 0) and a spectator are left exactly as they are. Phased players are always player
+// slots -- NPCs never get a phase mode -- so the scan stops at level.maxclients.
+static void RP_PhaseHideBodies( const gentity_t *mover )
+{
+	int i;
+
+	rp_phaseHiddenCount = 0;
+
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gentity_t *other = &g_entities[i];
+
+		if ( other == mover || !other->inuse || !other->client )
+			continue;
+		if ( other->client->pers.connected != CON_CONNECTED )
+			continue;
+		if ( !RP_PhasePassesThrough( other ) )
+			continue;
+		if ( other->r.contents != CONTENTS_BODY )
+			continue;
+
+		other->r.contents = 0;
+		rp_phaseHidden[rp_phaseHiddenCount++] = i;
+	}
+}
+
+// Restores only what RP_PhaseHideBodies cleared, and only if it is still cleared: if something
+// during the Pmove changed a hidden body's contents -- a vehicle impact that killed it and turned it
+// into CONTENTS_CORPSE -- that newer value is left alone.
+static void RP_PhaseRestoreBodies( void )
+{
+	int i;
+
+	for ( i = 0; i < rp_phaseHiddenCount; i++ )
+	{
+		gentity_t *other = &g_entities[rp_phaseHidden[i]];
+
+		if ( other->r.contents == 0 )
+		{
+			other->r.contents = CONTENTS_BODY;
+		}
+	}
+
+	rp_phaseHiddenCount = 0;
+}
+
+// Whether this live body overlaps another live body it would collide with once solid again: a
+// player, bot, NPC or vehicle with CONTENTS_BODY that is not itself passing through. Tested on the
+// real boxes (currentOrigin + mins/maxs) rather than on r.absmin/absmax, which SV_LinkEntity widens
+// by one unit -- standing next to someone is not standing inside them.
+static qboolean RP_PhaseOverlapsBody( gentity_t *ent )
+{
+	int touch[MAX_GENTITIES];
+	int num, i, j;
+	vec3_t mins, maxs;
+
+	if ( ent->r.contents != CONTENTS_BODY )
+	{ // dead, ghosted in a vehicle or spectating: nothing to collide with
+		return qfalse;
+	}
+
+	VectorAdd( ent->r.currentOrigin, ent->r.mins, mins );
+	VectorAdd( ent->r.currentOrigin, ent->r.maxs, maxs );
+
+	num = trap->EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+
+	for ( i = 0; i < num; i++ )
+	{
+		gentity_t *other = &g_entities[touch[i]];
+		vec3_t omins, omaxs;
+		qboolean overlaps = qtrue;
+
+		if ( other == ent || !other->inuse || !other->client )
+			continue;
+		if ( !(other->r.contents & CONTENTS_BODY) )
+			continue;
+		if ( RP_PhasePassesThrough( other ) )
+			continue;
+
+		VectorAdd( other->r.currentOrigin, other->r.mins, omins );
+		VectorAdd( other->r.currentOrigin, other->r.maxs, omaxs );
+
+		for ( j = 0; j < 3; j++ )
+		{
+			if ( omins[j] >= maxs[j] || omaxs[j] <= mins[j] )
+			{
+				overlaps = qfalse;
+				break;
+			}
+		}
+
+		if ( overlaps )
+		{
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
+// Once per frame per client (ClientEndFrame): finish a release once nothing overlaps, then write the
+// mode the clients see. A release in progress is sent as RP_PHASE_NONSOLID -- the player already
+// looks normal, but their own prediction must keep passing through bodies until the server does.
+static void RP_PhaseUpdate( gentity_t *ent )
+{
+	gclient_t *client = ent->client;
+	int sentMode;
+
+	if ( client->pers.phase_releasing )
+	{
+		if ( client->pers.phase_mode != RP_PHASE_NONE || !RP_PhaseOverlapsBody( ent ) )
+		{
+			client->pers.phase_releasing = qfalse;
+		}
+	}
+
+	sentMode = client->pers.phase_mode;
+
+	if ( sentMode == RP_PHASE_NONE && client->pers.phase_releasing )
+	{
+		sentMode = RP_PHASE_NONSOLID;
+	}
+
+	client->ps.eFlags &= ~EF_RP_PHASE_MASK;
+	client->ps.eFlags |= ( sentMode << EF_RP_PHASE_SHIFT ) & EF_RP_PHASE_MASK;
+}
+
+/*
+=================
 SpectatorThink
 =================
 */
@@ -3610,6 +3770,13 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 		}
 	}
+	// GalaxyRP: [Phase] a phased player walks through bodies -- see RP_PhasePassesThrough(). Dead
+	// players already trace without CONTENTS_BODY; this only matters for the living.
+	if ( RP_PhasePassesThrough( ent ) )
+	{
+		pmove.tracemask &= ~CONTENTS_BODY;
+	}
+
 	pmove.trace = SV_PMTrace;
 	pmove.pointcontents = trap->PointContents;
 	pmove.debugLevel = g_debugMove.integer;
@@ -3869,7 +4036,11 @@ void ClientThink_real( gentity_t *ent ) {
 		pmove.cmd.buttons &= ~(BUTTON_ALT_ATTACK);
 	}
 
+	// GalaxyRP: [Phase] everyone else walks through phased bodies: hidden for exactly this call and
+	// put back straight after, before anything else in this function traces against them.
+	RP_PhaseHideBodies( ent );
 	Pmove (&pmove);
+	RP_PhaseRestoreBodies();
 
 	if (ent->client->solidHack)
 	{
@@ -4821,6 +4992,10 @@ void ClientEndFrame( gentity_t *ent ) {
 
 	G_SetClientSound (ent);
 
+	// GalaxyRP: [Phase] finish a release that has come clear, and write the mode clients see into
+	// ps.eFlags, where the state copy below carries it into s.eFlags.
+	RP_PhaseUpdate( ent );
+
 	// set the latest infor
 	if (g_smoothClients.integer) {
 		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
@@ -4828,6 +5003,18 @@ void ClientEndFrame( gentity_t *ent ) {
 	}
 	else {
 		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qfalse );
+	}
+
+	// GalaxyRP: [Phase] no collision box in the snapshot for a live phased body. SV_LinkEntity packs
+	// s.solid from r.contents, which stays CONTENTS_BODY so that shots and powers still hit; clients
+	// use s.solid only to build the list they predict movement against, so zeroing it here makes
+	// every client -- a stock one included -- walk through this player the way the server now lets
+	// them. Nothing on the server reads a player's s.solid, and the next link rebuilds it, so it is
+	// redone every frame: ClientEndFrame runs after every think of the frame, and nothing relinks a
+	// client between here and the snapshot.
+	if ( RP_PhasePassesThrough( ent ) && ent->r.contents == CONTENTS_BODY )
+	{
+		ent->s.solid = 0;
 	}
 
 	if (isNPC)

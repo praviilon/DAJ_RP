@@ -1289,6 +1289,10 @@ typedef struct cgMedia_s {
 	qhandle_t	refractionShader;
 
 	qhandle_t	cloakedShader;
+	// GalaxyRP: [Phase] the texture-independent overlay passes of /admholo and /admghost
+	// (assets/client/shaders/rp_phase.shader) -- see CG_AddPhasedPlayerModel() in cg_players.c.
+	qhandle_t	rpHoloOverlayShader;
+	qhandle_t	rpGhostOverlayShader;
 
 	qhandle_t	boltShader;
 

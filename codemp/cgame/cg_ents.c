@@ -852,6 +852,16 @@ void CG_AddRadarEnt(centity_t *cent)
 	{
 		return;
 	}
+	// GalaxyRP: [Phase] Force ghosts and holograms stay off the radar and automap too, by the same
+	// reasoning. A player who is only non-solid (/admsolid) still shows.
+	{
+		const int phase = RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags );
+
+		if (phase == RP_PHASE_GHOST || phase == RP_PHASE_HOLO)
+		{
+			return;
+		}
+	}
 	if (cg.radarEntityCount >= numRadarEnts)
 	{
 #ifdef _DEBUG

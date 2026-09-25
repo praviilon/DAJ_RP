@@ -6300,6 +6300,94 @@ CG_`Entity
 =================
 */
 #define MAX_XHAIR_DIST_ACCURACY	20000.0f
+/*
+=================
+CG_PhaseCrosshairTrace
+
+GalaxyRP: [Phase] players under /admsolid, /admghost or /admholo arrive with no collision box
+(s.solid 0 -- see ClientEndFrame in g_active.c), so the crosshair traces, which only test the solid
+list, go straight through them and their name never shows. This tests the segment start->end
+against a standard player box around each of them, scaled by the model scale they send, and takes
+the nearest hit if it is closer than whatever the real trace found. A slab test against an
+axis-aligned box: the same box the server gives a standing player, which is close enough for aiming
+a name tag.
+=================
+*/
+static qboolean CG_PhaseRayHitsBox( const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs, float *frac )
+{
+	float tmin = 0.0f, tmax = 1.0f;
+	int i;
+
+	for ( i = 0; i < 3; i++ )
+	{
+		const float d = end[i] - start[i];
+
+		if ( d > -0.0001f && d < 0.0001f )
+		{ // parallel to this slab: must already be inside it
+			if ( start[i] < mins[i] || start[i] > maxs[i] )
+			{
+				return qfalse;
+			}
+		}
+		else
+		{
+			float t1 = ( mins[i] - start[i] ) / d;
+			float t2 = ( maxs[i] - start[i] ) / d;
+
+			if ( t1 > t2 )
+			{
+				const float tmp = t1; t1 = t2; t2 = tmp;
+			}
+			if ( t1 > tmin ) tmin = t1;
+			if ( t2 < tmax ) tmax = t2;
+			if ( tmin > tmax )
+			{
+				return qfalse;
+			}
+		}
+	}
+
+	*frac = tmin;
+	return qtrue;
+}
+
+static void CG_PhaseCrosshairTrace( trace_t *trace, const vec3_t start, const vec3_t end, int ignore )
+{
+	int i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		centity_t *cent = &cg_entities[i];
+		vec3_t mins, maxs;
+		float scale, frac;
+
+		if ( i == ignore || i == cg.predictedPlayerState.clientNum )
+			continue;
+		if ( !cent->currentValid || cent->currentState.eType != ET_PLAYER )
+			continue;
+		if ( RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags ) == RP_PHASE_NONE )
+			continue;
+		if ( cent->currentState.eFlags & ( EF_DEAD | EF_NODRAW ) )
+			continue;
+
+		scale = cent->currentState.iModelScale ? cent->currentState.iModelScale / 100.0f : 1.0f;
+
+		VectorSet( mins, -15.0f * scale, -15.0f * scale, DEFAULT_MINS_2 * scale );
+		VectorSet( maxs, 15.0f * scale, 15.0f * scale, DEFAULT_MAXS_2 * scale );
+		VectorAdd( mins, cent->lerpOrigin, mins );
+		VectorAdd( maxs, cent->lerpOrigin, maxs );
+
+		if ( CG_PhaseRayHitsBox( start, end, mins, maxs, &frac ) && frac < trace->fraction )
+		{
+			trace->fraction = frac;
+			trace->entityNum = i;
+			trace->endpos[0] = start[0] + frac * ( end[0] - start[0] );
+			trace->endpos[1] = start[1] + frac * ( end[1] - start[1] );
+			trace->endpos[2] = start[2] + frac * ( end[2] - start[2] );
+		}
+	}
+}
+
 static void CG_ScanForCrosshairEntity( void ) {
 	trace_t		trace;
 	vec3_t		start, end;
@@ -6451,6 +6539,9 @@ static void CG_ScanForCrosshairEntity( void ) {
 		CG_Trace( &trace, start, vec3_origin, vec3_origin, end,
 			ignore, CONTENTS_SOLID|CONTENTS_BODY );
 	}
+
+	// GalaxyRP: [Phase] let the name of a phased player show -- see CG_PhaseCrosshairTrace()
+	CG_PhaseCrosshairTrace( &trace, start, end, ignore );
 
 	if (trace.entityNum < MAX_CLIENTS)
 	{

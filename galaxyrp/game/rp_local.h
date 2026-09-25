@@ -103,6 +103,9 @@ typedef enum {
 	// what every saved permission means. New bits go here, immediately before ADM_NUM_CMDS.
 	// pers.bitvalue is a 32-bit int, so this one (bit 27) leaves three more before the sign bit.
 	ADM_WEATHER,
+	// GalaxyRP: [Phase] /admghost, /admholo and /admsolid -- appended for the same reason as above
+	// (bit 28, bit value 268435456). Two bits remain before the sign bit.
+	ADM_PHASE,
 	ADM_NUM_CMDS
 
 } zyk_admin_t;

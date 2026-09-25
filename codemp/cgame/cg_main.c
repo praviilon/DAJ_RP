@@ -1414,6 +1414,8 @@ Ghoul2 Insert End
 	cgs.media.refractionShader				= trap->R_RegisterShader("effects/refraction");
 
 	cgs.media.cloakedShader					= trap->R_RegisterShader( "gfx/effects/cloakedShader" );
+	cgs.media.rpHoloOverlayShader			= trap->R_RegisterShader( "gfx/effects/rp_holo_overlay" );
+	cgs.media.rpGhostOverlayShader			= trap->R_RegisterShader( "gfx/effects/rp_ghost_overlay" );
 
 	// wall marks
 	cgs.media.shadowMarkShader	= trap->R_RegisterShader( "markShadow" );

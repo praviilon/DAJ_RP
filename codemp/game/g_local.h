@@ -746,6 +746,15 @@ typedef struct clientPersistant_s {
 	// zyk: a bitfield of playerStatus_t values -- see the enum above this struct.
 	int player_statuses;
 
+	// GalaxyRP: [Phase] /admsolid, /admghost, /admholo -- an rpPhaseMode_t (bg_public.h). In pers, so
+	// it survives death and respawn (ClientSpawn keeps pers); ClientConnect zeroes the whole client,
+	// so a map change or a reconnect clears it, and RP_ClearPhaseMode() clears it on /login, /logout,
+	// /new and /char. phase_releasing is the tail of a mode that has just been turned off: the player
+	// keeps passing through bodies, and still sends RP_PHASE_NONSOLID, until nothing overlaps them --
+	// see RP_PhaseUpdate() in g_active.c.
+	int phase_mode;
+	qboolean phase_releasing;
+
 	// zyk: used to backup player force powers before some event that does not allow them. They will be restored after event ends
 	int zyk_saved_force_powers;
 	int zyk_saved_force_power_levels[NUM_FORCE_POWERS];
@@ -2545,6 +2554,10 @@ qboolean RP_HookMayStayOut( gentity_t *ent );
 qboolean RP_CanKeepHook( gentity_t *ent );
 qboolean RP_CanFireHook( gentity_t *ent );
 #define RP_HOOK_CLASSNAME "rp_hook"
+
+// GalaxyRP: [Phase] /admsolid, /admghost, /admholo -- g_active.c and g_cmds.c
+qboolean RP_PhasePassesThrough( const gentity_t *ent );
+void RP_ClearPhaseMode( gentity_t *ent );
 
 //
 // bg_pmove.c (server-only part)

@@ -5637,6 +5637,16 @@ static qboolean CG_PlayerShadow( centity_t *cent, float *shadowPlane ) {
 		return qfalse;
 	}
 
+	// GalaxyRP: [Phase] nor for a Force ghost or a hologram -- see CG_AddPhasedPlayerModel()
+	{
+		const int phase = RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags );
+
+		if ( phase == RP_PHASE_GHOST || phase == RP_PHASE_HOLO )
+		{
+			return qfalse;
+		}
+	}
+
 	if (cent->currentState.eFlags & EF_DEAD)
 	{
 		return qfalse;
@@ -9624,6 +9634,100 @@ void CG_CheckThirdPersonAlpha( centity_t *cent, refEntity_t *legs )
 	}
 }
 
+/*
+===============
+CG_AddPhasedPlayerModel
+
+GalaxyRP: [Phase] draws a player whom /admholo or /admghost has turned into a hologram or a Force
+ghost, in place of the plain model. Returns qfalse, drawing nothing, for anyone else -- including a
+player who is only non-solid (/admsolid), who looks normal -- so every caller can fall back to its
+own R_AddRefEntityToScene. The mode comes from the two phase bits of eFlags (bg_public.h).
+
+The effect has to work on any player model, and a customShader replaces every surface of a model
+with one fixed shader that cannot refer to the surface's own texture. So it is two passes of the same
+posed model, as the force shells are drawn:
+
+  1. The model with its own textures, restyled by the renderer's per-entity overrides (both TaystJK
+     renderers honour them): RF_RGB_TINT forces the entity colour onto every stage of the model's
+     shaders, RF_FORCE_ENT_ALPHA forces translucent blending at the entity alpha, RF_ALPHA_DEPTH
+     makes that translucent pass write depth.
+       hologram: tinted ( 0.1 0.2 1.0 ) and translucent -- the hologram skin's first stage, blended
+                 instead of added, since the renderers have no per-entity additive override.
+       ghost:    translucent with the ghost skin's flicker, alphaGen wave sin 0.7 0.1 0.1 0.1,
+                 computed here, and depth-writing like the skin's depthWrite; lighting is untouched.
+  2. The same model again with a customShader holding only the texture-independent stages
+     (assets/client/shaders/rp_phase.shader): scanlines + broken-camera noise for the hologram,
+     the pulsing blue glow for the ghost. RF_FORCEPOST keeps it after pass 1 in the vanilla
+     renderer, which post-renders RF_FORCE_ENT_ALPHA entities; the Vulkan renderer draws both in
+     sort order, where the additive overlay already comes after the opaque-sorted model.
+
+An alpha the caller has already asked for -- the third-person alpha, a cloak fade -- is kept: the
+lower of that and the phase's own wins. withOverlay is qfalse during a cloak fade, where only the
+fading model is wanted. Both passes skip the shadow (CG_PlayerShadow skips the blob too).
+===============
+*/
+#define RP_HOLO_TINT_R		26		// 0.1
+#define RP_HOLO_TINT_G		51		// 0.2
+#define RP_HOLO_TINT_B		255		// 1.0
+#define RP_HOLO_ALPHA		150
+static qboolean CG_AddPhasedPlayerModel( centity_t *cent, const refEntity_t *legs, qboolean withOverlay )
+{
+	const int phase = RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags );
+	refEntity_t model;
+	int alpha;
+
+	if ( phase != RP_PHASE_GHOST && phase != RP_PHASE_HOLO )
+	{
+		return qfalse;
+	}
+
+	model = *legs;
+	model.renderfx |= RF_NOSHADOW;
+
+	alpha = ( model.renderfx & RF_FORCE_ENT_ALPHA ) ? model.shaderRGBA[3] : 255;
+
+	if ( phase == RP_PHASE_HOLO )
+	{
+		model.renderfx |= ( RF_RGB_TINT | RF_FORCE_ENT_ALPHA );
+		model.shaderRGBA[0] = RP_HOLO_TINT_R;
+		model.shaderRGBA[1] = RP_HOLO_TINT_G;
+		model.shaderRGBA[2] = RP_HOLO_TINT_B;
+
+		if ( alpha > RP_HOLO_ALPHA )
+		{
+			alpha = RP_HOLO_ALPHA;
+		}
+	}
+	else
+	{ // base 0.7, amplitude 0.1, phase 0.1, 0.1 cycles a second
+		const float wave = 0.7f + 0.1f * (float)sin( 2.0 * M_PI * ( 0.1 + 0.1 * ( cg.time * 0.001 ) ) );
+		const int ghostAlpha = (int)( wave * 255.0f );
+
+		model.renderfx |= ( RF_FORCE_ENT_ALPHA | RF_ALPHA_DEPTH );
+
+		if ( alpha > ghostAlpha )
+		{
+			alpha = ghostAlpha;
+		}
+	}
+
+	model.shaderRGBA[3] = (byte)alpha;
+	trap->R_AddRefEntityToScene( &model );
+
+	if ( withOverlay )
+	{
+		refEntity_t overlay = *legs;
+
+		overlay.renderfx &= ~( RF_RGB_TINT | RF_FORCE_ENT_ALPHA | RF_ALPHA_DEPTH );
+		overlay.renderfx |= ( RF_NOSHADOW | RF_FORCEPOST );
+		overlay.shaderRGBA[0] = overlay.shaderRGBA[1] = overlay.shaderRGBA[2] = overlay.shaderRGBA[3] = 255;
+		overlay.customShader = ( phase == RP_PHASE_HOLO ) ? cgs.media.rpHoloOverlayShader : cgs.media.rpGhostOverlayShader;
+		trap->R_AddRefEntityToScene( &overlay );
+	}
+
+	return qtrue;
+}
+
 void CG_Player( centity_t *cent ) {
 	clientInfo_t	*ci;
 	refEntity_t		legs;
@@ -11940,7 +12044,11 @@ stillDoSaber:
 		if ((cg.snap->ps.fd.forcePowersActive & (1 << FP_SEE))
 			&& cg.snap->ps.clientNum != cent->currentState.number)
 		{//just draw him
-			trap->R_AddRefEntityToScene( &legs );
+			// GalaxyRP: [Phase] ...as a ghost or hologram if that is what he is
+			if ( !CG_AddPhasedPlayerModel( cent, &legs, qtrue ) )
+			{
+				trap->R_AddRefEntityToScene( &legs );
+			}
 		}
 		else
 		{
@@ -11964,7 +12072,12 @@ stillDoSaber:
 				legs.customShader = 0; // use regular skin
 				legs.renderfx &= ~RF_RGB_TINT;
 				legs.renderfx |= RF_FORCE_ENT_ALPHA;
-				trap->R_AddRefEntityToScene( &legs );
+				// GalaxyRP: [Phase] a ghost or hologram fades in and out as itself, not as a plain
+				// player; its overlay pass waits until the fade is over
+				if ( !CG_AddPhasedPlayerModel( cent, &legs, qfalse ) )
+				{
+					trap->R_AddRefEntityToScene( &legs );
+				}
 			}
 		}
 	}
@@ -11973,7 +12086,11 @@ stillDoSaber:
 		if ((cg.snap->ps.fd.forcePowersActive & (1 << FP_SEE))
 			&& cg.snap->ps.clientNum != cent->currentState.number)
 		{//just draw him
-			trap->R_AddRefEntityToScene( &legs );
+			// GalaxyRP: [Phase] ...as a ghost or hologram if that is what he is
+			if ( !CG_AddPhasedPlayerModel( cent, &legs, qtrue ) )
+			{
+				trap->R_AddRefEntityToScene( &legs );
+			}
 		}
 		else
 		{
@@ -12035,7 +12152,11 @@ stillDoSaber:
 	if (!(cent->currentState.powerups & (1 << PW_CLOAKED)))
 	{ //don't add the normal model if cloaked
 		CG_CheckThirdPersonAlpha( cent, &legs );
-		trap->R_AddRefEntityToScene(&legs);
+		// GalaxyRP: [Phase] a Force ghost or hologram is drawn in its own style instead
+		if ( !CG_AddPhasedPlayerModel( cent, &legs, qtrue ) )
+		{
+			trap->R_AddRefEntityToScene(&legs);
+		}
 	}
 
 	//cent->frame_minus2 = cent->frame_minus1;

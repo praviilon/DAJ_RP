@@ -712,8 +712,29 @@ typedef enum {
 #define	EF_NOT_USED_6			(1<<15)		// not used
 
 #define	EF_NOT_USED_2			(1<<16)		// not used
-#define	EF_NOT_USED_3			(1<<17)		// not used
-#define	EF_NOT_USED_4			(1<<18)		// not used
+#define	EF_NOT_USED_3			(1<<17)		// claimed by GalaxyRP -- see EF_RP_PHASE_MASK below
+#define	EF_NOT_USED_4			(1<<18)		// claimed by GalaxyRP -- see EF_RP_PHASE_MASK below
+
+// GalaxyRP: [Phase] the /admsolid, /admghost and /admholo state of a player, as a two-bit number in
+// bits 17-18 (read it with RP_PHASE_FROM_EFLAGS, never bit by bit): 0 normal, 1 non-solid, 2 Force
+// ghost, 3 hologram. Every non-zero value means the player does not collide with other players and
+// NPCs; 2 and 3 also select the look the plugin draws and keep the player off the radar. The server
+// (ClientEndFrame, g_active.c) writes it into ps.eFlags every frame from pers.phase_mode, so it
+// survives respawns and reaches spectators and the player's own prediction (cg_predict.c) alike.
+// Same reasoning as EF_RPG_JETPACK_UPGRADE above for claiming spare bits: eFlags goes out at its full
+// 32 bits, and a client without the plugin receives them, has no name for them and draws the player
+// as usual. The upstream names are kept above for the same merge-safety reason. Bits 15 and 16 were
+// deliberately NOT used: TaystJK's own headers name them EF_ALT_DIM and EF_GRAPPLE_SWING (JA+ flags).
+#define EF_RP_PHASE_SHIFT		17
+#define EF_RP_PHASE_MASK		(EF_NOT_USED_3 | EF_NOT_USED_4)
+#define RP_PHASE_FROM_EFLAGS(f)	(((f) & EF_RP_PHASE_MASK) >> EF_RP_PHASE_SHIFT)
+
+typedef enum {
+	RP_PHASE_NONE = 0,		// normal
+	RP_PHASE_NONSOLID,		// /admsolid: passes through players and NPCs, looks normal
+	RP_PHASE_GHOST,			// /admghost: non-solid, drawn as a Force ghost, off the radar
+	RP_PHASE_HOLO			// /admholo: non-solid, drawn as a hologram, off the radar
+} rpPhaseMode_t;
 
 #define	EF_BODYPUSH				(1<<19)		//rww - claiming this for fullbody push effect
 
