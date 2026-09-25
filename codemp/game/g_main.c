@@ -4615,6 +4615,8 @@ void CheckVote( void ) {
 		else
 		{
 			trap->SendServerCommand( -1, va("print \"%s (%s)\n\"", G_GetStringEdString("MP_SVGAME", "VOTEFAILED"), level.voteStringClean) );
+			// GalaxyRP fix: [Vote] a failed gametype vote no longer leaves votingGametype set -- see below
+			level.votingGametype = qfalse;
 		}
 
 		// zyk: set the timer for the next vote of this player
@@ -4635,6 +4637,13 @@ void CheckVote( void ) {
 		else if ( level.voteNo >= (level.numVotingClients+1)/2 )
 		{
 			trap->SendServerCommand( -1, va("print \"%s (%s)\n\"", G_GetStringEdString("MP_SVGAME", "VOTEFAILED"), level.voteStringClean) );
+			// GalaxyRP fix: [Vote] G_VoteGametype() raises votingGametype when the vote is CALLED, and only
+			// the execute block above lowered it again, so a gametype vote that failed left it standing
+			// until the next /callvote. Whatever next set voteExecuteTime without going through
+			// Cmd_CallVote_f() -- which is exactly what the team-vote timer bug in CheckTeamVote() did --
+			// then ran the gametype switch (map change, bot kick, fraglimit reset) for a vote nobody
+			// passed. Nothing can reach that any more, but a failed vote should not leave the flag armed.
+			level.votingGametype = qfalse;
 			// zyk: set the timer for the next vote of this player
 			if (rp_vote_timer.integer > 0 && level.voting_player > -1)
 				g_entities[level.voting_player].client->sess.vote_timer = rp_vote_timer.integer;
@@ -4770,7 +4779,14 @@ void CheckTeamVote( int team ) {
 		if ( level.teamVoteYes[cs_offset] > level.numteamVotingClients[cs_offset]/2 ) {
 			// execute the command, then remove the vote
 			trap->SendServerCommand( -1, va("print \"%s (%s)\n\"", G_GetStringEdString("MP_SVGAME", "TEAMVOTEPASSED"), level.teamVoteStringClean[cs_offset]) );
-			level.voteExecuteTime = level.time + 3000;
+			// GalaxyRP fix: [Vote] this set level.voteExecuteTime -- the GLOBAL vote's timer -- instead of
+			// this team's own. teamVoteExecuteTime[] was read by the block at the top of this function but
+			// never set anywhere, so a passed leader vote never made anyone leader; instead, three seconds
+			// later CheckVote() re-ran level.voteString, which is never cleared: the last global vote of the
+			// map (a map change, a gametype change, a restart), or -- with a global vote still being voted
+			// on -- a command nobody had passed yet. Inherited from upstream (TaystJK has it too). Team
+			// votes exist only in the Red/Blue gametypes, so FFA never reached it.
+			level.teamVoteExecuteTime[cs_offset] = level.time + 3000;
 		}
 
 		// same behavior as a timeout

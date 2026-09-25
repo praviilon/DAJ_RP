@@ -9152,6 +9152,40 @@ qboolean G_VoteKick( gentity_t *ent, int numArgs, const char *arg1, const char *
 
 const char *G_GetArenaInfoByMap( const char *map );
 
+/*
+GalaxyRP fix: [Vote] the "/maplist bsp" listing, split out of Cmd_MapList_f() so /callvote map can show it
+too. G_VoteMap() used to call Cmd_MapList_f() itself when no map was named, and Cmd_MapList_f() reads its
+arguments from the command line -- which at that point is "callvote map", so it took "map" for a page
+number, atoi() made that 0, and the player asking which maps they could vote for was told "Invalid page
+number". Same listing as before: every map in the arena files that the current gametype supports.
+
+GalaxyRP fix: [Vote] map[] was 24 bytes, so a map name of 24 characters or more was cut off in the list
+and could not be copied into a vote. MAX_QPATH is the engine's own limit for a path; buf's flush check
+below already sends it in pieces whatever the entry length.
+*/
+static void G_PrintVotableMaps( gentity_t *ent ) {
+	int i, toggle=0;
+	char map[MAX_QPATH] = "--", buf[512] = {0};
+
+	Q_strcat( buf, sizeof( buf ), "Map list:" );
+
+	for ( i=0; i<level.arenas.num; i++ ) {
+		Q_strncpyz( map, Info_ValueForKey( level.arenas.infos[i], "map" ), sizeof( map ) );
+		Q_StripColor( map );
+
+		if ( G_DoesMapSupportGametype( map, level.gametype ) ) {
+			char *tmpMsg = va( " ^%c%s", (++toggle&1) ? COLOR_GREEN : COLOR_YELLOW, map );
+			if ( strlen( buf ) + strlen( tmpMsg ) >= sizeof( buf ) ) {
+				trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", buf ) );
+				buf[0] = '\0';
+			}
+			Q_strcat( buf, sizeof( buf ), tmpMsg );
+		}
+	}
+
+	trap->SendServerCommand( ent-g_entities, va( "print \"%s\n\"", buf ) );
+}
+
 void Cmd_MapList_f( gentity_t *ent ) {
 	char arg1[MAX_STRING_CHARS];
 
@@ -9165,26 +9199,7 @@ void Cmd_MapList_f( gentity_t *ent ) {
 
 	if (Q_stricmp(arg1, "bsp") == 0)
 	{
-		int i, toggle=0;
-		char map[24] = "--", buf[512] = {0};
-
-		Q_strcat( buf, sizeof( buf ), "Map list:" );
-
-		for ( i=0; i<level.arenas.num; i++ ) {
-			Q_strncpyz( map, Info_ValueForKey( level.arenas.infos[i], "map" ), sizeof( map ) );
-			Q_StripColor( map );
-
-			if ( G_DoesMapSupportGametype( map, level.gametype ) ) {
-				char *tmpMsg = va( " ^%c%s", (++toggle&1) ? COLOR_GREEN : COLOR_YELLOW, map );
-				if ( strlen( buf ) + strlen( tmpMsg ) >= sizeof( buf ) ) {
-					trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", buf ) );
-					buf[0] = '\0';
-				}
-				Q_strcat( buf, sizeof( buf ), tmpMsg );
-			}
-		}
-
-		trap->SendServerCommand( ent-g_entities, va( "print \"%s\n\"", buf ) );
+		G_PrintVotableMaps( ent );
 	}
 	else
 	{
@@ -9233,7 +9248,10 @@ void Cmd_MapList_f( gentity_t *ent ) {
 		}
 		else
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"The maplist file does not exist\n\"" );
+			// GalaxyRP fix: [Vote] GalaxyRP/maplist.txt is a list the server owner writes by hand and none
+			// is shipped, so on most servers every paged /maplist ended here. Point at the listing that
+			// always works instead of stopping at a dead end.
+			trap->SendServerCommand( ent-g_entities, "print \"The maplist file does not exist. Use ^3/maplist bsp ^7to list the maps you can vote for.\n\"" );
 			return;
 		}
 	}
@@ -9261,8 +9279,10 @@ qboolean G_VoteMap( gentity_t *ent, int numArgs, const char *arg1, const char *a
 	const char *arenaInfo;
 
 	// didn't specify a map, show available maps
+	// GalaxyRP fix: [Vote] print the usage and the list directly -- see G_PrintVotableMaps()
 	if ( numArgs < 3 ) {
-		Cmd_MapList_f( ent );
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/callvote map <map name>\n\"" );
+		G_PrintVotableMaps( ent );
 		return qfalse;
 	}
 
@@ -9425,6 +9445,19 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Vote] a vote that has passed but not run yet (the g_voteDelay wait) blocks a new one.
+	// Calling a vote in that window used to run the waiting command on the spot, from a block further
+	// down, and that block did only half of what CheckVote() does. For a gametype vote it ran
+	// "g_gametype N" but -- having just cleared level.votingGametype a few lines earlier -- skipped the
+	// map change, the bot kick and the fraglimit fix, so the gametype was only stored by the engine and
+	// the server stayed in the old one until some later map load picked it up, onto whatever map that
+	// was. It also let anyone cut any passed vote's g_voteDelay short by calling a vote of their own.
+	// CheckVote() is now the only place a passed vote runs; the wait is g_voteDelay (3 seconds shipped).
+	else if ( level.voteExecuteTime ) {
+		trap->SendServerCommand( ent-g_entities, "print \"A vote has just passed and is about to take effect. Try again in a moment.\n\"" );
+		return;
+	}
+
 	// can't vote as a spectator, except in (power)duel
 	else if ( level.gametype != GT_DUEL && level.gametype != GT_POWERDUEL && ent->client->sess.sessionTeam == TEAM_SPECTATOR ) {
 		trap->SendServerCommand( ent-g_entities, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "NOSPECVOTE" ) ) );
@@ -9523,11 +9556,8 @@ validVote:
 
 	level.voteExecuteDelay = vote->voteDelay ? g_voteDelay.integer : 0;
 
-	// there is still a vote to be executed, execute it and store the new vote
-	if ( level.voteExecuteTime ) {
-		level.voteExecuteTime = 0;
-		trap->SendConsoleCommand( EXEC_APPEND, va( "%s\n", level.voteString ) );
-	}
+	// GalaxyRP fix: [Vote] the "there is still a vote to be executed, execute it now" block that stood
+	// here is gone -- a new vote is refused above while one is waiting to run, so it could not be reached.
 
 	// pass the args onto vote-specific handlers for parsing/filtering
 	if ( vote->func ) {
@@ -17950,6 +17980,14 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP fix: [Admin] a backslash is refused for the same reason G_VoteMap() refuses one: it is not
+	// a character a map path uses, and the path below is handed to the engine's file system.
+	if (strchr(mapname, '\\'))
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Invalid map name.\n\"" );
+		return;
+	}
+
 	// GalaxyRP fix: [Admin] atoi() silently returns 0 for a non-numeric string (e.g. "dfd"
 	// would parse as gametype 0 / FFA instead of being rejected), so require the argument to
 	// actually be an integer first using this file's existing StringIsInteger() helper.
@@ -17982,27 +18020,30 @@ void Cmd_AdmMap_f( gentity_t *ent ) {
 	}
 
 	{ // zyk: make sure the requested map actually exists before changing to it
-		char				unsortedMaps[4096];
-		char*				possibleMapName;
-		int					numMaps;
-		const unsigned int	MAX_MAPS = 512;
-		qboolean			found = qfalse;
+		// GalaxyRP fix: [Admin] opened directly, the way G_VoteMap() checks a /callvote map, instead of
+		// looking the name up in FS_GetFileList( "maps", ".bsp" ). That listing missed real maps in two
+		// ways (qcommon/files.cpp): FS_GetFileList() stops without a word once its buffer is full, and this
+		// one was 4096 bytes -- a couple of hundred map names -- so on a large map collection the maps
+		// past that point were "not found"; and for loose files on disk (not inside a pk3) the listing
+		// only reads maps/ itself, never a subfolder, so a loose maps/mp/<name>.bsp could not be loaded
+		// at all. FS_Open() finds a map anywhere the engine's own "map" command would. The length test
+		// matches what that command can take: it builds the same "maps/<name>.bsp" in a MAX_QPATH buffer.
+		char			bspName[MAX_QPATH] = {0};
+		fileHandle_t	fp = NULL_FILE;
+		qboolean		found = qfalse;
 
-		numMaps = trap->FS_GetFileList( "maps", ".bsp", unsortedMaps, sizeof( unsortedMaps ) );
-		if (numMaps) {
-			int len, i;
-			if (numMaps > MAX_MAPS)
-				numMaps = MAX_MAPS;
-			possibleMapName = unsortedMaps;
-			for (i = 0; i < numMaps; i++) {
-				len = strlen(possibleMapName);
-				if (!Q_stricmp(possibleMapName + len - 4, ".bsp"))
-					possibleMapName[len-4] = '\0';
-				if (!Q_stricmp(mapname, possibleMapName)) {
-					found = qtrue;
-					break;
-				}
-				possibleMapName += len + 1;
+		if (strlen(mapname) + strlen("maps/.bsp") < sizeof(bspName))
+		{
+			Com_sprintf( bspName, sizeof(bspName), "maps/%s.bsp", mapname );
+
+			if ( trap->FS_Open( bspName, &fp, FS_READ ) > 0 )
+			{
+				found = qtrue;
+			}
+
+			if ( fp != NULL_FILE )
+			{
+				trap->FS_Close( fp );
 			}
 		}
 

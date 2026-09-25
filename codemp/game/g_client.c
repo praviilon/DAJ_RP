@@ -4477,14 +4477,19 @@ void G_ClearTeamVote( gentity_t *ent, int team ) {
 	else							return;
 
 	if ( level.teamVoteTime[voteteam] ) {
+		// GalaxyRP fix: [Vote] "+ voteteam" on both configstrings. The Red and Blue tallies sit side by side
+		// (CS_TEAMVOTE_YES + 0 / + 1), and every other writer -- Cmd_CallTeamVote_f(), Cmd_TeamVote_f() --
+		// adds the offset; this one did not, so a Blue voter leaving the team or the server overwrote RED's
+		// on-screen count with Blue's number and left Blue's showing the vote that had just been removed.
+		// Display only: the real tally is level.teamVoteYes/No, which was always updated correctly.
 		if ( ent->client->mGameFlags & PSG_TEAMVOTED ) {
 			if ( ent->client->pers.teamvote == 1 ) {
 				level.teamVoteYes[voteteam]--;
-				trap->SetConfigstring( CS_TEAMVOTE_YES, va( "%i", level.teamVoteYes[voteteam] ) );
+				trap->SetConfigstring( CS_TEAMVOTE_YES + voteteam, va( "%i", level.teamVoteYes[voteteam] ) );
 			}
 			else if ( ent->client->pers.teamvote == 2 ) {
 				level.teamVoteNo[voteteam]--;
-				trap->SetConfigstring( CS_TEAMVOTE_NO, va( "%i", level.teamVoteNo[voteteam] ) );
+				trap->SetConfigstring( CS_TEAMVOTE_NO + voteteam, va( "%i", level.teamVoteNo[voteteam] ) );
 			}
 		}
 		ent->client->mGameFlags &= ~(PSG_TEAMVOTED);
