@@ -9677,7 +9677,7 @@ fading model is wanted. Both passes skip the shadow (CG_PlayerShadow skips the b
 #define RP_HOLO_ALPHA		200		// 0.78
 #define RP_GHOST_ALPHA_BASE	0.55f	// flicker between 0.45 and 0.65
 #define RP_GHOST_ALPHA_AMP	0.1f
-static qboolean CG_AddPhasedPlayerModel( centity_t *cent, const refEntity_t *legs, qboolean withOverlay )
+qboolean CG_AddPhasedPlayerModel( centity_t *cent, const refEntity_t *legs, qboolean withOverlay )
 {
 	const int phase = RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags );
 	refEntity_t model;

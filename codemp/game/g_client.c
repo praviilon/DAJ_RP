@@ -1093,6 +1093,11 @@ static qboolean CopyToBodyQue( gentity_t *ent ) {
 	body->s.eType = ET_BODY;
 	body->s.eFlags = EF_DEAD;		// clear EF_TALK, etc
 
+	// GalaxyRP: [Phase] ...but keep the phase bits, so the corpse of a Force ghost or a hologram
+	// still looks like one (drawn by CG_General(), cg_ents.c). Purely visual on a body: its contents
+	// are CONTENTS_CORPSE and nothing on the server reads these bits from an ET_BODY.
+	body->s.eFlags |= ( ent->s.eFlags & EF_RP_PHASE_MASK );
+
 	if (ent->client && (ent->client->ps.eFlags & EF_DISINTEGRATION))
 	{
 		body->s.eFlags |= EF_DISINTEGRATION;

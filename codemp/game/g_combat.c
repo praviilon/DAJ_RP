@@ -3772,6 +3772,10 @@ void G_Dismember( gentity_t *ent, gentity_t *enemy, vec3_t point, int limbType, 
 	limb->s.eType = ET_GENERAL;
 	limb->s.weapon = G2_MODEL_PART;
 	limb->s.modelGhoul2 = limbType;
+	// GalaxyRP: [Phase] a severed limb of a Force ghost or a hologram looks like one too (drawn by
+	// CG_General(), cg_ents.c). The owner -- a player, an NPC or a player's corpse (ET_BODY, see
+	// CopyToBodyQue) -- already carries the mode in s.eFlags; purely visual on a limb.
+	limb->s.eFlags |= ( ent->s.eFlags & EF_RP_PHASE_MASK );
 	limb->s.modelindex = ent->s.number;
 	if (!ent->client)
 	{
