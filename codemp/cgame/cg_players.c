@@ -9651,9 +9651,14 @@ posed model, as the force shells are drawn:
      renderers honour them): RF_RGB_TINT forces the entity colour onto every stage of the model's
      shaders, RF_FORCE_ENT_ALPHA forces translucent blending at the entity alpha, RF_ALPHA_DEPTH
      makes that translucent pass write depth.
-       hologram: tinted ( 0.1 0.2 1.0 ) and translucent -- the hologram skin's first stage, blended
-                 instead of added, since the renderers have no per-entity additive override.
-       ghost:    translucent with the ghost skin's flicker, alphaGen wave sin 0.7 0.1 0.1 0.1,
+       hologram: tinted ( 0.35 0.55 1.0 ) and translucent at 200. The hologram skin's own colour,
+                 ( 0.1 0.2 1.0 ), is too dark here: the tint MULTIPLIES the texture and drops the
+                 lighting, and the skin could get away with it only because it was added, not
+                 blended -- the renderers have no per-entity additive override. At 0.1 / 0.2 the
+                 red and green that carry a skin's detail are crushed and the model reads as a
+                 dark blue shape behind the overlay; 0.35 / 0.55 keeps the detail and stays blue.
+       ghost:    translucent with a flicker like the ghost skin's, alphaGen wave sin 0.55 0.1 0.1
+                 0.1 (the skin uses 0.7; a little more see-through suits the model pass here),
                  computed here, and depth-writing like the skin's depthWrite; lighting is untouched.
   2. The same model again with a customShader holding only the texture-independent stages
      (assets/client/shaders/rp_phase.shader): scanlines + broken-camera noise for the hologram,
@@ -9666,10 +9671,12 @@ lower of that and the phase's own wins. withOverlay is qfalse during a cloak fad
 fading model is wanted. Both passes skip the shadow (CG_PlayerShadow skips the blob too).
 ===============
 */
-#define RP_HOLO_TINT_R		26		// 0.1
-#define RP_HOLO_TINT_G		51		// 0.2
+#define RP_HOLO_TINT_R		89		// 0.35
+#define RP_HOLO_TINT_G		140		// 0.55
 #define RP_HOLO_TINT_B		255		// 1.0
-#define RP_HOLO_ALPHA		150
+#define RP_HOLO_ALPHA		200		// 0.78
+#define RP_GHOST_ALPHA_BASE	0.55f	// flicker between 0.45 and 0.65
+#define RP_GHOST_ALPHA_AMP	0.1f
 static qboolean CG_AddPhasedPlayerModel( centity_t *cent, const refEntity_t *legs, qboolean withOverlay )
 {
 	const int phase = RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags );
@@ -9699,8 +9706,8 @@ static qboolean CG_AddPhasedPlayerModel( centity_t *cent, const refEntity_t *leg
 		}
 	}
 	else
-	{ // base 0.7, amplitude 0.1, phase 0.1, 0.1 cycles a second
-		const float wave = 0.7f + 0.1f * (float)sin( 2.0 * M_PI * ( 0.1 + 0.1 * ( cg.time * 0.001 ) ) );
+	{ // base RP_GHOST_ALPHA_BASE, amplitude RP_GHOST_ALPHA_AMP, phase 0.1, 0.1 cycles a second
+		const float wave = RP_GHOST_ALPHA_BASE + RP_GHOST_ALPHA_AMP * (float)sin( 2.0 * M_PI * ( 0.1 + 0.1 * ( cg.time * 0.001 ) ) );
 		const int ghostAlpha = (int)( wave * 255.0f );
 
 		model.renderfx |= ( RF_FORCE_ENT_ALPHA | RF_ALPHA_DEPTH );
