@@ -888,8 +888,11 @@ typedef struct admin_command_description_s {
 // These strings are display-only: /adminlist's table, check_admin_command()'s refusal message,
 // /adminup and /admindown's confirmations and the server log all print them, and nothing parses
 // them, so renaming is safe. Longest is now 20 characters, well inside print_row()'s 33 columns.
+//
+// GalaxyRP: [NPC System] "NPC Spawn" -> "NPC management": the power has long covered more than
+// spawning (kill, team, score, and now /npc effect). Changed in the calculator too.
 const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
-	{ "NPC Spawn",				ADM_NPC					},
+	{ "NPC management",			ADM_NPC					},
 	{ "No Clip",				ADM_NOCLIP				},
 	{ "Give Admin",				ADM_GIVEADM				},
 	{ "Teleport",				ADM_TELE				},
@@ -12632,9 +12635,12 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// almost none -- and going over SV_SendServerCommand's hard 1022 does not truncate, it
 				// silently drops the whole message.
 				//
-				// The one note under the header carries the access rule for all eight: Cmd_NPC_f is gated on
+				// The one note under the header carries the access rule for all nine: Cmd_NPC_f is gated on
 				// ADM_NPC, while /order is not gated at all. Stating it once beats repeating an (Admin only)
 				// tag on every row.
+				//
+				// With /npc effect this message is 979 bytes, 43 short of the 1022 limit: another row goes
+				// in a SendServerCommand of its own.
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------NPC System--------\n\
 ^7The ^3/npc ^7commands require the ^3NPC ^7admin command. See ^3/adminlist^7.\n\
 ^3/npc spawn <type> <targetname (optional)>: ^7Spawns an npc.\n\
@@ -12642,7 +12648,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/npc kill <targetname or type>: ^7Kills npcs with that targetname or type.\n\
 ^3/npc kill all: ^7Kills every npc.\n\
 ^3/npc kill team <player/enemy/neutral/free or nonally>: ^7Kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
-^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc you are looking at.\n\
+^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc in your crosshair.\n\
+^3/npc effect <holo/ghost/nonsolid/clear>: ^7Hologram, Force ghost or walk-through npc in your crosshair; ^3clear ^7undoes it.\n\
 ^3/npc score <targetname (optional)>: ^7Prints npc scores to the server console.\n\
 ^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
 				// GalaxyRP: [Mini-Games] /duelmode and /meleemode were documented nowhere at all -- not
@@ -16727,7 +16734,8 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 			trap->SendServerCommand( ent-g_entities, "print \"\n^3/npc spawn <type> <targetname (optional)>^7: spawns an npc. ^3/npc spawn vehicle <type> <targetname (optional)>^7: spawns a vehicle.\n\
 ^3/npc kill <targetname or type>^7: kills npcs with that targetname or type. ^3/npc kill all^7: kills every npc.\n\
 ^3/npc kill team <player/enemy/neutral/free or nonally>^7: kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
-^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc you are looking at.\n\
+^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc in your crosshair.\n\
+^3/npc effect <holo/ghost/nonsolid/clear>^7: gives the npc in your crosshair a hologram or Force ghost look (both walk-through) or makes it walk-through only; ^3clear ^7restores it, and makes an npc that spawned non-solid solid.\n\
 ^3/npc score <targetname (optional)>^7: prints npc scores to the server console.\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
@@ -18975,7 +18983,7 @@ The mode survives death and respawn (it lives in pers), and is cleared by a map 
 (ClientConnect zeroes the client) and by /login, /logout, /new and /char (RP_ClearPhaseMode()).
 ==================
 */
-static const char *RP_PhaseModeName( int mode )
+const char *RP_PhaseModeName( int mode )
 {
 	switch ( mode )
 	{

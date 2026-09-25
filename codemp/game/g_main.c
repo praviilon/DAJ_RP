@@ -8256,6 +8256,8 @@ void G_RunFrame( int levelTime ) {
 			ClientEndFrame( ent );
 		}
 	}
+	// GalaxyRP: [Phase] and the same for the NPCs /npc effect has phased (g_active.c)
+	RP_PhaseNpcEndFrame();
 #ifdef _G_FRAME_PERFANAL
 	iTimer_ClientEndframe = trap->PrecisionTimer_End(timer_ClientEndframe);
 #endif

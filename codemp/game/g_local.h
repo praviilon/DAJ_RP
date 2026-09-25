@@ -2555,9 +2555,13 @@ qboolean RP_CanKeepHook( gentity_t *ent );
 qboolean RP_CanFireHook( gentity_t *ent );
 #define RP_HOOK_CLASSNAME "rp_hook"
 
-// GalaxyRP: [Phase] /admsolid, /admghost, /admholo -- g_active.c and g_cmds.c
+// GalaxyRP: [Phase] /admsolid, /admghost, /admholo and /npc effect -- g_active.c, g_cmds.c and
+// NPC_spawn.c
 qboolean RP_PhasePassesThrough( const gentity_t *ent );
 void RP_ClearPhaseMode( gentity_t *ent );
+const char *RP_PhaseModeName( int mode );
+void RP_PhaseTrackNpc( gentity_t *npc );
+void RP_PhaseNpcEndFrame( void );
 
 //
 // bg_pmove.c (server-only part)

@@ -719,6 +719,10 @@ collision between bodies is switched off, from three sides:
     r.contents live, so no relink is needed, and nothing outside that window sees the change;
   - ClientEndFrame sends phased players with s.solid 0, so every client, stock ones included,
     predicts walking through them instead of bumping into a box the server no longer blocks with.
+
+NPCs get the same three through /npc effect: the mode lives in the NPC's own client->pers, its Pmove
+goes through ClientThink_real like a player's, and RP_PhaseNpcEndFrame() stands in for
+ClientEndFrame, which NPCs never reach.
 =================
 */
 qboolean RP_PhasePassesThrough( const gentity_t *ent )
@@ -731,12 +735,65 @@ qboolean RP_PhasePassesThrough( const gentity_t *ent )
 	return ( ent->client->pers.phase_mode != RP_PHASE_NONE || ent->client->pers.phase_releasing ) ? qtrue : qfalse;
 }
 
-static int rp_phaseHidden[MAX_CLIENTS];
+static int rp_phaseHidden[MAX_GENTITIES];
 static int rp_phaseHiddenCount = 0;
 
+// GalaxyRP: [Phase] the NPCs /npc effect has given a mode, plus any still finishing a release. Kept
+// as a short list so the per-Pmove scan below never has to walk every entity slot. An entry is only
+// a hint: every reader re-checks the slot (in use, still an NPC, still passing through), and
+// RP_PhaseNpcEndFrame() drops entries that no longer are -- a freed slot is zeroed by G_FreeEntity,
+// and a new NPC in a reused slot starts with a zeroed client (NPC_Spawn_Do), so neither can inherit
+// a mode.
+static int rp_phasedNpcs[MAX_GENTITIES];
+static int rp_phasedNpcCount = 0;
+
+static qboolean RP_PhaseIsLiveNpc( const gentity_t *ent )
+{
+	return ( ent->inuse && ent->client && ent->s.eType == ET_NPC ) ? qtrue : qfalse;
+}
+
+// Adds an NPC to the list; called by /npc effect whenever it gives an NPC a mode or starts a release.
+void RP_PhaseTrackNpc( gentity_t *npc )
+{
+	int i, num;
+
+	if ( !npc || !RP_PhaseIsLiveNpc( npc ) )
+	{
+		return;
+	}
+
+	num = (int)( npc - g_entities );
+
+	for ( i = 0; i < rp_phasedNpcCount; i++ )
+	{
+		if ( rp_phasedNpcs[i] == num )
+		{
+			return;
+		}
+	}
+
+	if ( rp_phasedNpcCount < MAX_GENTITIES )
+	{
+		rp_phasedNpcs[rp_phasedNpcCount++] = num;
+	}
+}
+
+static void RP_PhaseHideBody( gentity_t *other, const gentity_t *mover )
+{
+	if ( other == mover || !other->inuse || !other->client )
+		return;
+	if ( !RP_PhasePassesThrough( other ) )
+		return;
+	if ( other->r.contents != CONTENTS_BODY )
+		return;
+
+	other->r.contents = 0;
+	rp_phaseHidden[rp_phaseHiddenCount++] = (int)( other - g_entities );
+}
+
 // Only live bodies are touched: a corpse (CONTENTS_CORPSE), a rider a vehicle has Ghost()ed
-// (contents 0) and a spectator are left exactly as they are. Phased players are always player
-// slots -- NPCs never get a phase mode -- so the scan stops at level.maxclients.
+// (contents 0) and a spectator are left exactly as they are. Players are scanned by slot; NPCs come
+// from the phased-NPC list, since /npc effect is the only way an NPC gets a mode.
 static void RP_PhaseHideBodies( const gentity_t *mover )
 {
 	int i;
@@ -747,17 +804,20 @@ static void RP_PhaseHideBodies( const gentity_t *mover )
 	{
 		gentity_t *other = &g_entities[i];
 
-		if ( other == mover || !other->inuse || !other->client )
-			continue;
-		if ( other->client->pers.connected != CON_CONNECTED )
-			continue;
-		if ( !RP_PhasePassesThrough( other ) )
-			continue;
-		if ( other->r.contents != CONTENTS_BODY )
+		if ( other->inuse && other->client && other->client->pers.connected != CON_CONNECTED )
 			continue;
 
-		other->r.contents = 0;
-		rp_phaseHidden[rp_phaseHiddenCount++] = i;
+		RP_PhaseHideBody( other, mover );
+	}
+
+	for ( i = 0; i < rp_phasedNpcCount; i++ )
+	{
+		gentity_t *other = &g_entities[rp_phasedNpcs[i]];
+
+		if ( !RP_PhaseIsLiveNpc( other ) )
+			continue;
+
+		RP_PhaseHideBody( other, mover );
 	}
 }
 
@@ -860,6 +920,69 @@ static void RP_PhaseUpdate( gentity_t *ent )
 
 	client->ps.eFlags &= ~EF_RP_PHASE_MASK;
 	client->ps.eFlags |= ( sentMode << EF_RP_PHASE_SHIFT ) & EF_RP_PHASE_MASK;
+}
+
+/*
+=================
+RP_PhaseNpcEndFrame
+
+GalaxyRP: [Phase] ClientEndFrame() for the NPCs /npc effect has phased -- NPCs never reach
+ClientEndFrame(), which only walks player slots. Called from G_RunFrame() straight after that loop,
+once every think of the frame is done, so it does for each listed NPC exactly what ClientEndFrame()
+does for a phased player:
+
+  - RP_PhaseUpdate(): finish a release that has come clear, and write the mode into ps.eFlags;
+  - the same bits into s.eFlags at once, since an NPC's ClientThink_real() -- where its state is
+    normally copied from ps -- does not necessarily run every server frame;
+  - s.solid 0 for a live phased body, so every client predicts walking through it. Nothing links an
+    NPC after this point in the frame, so it holds until the snapshot.
+
+An NPC whose mode and release are both over is written back to normal once more and then dropped
+from the list; so is a slot that is no longer an NPC at all.
+=================
+*/
+void RP_PhaseNpcEndFrame( void )
+{
+	int i = 0;
+
+	while ( i < rp_phasedNpcCount )
+	{
+		gentity_t *npc = &g_entities[rp_phasedNpcs[i]];
+		qboolean wasPassing;
+
+		if ( !RP_PhaseIsLiveNpc( npc ) )
+		{ // freed, or reused by something else: nothing of ours left on it
+			rp_phasedNpcs[i] = rp_phasedNpcs[--rp_phasedNpcCount];
+			continue;
+		}
+
+		wasPassing = RP_PhasePassesThrough( npc );
+
+		RP_PhaseUpdate( npc );
+
+		npc->s.eFlags &= ~EF_RP_PHASE_MASK;
+		npc->s.eFlags |= ( npc->client->ps.eFlags & EF_RP_PHASE_MASK );
+
+		if ( !RP_PhasePassesThrough( npc ) )
+		{ // back to normal for good. If this frame is the one that ended it, relink so s.solid is
+		  // rebuilt from r.contents now rather than at the NPC's next think -- but only an NPC that is
+		  // in the world already, and never a stale entry (a new NPC in a reused slot), which was not
+		  // passing through to begin with.
+			if ( wasPassing && npc->r.linked )
+			{
+				trap->LinkEntity( (sharedEntity_t *)npc );
+			}
+			rp_phasedNpcs[i] = rp_phasedNpcs[--rp_phasedNpcCount];
+			continue;
+		}
+
+		if ( npc->r.contents == CONTENTS_BODY )
+		{
+			npc->s.solid = 0;
+		}
+
+		i++;
+	}
 }
 
 /*

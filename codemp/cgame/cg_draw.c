@@ -6311,6 +6311,11 @@ against a standard player box around each of them, scaled by the model scale the
 the nearest hit if it is closer than whatever the real trace found. A slab test against an
 axis-aligned box: the same box the server gives a standing player, which is close enough for aiming
 a name tag.
+
+NPCs /npc effect has phased arrive the same way, so they are tested too: no name is drawn for an
+NPC, but the crosshair still changes colour over it like over any other NPC. Their real box is not
+sent once s.solid is 0, so they get the same standard box -- right for humanoids, a little generous
+or tight for droids and creatures, which is fine for colouring a crosshair.
 =================
 */
 static qboolean CG_PhaseRayHitsBox( const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs, float *frac )
@@ -6355,7 +6360,7 @@ static void CG_PhaseCrosshairTrace( trace_t *trace, const vec3_t start, const ve
 {
 	int i;
 
-	for ( i = 0; i < MAX_CLIENTS; i++ )
+	for ( i = 0; i < ENTITYNUM_WORLD; i++ )
 	{
 		centity_t *cent = &cg_entities[i];
 		vec3_t mins, maxs;
@@ -6363,7 +6368,9 @@ static void CG_PhaseCrosshairTrace( trace_t *trace, const vec3_t start, const ve
 
 		if ( i == ignore || i == cg.predictedPlayerState.clientNum )
 			continue;
-		if ( !cent->currentValid || cent->currentState.eType != ET_PLAYER )
+		if ( !cent->currentValid )
+			continue;
+		if ( cent->currentState.eType != ( i < MAX_CLIENTS ? ET_PLAYER : ET_NPC ) )
 			continue;
 		if ( RP_PHASE_FROM_EFLAGS( cent->currentState.eFlags ) == RP_PHASE_NONE )
 			continue;

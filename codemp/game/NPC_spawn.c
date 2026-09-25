@@ -4801,6 +4801,251 @@ Svcmd_NPC_f
 
 parse and dispatch bot commands
 */
+/*
+==================
+RP_NpcInCrosshair
+
+GalaxyRP: [NPC System] the live NPC under the admin's crosshair, for /npc team and /npc effect.
+
+/npc team used to take ps.hasLookTarget / ps.lookTarget, which is not the crosshair at all:
+WP_SaberStartMissileBlockCheck() sets it to whatever living body is within 256 units and in view,
+so it could name a bystander instead of the NPC being aimed at, and nothing beyond 256 units. And
+no ordinary trace can find an NPC that spawned non-solid -- the NOTSOLID spawnflag gives it contents
+0 -- which is exactly the NPC /npc effect clear exists for.
+
+So: one trace from the eye along the view to the first wall (MASK_SOLID, so bodies do not stop it),
+then the same ray against the real box of every live NPC, nearest hit in front of that wall wins.
+Solid or not, any distance up to RP_NPC_AIM_RANGE, never through walls. Dead NPCs and NPCs that are
+not drawn (EF_NODRAW, SVF_NOCLIENT -- scripted invisibility) are skipped: nobody can be aiming at
+them, and neither is an NPC not yet linked into the world. If the eye itself is inside solid
+(noclip), walls are ignored rather than finding nothing.
+==================
+*/
+#define RP_NPC_AIM_RANGE	8192.0f
+
+static qboolean RP_RayHitsBox( const vec3_t start, const vec3_t end, const vec3_t mins, const vec3_t maxs, float *frac )
+{
+	float tmin = 0.0f, tmax = 1.0f;
+	int k;
+
+	for ( k = 0; k < 3; k++ )
+	{
+		const float d = end[k] - start[k];
+
+		if ( fabs( d ) < 0.0001f )
+		{ // parallel to this pair of faces: inside the slab or a miss
+			if ( start[k] < mins[k] || start[k] > maxs[k] )
+			{
+				return qfalse;
+			}
+		}
+		else
+		{
+			float t1 = ( mins[k] - start[k] ) / d;
+			float t2 = ( maxs[k] - start[k] ) / d;
+
+			if ( t1 > t2 )
+			{
+				const float tmp = t1;
+				t1 = t2;
+				t2 = tmp;
+			}
+			if ( t1 > tmin )
+			{
+				tmin = t1;
+			}
+			if ( t2 < tmax )
+			{
+				tmax = t2;
+			}
+			if ( tmin > tmax )
+			{
+				return qfalse;
+			}
+		}
+	}
+
+	*frac = tmin;
+	return qtrue;
+}
+
+static gentity_t *RP_NpcInCrosshair( gentity_t *ent )
+{
+	vec3_t eye, fwd, end;
+	trace_t tr;
+	gentity_t *best = NULL;
+	float bestFrac;
+	int i;
+
+	VectorCopy( ent->client->ps.origin, eye );
+	eye[2] += ent->client->ps.viewheight;
+	AngleVectors( ent->client->ps.viewangles, fwd, NULL, NULL );
+	VectorMA( eye, RP_NPC_AIM_RANGE, fwd, end );
+
+	trap->Trace( &tr, eye, NULL, NULL, end, ent->s.number, MASK_SOLID, qfalse, 0, 0 );
+	bestFrac = tr.startsolid ? 1.0f : tr.fraction;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		gentity_t *npc = &g_entities[i];
+		vec3_t mins, maxs;
+		float frac;
+
+		if ( !npc->inuse || !npc->r.linked || !npc->client || !npc->NPC || npc->s.eType != ET_NPC )
+			continue;
+		if ( npc->health <= 0 || ( npc->s.eFlags & ( EF_DEAD | EF_NODRAW ) ) || ( npc->r.svFlags & SVF_NOCLIENT ) )
+			continue;
+
+		VectorAdd( npc->r.currentOrigin, npc->r.mins, mins );
+		VectorAdd( npc->r.currentOrigin, npc->r.maxs, maxs );
+
+		if ( RP_RayHitsBox( eye, end, mins, maxs, &frac ) && frac < bestFrac )
+		{
+			bestFrac = frac;
+			best = npc;
+		}
+	}
+
+	return best;
+}
+
+// "^3stormtrooper ^7(johnny)" -- the NPC type, and its targetname when it has one.
+static void RP_NpcLabel( const gentity_t *npc, char *buf, int size )
+{
+	const char *type = ( npc->NPC_type && npc->NPC_type[0] ) ? npc->NPC_type : "npc";
+
+	if ( npc->targetname && npc->targetname[0] )
+		Com_sprintf( buf, size, "^3%s ^7(%s)", type, npc->targetname );
+	else
+		Com_sprintf( buf, size, "^3%s^7", type );
+}
+
+/*
+==================
+RP_NpcEffect_f
+
+GalaxyRP: [NPC System] /npc effect <holo|ghost|nonsolid|clear> on the NPC in the crosshair -- the
+NPC side of /admholo, /admghost and /admsolid (g_cmds.c), and the same pers.phase_mode underneath,
+so an NPC in a mode behaves exactly like a phased player: hit, damaged and targeted like any other,
+only movement passes through (RP_PhasePassesThrough(), g_active.c), and ghost/holo get the client
+plugin's look and stay off the radar.
+
+Not a toggle: holo, ghost and nonsolid set that mode (switching straight from one to another is
+fine), and only clear takes it off. Clearing goes through the same release as a player's, so an NPC
+cleared while standing inside somebody stays walk-through until the two are apart.
+
+An NPC can also be non-solid from the map, outside this system: the NOTSOLID spawnflag gives it
+contents 0 (nothing can hit it either), and a script's SET_SOLID false gives it CONTENTS_CORPSE.
+Any of these commands makes it a normal CONTENTS_BODY again -- holo/ghost/nonsolid into this
+system's walk-through-but-hittable body, clear into a plain solid one (through the release, so it
+cannot trap anyone). A script that later sets it non-solid again wins, as it would have anyway.
+
+Vehicles are refused -- their physics and riders are a different beast -- and so is an NPC riding
+one. The mode lasts until clear, the NPC's removal, or a map change; the next NPC in that slot
+starts with a zeroed client.
+==================
+*/
+static void RP_NpcEffect_f( gentity_t *ent )
+{
+	char arg[MAX_STRING_CHARS];
+	char label[MAX_STRING_CHARS];
+	gentity_t *npc;
+	int mode;
+	qboolean mapNonSolid;
+
+	trap->Argv( 2, arg, sizeof( arg ) );
+
+	if ( trap->Argc() != 3 )
+		mode = -1;
+	else if ( !Q_stricmp( arg, "holo" ) )
+		mode = RP_PHASE_HOLO;
+	else if ( !Q_stricmp( arg, "ghost" ) )
+		mode = RP_PHASE_GHOST;
+	else if ( !Q_stricmp( arg, "nonsolid" ) )
+		mode = RP_PHASE_NONSOLID;
+	else if ( !Q_stricmp( arg, "clear" ) )
+		mode = RP_PHASE_NONE;
+	else
+		mode = -1;
+
+	if ( mode == -1 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/npc effect ^2<holo/ghost/nonsolid/clear>\n^7Aim at the NPC. The effect stays until ^3/npc effect clear^7, which also makes an NPC that spawned non-solid solid.\n\"" );
+		return;
+	}
+
+	npc = RP_NpcInCrosshair( ent );
+
+	if ( !npc )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1No NPC in your crosshair.\n\"" );
+		return;
+	}
+
+	RP_NpcLabel( npc, label, sizeof( label ) );
+
+	if ( npc->client->NPC_class == CLASS_VEHICLE || npc->s.NPC_class == CLASS_VEHICLE )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"^1Vehicles cannot be given an effect (%s^1).\n\"", label ) );
+		return;
+	}
+
+	if ( npc->client->ps.m_iVehicleNum )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"^1%s ^1is riding a vehicle.\n\"", label ) );
+		return;
+	}
+
+	// a live NPC is CONTENTS_BODY unless the map or a script made it non-solid
+	mapNonSolid = ( npc->r.contents != CONTENTS_BODY ) ? qtrue : qfalse;
+
+	if ( mode == RP_PHASE_NONE )
+	{
+		if ( npc->client->pers.phase_mode == RP_PHASE_NONE && !mapNonSolid )
+		{
+			trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7has no effect to clear.\n\"", label ) );
+			return;
+		}
+
+		npc->client->pers.phase_mode = RP_PHASE_NONE;
+		npc->client->pers.phase_releasing = qtrue;
+	}
+	else
+	{
+		if ( npc->client->pers.phase_mode == mode && !mapNonSolid )
+		{
+			trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is already %s.\n\"", label, RP_PhaseModeName( mode ) ) );
+			return;
+		}
+
+		npc->client->pers.phase_mode = mode;
+		npc->client->pers.phase_releasing = qfalse;
+	}
+
+	if ( mapNonSolid )
+	{ // back to a normal body; the mode (or the release) keeps it walk-through for now
+		npc->r.contents = CONTENTS_BODY;
+		npc->clipmask |= CONTENTS_BODY;
+	}
+
+	RP_PhaseTrackNpc( npc );
+	trap->LinkEntity( (sharedEntity_t *)npc );
+
+	if ( mode == RP_PHASE_NONE )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is back to normal%s.\n\"", label, mapNonSolid ? " and solid" : "" ) );
+	}
+	else
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is now %s%s.\n\"", label, RP_PhaseModeName( mode ),
+			mapNonSolid ? " ^7(it spawned non-solid; it can be hit now)" : "" ) );
+	}
+
+	G_LogPrintf( "npc effect: %s ^7made NPC %s (%d) %s\n", ent->client->pers.netname,
+		( npc->NPC_type && npc->NPC_type[0] ) ? npc->NPC_type : "npc", npc->s.number,
+		( mode == RP_PHASE_NONE ) ? "normal" : RP_PhaseModeName( mode ) );
+}
+
 // GalaxyRP fix: [NPC] "qboolean showBBoxes = qfalse;" used to live here, the flag behind
 // "/npc showbounds". The subcommand, its help line and everything that read the flag are gone --
 // see the comment where the subcommand was, in Cmd_NPC_f() below.
@@ -4826,12 +5071,14 @@ void Cmd_NPC_f( gentity_t *ent )
 	trap->Argv( 1, cmd, 1024 );
 
 	if ( !cmd[0] )
-	{
-		Com_Printf( "Valid NPC commands are:\n" );
-		Com_Printf( " spawn [NPC type (from NPCs.cfg)]\n" );
-		Com_Printf( " kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n" );
-		Com_Printf( " score [NPC targetname] (prints number of kills per NPC)\n" );
-		Com_Printf( " team [team (player or enemy or neutral or free)]\n" ); // zyk: new option
+	{ // GalaxyRP fix: [NPC System] this listing went to the server console (Com_Printf), so the admin
+	  // who typed /npc saw nothing at all. score still prints there -- see NPC_PrintScore().
+		trap->SendServerCommand( ent-g_entities, "print \"Valid NPC commands are:\n\
+ spawn [NPC type (from NPCs.cfg)]\n\
+ kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n\
+ score [NPC targetname] (prints number of kills per NPC to the server console)\n\
+ team [team (player or enemy or neutral or free)] (the NPC in your crosshair)\n\
+ effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\"" );
 	}
 	else if ( Q_stricmp( cmd, "spawn" ) == 0 )
 	{
@@ -4901,53 +5148,69 @@ void Cmd_NPC_f( gentity_t *ent )
 	}
 	else if ( Q_stricmp( cmd, "team" ) == 0 )
 	{ // zyk: new option
-		if (trap->Argc() == 3 && ent->client->ps.hasLookTarget == qtrue)
+		// GalaxyRP fix: [NPC System] this acted on ps.lookTarget, which is not the crosshair -- see
+		// RP_NpcInCrosshair() -- and said nothing at all, whether it worked, found no NPC or did not
+		// know the team. It now takes the NPC in the crosshair and reports each outcome.
+		char		cmd2[1024];
+		gentity_t	*thisent;
+		char		label[MAX_STRING_CHARS];
+		int			newTeam;
+
+		// GalaxyRP fix: [Guardian] a "NPC team cannot be used in bosses" guard, gated on
+		// client->pers.guardian_invoked_by_id != -1, used to live here. guardian_invoked_by_id is
+		// permanently -1 (its only setter, spawn_boss(), was deleted as unreachable dead code), so the
+		// guard was dead and has been removed.
+
+		// GalaxyRP fix: [Quests] a "NPC team cannot be used in the Guardian of Map" guard, gated on
+		// level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only setter) was deleted
+		// as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and
+		// level.guardian_quest has been removed along with it, so this guard is removed too.
+
+		// GalaxyRP fix: [NPC] this compared against the short names only, while /npc kill team
+		// accepted only the full NPCTEAM_* spellings. Both subcommands now take either form.
+		trap->Argv( 2, cmd2, sizeof( cmd2 ) );
+		newTeam = ( trap->Argc() == 3 ) ? zyk_team_from_string( cmd2 ) : -1;
+
+		if ( newTeam != NPCTEAM_PLAYER && newTeam != NPCTEAM_ENEMY && newTeam != NPCTEAM_NEUTRAL && newTeam != NPCTEAM_FREE )
 		{
-			char		cmd2[1024];
-			gentity_t *thisent = &g_entities[ent->client->ps.lookTarget];
-
-			trap->Argv( 2, cmd2, sizeof( cmd2 ) );
-
-			if (thisent->NPC)
-			{
-				// GalaxyRP fix: [Guardian] a "NPC team cannot be used in bosses" guard, gated
-				// on client->pers.guardian_invoked_by_id != -1, used to live here.
-				// guardian_invoked_by_id is permanently -1 (its only setter, spawn_boss(),
-				// was deleted as unreachable dead code), so the guard was dead and has been
-				// removed.
-
-				// GalaxyRP fix: [Quests] a "NPC team cannot be used in the Guardian of Map" guard,
-				// gated on level.guardian_quest, used to live here. Cmd_GuardianQuest_f (its only
-				// setter) was deleted as unreachable dead code (see the GalaxyRP fix comment in
-				// g_cmds.c), and level.guardian_quest has been removed along with it, so this guard is
-				// removed too.
-
-				// GalaxyRP fix: [NPC] this compared against the short names only, while
-				// /npc kill team accepted only the full NPCTEAM_* spellings. Both subcommands now
-				// take either form. An unrecognised name is still ignored, exactly as before.
-				int newTeam = zyk_team_from_string(cmd2);
-
-				if (newTeam == NPCTEAM_PLAYER)
-				{
-					thisent->client->playerTeam = NPCTEAM_PLAYER;
-					thisent->client->enemyTeam = NPCTEAM_ENEMY;
-				}
-				else if (newTeam == NPCTEAM_ENEMY)
-				{
-					thisent->client->playerTeam = NPCTEAM_ENEMY;
-					thisent->client->enemyTeam = NPCTEAM_PLAYER;
-				}
-				else if (newTeam == NPCTEAM_NEUTRAL)
-				{
-					thisent->client->playerTeam = NPCTEAM_NEUTRAL;
-					thisent->client->enemyTeam = NPCTEAM_NEUTRAL;
-				}
-				else if (newTeam == NPCTEAM_FREE)
-				{
-					thisent->client->playerTeam = NPCTEAM_FREE;
-					thisent->client->enemyTeam = NPCTEAM_FREE;
-				}
-			}
+			trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/npc team ^2<player/enemy/neutral/free>\n^7Aim at the NPC.\n\"" );
+			return;
 		}
+
+		thisent = RP_NpcInCrosshair( ent );
+
+		if ( !thisent )
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"^1No NPC in your crosshair.\n\"" );
+			return;
+		}
+
+		if (newTeam == NPCTEAM_PLAYER)
+		{
+			thisent->client->playerTeam = NPCTEAM_PLAYER;
+			thisent->client->enemyTeam = NPCTEAM_ENEMY;
+		}
+		else if (newTeam == NPCTEAM_ENEMY)
+		{
+			thisent->client->playerTeam = NPCTEAM_ENEMY;
+			thisent->client->enemyTeam = NPCTEAM_PLAYER;
+		}
+		else if (newTeam == NPCTEAM_NEUTRAL)
+		{
+			thisent->client->playerTeam = NPCTEAM_NEUTRAL;
+			thisent->client->enemyTeam = NPCTEAM_NEUTRAL;
+		}
+		else
+		{
+			thisent->client->playerTeam = NPCTEAM_FREE;
+			thisent->client->enemyTeam = NPCTEAM_FREE;
+		}
+
+		RP_NpcLabel( thisent, label, sizeof( label ) );
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is now on team %s.\n\"", label, cmd2 ) );
+	}
+	else if ( Q_stricmp( cmd, "effect" ) == 0 )
+	{
+		RP_NpcEffect_f( ent );
 	}
 }
