@@ -6402,7 +6402,23 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// warning above still stands. And it sits in the left half of the OR for the reason
 			// given two paragraphs up: a player ALREADY down who then falls into the void must still
 			// reach the clear-then-die arm.
-			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && !targ->client->ps.m_iVehicleNum
+			//
+			// GalaxyRP fix: [Death System] "&& pm_type != PM_DEAD" -- a player who died earlier in THIS
+			// frame is not downed by a second hit on the corpse. The EF_DEAD test beside it cannot see
+			// such a death: s.eFlags gets EF_DEAD from health only once per frame, in
+			// BG_PlayerStateToEntityState() (see the death-counter note in player_die()). A rider killed
+			// in the saddle loses the other guard too, because player_die() ejects them and that clears
+			// ps.m_iVehicleNum. So when a vehicle's own bolt destroyed a hideRider vehicle, the vehicle's
+			// death killed its pilot outright (deaths +1, correct) and ejected him, and the SAME bolt's
+			// splash then found the fresh corpse -- attacker with a client, not "dead", not mounted -- and
+			// ran paralyze_player() on it: knockdowns +1, health back to RP_DOWNED_HEALTH and the downed
+			// state on a dead man, until the vehicle's explosion finished him off again. Any splash weapon
+			// that kills a rider does the same. pm_type is set to PM_DEAD by player_die() at once and is
+			// its own "already dead" guard, and it is never PM_DEAD for a downed player (ClientThink_real
+			// only assigns it at health <= 0 without the DOWNED bit), so the finish-off half of this
+			// condition is untouched. A corpse hit now goes to the plain targ->die() below, where
+			// player_die() returns on that same guard, as any second hit on a corpse already did.
+			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && targ->client->ps.pm_type != PM_DEAD && !targ->client->ps.m_iVehicleNum
 				&& !zyk_minigame_forces_death(targ)
 				&& ((RP_DownedSystemEnabled() && attacker && attacker->client
 					&& !((mod == MOD_FALLING || mod == MOD_SUICIDE) && (dflags & DAMAGE_NO_PROTECTION)))
