@@ -11493,6 +11493,24 @@ qboolean jetpack_command_allowed(gentity_t *ent)
 	return (rp_allow_jetpack_command.integer == 1) ? qtrue : qfalse;
 }
 
+// GalaxyRP fix: [Jetpack] whether a jetpack may be HANDED to this player from their Jetpack skill:
+// jetpack_command_allowed() plus the two gametypes that never allow one. This was written inline in
+// initialize_rpg_skills() and nowhere else, so the other place that grants the item from the skill --
+// the live /skillup path in apply_skill_change_in_game() -- skipped it and handed a jetpack out in
+// Siege, in Jedi Master and with rp_allow_jetpack_command 0, until the player's next spawn quietly
+// took it back. Both now ask this. (Cmd_Jetpack_f keeps its own condition: it adds tests that belong
+// to the command, not to the skill.)
+qboolean RP_JetpackGrantAllowed(gentity_t *ent)
+{
+	if (!jetpack_command_allowed(ent))
+		return qfalse;
+
+	if (level.gametype == GT_SIEGE || level.gametype == GT_JEDIMASTER)
+		return qfalse;
+
+	return qtrue;
+}
+
 // GalaxyRP: [Grapple Hook] the permission half of the hook, with jetpack_command_allowed()'s shape
 // exactly: rp_allow_grapple_hook 0 refuses everyone; a logged-in player is answered by their Grapple
 // Hook skill (index 55, one level) whatever the cvar says above 0; a logged-out player is allowed
@@ -11844,8 +11862,9 @@ void initialize_rpg_skills(gentity_t *ent)
 		// function body is already inside "if (sess.amrpgmode == 2)", so that half was a tautology, and
 		// for a logged-in player the helper now returns exactly "cvar > 0 && skill_levels[34] > 0",
 		// which is what the two clauses together used to evaluate to for every value of the cvar.
-		if (jetpack_command_allowed(ent) &&
-			level.gametype != GT_SIEGE && level.gametype != GT_JEDIMASTER)
+		// GalaxyRP fix: [Jetpack] the same rule, now through RP_JetpackGrantAllowed() so the live
+		// /skillup grant cannot drift from it. Identical result: that helper is exactly this test.
+		if (RP_JetpackGrantAllowed(ent))
 			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << HI_JETPACK);
 
 		// zyk: loading initial health of the player
@@ -13099,6 +13118,20 @@ void zyk_adjust_holdable_items(gentity_t *ent)
 	// cloaked and instantly desynced.
 	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_CLOAK)) && ent->client->ps.powerups[PW_CLOAKED])
 		Jedi_DecloakPair(ent);
+
+	// GalaxyRP fix: [Items] the jetpack and the binoculars are the other two holdables that keep
+	// something running after they leave the inventory, and both are switched off by the item itself:
+	// the Use key for the jetpack (GENCMD_USE_JETPACK) and the zoom key for the binoculars (GENCMD_ZOOM)
+	// only work while the item is owned. Losing either while in use left the player unable to stop it --
+	// flying on an invisible jetpack until the fuel ran out, or stuck at binocular magnification until
+	// they happened to switch weapons. Same shape as the cloak test above: only when the item is gone
+	// AND the thing is actually running. zoomMode 2 is the binoculars only; a disruptor scope
+	// (zoomMode 1) belongs to the weapon and is left alone.
+	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_JETPACK)) && ent->client->jetPackOn)
+		Jetpack_Off(ent);
+
+	if (!(ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << HI_BINOCULARS)) && ent->client->ps.zoomMode == 2)
+		zyk_cancel_zoom(ent);
 }
 
 /*
@@ -17120,11 +17153,33 @@ void apply_skill_change_in_game(gentity_t* ent, int skill_id, qboolean upgrade) 
 	//GalaxyRP (Alex): [Skill] Give them the item.
 	if (strcmp(skills[skill_id].category, "items") == 0 && skills[skill_id].value_internal != 0) {
 		if (upgrade) {
-			ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << skills[skill_id].value_internal);
+			// GalaxyRP fix: [Jetpack] the jetpack only where the skill may hand one out -- see
+			// RP_JetpackGrantAllowed() -- and not to a player in a running Melee Battle, whose holdables
+			// melee_battle_prepare() has just taken down to the binoculars (/jetpack refuses the roster
+			// for the same reason). Gated on the battle having started (melee_mode 2, or 3 while the
+			// winner is announced), not on sign-up: until melee_battle_prepare() runs the player still
+			// carries their normal kit, and that is what it snapshots and gives back afterwards. A
+			// refused grant costs nothing -- the skill level still rises, and the jetpack arrives
+			// wherever the normal rules allow it: the next spawn, or /jetpack.
+			if (skills[skill_id].value_internal != HI_JETPACK ||
+				(RP_JetpackGrantAllowed(ent) &&
+				 !(level.melee_mode >= 2 && level.melee_players[ent->s.number] != -1)))
+			{
+				ent->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << skills[skill_id].value_internal);
+			}
 		}
 		else {
 			if (ent->client->pers.skill_levels[skill_id] == 0) {
 				ent->client->ps.stats[STAT_HOLDABLE_ITEMS] &= ~(1 << skills[skill_id].value_internal);
+
+				// GalaxyRP fix: [Items] this only took the item away. A jetpack in flight kept flying
+				// (invisibly -- EF_JETPACK follows ownership) and a Cloak Item kept its wearer cloaked,
+				// and neither could be switched off any more, because the keys that do it require the
+				// item. zyk_adjust_holdable_items() is the helper for "an item left the inventory": it
+				// switches the jetpack off, decloaks (together with a paired vehicle), lowers the
+				// binoculars and clears a selected slot that has nothing left in it. It does nothing
+				// for an item that was not in use, so every other item skill is unaffected.
+				zyk_adjust_holdable_items(ent);
 			}
 		}
 	}
