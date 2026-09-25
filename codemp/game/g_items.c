@@ -3278,9 +3278,11 @@ gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity ) {
 		{
 			droppedBlueFlag = dropped;
 		}
-	} else { // auto-remove after 30 seconds
+	} else { // auto-remove after rp_item_lifetime seconds
+		// DAJ_RP: [Items] was a hard-coded 300000 (zyk's 5 minutes, up from stock's 30 s); now
+		// rp_item_lifetime, default 100 s, clamped to 0..200 s. At 0 the item is freed on the next frame.
 		dropped->think = G_FreeEntity;
-		dropped->nextthink = level.time + 300000;  // zyk: changed the timeout of the item to 5 minutes
+		dropped->nextthink = level.time + RP_CorpseSecondsToMs( rp_item_lifetime.integer );
 	}
 
 	dropped->flags = FL_DROPPED_ITEM;

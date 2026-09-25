@@ -180,7 +180,14 @@ void RP_CVU_playerCorpseTime(void)
 	RP_ClampCorpseTimeCvar(&rp_player_corpse_time, "rp_player_corpse_time");
 }
 
-// Seconds to milliseconds for the three readers, clamped again so the result is always 0..200000
+// DAJ_RP: [Items] rp_item_lifetime (dropped items) uses the same 0..200 second range, so it shares the
+// clamp above and RP_CorpseSecondsToMs() below even though it is not a corpse.
+void RP_CVU_itemLifetime(void)
+{
+	RP_ClampCorpseTimeCvar(&rp_item_lifetime, "rp_item_lifetime");
+}
+
+// Seconds to milliseconds for the three corpse readers and LaunchItem() (rp_item_lifetime), clamped again so the result is always 0..200000
 // whatever the cvar holds -- the callbacks above run on change and at registration, but this keeps
 // the timers safe on their own.
 int RP_CorpseSecondsToMs(int seconds)

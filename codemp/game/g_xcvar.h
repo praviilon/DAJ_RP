@@ -421,6 +421,12 @@ XCVAR_DEF( rp_screen_message_timer,	"5",			RP_CVU_screenMessageTimer,	CVAR_ARCHI
 XCVAR_DEF( rp_npc_corpse_time,		"10",			RP_CVU_npcCorpseTime,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_limb_lifetime,		"8",			RP_CVU_limbLifetime,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_player_corpse_time,	"30",			RP_CVU_playerCorpseTime,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// DAJ_RP: [Items] how long, in seconds, a dropped item stays on the ground (LaunchItem, g_items.c):
+// weapons dropped on death or pulled out of a hand, items and powerups dropped on death, and anything
+// thrown with /drop. Was a hard-coded 300 (5 minutes); the default is deliberately lower. Same 0..200
+// clamp as the corpse times above. 0 removes a dropped item at once, i.e. nothing can be picked up.
+// Set when the item is dropped, so a change applies to later drops only. CTF flags keep their 30 s.
+XCVAR_DEF( rp_item_lifetime,		"100",			RP_CVU_itemLifetime,		CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 // GalaxyRP fix: [validation] RP_CVU_listCmdsResultsPerPage (g_cvar.c) clamps a non-positive value
 // back to 1 -- see its comment for why 0 needs its own floor instead of the usual clamp-to-0 pattern.
 XCVAR_DEF( rp_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

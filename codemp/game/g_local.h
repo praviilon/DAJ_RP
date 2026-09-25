@@ -2473,6 +2473,8 @@ void RP_CVU_flameThrowerCooldown(void);
 void RP_CVU_npcCorpseTime(void);
 void RP_CVU_limbLifetime(void);
 void RP_CVU_playerCorpseTime(void);
+// DAJ_RP: [Items] rp_item_lifetime shares the same 0..RP_CORPSE_TIME_MAX clamp and conversion.
+void RP_CVU_itemLifetime(void);
 int RP_CorpseSecondsToMs(int seconds);
 
 // GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in both
