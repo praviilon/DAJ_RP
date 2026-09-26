@@ -1405,6 +1405,117 @@ static void RP_FixArtusDetention( void )
 	RP_SpawnTrigger( mins, maxs, "run_beam", 1, -1.0f );	// CLIENTONLY, fire once
 }
 
+/*
+------------------
+RP_FixJediOutcastDemo
+
+demo and jodemo (the same map under two names). The demo's own scripts were never shipped, so
+the two doors only they unlocked stay locked for good:
+  - shieldgendoor, into the shield generator room;
+  - baydoor, a small bay door on the upper level.
+Both are unlocked here, before the first frame. SP_func_door gave every locked door the think that
+builds its walk-up trigger one frame after spawn, and that still runs, so from then on each is an
+ordinary door: it opens as anyone walks up and closes after its wait. The lock shader is stepped
+to its unlocked frame, as UnLockDoors() does. shieldgendoor's opentarget (kyle_seecore) is
+dropped: it runs a script the game never had, so every opening would only print an error.
+------------------
+*/
+static void RP_FixJediOutcastDemo( void )
+{
+	gentity_t *ent;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( RP_IsBrushEntity( ent, "func_door", "*99" ) && ent->targetname && !Q_stricmp( ent->targetname, "shieldgendoor" ) )
+		{
+			ent->spawnflags &= ~16;		// MOVER_LOCKED
+			ent->s.frame = 1;
+			ent->opentarget = NULL;
+		}
+		else if ( RP_IsBrushEntity( ent, "func_door", "*106" ) && ent->targetname && !Q_stricmp( ent->targetname, "baydoor" ) )
+		{
+			ent->spawnflags &= ~16;		// MOVER_LOCKED
+			ent->s.frame = 1;
+		}
+	}
+}
+
+/*
+------------------
+RP_FixNsStreets
+
+ts1 and ts2 are the two sliding tables in the bar: doors the use key slides open, which start
+inactive. Only the bartender conversation arms them (act_table), and that is a cutscene, so they
+never could be used. They are made active here: anyone can slide one open with the use key, and it
+slides back after its wait.
+
+Three NPCs hide inside those tables -- table1_thug and table3_thug under ts1, table2_thug under
+ts2 -- spawned cinematic (no AI), not solid and inside the table brushes, for the ambush the
+bartender script springs by teleporting them out. Nothing here would, so an open table would
+show three motionless figures anyone can walk through. Their spawners are removed before the
+first frame, which is before they would spawn.
+------------------
+*/
+static void RP_FixNsStreets( void )
+{
+	static const char *tableThugs[] = { "table1_thug", "table2_thug", "table3_thug" };
+	gentity_t *ent;
+	int i;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( !ent->inuse || !ent->classname )
+		{
+			continue;
+		}
+
+		if ( ( RP_IsBrushEntity( ent, "func_door", "*141" ) || RP_IsBrushEntity( ent, "func_door", "*140" ) ) &&
+			ent->targetname && ( !Q_stricmp( ent->targetname, "ts1" ) || !Q_stricmp( ent->targetname, "ts2" ) ) )
+		{
+			ent->spawnflags &= ~128;	// MOVER_INACTIVE
+			ent->flags &= ~FL_INACTIVE;
+		}
+		else if ( !Q_stricmpn( ent->classname, "NPC_", 4 ) && ent->NPC_targetname )
+		{
+			for ( i = 0; i < (int)ARRAY_LEN( tableThugs ); i++ )
+			{
+				if ( !Q_stricmp( ent->NPC_targetname, tableThugs[i] ) )
+				{
+					G_FreeEntity( ent );
+					break;
+				}
+			}
+		}
+	}
+}
+
+/*
+------------------
+RP_FixNsStarpad
+
+backdooropen2, a double door by the hangar, has its own walk-up trigger (named backdoor), but
+that trigger starts inactive and only a target_activate called hangar_ramp arms it. Lando's
+hangar-attack script fires that, after a voice line nothing in MP ever finishes, so the door
+never opened. The trigger is armed here instead. hangar_ramp is not fired: the hangar ramp door
+answers to the same name.
+------------------
+*/
+static void RP_FixNsStarpad( void )
+{
+	gentity_t *ent;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( RP_IsBrushEntity( ent, "trigger_multiple", "*111" ) &&
+			ent->targetname && !Q_stricmp( ent->targetname, "backdoor" ) &&
+			ent->target && !Q_stricmp( ent->target, "backdooropen2" ) )
+		{
+			ent->spawnflags &= ~128;	// INACTIVE
+			ent->flags &= ~FL_INACTIVE;
+		}
+	}
+}
+
 static void RP_JediOutcastMapFixes( const char *mapname )
 {
 	int m;
@@ -1445,6 +1556,18 @@ static void RP_JediOutcastMapFixes( const char *mapname )
 		else if ( !Q_stricmp( mapname, "artus_detention" ) )
 		{
 			RP_FixArtusDetention();
+		}
+		else if ( !Q_stricmp( mapname, "demo" ) || !Q_stricmp( mapname, "jodemo" ) )
+		{
+			RP_FixJediOutcastDemo();
+		}
+		else if ( !Q_stricmp( mapname, "ns_streets" ) )
+		{
+			RP_FixNsStreets();
+		}
+		else if ( !Q_stricmp( mapname, "ns_starpad" ) )
+		{
+			RP_FixNsStarpad();
 		}
 		return;
 	}
