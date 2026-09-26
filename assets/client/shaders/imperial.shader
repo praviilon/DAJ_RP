@@ -292,6 +292,7 @@ textures/impdetention/elevat_floor
 
 textures/impdetention/floorgrate
 {
+	cull none
 	q3map_material	HollowMetal
 	{
 		map $lightmap
@@ -304,6 +305,7 @@ textures/impdetention/floorgrate
 
 textures/impdetention/floorgrate1
 {
+	cull none
 	q3map_material	HollowMetal
 	{
 		map $lightmap
@@ -583,6 +585,7 @@ textures/kejim/redfield1
 
 textures/kejim/grate02
 {
+	cull none
 	surfaceparm	nonopaque
 	surfaceparm	trans
 	q3map_material	HollowMetal
@@ -1664,6 +1667,7 @@ textures/kejim/refcolumn
 
 textures/kejim/grate02_broke
 {
+	cull none
 	qer_editorimage	textures/kejim/grate02_broke
 	surfaceparm	nonopaque
 	surfaceparm	trans
@@ -1701,6 +1705,7 @@ textures/kejim/kej_lights
 
 textures/kejim/grate02_long
 {
+	cull none
 	qer_editorimage	textures/kejim/grate02_long
 	surfaceparm	nonopaque
 	surfaceparm	trans
@@ -1721,6 +1726,7 @@ textures/kejim/grate02_long
 
 textures/kejim/grate02_long_broken
 {
+	cull none
 	qer_editorimage	textures/kejim/grate02_long_broken
 	surfaceparm	nonopaque
 	surfaceparm	trans
@@ -5394,6 +5400,7 @@ textures/imperial/shiny_floor
 
 textures/imperial/grate02
 {
+	cull none
 	surfaceparm	nonopaque
 	surfaceparm	trans
 	q3map_material	HollowMetal
@@ -5410,6 +5417,7 @@ textures/imperial/grate02
 
 textures/imperial/grate02_broke
 {
+	cull none
 	surfaceparm	nonopaque
 	surfaceparm	trans
 	q3map_material	HollowMetal
@@ -5428,6 +5436,7 @@ textures/imperial/grate02_broke
 
 textures/imperial/grate02_long
 {
+	cull none
 	surfaceparm	nonopaque
 	surfaceparm	trans
 	q3map_material	HollowMetal
@@ -5446,6 +5455,7 @@ textures/imperial/grate02_long
 
 textures/imperial/grate02_long_broken
 {
+	cull none
 	surfaceparm	nonsolid
 	surfaceparm	nonopaque
 	surfaceparm	trans
