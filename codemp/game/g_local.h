@@ -1831,6 +1831,12 @@ typedef struct level_locals_s {
 	// zyk: tests if it is a sp map in loading time
 	qboolean sp_map;
 
+	// GalaxyRP: [SP Maps] set on a Jedi Outcast SP map: a spawn point's target -- the map's
+	// single-player start scripts, copied onto the added spawn points -- fires for the first
+	// player who spawns after the map loads, not for every spawn. See ClientSpawn() and
+	// RP_JediOutcastMapFixes() (g_main.c).
+	qboolean rp_spawn_target_once;
+
 	// zyk: level.time when the server becomes empty (no players)
 	int server_empty_change_map_timer;
 

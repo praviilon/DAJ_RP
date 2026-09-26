@@ -921,6 +921,355 @@ void fix_sp_func_door(gentity_t *ent)
 	G_FreeEntity( ent );
 }
 
+/*
+==================================================================================================
+GalaxyRP: [SP Maps] Jedi Outcast single-player maps
+
+The Jedi Outcast SP maps load in Jedi Academy multiplayer but were never part of Zyk's SP map list
+above: each has exactly one spawn point (its info_player_start), so everyone who spawns together
+telefrags. This adds 3-4 spawn points to every one of the 28, and on bespin_streets makes the doors,
+lifts and start lift that only single-player scripts moved usable by players.
+
+Spawn points. For 23 maps they sit 40-80 units from the original start, facing the same way, and
+were picked by testing each candidate against the map's own geometry (read from the .bsp): a clear
+player box and a clear path from the start, level solid floor within 24 units of the start's, no
+water/slime/lava, no hurt/teleport/push trigger down to the floor, nothing within 16 units of a
+door or lift, and 40+ units from every other spawn point (the player box is 30 wide, so closer
+would telefrag). On five maps where the start is on a moving lift, inside a moving bin, in a
+shuttle over a hurt zone or on a slope, the points were placed in game and checked the same way.
+
+The original start is kept, except where it stands on or in something that moves:
+  - ns_starpad: at the bottom of a script-driven elevator ride of some 6,700 units;
+  - ns_hideout: inside a moving bin under a low ceiling;
+  - bespin_streets: on the start lift's deck, which RP_FixBespinStreets() below makes rest at the
+    top -- its column then fills the bottom of the shaft, so a spawn there would be inside it.
+Its target is read before it is removed, and every added point carries it, as Zyk's helper copies
+it: it is the map's single-player start script. level.rp_spawn_target_once makes it fire for the
+first spawn only (ClientSpawn(), g_client.c).
+==================================================================================================
+*/
+#define RP_JO_MAX_SPAWNS	4
+
+typedef struct rp_jo_spawns_s {
+	const char	*map;
+	qboolean	removeOriginal;
+	int			count;
+	int			points[RP_JO_MAX_SPAWNS][4];	// x, y, z, yaw
+} rp_jo_spawns_t;
+
+static const rp_jo_spawns_t rp_jo_spawns[] = {
+	{ "artus_detention", qfalse, 3, { { -241, 4222, 660, 167 }, { -215, 4360, 660, 178 }, { -182, 4509, 660, -158 } } },
+	{ "artus_mine", qfalse, 3, { { 3904, -2928, 1192, 180 }, { 3904, -2848, 1192, 180 }, { 3944, -2888, 1194, 180 } } },
+	{ "artus_topside", qfalse, 3, { { 2204, 1892, 160, 0 }, { 2204, 1812, 156, 0 }, { 2244, 1852, 156, 0 } } },
+	{ "bespin_platform", qfalse, 3, { { -1280, 40, 24, 0 }, { -1280, -40, 24, 0 }, { -1320, 0, 24, 0 } } },
+	{ "bespin_streets", qtrue , 4, { { -3782, -4094, -1703, 91 }, { -3590, -4069, -1703, 95 }, { -4044, -4092, -1703, 58 }, { -4013, -3903, -1703, -1 } } },
+	{ "bespin_undercity", qfalse, 3, { { -40, -496, -3432, 90 }, { 40, -496, -3432, 90 }, { 0, -456, -3432, 90 } } },
+	{ "cairn_assembly", qfalse, 3, { { -2200, 747, 512, 90 }, { -2120, 747, 512, 90 }, { -2160, 787, 512, 90 } } },
+	{ "cairn_bay", qfalse, 3, { { -3128, 176, 600, 135 }, { -3088, 216, 600, 135 }, { -3168, 216, 600, 135 } } },
+	{ "cairn_dock1", qfalse, 3, { { 6584, -5928, 464, 90 }, { 6664, -5928, 464, 90 }, { 6624, -5968, 468, 90 } } },
+	{ "cairn_reactor", qfalse, 3, { { 1464, -8912, -584, 270 }, { 1384, -8912, -584, 270 }, { 1424, -8872, -584, 270 } } },
+	{ "demo", qfalse, 3, { { 464, 2848, -28, 315 }, { 424, 2808, -28, 315 }, { 504, 2808, -28, 315 } } },
+	{ "doom_comm", qfalse, 3, { { 40, -832, 24, 270 }, { -40, -832, 24, 270 }, { 0, -872, 24, 270 } } },
+	{ "doom_detention", qfalse, 3, { { -1024, -376, 216, 0 }, { -1024, -456, 216, 0 }, { -1064, -416, 216, 0 } } },
+	{ "doom_shields", qfalse, 3, { { 2144, -1576, 24, 135 }, { 2184, -1536, 24, 135 }, { 2104, -1536, 24, 135 } } },
+	{ "jodemo", qfalse, 3, { { 464, 2848, -28, 315 }, { 424, 2808, -28, 315 }, { 504, 2808, -28, 315 } } },
+	{ "kejim_base", qfalse, 3, { { 416, 752, 24, 180 }, { 416, 832, 24, 180 }, { 456, 792, 24, 180 } } },
+	{ "kejim_post", qfalse, 3, { { 1692, -1732, -40, 180 }, { 1692, -1652, -40, 180 }, { 1732, -1692, -40, 180 } } },
+	{ "ns_hideout", qtrue , 4, { { -177, 2486, 8, -1 }, { -128, 2332, 8, 32 }, { -289, 2420, 8, 175 }, { 54, 2462, -247, 84 } } },
+	{ "ns_starpad", qtrue , 3, { { -1647, -2984, -1063, 93 }, { -1643, -2826, -1063, -163 }, { -1835, -2955, -1063, 4 } } },
+	{ "ns_streets", qfalse, 3, { { 2292, 388, -224, 135 }, { 2332, 428, -224, 135 }, { 2252, 428, -224, 135 } } },
+	{ "pit", qfalse, 3, { { 312, -1040, 216, 0 }, { 312, -1120, 216, 0 }, { 272, -1080, 216, 0 } } },
+	{ "valley", qfalse, 3, { { -1312, -1080, -104, 135 }, { -1272, -1040, -104, 135 }, { -1352, -1040, -104, 135 } } },
+	{ "yavin_canyon", qfalse, 3, { { -4322, -4798, 2241, 45 }, { -4282, -4838, 2238, 45 }, { -4282, -4758, 2238, 45 } } },
+	{ "yavin_courtyard", qfalse, 3, { { 2464, -2424, -536, 45 }, { 2504, -2464, -533, 45 }, { 2504, -2384, -538, 45 } } },
+	{ "yavin_final", qfalse, 3, { { -8608, 3944, -784, 90 }, { -8528, 3944, -784, 90 }, { -8568, 3904, -784, 90 } } },
+	{ "yavin_swamp", qfalse, 3, { { -5954, -4174, 1751, 315 }, { -5914, -4214, 1757, 315 }, { -5954, -4214, 1758, 315 } } },
+	{ "yavin_temple", qfalse, 3, { { 896, -1336, -488, 90 }, { 976, -1336, -488, 90 }, { 936, -1296, -488, 90 } } },
+	{ "yavin_trial", qfalse, 3, { { 135, 383, 24, -92 }, { 356, -105, 56, 164 }, { 505, 199, 88, 8 } } },
+};
+
+// zyk_create_info_player_deathmatch() with the target passed in: it copies the target of the
+// first spawn point it finds, which is gone on the maps that remove their original.
+static void RP_CreateSpawnPoint( const int *point, const char *target )
+{
+	gentity_t *spawn_ent = RP_SpawnForClassname( "info_player_deathmatch", qfalse, qfalse );
+
+	if ( !spawn_ent )
+	{
+		return;
+	}
+
+	zyk_set_entity_field( spawn_ent, "classname", "info_player_deathmatch" );
+	zyk_set_entity_field( spawn_ent, "origin", va( "%d %d %d", point[0], point[1], point[2] ) );
+	zyk_set_entity_field( spawn_ent, "angles", va( "0 %d 0", point[3] ) );
+	if ( target && target[0] )
+	{
+		zyk_set_entity_field( spawn_ent, "target", (char *)target );
+	}
+
+	zyk_spawn_entity( spawn_ent );
+}
+
+/*
+------------------
+Lift calls
+
+A use-panel that sends a lift to its other end. A func_door that is not TOGGLE, used while it is
+waiting at its far end (pos2), only restarts its wait -- so pressing the panel at the lift's
+resting landing to call it back would keep it away longer instead, and on bespin_streets' start
+lift that means holding a 1,728-unit shaft open in the street. So every panel goes through one of
+these: resting at pos1 -> a normal use, and it travels to pos2; waiting at pos2 -> it heads back
+now instead of after its wait; moving -> ignored, so nobody reverses it under a rider. Every press
+therefore means "go to the other end".
+------------------
+*/
+extern void ReturnToPos1( gentity_t *ent );
+extern void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );
+extern void Use_Multi( gentity_t *ent, gentity_t *other, gentity_t *activator );
+
+static void RP_LiftCallUse( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	gentity_t *lift = self->target_ent;
+
+	if ( !lift || !lift->inuse || lift->s.eType != ET_MOVER || !lift->use )
+	{
+		return;
+	}
+
+	if ( lift->moverState == MOVER_POS1 )
+	{
+		lift->use( lift, self, activator );
+	}
+	else if ( lift->moverState == MOVER_POS2 && lift->think == ReturnToPos1 && lift->nextthink > level.time )
+	{
+		lift->nextthink = level.time;
+	}
+}
+
+// The logic entity panels target; target_ent is the lift. Never linked, networked or thinking.
+static void RP_SpawnLiftCall( gentity_t *lift, const char *name )
+{
+	gentity_t *call = G_Spawn();
+
+	call->classname = "rp_lift_call";
+	call->targetname = G_NewString( name );
+	call->target_ent = lift;
+	call->use = RP_LiftCallUse;
+}
+
+// A use-button trigger volume (a trigger_multiple with CLIENTONLY | USE_BUTTON) built in place: a
+// trigger_multiple spawned without a brush model works, but InitTrigger() complains about it on
+// the console at every map load.
+static void RP_SpawnUseTrigger( const vec3_t absmin, const vec3_t absmax, const char *target )
+{
+	gentity_t *trig = G_Spawn();
+	vec3_t center;
+	int k;
+
+	for ( k = 0; k < 3; k++ )
+	{
+		center[k] = ( absmin[k] + absmax[k] ) * 0.5f;
+		trig->r.mins[k] = absmin[k] - center[k];
+		trig->r.maxs[k] = absmax[k] - center[k];
+	}
+
+	trig->classname = "trigger_multiple";
+	trig->spawnflags = 1 | 4;			// CLIENTONLY | USE_BUTTON
+	trig->target = G_NewString( target );
+	trig->wait = 1.0f;					// seconds
+	trig->touch = Touch_Multi;
+	trig->use = Use_Multi;
+	trig->r.contents = CONTENTS_TRIGGER;
+	trig->r.svFlags = SVF_NOCLIENT;
+	G_SetOrigin( trig, center );
+	trap->LinkEntity( (sharedEntity_t *)trig );
+}
+
+/*
+------------------
+RP_FixBespinStreets
+
+In single player an R5 droid's scripts unlock three doors and the player's scripts run the lifts;
+without those scripts nothing here moves. Fixed as follows:
+  - locked_door1/2/3 (the droid's doors), copdoors (a locked double door) and bigdoor (the hangar
+    door, a 1,000-damage crusher): opened and removed with Zyk's fix_sp_func_door(), matched on
+    func_door as well as the name -- "copdoors" is also a target_deactivate's name. A door's team
+    partners go with it (copdoors is a two-door team, and G_FindTeams() has moved the partner's
+    name onto the master), and team links are cut first: moving a door team relinks every member,
+    and a partner already freed must not be;
+  - lift1-lift5: they already have a use-panel (trigger_multiple, USE_BUTTON) at each landing
+    that fired a single-player script; the panels now target a lift call for their lift, and the
+    lifts wait 5 seconds at the far end instead of 3;
+  - uplift, the start lift -- a deck on a 1,728-unit hydraulic column, START_OPEN|TOGGLE, resting
+    at the bottom until a script raised it: it now rests at the top (START_OPEN's position swap
+    undone, not TOGGLE, 5-second wait), since at street level the shaft is open with floor right
+    up to its edge and a lift resting at the bottom would leave that drop open; at the top the
+    deck closes the street and the column fills the shaft. It gets a use-trigger over each
+    landing, 48 units wider than the shaft and 88 high, built from its own bounds. Renamed, so a
+    leftover script cannot drive it;
+  - the R5 droid stood on the lift deck, inside the column now: its spawner (which spawns it after
+    this has run) moves beside the new spawn points, clear of the lift trigger, facing the lift.
+------------------
+*/
+static void RP_FixBespinStreets( void )
+{
+	static const char *removeDoors[] = { "locked_door1", "locked_door2", "locked_door3", "copdoors", "bigdoor" };
+	static const char *liftNames[] = { "lift1", "lift2", "lift3", "lift4", "lift5" };
+	static const char *panelNames[] = { "t296", "t297", "t299", "t302", "t304" };	// same order as liftNames
+	gentity_t *doors[16];
+	int numDoors = 0;
+	gentity_t *ent;
+	gentity_t *uplift = NULL;
+	int i;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( !ent->inuse || !ent->classname )
+		{
+			continue;
+		}
+
+		if ( !Q_stricmp( ent->classname, "func_door" ) && ent->targetname )
+		{
+			for ( i = 0; i < (int)ARRAY_LEN( removeDoors ); i++ )
+			{
+				if ( !Q_stricmp( ent->targetname, removeDoors[i] ) )
+				{ // and its team partners: G_FindTeams() has already moved their targetname onto this
+				  // one, the team master, so they cannot be found by name any more
+					gentity_t *member;
+
+					for ( member = ent; member && numDoors < (int)ARRAY_LEN( doors ); member = member->teamchain )
+					{
+						int k;
+
+						for ( k = 0; k < numDoors && doors[k] != member; k++ )
+							;
+						if ( k == numDoors )
+						{ // not collected yet
+							doors[numDoors++] = member;
+						}
+					}
+				}
+			}
+
+			for ( i = 0; i < (int)ARRAY_LEN( liftNames ); i++ )
+			{
+				if ( !Q_stricmp( ent->targetname, liftNames[i] ) )
+				{
+					ent->wait = 5000;
+					RP_SpawnLiftCall( ent, va( "rp_liftcall_%s", liftNames[i] ) );
+				}
+			}
+
+			if ( !Q_stricmp( ent->targetname, "uplift" ) )
+			{
+				uplift = ent;
+			}
+		}
+		else if ( !Q_stricmp( ent->classname, "trigger_multiple" ) && ent->targetname )
+		{
+			for ( i = 0; i < (int)ARRAY_LEN( panelNames ); i++ )
+			{
+				if ( !Q_stricmp( ent->targetname, panelNames[i] ) )
+				{
+					ent->target = G_NewString( va( "rp_liftcall_%s", liftNames[i] ) );
+				}
+			}
+		}
+		else if ( !Q_stricmp( ent->classname, "NPC_Droid_R5D2" ) )
+		{
+			vec3_t droidOrigin = { -3900, -4010, -1704 };
+
+			VectorCopy( droidOrigin, ent->s.origin );
+			G_SetOrigin( ent, droidOrigin );
+			ent->s.angles[YAW] = 90;
+		}
+	}
+
+	for ( i = 0; i < numDoors; i++ )
+	{
+		doors[i]->teamchain = NULL;
+		doors[i]->teammaster = doors[i];
+	}
+	for ( i = 0; i < numDoors; i++ )
+	{
+		fix_sp_func_door( doors[i] );
+	}
+
+	if ( uplift && (uplift->spawnflags & 1) )
+	{
+		vec3_t tmp, mins, maxs;
+
+		// SP_func_door swapped the two positions for START_OPEN; swap them back, so pos1 -- where it
+		// rests -- is the compiled position at street level
+		VectorCopy( uplift->pos1, tmp );
+		VectorCopy( uplift->pos2, uplift->pos1 );
+		VectorCopy( tmp, uplift->pos2 );
+		uplift->spawnflags &= ~(1 | 8);		// START_OPEN, TOGGLE
+		uplift->wait = 5000;
+		uplift->targetname = G_NewString( "rp_uplift" );
+		G_SetOrigin( uplift, uplift->pos1 );
+		trap->LinkEntity( (sharedEntity_t *)uplift );
+
+		RP_SpawnLiftCall( uplift, "rp_liftcall_uplift" );
+
+		// one trigger over each landing: the deck's top surface at pos1 (street) and at pos2 (bottom)
+		for ( i = 0; i < 2; i++ )
+		{
+			const float *deck = i ? uplift->pos2 : uplift->pos1;
+
+			mins[0] = deck[0] + uplift->r.mins[0] - 48;
+			mins[1] = deck[1] + uplift->r.mins[1] - 48;
+			mins[2] = deck[2] + uplift->r.maxs[2];
+			maxs[0] = deck[0] + uplift->r.maxs[0] + 48;
+			maxs[1] = deck[1] + uplift->r.maxs[1] + 48;
+			maxs[2] = mins[2] + 88;
+			RP_SpawnUseTrigger( mins, maxs, "rp_liftcall_uplift" );
+		}
+	}
+}
+
+static void RP_JediOutcastMapFixes( const char *mapname )
+{
+	int m;
+
+	for ( m = 0; m < (int)ARRAY_LEN( rp_jo_spawns ); m++ )
+	{
+		const rp_jo_spawns_t *map = &rp_jo_spawns[m];
+		gentity_t *original;
+		const char *target;
+		int i;
+
+		if ( Q_stricmp( mapname, map->map ) != 0 )
+		{
+			continue;
+		}
+
+		// the map's own start (SP_info_player_start renamed it); the string survives G_FreeEntity,
+		// it lives in the level string pool
+		original = G_Find( NULL, FOFS(classname), "info_player_deathmatch" );
+		target = original ? original->target : NULL;
+
+		if ( map->removeOriginal && original )
+		{
+			G_FreeEntity( original );
+		}
+
+		for ( i = 0; i < map->count; i++ )
+		{
+			RP_CreateSpawnPoint( map->points[i], target );
+		}
+
+		level.rp_spawn_target_once = qtrue;
+
+		if ( !Q_stricmp( mapname, "bespin_streets" ) )
+		{
+			RP_FixBespinStreets();
+		}
+		return;
+	}
+}
+
 
 // GalaxyRP fix: [Guardian] Zyk_NPC_SpawnType() (and its local NPC_Spawn_Do extern) removed here — its only call sites were spawn_boss() and the dead quest guardians dispatch block, both permanently unreachable (spawn_boss has no callers)
 
@@ -2193,6 +2542,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		zyk_create_info_player_deathmatch(2397,7403,1817,90);
 		zyk_create_info_player_deathmatch(2797,7403,1817,90);
 	}
+
+	// GalaxyRP: [SP Maps] the Jedi Outcast SP maps -- spawn points, and bespin_streets' doors and lifts
+	RP_JediOutcastMapFixes( zyk_mapname );
 
 	level.sp_map = qfalse;
 

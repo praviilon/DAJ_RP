@@ -4323,6 +4323,21 @@ void ClientSpawn(gentity_t *ent) {
 			// fire the targets of the spawn point
 			G_UseTargets(spawnPoint, ent);
 
+			// GalaxyRP: [SP Maps] on a Jedi Outcast SP map the spawn points' target is the map's
+			// single-player start script (player setup, intro, cinematic), copied onto every added
+			// spawn point. It is meant to run once, so the first spawn that fires it clears it from
+			// every deathmatch spawn point on the map; later spawns fire nothing.
+			if ( level.rp_spawn_target_once && spawnPoint && spawnPoint->target )
+			{
+				gentity_t *spot = NULL;
+
+				while ( (spot = G_Find( spot, FOFS(classname), "info_player_deathmatch" )) != NULL )
+				{
+					spot->target = NULL;
+				}
+				spawnPoint->target = NULL;
+			}
+
 			// positively link the client, even if the command times are weird
 			VectorCopy(ent->client->ps.origin, ent->r.currentOrigin);
 
