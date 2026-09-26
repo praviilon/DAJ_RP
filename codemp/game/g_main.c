@@ -1939,6 +1939,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		zyk_create_info_player_deathmatch(-65,-686,89,90);
 		zyk_create_info_player_deathmatch(56,-686,89,90);
+		// GalaxyRP: [SP Maps] six more from New Zyk mod: two extending the row above, and four in the
+		// gaps between the bunks along the side walls, facing into the room. Checked against the map:
+		// clear standing room, flat floor at the start's height, clear of the NPCs and of the
+		// intermission trigger on the original start.
+		zyk_create_info_player_deathmatch(-329, -686, 89, 90);
+		zyk_create_info_player_deathmatch(202, -686, 89, 90);
+		zyk_create_info_player_deathmatch(-411, -491, 89, 0);
+		zyk_create_info_player_deathmatch(280, -491, 89, 179);
+		zyk_create_info_player_deathmatch(-411, -252, 89, 0);
+		zyk_create_info_player_deathmatch(280, -252, 89, 179);
 	}
 	else if (Q_stricmp(zyk_mapname, "t1_rail") == 0)
 	{
@@ -2504,6 +2514,18 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				G_FreeEntity( ent );
 			}
 			if (ent->legacySlot >= 153 && ent->legacySlot <= 160)
+			{
+				G_FreeEntity( ent );
+			}
+			// GalaxyRP: [SP Maps] from New Zyk mod: open the right-hand breach in the city wall. The
+			// siege attackers blow one of two holes in it, each three func_breakable pieces feeding a
+			// counter (rightholecounter / leftholecounter) whose only target drives the siege radar
+			// icons. Those pieces take heavy weapons only and 1000-3000 damage, so in FFA the players
+			// who spawn outside the wall could not get in -- everything beyond it (the gate, the
+			// objective doors, the shield) is already opened above. The left breach is left as it is.
+			// New Zyk mod picks these by slot (358, 359, 362); matched by what they are here, which is
+			// the same three entities without depending on the spawn order.
+			if (Q_stricmp( ent->classname, "func_breakable") == 0 && Q_stricmp( ent->target, "rightholecounter") == 0)
 			{
 				G_FreeEntity( ent );
 			}

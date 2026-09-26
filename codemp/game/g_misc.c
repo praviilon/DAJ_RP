@@ -369,7 +369,6 @@ void misc_model_breakable_init( gentity_t *ent );
 void SP_misc_model_breakable( gentity_t *ent )
 {
 	char	damageModel[MAX_QPATH];
-	char	chunkModel[MAX_QPATH];
 	char	useModel[MAX_QPATH];
 	int		len;
 	float grav = 0;
@@ -431,8 +430,8 @@ void SP_misc_model_breakable( gentity_t *ent )
 	//  2. Nothing checked len against the buffer either. strncpy() fills MAX_QPATH bytes without
 	//     terminating, and damageModel[len] = 0 then wrote the terminator at an offset taken
 	//     straight from the model name -- a ~900 character name put it ~900 bytes past the end.
-	//  3. The three strcat()s below appended seven more characters onto buffers strncpy() may have
-	//     left unterminated, so even a legal 60-character name overflowed.
+	//  3. The strcat()s below appended seven more characters onto buffers strncpy() may have left
+	//     unterminated, so even a legal 60-character name overflowed.
 	//
 	// The length is validated first, the copies are bounded and always terminated, and the
 	// extensions are appended with Q_strcat. Which models are accepted does not change: a name
@@ -453,19 +452,23 @@ void SP_misc_model_breakable( gentity_t *ent )
 
 	Q_strncpyz( damageModel, ent->model, sizeof(damageModel) );
 	damageModel[len] = 0;	//chop extension
-	Q_strncpyz( chunkModel, damageModel, sizeof(chunkModel));
 	Q_strncpyz( useModel, damageModel, sizeof(useModel));
-	
+
 	if (ent->takedamage) {
 		//Dead/damaged model
 		if( !(ent->spawnflags & 8) ) {	//no dmodel
 			Q_strcat( damageModel, sizeof(damageModel), "_d1.md3" );
 			ent->s.modelindex2 = G_ModelIndex( damageModel );
 		}
-		
-		//Chunk model
-		Q_strcat( chunkModel, sizeof(chunkModel), "_c1.md3" );
-		ent->s.modelGhoul2 = G_ModelIndex( chunkModel );
+
+		// GalaxyRP fix: [SP Maps] the singleplayer "_c1.md3" chunk model used to be registered here
+		// and stored in s.modelGhoul2. In multiplayer that field is not a model slot: any non-zero
+		// value tells cgame (CG_General) that the entity is a Ghoul2 model, so every damageable
+		// breakable had the client try to build a Ghoul2 instance out of its .md3 -- and a chunk
+		// index that happened to be 127 hid the entity entirely ("not ready to be drawn"). It also
+		// took a model configstring for a file that almost never exists. Vanilla MP never sets it for
+		// this class, and New Zyk mod has since commented it out as not working in MP. With it gone
+		// the destruction debris in misc_model_breakable_die() is the material chunks, as in vanilla.
 	}
 
 	//Use model
