@@ -726,6 +726,12 @@ static qboolean turretG2_find_enemies( gentity_t *self )
 
 		if ( !target->client )
 		{
+			// GalaxyRP: [SP Maps] a single-player map's misc_turret shoots clients only, as it did
+			// in single player -- see RP_SpawnSPTurret() in g_turret.c
+			if ( self->rpSpTurret )
+			{
+				continue;
+			}
 			// only attack clients
 			if ( !(target->flags&FL_BBRUSH)//not a breakable brush
 				|| !target->takedamage//is a bbrush, but invincible
@@ -745,6 +751,10 @@ static qboolean turretG2_find_enemies( gentity_t *self )
 		}
 		if ( target->client && target->client->tempSpectate >= level.time )
 		{
+			continue;
+		}
+		if ( self->rpSpTurret && target->client && target->client->playerTeam == self->rpSpTurretTeam )
+		{ // GalaxyRP: [SP Maps] single player's noDamageTeam: the team this turret leaves alone
 			continue;
 		}
 		if ( self->alliedTeam )

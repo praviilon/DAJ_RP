@@ -397,6 +397,14 @@ struct gentity_s {
 	// one of its slot numbers means before porting a fix from it.
 	int			legacySlot;
 
+	// GalaxyRP: [SP Maps] true on a misc_turret spawned on a single-player map as the turret that
+	// classname means there -- a misc_turretG2 (SP_misc_turret() in g_turret.c). It then behaves as
+	// single player's does towards rpSpTurretTeam, its "team" key: it does not target clients of
+	// that team (client->playerTeam) and takes no damage from them (G_Damage()). qfalse, and the
+	// team unread, on every other entity.
+	qboolean	rpSpTurret;
+	npcteam_t	rpSpTurretTeam;
+
 	int			flags;				// FL_* variables
 
 	char		*model;
@@ -1833,6 +1841,13 @@ typedef struct level_locals_s {
 	// zyk: tests if it is a sp map in loading time
 	qboolean sp_map;
 
+	// GalaxyRP: [SP Maps] which single-player campaign this map comes from, by name: a Jedi
+	// Academy SP map (the sp_map list) or a Jedi Outcast one (the JO spawn-point table), both in
+	// g_main.c. Set before the map's entities spawn and, unlike sp_map, kept until the next map,
+	// so what an admin or a preset spawns later is read the same way. Classnames whose meaning
+	// differs in single player go by it -- misc_turret (SP_misc_turret() in g_turret.c).
+	int rp_sp_game;
+
 	// GalaxyRP: [SP Maps] set on a Jedi Outcast SP map: a spawn point's target -- the map's
 	// single-player start scripts, copied onto the added spawn points -- fires for the first
 	// player who spawns after the map loads, not for every spawn. See ClientSpawn() and
@@ -2201,6 +2216,12 @@ gentity_t	*G_SpawnLogical( void );
 // /entadd message and the entityinfo command); nothing gates on it, because exhausting that region
 // cannot drop the server the way the networked one can -- G_SpawnLogical() refuses instead.
 int		G_FreeLogicalEntityCount( void );
+
+// GalaxyRP: [SP Maps] level.rp_sp_game
+#define RP_SP_GAME_NONE		0	// a multiplayer map, or any map not on either list
+#define RP_SP_GAME_JA		1	// a Jedi Academy single-player map
+#define RP_SP_GAME_JO		2	// a Jedi Outcast single-player map
+
 // GalaxyRP: [Logical Entities] see gentity_t::legacySlot.
 void	RP_LegacySlotsBegin( void );
 void	RP_LegacySlotAssign( gentity_t *e );

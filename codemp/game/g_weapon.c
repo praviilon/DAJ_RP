@@ -3562,6 +3562,7 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	// GalaxyRP: [Shop] doors, plats and buttons are unlocked and activated for good and opened in the
 	// same hit, even inactive ones single player's scripts or droids would have activated -- see
 	// RP_StunBatonUseMover() in g_mover.c; every other mover gets the GlobalUse() it always did.
+	// A door that starts open and closes for good (wait -1) is reopened by it too.
 	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
 		rp_stun_baton_door_unlock.integer == 1)
 	{

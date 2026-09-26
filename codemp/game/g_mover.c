@@ -946,8 +946,43 @@ name is kept, and the master is used like any button would use it. A locked door
 touch trigger from spawn (locked doors always get one), so from then on it opens for everyone;
 an inactive one answers its own trigger, button or use key again. The map can still lock or
 deactivate it later, and a map load restores it. Every other mover keeps plain GlobalUse().
+
+One kind of door is handled apart: a func_door that STARTS OPEN with a wait of -1. It closes once,
+when its trigger or script uses it, and Reached_BinaryMover() then clears its use function for
+good ("Done for good") -- so neither GlobalUse() nor anything else could open it again, and on
+cairn_assembly one shut everyone behind it in the spawn closet. The baton now reopens it: the
+use function is given back to every member, the team is sent back to pos1 (open, for a door
+that starts open) the way a door returns after its wait, and it stays there. The map can close it
+again, and the baton can reopen it again. While it is open or reopening the baton leaves it
+alone -- a plain use would close it, for good -- and while it is closing a plain use reverses it
+back open, as it does for any door.
+
+Only when it is shaped like a door, though: at least 64 units tall and taller than it is thick.
+The same two settings build things as well as close doorways -- yavin_trial's staircase of 16-unit
+stone steps, ns_starpad's hangar ramp, cairn_dock1's covers over a pit -- and "reopening" those
+would take the stairs, the ramp or the pit cover away again. They stay GlobalUse() no-ops.
 ================
 */
+static qboolean RP_IsOneShotClosingDoor( const gentity_t *door )
+{
+	float height, thickness;
+
+	if ( !door->classname || Q_stricmp( door->classname, "func_door" ) ||
+		!( door->spawnflags & 1 ) || door->wait >= 0 )	// START_OPEN; wait is in ms by now
+	{
+		return qfalse;
+	}
+
+	height = door->r.maxs[2] - door->r.mins[2];
+	thickness = door->r.maxs[0] - door->r.mins[0];
+	if ( door->r.maxs[1] - door->r.mins[1] < thickness )
+	{
+		thickness = door->r.maxs[1] - door->r.mins[1];
+	}
+
+	return ( height >= 64.0f && height > thickness ) ? qtrue : qfalse;
+}
+
 void RP_StunBatonUseMover( gentity_t *mover, gentity_t *user )
 {
 	gentity_t *master, *member;
@@ -957,18 +992,50 @@ void RP_StunBatonUseMover( gentity_t *mover, gentity_t *user )
 		return;
 	}
 
+	master = mover;
+	if ( ( master->flags & FL_TEAMSLAVE ) && master->teammaster && master->teammaster->inuse )
+	{
+		master = master->teammaster;
+	}
+
+	if ( master->s.eType == ET_MOVER && RP_IsOneShotClosingDoor( master ) )
+	{
+		for ( member = master; member; member = member->teamchain )
+		{
+			member->flags &= ~FL_INACTIVE;
+			if ( member->spawnflags & MOVER_LOCKED )
+			{
+				member->spawnflags &= ~MOVER_LOCKED;
+				member->s.frame = 1;
+			}
+		}
+
+		if ( master->moverState == MOVER_POS2 )
+		{ // closed, for good: give the whole team its use back and send it back open
+			for ( member = master; member; member = member->teamchain )
+			{
+				if ( !member->use )
+				{
+					member->use = Use_BinaryMover;
+				}
+			}
+			master->activator = user;
+			ReturnToPos1( master );
+		}
+		else if ( master->moverState == MOVER_1TO2 && master->use )
+		{ // on its way shut: a use reverses it, back open
+			Use_BinaryMover( master, user, user );
+		}
+		// open, or reopening: nothing to do
+		return;
+	}
+
 	if ( mover->use != Use_BinaryMover || !mover->classname ||
 		( Q_stricmp( mover->classname, "func_door" ) && Q_stricmp( mover->classname, "func_plat" ) &&
 		  Q_stricmp( mover->classname, "func_button" ) ) )
 	{
 		GlobalUse( mover, user, user );
 		return;
-	}
-
-	master = mover;
-	if ( ( master->flags & FL_TEAMSLAVE ) && master->teammaster && master->teammaster->inuse )
-	{
-		master = master->teammaster;
 	}
 
 	for ( member = master; member; member = member->teamchain )

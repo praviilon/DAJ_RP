@@ -938,23 +938,28 @@ void fix_sp_func_door(gentity_t *ent)
 GalaxyRP: [SP Maps] Jedi Outcast single-player maps
 
 The Jedi Outcast SP maps load in Jedi Academy multiplayer but were never part of Zyk's SP map list
-above: each has exactly one spawn point (its info_player_start), so everyone who spawns together
-telefrags. This adds 3-4 spawn points to every one of the 28, and on bespin_streets makes the doors,
-lifts and start lift that only single-player scripts moved usable by players.
+(rp_ja_sp_maps, below): each has exactly one spawn point (its info_player_start), so everyone who
+spawns together telefrags. This adds 3-4 spawn points to every one of the 28, and on bespin_streets
+makes the doors, lifts and start lift that only single-player scripts moved usable by players.
 
-Spawn points. For 23 maps they sit 40-80 units from the original start, facing the same way, and
+Spawn points. For 22 maps they sit 40-80 units from the original start, facing the same way, and
 were picked by testing each candidate against the map's own geometry (read from the .bsp): a clear
 player box and a clear path from the start, level solid floor within 24 units of the start's, no
 water/slime/lava, no hurt/teleport/push trigger down to the floor, nothing within 16 units of a
 door or lift, and 40+ units from every other spawn point (the player box is 30 wide, so closer
 would telefrag). On five maps where the start is on a moving lift, inside a moving bin, in a
-shuttle over a hurt zone or on a slope, the points were placed in game and checked the same way.
+shuttle over a hurt zone or on a slope, the points were placed in game and checked the same way,
+and so were cairn_assembly's (see below).
 
 The original start is kept, except where it stands on or in something that moves:
   - ns_starpad: at the bottom of a script-driven elevator ride of some 6,700 units;
   - ns_hideout: inside a moving bin under a low ceiling;
   - bespin_streets: on the start lift's deck, which RP_FixBespinStreets() below makes rest at the
-    top -- its column then fills the bottom of the shaft, so a spawn there would be inside it.
+    top -- its column then fills the bottom of the shaft, so a spawn there would be inside it;
+  - cairn_assembly: in a closet behind ass_door, a door that starts open, wait -1. A one-shot
+    trigger across the hall beyond it closes it for good the first time anyone walks through, and
+    everyone who spawned after that was shut in. The four points are in that hall, past the door
+    and short of the trigger, out of sight of the two entry turrets.
 Its target is read before it is removed, and every added point carries it, as Zyk's helper copies
 it: it is the map's single-player start script. level.rp_spawn_target_once makes it fire for the
 first spawn only (ClientSpawn(), g_client.c).
@@ -976,7 +981,7 @@ static const rp_jo_spawns_t rp_jo_spawns[] = {
 	{ "bespin_platform", qfalse, 3, { { -1280, 40, 24, 0 }, { -1280, -40, 24, 0 }, { -1320, 0, 24, 0 } } },
 	{ "bespin_streets", qtrue , 4, { { -3782, -4094, -1703, 91 }, { -3590, -4069, -1703, 95 }, { -4044, -4092, -1703, 58 }, { -4013, -3903, -1703, -1 } } },
 	{ "bespin_undercity", qfalse, 3, { { -40, -496, -3432, 90 }, { 40, -496, -3432, 90 }, { 0, -456, -3432, 90 } } },
-	{ "cairn_assembly", qfalse, 3, { { -2200, 747, 512, 90 }, { -2120, 747, 512, 90 }, { -2160, 787, 512, 90 } } },
+	{ "cairn_assembly", qtrue , 4, { { -2326, 815, 472, 62 }, { -2324, 1118, 472, -54 }, { -2339, 970, 472, 2 }, { -2232, 974, 472, 2 } } },
 	{ "cairn_bay", qfalse, 3, { { -3128, 176, 600, 135 }, { -3088, 216, 600, 135 }, { -3168, 216, 600, 135 } } },
 	{ "cairn_dock1", qfalse, 3, { { 6584, -5928, 464, 90 }, { 6664, -5928, 464, 90 }, { 6624, -5968, 468, 90 } } },
 	{ "cairn_reactor", qfalse, 3, { { 1464, -8912, -584, 270 }, { 1384, -8912, -584, 270 }, { 1424, -8872, -584, 270 } } },
@@ -999,6 +1004,66 @@ static const rp_jo_spawns_t rp_jo_spawns[] = {
 	{ "yavin_temple", qfalse, 3, { { 896, -1336, -488, 90 }, { 976, -1336, -488, 90 }, { 936, -1296, -488, 90 } } },
 	{ "yavin_trial", qfalse, 3, { { 135, 383, 24, -92 }, { 356, -105, 56, 164 }, { 505, 199, 88, 8 } } },
 };
+
+/*
+------------------
+Single-player map lists
+
+Which campaign a map comes from, by its name -- the only reliable test there is. DAJ runs these
+maps in FFA, so the gametype says nothing, and the folder does not either: custom multiplayer maps
+sit in maps/ just as the SP maps do, and must keep the multiplayer meaning of every classname.
+The two campaigns have to be told apart as well, not just "SP or not" -- misc_turret's spawnflag
+4 is TURBO in Jedi Academy and means nothing in Jedi Outcast (SP_misc_turret(), g_turret.c).
+No name is on both lists.
+
+  - Jedi Academy: Zyk's SP map list, which sets level.sp_map (and so rp_sp_npc_fix) as it always
+    did -- the 28 campaign maps and the six academy hubs;
+  - Jedi Outcast: the 28 maps of the spawn-point table above.
+------------------
+*/
+static const char *rp_ja_sp_maps[] = {
+	"yavin1", "yavin1b", "yavin2",
+	"t1_danger", "t1_fatal", "t1_inter", "t1_rail", "t1_sour", "t1_surprise",
+	"hoth2", "hoth3",
+	"t2_dpred", "t2_rancor", "t2_rogue", "t2_trip", "t2_wedge",
+	"vjun1", "vjun2", "vjun3",
+	"t3_bounty", "t3_byss", "t3_hevil", "t3_rift", "t3_stamp",
+	"taspir1", "taspir2", "kor1", "kor2",
+	// GalaxyRP fix: [NPC] the six academy hub maps were missing, so rp_sp_npc_fix never applied
+	// to the SP maps most likely to host RP -- the ones with Kyle, Luke, Rosh, the students and
+	// the protocol droids in them.
+	"academy1", "academy2", "academy3", "academy4", "academy5", "academy6",
+};
+
+static qboolean RP_IsJediAcademySPMap( const char *mapname )
+{
+	int i;
+
+	for ( i = 0; i < (int)ARRAY_LEN( rp_ja_sp_maps ); i++ )
+	{
+		if ( !Q_stricmp( mapname, rp_ja_sp_maps[i] ) )
+		{
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
+static qboolean RP_IsJediOutcastMap( const char *mapname )
+{
+	int i;
+
+	for ( i = 0; i < (int)ARRAY_LEN( rp_jo_spawns ); i++ )
+	{
+		if ( !Q_stricmp( mapname, rp_jo_spawns[i].map ) )
+		{
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
 
 // zyk_create_info_player_deathmatch() with the target passed in: it copies the target of the
 // first spawn point it finds, which is gone on the maps that remove their original.
@@ -1032,10 +1097,19 @@ resting landing to call it back would keep it away longer instead, and on bespin
 lift that means holding a 1,728-unit shaft open in the street. So every panel goes through one of
 these: resting at pos1 -> a normal use, and it travels to pos2; waiting at pos2 -> it heads back
 now instead of after its wait; moving -> ignored, so nobody reverses it under a rider. Every press
-therefore means "go to the other end".
+therefore means "go to the other end" -- once the lift has stood at that landing for
+RP_LIFT_CALL_COOLDOWN: a press sooner than that after it arrives is ignored too, so the people
+it brought can step off before anyone sends it away again (and a rider still holding the use key
+on the deck does not bounce it straight back). SetMoverState() stamps s.pos.trTime with the
+moment the lift reached pos1 or pos2, so that is what the cooldown counts from. It is 0 on a lift
+that has not moved since the map loaded, and that never blocks -- level.time itself can be under
+the cooldown when the server has only just started.
 ------------------
 */
+#define RP_LIFT_CALL_COOLDOWN	3000	// ms after a lift reaches either end before a call moves it
+
 extern void ReturnToPos1( gentity_t *ent );
+extern void InitMoverTrData( gentity_t *ent );
 extern void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );
 extern void Use_Multi( gentity_t *ent, gentity_t *other, gentity_t *activator );
 
@@ -1045,6 +1119,12 @@ static void RP_LiftCallUse( gentity_t *self, gentity_t *other, gentity_t *activa
 
 	if ( !lift || !lift->inuse || lift->s.eType != ET_MOVER || !lift->use )
 	{
+		return;
+	}
+
+	if ( ( lift->moverState == MOVER_POS1 || lift->moverState == MOVER_POS2 ) &&
+		lift->s.pos.trTime && level.time < lift->s.pos.trTime + RP_LIFT_CALL_COOLDOWN )
+	{ // arrived less than the cooldown ago
 		return;
 	}
 
@@ -1123,9 +1203,11 @@ without those scripts nothing here moves. Fixed as follows:
     at the bottom until a script raised it: it now rests at the top (START_OPEN's position swap
     undone, not TOGGLE, 5-second wait), since at street level the shaft is open with floor right
     up to its edge and a lift resting at the bottom would leave that drop open; at the top the
-    deck closes the street and the column fills the shaft. It gets a use-trigger over each
-    landing, 48 units wider than the shaft and 88 high, built from its own bounds. Renamed, so a
+    deck closes the street and the column fills the shaft. It travels at the map's own speed (200,
+    8.6 seconds end to end). It gets a use-trigger over each landing, 48 units wider than the
+    shaft and 88 high, built from its own bounds, that fires at most every 3 seconds. Renamed, so a
     leftover script cannot drive it;
+  - every lift, the start lift too, ignores calls for RP_LIFT_CALL_COOLDOWN after it arrives;
   - the R5 droid stood on the lift deck, inside the column now: its spawner (which spawns it after
     this has run) moves beside the new spawn points, clear of the lift trigger, facing the lift.
 ------------------
@@ -1266,6 +1348,10 @@ static void RP_FixBespinStreets( void )
 		uplift->wait = 5000;
 		uplift->targetname = G_NewString( "rp_uplift" );
 		G_SetOrigin( uplift, uplift->pos1 );
+		// G_SetOrigin() zeroes s.pos.trDuration, the travel time SP_func_door worked out from the
+		// speed -- and SetMoverState() turns a zero into 1 ms, which made the lift jump from end to
+		// end. Work it out again from pos1, pos2 and the map's speed.
+		InitMoverTrData( uplift );
 		trap->LinkEntity( (sharedEntity_t *)uplift );
 
 		RP_SpawnLiftCall( uplift, "rp_liftcall_uplift" );
@@ -1281,7 +1367,7 @@ static void RP_FixBespinStreets( void )
 			maxs[0] = deck[0] + uplift->r.maxs[0] + 48;
 			maxs[1] = deck[1] + uplift->r.maxs[1] + 48;
 			maxs[2] = mins[2] + 88;
-			RP_SpawnTrigger( mins, maxs, "rp_liftcall_uplift", 1 | 4, 1.0f );	// CLIENTONLY | USE_BUTTON
+			RP_SpawnTrigger( mins, maxs, "rp_liftcall_uplift", 1 | 4, 3.0f );	// CLIENTONLY | USE_BUTTON
 		}
 	}
 }
@@ -1542,23 +1628,16 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// protocol_imp and r2d2_imp on vjun3 unconditionally to stay under the old 16-entry
 	// MAX_ANIM_FILES, which has been 128 since 3.47. Both types are on the rp_sp_npc_fix list.
 
-	if (Q_stricmp(zyk_mapname, "yavin1") == 0 || Q_stricmp(zyk_mapname, "yavin1b") == 0 || Q_stricmp(zyk_mapname, "yavin2") == 0 || 
-		Q_stricmp(zyk_mapname, "t1_danger") == 0 || Q_stricmp(zyk_mapname, "t1_fatal") == 0 || Q_stricmp(zyk_mapname, "t1_inter") == 0 ||
-		Q_stricmp(zyk_mapname, "t1_rail") == 0 || Q_stricmp(zyk_mapname, "t1_sour") == 0 || Q_stricmp(zyk_mapname, "t1_surprise") == 0 ||
-		Q_stricmp(zyk_mapname, "hoth2") == 0 || Q_stricmp(zyk_mapname, "hoth3") == 0 || Q_stricmp(zyk_mapname, "t2_dpred") == 0 ||
-		Q_stricmp(zyk_mapname, "t2_rancor") == 0 || Q_stricmp(zyk_mapname, "t2_rogue") == 0 || Q_stricmp(zyk_mapname, "t2_trip") == 0 ||
-		Q_stricmp(zyk_mapname, "t2_wedge") == 0 || Q_stricmp(zyk_mapname, "vjun1") == 0 || Q_stricmp(zyk_mapname, "vjun2") == 0 ||
-		Q_stricmp(zyk_mapname, "vjun3") == 0 || Q_stricmp(zyk_mapname, "t3_bounty") == 0 || Q_stricmp(zyk_mapname, "t3_byss") == 0 ||
-		Q_stricmp(zyk_mapname, "t3_hevil") == 0 || Q_stricmp(zyk_mapname, "t3_rift") == 0 || Q_stricmp(zyk_mapname, "t3_stamp") == 0 ||
-		Q_stricmp(zyk_mapname, "taspir1") == 0 || Q_stricmp(zyk_mapname, "taspir2") == 0 || Q_stricmp(zyk_mapname, "kor1") == 0 ||
-		Q_stricmp(zyk_mapname, "kor2") == 0 ||
-		// GalaxyRP fix: [NPC] the six academy hub maps were missing, so rp_sp_npc_fix never applied
-		// to the SP maps most likely to host RP -- the ones with Kyle, Luke, Rosh, the students and
-		// the protocol droids in them.
-		Q_stricmp(zyk_mapname, "academy1") == 0 || Q_stricmp(zyk_mapname, "academy2") == 0 || Q_stricmp(zyk_mapname, "academy3") == 0 ||
-		Q_stricmp(zyk_mapname, "academy4") == 0 || Q_stricmp(zyk_mapname, "academy5") == 0 || Q_stricmp(zyk_mapname, "academy6") == 0)
+	// GalaxyRP: [SP Maps] the single-player map lists moved into RP_IsJediAcademySPMap() and
+	// RP_IsJediOutcastMap() above; sp_map is set from the first exactly as before.
+	if ( RP_IsJediAcademySPMap( zyk_mapname ) )
 	{
 		level.sp_map = qtrue;
+		level.rp_sp_game = RP_SP_GAME_JA;
+	}
+	else if ( RP_IsJediOutcastMap( zyk_mapname ) )
+	{
+		level.rp_sp_game = RP_SP_GAME_JO;
 	}
 
 	// GalaxyRP fix: [Entity System] this MUST be reset before the line below and nowhere else.

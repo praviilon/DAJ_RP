@@ -5568,6 +5568,15 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 	}
 
+	// GalaxyRP: [SP Maps] a single-player map's misc_turret takes no damage from the team it leaves
+	// alone, as single player's noDamageTeam -- see RP_SpawnSPTurret() in g_turret.c. So a stray
+	// shot from one of the map's own stormtroopers neither hurts it nor, through TurretG2Pain(),
+	// makes it turn on him.
+	if ( targ->rpSpTurret && attacker && attacker->client && attacker->client->playerTeam == targ->rpSpTurretTeam )
+	{
+		return;
+	}
+
 	#ifdef BASE_COMPAT
 		// battlesuit protects from all radius damage (but takes knockback)
 		// and protects 50% against all damage
