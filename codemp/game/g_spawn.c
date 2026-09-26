@@ -2300,8 +2300,8 @@ void G_LinkLocations( void ) {
 // promote them. There level.spawning is qfalse, and that is fine: G_Spawn() carries no such guard
 // (the only readers of the flag are G_SpawnString, zyk_brush_model_allowed and the two legacy-slot
 // helpers, none of which this pass calls), and the legacy-slot swap below simply becomes a no-op
-// on zeros, which is correct -- legacySlot only drives the hardcoded per-map fixups in G_InitGame,
-// which finished long before. That call site sits above the load block's G_FindTeams(), mirroring
+// on zeros, which is correct -- legacySlot only describes the map's own spawn pass, which finished
+// long before (see gentity_t::legacySlot). That call site sits above the load block's G_FindTeams(), mirroring
 // the order here: G_FindTeams builds teammaster/teamchain POINTER chains and moves a slave's
 // targetname onto its master, so a free-and-reallocate has to happen before it, not after.
 //

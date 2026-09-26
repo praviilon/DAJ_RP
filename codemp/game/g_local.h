@@ -390,9 +390,11 @@ struct gentity_s {
 	// map entity been networked -- what its number WAS before this feature. Assigned only to
 	// entities allocated while the map is spawning (level.spawning), by a small simulation of the
 	// old allocator that runs beside the real one (RP_LegacySlotAssign/Release in g_utils.c).
-	// Exists for the two SP-map fix-ups in G_InitGame that identify entities by their number
-	// (hoth3's 232/233, kor1's 418-422): those numbers were read off the old layout and stay
-	// valid against this field. 0 for anything spawned later.
+	// 0 for anything spawned later. It was written for the SP-map fix-ups in G_InitGame that
+	// picked entities by number, as New Zyk mod still does; those now match by classname and
+	// brush model instead (see RP_IsBrushEntity() in g_main.c), so nothing reads it today. Kept
+	// because it reproduces New Zyk mod's numbering exactly -- the way to find out which entity
+	// one of its slot numbers means before porting a fix from it.
 	int			legacySlot;
 
 	int			flags;				// FL_* variables

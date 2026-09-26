@@ -912,6 +912,18 @@ void zyk_create_ctf_player_spawn(int x, int y, int z, int yaw, qboolean redteam,
 	}
 }
 
+// GalaxyRP: [SP Maps] the per-map fix-ups in G_InitGame name the entities they change by what they
+// are -- classname and brush model -- rather than by entity number. New Zyk mod picks some of them
+// by slot; those numbers only hold for one spawn order and one server config (g_weaponDisable frees
+// rack weapons at load and shifts every later number), so each was matched against the real map and
+// replaced by the classname and "*N" model of the entity it hit. An inline model belongs to exactly
+// one entity in a map, and a freed entity (classname "freed", model NULL) never matches.
+static qboolean RP_IsBrushEntity( const gentity_t *ent, const char *classname, const char *model )
+{
+	return ( ent->inuse && ent->classname && ent->model &&
+		!Q_stricmp( ent->classname, classname ) && !Q_stricmp( ent->model, model ) ) ? qtrue : qfalse;
+}
+
 // zyk: used to fix func_door entities in SP maps that wont work and must be removed without causing the door glitch
 void fix_sp_func_door(gentity_t *ent)
 {
@@ -1046,10 +1058,13 @@ static void RP_LiftCallUse( gentity_t *self, gentity_t *other, gentity_t *activa
 	}
 }
 
-// The logic entity panels target; target_ent is the lift. Never linked, networked or thinking.
+// The logic entity panels target; target_ent is the lift. Never linked, networked or thinking, and
+// only ever reached by name through G_UseTargets() -> G_Find(), which walks both regions -- so it
+// goes in the logical region like a target_relay, and falls back to a networked slot only when
+// rp_logical_entities was 0 at map start.
 static void RP_SpawnLiftCall( gentity_t *lift, const char *name )
 {
-	gentity_t *call = G_Spawn();
+	gentity_t *call = level.logical_entities_enabled ? G_SpawnLogical() : G_Spawn();
 
 	call->classname = "rp_lift_call";
 	call->targetname = G_NewString( name );
@@ -1057,10 +1072,11 @@ static void RP_SpawnLiftCall( gentity_t *lift, const char *name )
 	call->use = RP_LiftCallUse;
 }
 
-// A use-button trigger volume (a trigger_multiple with CLIENTONLY | USE_BUTTON) built in place: a
-// trigger_multiple spawned without a brush model works, but InitTrigger() complains about it on
-// the console at every map load.
-static void RP_SpawnUseTrigger( const vec3_t absmin, const vec3_t absmax, const char *target )
+// A trigger volume (a trigger_multiple) built in place: one spawned without a brush model works,
+// but InitTrigger() complains about it on the console at every map load. spawnflags as
+// trigger_multiple's (1 CLIENTONLY, 4 USE_BUTTON); wait in seconds, and -1 fires once, as
+// trigger_once does.
+static void RP_SpawnTrigger( const vec3_t absmin, const vec3_t absmax, const char *target, int spawnflags, float wait )
 {
 	gentity_t *trig = G_Spawn();
 	vec3_t center;
@@ -1074,9 +1090,9 @@ static void RP_SpawnUseTrigger( const vec3_t absmin, const vec3_t absmax, const 
 	}
 
 	trig->classname = "trigger_multiple";
-	trig->spawnflags = 1 | 4;			// CLIENTONLY | USE_BUTTON
+	trig->spawnflags = spawnflags;
 	trig->target = G_NewString( target );
-	trig->wait = 1.0f;					// seconds
+	trig->wait = wait;
 	trig->touch = Touch_Multi;
 	trig->use = Use_Multi;
 	trig->r.contents = CONTENTS_TRIGGER;
@@ -1096,7 +1112,10 @@ without those scripts nothing here moves. Fixed as follows:
     func_door as well as the name -- "copdoors" is also a target_deactivate's name. A door's team
     partners go with it (copdoors is a two-door team, and G_FindTeams() has moved the partner's
     name onto the master), and team links are cut first: moving a door team relinks every member,
-    and a partner already freed must not be;
+    and a partner already freed must not be. Their target and target2 are cleared first too:
+    opening a door fires its target, which would have spawned locked_door1's eight ledge_enemies
+    (Rodians, Grans, a Weequay; MP ignores the difficulty flags, so all eight) at map load. They
+    now spawn when a player first walks through that doorway, from a one-shot trigger put there;
   - lift1-lift5: they already have a use-panel (trigger_multiple, USE_BUTTON) at each landing
     that fired a single-player script; the panels now target a lift call for their lift, and the
     lifts wait 5 seconds at the far end instead of 3;
@@ -1120,6 +1139,8 @@ static void RP_FixBespinStreets( void )
 	int numDoors = 0;
 	gentity_t *ent;
 	gentity_t *uplift = NULL;
+	vec3_t ledgeMins, ledgeMaxs;
+	qboolean haveLedgeDoor = qfalse;
 	int i;
 
 	RP_FOR_EACH_ENTITY( ent )
@@ -1188,12 +1209,48 @@ static void RP_FixBespinStreets( void )
 
 	for ( i = 0; i < numDoors; i++ )
 	{
-		doors[i]->teamchain = NULL;
-		doors[i]->teammaster = doors[i];
+		gentity_t *door = doors[i];
+
+		// the doorway locked_door1 closed: both halves fire ledge_enemies when they start to open.
+		// Kept, before the targets are cleared below, to put a trigger in their place.
+		if ( door->target && !Q_stricmp( door->target, "ledge_enemies" ) )
+		{
+			vec3_t dmins, dmaxs;
+			int k;
+
+			VectorAdd( door->r.currentOrigin, door->r.mins, dmins );
+			VectorAdd( door->r.currentOrigin, door->r.maxs, dmaxs );
+			for ( k = 0; k < 3; k++ )
+			{
+				if ( !haveLedgeDoor || dmins[k] < ledgeMins[k] ) ledgeMins[k] = dmins[k];
+				if ( !haveLedgeDoor || dmaxs[k] > ledgeMaxs[k] ) ledgeMaxs[k] = dmaxs[k];
+			}
+			haveLedgeDoor = qtrue;
+		}
+
+		// fix_sp_func_door() opens a door before it frees it, and a door that starts to open fires
+		// its target (Use_BinaryMover_Go) -- at map load, for nobody. target2 is cleared with it.
+		door->target = NULL;
+		door->target2 = NULL;
+
+		door->teamchain = NULL;
+		door->teammaster = door;
 	}
 	for ( i = 0; i < numDoors; i++ )
 	{
 		fix_sp_func_door( doors[i] );
+	}
+
+	// the ledge enemies now appear when a player first walks through that doorway, as they did in
+	// single player when the door opened: a one-shot, players-only trigger filling the opening,
+	// 32 units deep either side of the doors' plane (their thin horizontal axis)
+	if ( haveLedgeDoor )
+	{
+		int thin = ( ledgeMaxs[0] - ledgeMins[0] ) <= ( ledgeMaxs[1] - ledgeMins[1] ) ? 0 : 1;
+
+		ledgeMins[thin] -= 32;
+		ledgeMaxs[thin] += 32;
+		RP_SpawnTrigger( ledgeMins, ledgeMaxs, "ledge_enemies", 1, -1.0f );	// CLIENTONLY, fire once
 	}
 
 	if ( uplift && (uplift->spawnflags & 1) )
@@ -1224,7 +1281,7 @@ static void RP_FixBespinStreets( void )
 			maxs[0] = deck[0] + uplift->r.maxs[0] + 48;
 			maxs[1] = deck[1] + uplift->r.maxs[1] + 48;
 			maxs[2] = mins[2] + 88;
-			RP_SpawnUseTrigger( mins, maxs, "rp_liftcall_uplift" );
+			RP_SpawnTrigger( mins, maxs, "rp_liftcall_uplift", 1 | 4, 1.0f );	// CLIENTONLY | USE_BUTTON
 		}
 	}
 }
@@ -1860,7 +1917,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{ // zyk: remove the map change entity
 				G_FreeEntity( ent );
 			}
-			if (ent->legacySlot == 232 || ent->legacySlot == 233)
+			// GalaxyRP: [SP Maps] these were entities 232 and 233 (New Zyk mod picks them by slot); matched
+			// by what they are, which is the same two: the script runners for elevator1 near the end of
+			// the map, hoth3/elevator (t146, the call button) and common/elevator (t145, the car). Their
+			// name is removed, so neither trigger reaches its script any more.
+			if (Q_stricmp(ent->classname, "target_scriptrunner") == 0 &&
+				(Q_stricmp(ent->targetname, "t146") == 0 || Q_stricmp(ent->targetname, "t145") == 0))
 			{ // zyk: fixing the final door
 				ent->targetname = NULL;
 				zyk_main_set_entity_field(ent, "targetname", "zykremovekey");
@@ -1907,10 +1969,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				GlobalUse(ent, ent, ent);
 			}
 
-			if (ent->legacySlot == 443)
-			{ // zyk: trigger_hurt at the spawn area
-				G_FreeEntity( ent );
-			}
+			// GalaxyRP fix: [SP Maps] a removal of entity 443 ("trigger_hurt at the spawn area") used to
+			// be here. On this map 443 is not that trigger: it is func_door *137, an ordinary automatic
+			// door, and freeing it closed nothing but left the area portal under it shut -- the doorway
+			// showed the void. The trigger it meant (*139, two slots later) is the falling-death volume
+			// of the chasm around the spawn platform, and parts of that chasm have no floor at all, so
+			// removing it would leave a player falling for ever. Both are left as the map made them.
 
 		}
 		zyk_create_info_player_deathmatch(-1563,-4241,4569,-157);
@@ -2009,7 +2073,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{ // zyk: elevator inside sand crawler near the wall fire
 				G_FreeEntity( ent );
 			}
-			if (Q_stricmp( ent->classname, "func_door") == 0 && ent->legacySlot > 200 && Q_stricmp( ent->model, "*63") == 0)
+			// GalaxyRP: [SP Maps] the brush model alone identifies it (a slot test above 200 went with it,
+			// and matched the same door); it is tube_door's team partner, freed after the master
+			if (Q_stricmp( ent->classname, "func_door") == 0 && Q_stricmp( ent->model, "*63") == 0)
 			{ // zyk: tube door in which the droid goes in SP
 				G_FreeEntity( ent );
 			}
@@ -2087,11 +2153,14 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{ // zyk: remove office door
 				G_FreeEntity(ent);
 			}
-			if (ent->legacySlot == 142)
+			// GalaxyRP: [SP Maps] these two were entities 142 and 166 (New Zyk mod picks them by slot);
+			// matched by brush model, which is the same two: the scripted elevator car
+			// (penthouse_elevator1, whose *38 the func_plat below reuses) and its use-button
+			if (Q_stricmp(ent->classname, "func_static") == 0 && Q_stricmp(ent->model, "*38") == 0)
 			{ // zyk: remove the elevator
 				G_FreeEntity(ent);
 			}
-			if (ent->legacySlot == 166)
+			if (Q_stricmp(ent->classname, "trigger_multiple") == 0 && Q_stricmp(ent->model, "*47") == 0)
 			{ // zyk: remove the elevator button
 				G_FreeEntity(ent);
 			}
@@ -2172,8 +2241,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			else if (Q_stricmp( ent->classname, "func_door") == 0 && ent->legacySlot > 200)
+			else if (Q_stricmp( ent->classname, "func_door") == 0 && Q_stricmp( ent->model, "*79" ) == 0)
 			{ // zyk: door in the far end of the map, past the teleports the old Race Mode used
+			  // GalaxyRP: [SP Maps] matched by brush model; this was "any func_door above slot 200",
+			  // and *79 is the only one there once cin_door (*78) has been freed by name above
 				G_FreeEntity( ent );
 			}
 			else if (Q_stricmp( ent->targetname, "t547") == 0)
@@ -2269,7 +2340,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
-			if (ent->legacySlot == 123 || ent->legacySlot == 124)
+			// GalaxyRP: [SP Maps] entities 123 and 124 in New Zyk mod: the map's only two TIE bombers
+			if (Q_stricmp(ent->classname, "misc_model_breakable") == 0 &&
+				(Q_stricmp(ent->script_targetname, "tie1") == 0 || Q_stricmp(ent->script_targetname, "tie2") == 0))
 			{ // zyk: removing tie fighter misc_model_breakable entities to prevent client crashes
 				G_FreeEntity( ent );
 			}
@@ -2305,7 +2378,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
-			if (ent->legacySlot == 42)
+			// GalaxyRP: [SP Maps] entity 42 in New Zyk mod: a 5000-damage trigger_hurt
+			if (RP_IsBrushEntity(ent, "trigger_hurt", "*3"))
 			{
 				G_FreeEntity( ent );
 			}
@@ -2460,7 +2534,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
-			if (ent->legacySlot >= 418 && ent->legacySlot <= 422)
+			// GalaxyRP: [SP Maps] entities 418-422 in New Zyk mod: the five floor slabs s9..s5 of the
+			// first puzzle, brush models *78..*82
+			if (RP_IsBrushEntity(ent, "func_static", "*78") || RP_IsBrushEntity(ent, "func_static", "*79") ||
+				RP_IsBrushEntity(ent, "func_static", "*80") || RP_IsBrushEntity(ent, "func_static", "*81") ||
+				RP_IsBrushEntity(ent, "func_static", "*82"))
 			{ // zyk: remove part of the door on the floor on the first puzzle
 				G_FreeEntity( ent );
 			}
@@ -2488,7 +2566,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			if (ent->legacySlot >= 236 && ent->legacySlot <= 238)
+			// GalaxyRP: [SP Maps] entities 236-238 in New Zyk mod: the three lava trigger_hurts
+			if (RP_IsBrushEntity(ent, "trigger_hurt", "*21") || RP_IsBrushEntity(ent, "trigger_hurt", "*22") ||
+				RP_IsBrushEntity(ent, "trigger_hurt", "*23"))
 			{ // zyk: removing the trigger_hurt from the lava in Guardian of Universe arena
 				G_FreeEntity( ent );
 			}
@@ -2513,7 +2593,14 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			if (ent->legacySlot >= 153 && ent->legacySlot <= 160)
+			// GalaxyRP: [SP Maps] entities 153-160 in New Zyk mod: the droid-head doors and what drives
+			// them -- the t408 door pair (*22, *23), the t410 door (*26), the two breakables (*24, *27)
+			// and the trigger (*25) that start the chain, and its relays t409 and t407
+			if (RP_IsBrushEntity(ent, "func_door", "*22") || RP_IsBrushEntity(ent, "func_door", "*23") ||
+				RP_IsBrushEntity(ent, "func_breakable", "*24") || RP_IsBrushEntity(ent, "trigger_once", "*25") ||
+				RP_IsBrushEntity(ent, "func_door", "*26") || RP_IsBrushEntity(ent, "func_breakable", "*27") ||
+				(Q_stricmp(ent->classname, "target_relay") == 0 &&
+				 (Q_stricmp(ent->targetname, "t409") == 0 || Q_stricmp(ent->targetname, "t407") == 0)))
 			{
 				G_FreeEntity( ent );
 			}
