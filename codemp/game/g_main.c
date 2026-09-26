@@ -951,7 +951,8 @@ would telefrag). On five maps where the start is on a moving lift, inside a movi
 shuttle over a hurt zone or on a slope, the points were placed in game and checked the same way,
 and so were cairn_assembly's (see below).
 
-The original start is kept, except where it stands on or in something that moves:
+The original start is kept, except where it stands on or in something that moves, or where it
+hurts:
   - ns_starpad: at the bottom of a script-driven elevator ride of some 6,700 units;
   - ns_hideout: inside a moving bin under a low ceiling;
   - bespin_streets: on the start lift's deck, which RP_FixBespinStreets() below makes rest at the
@@ -959,7 +960,11 @@ The original start is kept, except where it stands on or in something that moves
   - cairn_assembly: in a closet behind ass_door, a door that starts open, wait -1. A one-shot
     trigger across the hall beyond it closes it for good the first time anyone walks through, and
     everyone who spawned after that was shut in. The four points are in that hall, past the door
-    and short of the trigger, out of sight of the two entry turrets.
+    and short of the trigger, out of sight of the two entry turrets;
+  - artus_detention: on the tram rail, where a player lands inside the rail's own trigger_hurt.
+    Three points are at the east end of the landing past the bridge the intro script collapses,
+    the fourth on the rock ledge below the landing's west end. See RP_FixArtusDetention() for the
+    falling beam the eastern three would otherwise never set off.
 Its target is read before it is removed, and every added point carries it, as Zyk's helper copies
 it: it is the map's single-player start script. level.rp_spawn_target_once makes it fire for the
 first spawn only (ClientSpawn(), g_client.c).
@@ -975,7 +980,7 @@ typedef struct rp_jo_spawns_s {
 } rp_jo_spawns_t;
 
 static const rp_jo_spawns_t rp_jo_spawns[] = {
-	{ "artus_detention", qfalse, 3, { { -241, 4222, 660, 167 }, { -215, 4360, 660, 178 }, { -182, 4509, 660, -158 } } },
+	{ "artus_detention", qtrue , 4, { { -241, 4222, 660, 167 }, { -215, 4360, 660, 178 }, { -182, 4509, 660, -158 }, { -815, 4545, 496, -4 } } },
 	{ "artus_mine", qfalse, 3, { { 3904, -2928, 1192, 180 }, { 3904, -2848, 1192, 180 }, { 3944, -2888, 1194, 180 } } },
 	{ "artus_topside", qfalse, 3, { { 2204, 1892, 160, 0 }, { 2204, 1812, 156, 0 }, { 2244, 1852, 156, 0 } } },
 	{ "bespin_platform", qfalse, 3, { { -1280, 40, 24, 0 }, { -1280, -40, 24, 0 }, { -1320, 0, 24, 0 } } },
@@ -1372,6 +1377,34 @@ static void RP_FixBespinStreets( void )
 	}
 }
 
+/*
+------------------
+RP_FixArtusDetention
+
+In single player Kyle arrives from the tram at the landing's west end and walks east across it.
+On the way he crosses a one-shot trigger (x -592..-552, the full width of the landing) that runs
+artus_detention/beam: a beam drops from the upper walkway and comes to rest as a 45-degree ramp
+from the landing up to it, killing the two guards up there. That ramp is the way to the upper
+booth, whose trigger unlocks the double door into the facility (t4) and arms the trigger that
+spawns the next squad.
+
+The three eastern spawn points are past where the beam lands, some 300 units short of that
+trigger, and a player can walk from them to the door -- through its east half, even -- without
+touching it. So a second one-shot, players-only trigger runs the same scriptrunner: a strip
+across the landing just west of those points, so the beam falls ahead of whoever first walks
+that way, as it did ahead of Kyle. The map's own trigger stays, for the ledge spawn point, whose
+way up to the landing crosses it. The scriptrunner allows one run (count 1), so the beam falls
+once whichever trigger fires first, and the other then does nothing.
+------------------
+*/
+static void RP_FixArtusDetention( void )
+{
+	const vec3_t mins = { -320, 4112, 636 };
+	const vec3_t maxs = { -288, 4568, 740 };
+
+	RP_SpawnTrigger( mins, maxs, "run_beam", 1, -1.0f );	// CLIENTONLY, fire once
+}
+
 static void RP_JediOutcastMapFixes( const char *mapname )
 {
 	int m;
@@ -1408,6 +1441,10 @@ static void RP_JediOutcastMapFixes( const char *mapname )
 		if ( !Q_stricmp( mapname, "bespin_streets" ) )
 		{
 			RP_FixBespinStreets();
+		}
+		else if ( !Q_stricmp( mapname, "artus_detention" ) )
+		{
+			RP_FixArtusDetention();
 		}
 		return;
 	}
