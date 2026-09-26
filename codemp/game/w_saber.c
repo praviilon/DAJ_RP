@@ -7645,6 +7645,7 @@ static void G_TossTheMofo(gentity_t *ent, vec3_t tossDir, float tossStr)
 }
 
 extern qboolean zyk_can_hit_target(gentity_t *attacker, gentity_t *target);
+extern void RP_AttackBreaksCloak( gentity_t *self );
 static gentity_t *G_KickTrace( gentity_t *ent, vec3_t kickDir, float kickDist, vec3_t kickEnd, int kickDamage, float kickPush )
 {
 	vec3_t	traceOrg, traceEnd, kickMins, kickMaxs;
@@ -7700,6 +7701,15 @@ static gentity_t *G_KickTrace( gentity_t *ent, vec3_t kickDir, float kickDist, v
 		}
 		if ( hitEnt->inuse )
 		{//we hit an entity
+			// GalaxyRP fix: [Cloak Item] a kick that lands on someone or something breaks the kicker's
+			// cloak -- kick moves are excluded from EV_SABER_ATTACK (bg_saber.c), so nothing else does.
+			// A kick that only meets the world or an inert brush (a wall kick, say) does not count.
+			// See RP_AttackBreaksCloak (w_force.c).
+			if ( hitEnt->client || hitEnt->takedamage )
+			{
+				RP_AttackBreaksCloak( ent );
+			}
+
 			//FIXME: don't hit same ent more than once per kick
 			if ( hitEnt->takedamage )
 			{//hurt it
@@ -8742,6 +8752,12 @@ nextStep:
 			if (!self->client->ps.saberEntityState && self->client->ps.saberEntityNum)
 			{
 				vec3_t startorg, startang, dir;
+
+				// GalaxyRP fix: [Cloak Item] this is the frame the saber leaves the owner's hand on a
+				// throw, and a throw never raises EV_SABER_ATTACK (the event that decloaks a swing), so
+				// break cloak here -- see RP_AttackBreaksCloak (w_force.c). A saber knocked out of the
+				// hand never comes through here: saberKnockOutOfHand sets saberEntityState itself.
+				RP_AttackBreaksCloak( self );
 
 				VectorCopy(boltOrigin, saberent->r.currentOrigin);
 

@@ -33,6 +33,39 @@ extern void NPC_Jedi_PlayConfusionSound( gentity_t *self );
 extern void NPC_UseResponse( gentity_t *self, gentity_t *user, qboolean useWhenDone );
 //NEEDED FOR MIND-TRICK on NPCS=========================================================
 extern void Jedi_Decloak( gentity_t *self );
+extern void Jedi_DecloakPair( gentity_t *self );
+extern qboolean Jedi_PairIsCloaked( gentity_t *self );
+
+// GalaxyRP fix: [Cloak Item] an attack that does not go through a weapon still breaks cloak. Cloak
+// already came down on weapon fire (FireWeapon, g_weapon.c) and on a saber swing (EV_SABER_ATTACK,
+// g_active.c), but the offensive Force powers, a saber throw and a kick announce themselves through
+// neither, so a cloaked player could lightning, drain, grip, push, pull, throw or kick while staying
+// invisible. Every such attack calls this at the moment it happens (w_force.c for the powers,
+// w_saber.c for the throw and the kick).
+//
+// Pair-aware for the same reason as the other hooks: riders can use the Force from the saddle (zyk
+// removed the vehicle block in BG_CanUseFPNow, bg_misc.c), so a rider's attack takes a cloaked
+// vehicle down with them even when the rider is not the cloaked half.
+//
+// Players only. The one NPC that cloaks, the Shadowtrooper, has its cloak driven every think by
+// Jedi_CheckCloak (NPC_AI_Jedi.c) from its saber state, so dropping it here would only be undone on
+// the next think -- a decloak/cloak sound pair every frame of a held grip or lightning.
+//
+// Like the weapon and saber hooks, and unlike taking damage in G_Damage, this sets no re-cloak
+// lockout: the attacker only loses the cloak, the toggle's own cooldown still applies, and the held
+// powers call this on every tick they run, so re-cloaking mid-attack does not stick.
+void RP_AttackBreaksCloak( gentity_t *self )
+{
+	if ( !self || !self->client || self->NPC )
+	{
+		return;
+	}
+
+	if ( Jedi_PairIsCloaked( self ) )
+	{
+		Jedi_DecloakPair( self );
+	}
+}
 
 extern qboolean BG_FullBodyTauntAnim( int anim );
 
@@ -1073,6 +1106,23 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 	if (!WP_ForcePowerAvailable( self, forcePower, overrideAmt ))
 	{
 		return;
+	}
+
+	// GalaxyRP fix: [Cloak Item] the offensive powers break cloak the moment they start -- see
+	// RP_AttackBreaksCloak. Mind Trick is deliberately left out: it is not an attack, so it keeps
+	// the cloak like the defensive and utility powers do. Grip, Drain and Lightning also
+	// break it on every frame they are held, in WP_ForcePowerRun.
+	switch ( (int)forcePower )
+	{
+	case FP_PUSH:
+	case FP_PULL:
+	case FP_GRIP:
+	case FP_LIGHTNING:
+	case FP_DRAIN:
+		RP_AttackBreaksCloak( self );
+		break;
+	default:
+		break;
 	}
 
 	if ( BG_FullBodyTauntAnim( self->client->ps.legsAnim ) )
@@ -5327,6 +5377,9 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			break;
 		}
 
+		// GalaxyRP fix: [Cloak Item] a held grip keeps breaking cloak, so re-cloaking while still
+		// choking someone does not stick -- see RP_AttackBreaksCloak.
+		RP_AttackBreaksCloak( self );
 		DoGripAction(self, forcePower);
 		break;
 	case FP_LEVITATION:
@@ -5406,6 +5459,9 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		{
 			while ( self->client->force.drainDebounce < level.time )
 			{
+				// GalaxyRP fix: [Cloak Item] every drain tick breaks cloak, not just the first -- see
+				// RP_AttackBreaksCloak.
+				RP_AttackBreaksCloak( self );
 				ForceShootDrain( self );
 				self->client->force.drainDebounce += FORCE_DEBOUNCE_TIME;
 			}
@@ -5435,6 +5491,9 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		{
 			while ( self->client->force.lightningDebounce < level.time )
 			{
+				// GalaxyRP fix: [Cloak Item] every lightning tick breaks cloak, not just the first -- see
+				// RP_AttackBreaksCloak.
+				RP_AttackBreaksCloak( self );
 				ForceShootLightning( self );
 				BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
 				self->client->force.lightningDebounce += FORCE_DEBOUNCE_TIME;
