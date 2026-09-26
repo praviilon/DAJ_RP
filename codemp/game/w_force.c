@@ -6388,6 +6388,77 @@ void sense_health_info(gentity_t *self, gentity_t *target)
 }
 
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
+
+// DAJ_RP: [Force Enlightenment] "is this player fighting in a Melee Battle right now?" -- melee_mode 2
+// is the battle itself (1 is sign-up, 3 the few seconds after a winner is declared, by which point the
+// winner has had their Force given back and been handed their prize). melee_players[] is indexed by
+// client number, so anything past MAX_CLIENTS -- NPCs run WP_ForcePowersUpdate() too -- is never in it.
+static qboolean RP_InMeleeBattle( gentity_t *self )
+{
+	if ( !self || self->s.number < 0 || self->s.number >= MAX_CLIENTS )
+	{
+		return qfalse;
+	}
+
+	return ( level.melee_mode == 2 && level.melee_players[self->s.number] != -1 ) ? qtrue : qfalse;
+}
+
+// DAJ_RP: [Force Enlightenment] put a player's Force back the way it was before Enlightenment
+// boosted it: the vanilla undo from WP_ForcePowersUpdate(), moved here verbatim so that
+// WP_EndForceEnlightenment() below runs exactly the same code. Restores every level from the
+// snapshot taken when the boost began, stops and forgets any power that snapshot had at 0, and
+// clears the "boosted" flag. Only meaningful while forceUsingAdded is set; both callers check.
+static void WP_UndoEnlightenedPowers( gentity_t *self )
+{
+	int i = 0;
+
+	while (i < NUM_FORCE_POWERS)
+	{
+		self->client->ps.fd.forcePowerLevel[i] = self->client->ps.fd.forcePowerBaseLevel[i];
+		if (!self->client->ps.fd.forcePowerLevel[i])
+		{
+			if (self->client->ps.fd.forcePowersActive & (1 << i))
+			{
+				WP_ForcePowerStop(self, i);
+			}
+			self->client->ps.fd.forcePowersKnown &= ~(1 << i);
+		}
+
+		i++;
+	}
+
+	self->client->ps.fd.forceUsingAdded = 0;
+}
+
+// DAJ_RP: [Force Enlightenment] end a player's Enlightenment on the spot: clear both powerups and, if
+// the boost is currently applied, undo it right now rather than on the next WP_ForcePowersUpdate().
+//
+// Why "right now" matters: the undo restores a snapshot taken when the boost began. Anything that
+// rewrites the player's Force levels in the meantime -- loading a character at /login or /new, a
+// minigame saving the Force it is about to strip -- is silently overwritten by that stale snapshot
+// one frame later if the flag is still set. That is how a logout-then-login onto a full-Force
+// character came out with the logged-out player's powers instead. Callers:
+//   - zyk_reset_force_powerups() (g_cmds.c), for /new, /char new, /char use, /login and /logout,
+//     BEFORE the next character's (or the logged-out) Force is loaded;
+//   - duel_tournament_prepare() and melee_battle_prepare() (g_main.c), BEFORE player_backup_force(),
+//     so the Force saved and later restored is the player's own and not a boosted copy that would
+//     outlive the Enlightenment.
+void WP_EndForceEnlightenment( gentity_t *self )
+{
+	if ( !self || !self->client )
+	{
+		return;
+	}
+
+	self->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] = 0;
+	self->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK] = 0;
+
+	if ( self->client->ps.fd.forceUsingAdded )
+	{
+		WP_UndoEnlightenedPowers( self );
+	}
+}
+
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 {
 	int			i, holo, holoregen;
@@ -6635,7 +6706,15 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 	i = 0;
 
 	// zyk: added the rpg mode condition, because RPG Mode players cant get power ups
-	if (self->client->sess.amrpgmode < 2 && duel_tournament_is_duelist(self) == qfalse && 
+	// DAJ_RP: [Force Enlightenment] and not for a Melee Battle combatant while the battle is on, the
+	// same way it already never applies to the two duelists of a Duel Tournament. Both minigames
+	// strip the player's Force for the match (melee_battle_prepare(), duel_tournament_prepare() in
+	// g_main.c) -- an Enlightenment picked up mid-battle would otherwise add those powers straight
+	// back as usable. It stays on the player and applies once the battle is over, on top of the
+	// Force the minigame gives back. (Any boost the player brought INTO a minigame is ended before
+	// their Force is saved -- see WP_EndForceEnlightenment() above.)
+	if (self->client->sess.amrpgmode < 2 && duel_tournament_is_duelist(self) == qfalse &&
+		!RP_InMeleeBattle(self) &&
 		(self->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] || self->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK]))
 	{ //enlightenment
 		if (!self->client->ps.fd.forceUsingAdded)
@@ -6661,24 +6740,9 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 	}
 	else if (self->client->ps.fd.forceUsingAdded)
 	{ //we don't have enlightenment but we're still using enlightened powers, so clear them back to how they should be.
-		i = 0;
-
-		while (i < NUM_FORCE_POWERS)
-		{
-			self->client->ps.fd.forcePowerLevel[i] = self->client->ps.fd.forcePowerBaseLevel[i];
-			if (!self->client->ps.fd.forcePowerLevel[i])
-			{
-				if (self->client->ps.fd.forcePowersActive & (1 << i))
-				{
-					WP_ForcePowerStop(self, i);
-				}
-				self->client->ps.fd.forcePowersKnown &= ~(1 << i);
-			}
-
-			i++;
-		}
-
-		self->client->ps.fd.forceUsingAdded = 0;
+		// DAJ_RP: [Force Enlightenment] the undo now lives in WP_UndoEnlightenedPowers() so
+		// WP_EndForceEnlightenment() can run the very same code -- unchanged.
+		WP_UndoEnlightenedPowers(self);
 	}
 
 	i = 0;

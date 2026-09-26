@@ -6311,6 +6311,8 @@ void poison_dart_hits(gentity_t *ent)
 // along with their call sites in g_items.c.
 
 // zyk: backup player force powers
+extern void WP_EndForceEnlightenment( gentity_t *self );
+
 void player_backup_force(gentity_t *ent)
 {
 	int i = 0;
@@ -6581,6 +6583,14 @@ void duel_tournament_prepare(gentity_t *ent)
 	// zyk: reset hp and shield of duelist
 	ent->health = 100;
 	ent->client->ps.stats[STAT_ARMOR] = 100;
+
+	// DAJ_RP: [Force Enlightenment] end any Enlightenment BEFORE the Force is saved. Saved while
+	// boosted, the backup held the boosted levels; the powerup clear further down then left the
+	// "boosted" flag behind, the next frame undid the boost mid-duel, and after the duel
+	// player_restore_force() handed the boosted levels back with nothing left to ever undo them -- a
+	// logged-out duelist kept level 3 in every power of their side until their next respawn. See
+	// WP_EndForceEnlightenment() (w_force.c).
+	WP_EndForceEnlightenment(ent);
 
 	player_backup_force(ent);
 
@@ -7212,6 +7222,12 @@ void melee_battle_prepare()
 			// teleported onto the platform is the one ranged attack in the arena. See
 			// zyk_wind_down_seeker_drone() in g_cmds.c.
 			zyk_wind_down_seeker_drone(ent);
+
+			// DAJ_RP: [Force Enlightenment] end any Enlightenment before the Force is saved, as
+			// duel_tournament_prepare() does and for the same reason: a backup taken while boosted is
+			// handed back by melee_battle_restore() with nothing left to undo it. WP_ForcePowersUpdate()
+			// then keeps a new Enlightenment from applying until the battle is over.
+			WP_EndForceEnlightenment(ent);
 
 			// GalaxyRP fix: [Melee Battle] same as the loadout backup above, placed against the
 			// force strip that follows it exactly as duel_tournament_prepare() places its own.

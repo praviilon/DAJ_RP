@@ -1904,8 +1904,8 @@ static void CG_Speaker( centity_t *cent ) {
 }
 
 // GalaxyRP: [Force Enlightenment] the single client-side copy of the Enlightenment pickup rule that
-// Touch_Item() enforces on the server (g_items.c). Answers "would the server refuse this item to a
-// player on plSide?", and is used for both jobs that need that answer: the greyed-out/unhighlighted
+// Touch_Item() enforces on the server (g_items.c). Answers "would the server refuse this item to
+// this player -- logged in, or logged out on plSide?", and is used for both jobs that need that answer: the greyed-out/unhighlighted
 // rendering of the item (CG_Item and friends below, which pass cg.snap->ps.fd.forceSide) and the
 // client-side pickup prediction in CG_TouchItem (cg_predict.c, which passes the predicted
 // playerstate's copy of the same field). Those two used to carry separate hand-written copies of the
@@ -1926,13 +1926,15 @@ qboolean CG_GreyItem(int type, int tag, int plSide)
 	if (type == IT_POWERUP &&
 		(tag == PW_FORCE_ENLIGHTENED_LIGHT || tag == PW_FORCE_ENLIGHTENED_DARK))
 	{
-		// GalaxyRP: [Force Enlightenment] logged-in players can pick up either Enlightenment color
-		// now (see Touch_Item in g_items.c), so neither one is unavailable to them. ui_loggedin is
-		// kept in step with sess.loggedin by the "supdateloggedin" server command, which the server
-		// now sends on every login/logout transition and unconditionally from ClientBegin().
+		// GalaxyRP: [Force Enlightenment] DAJ_RP: logged-in players cannot pick up either
+		// Enlightenment color (see Touch_Item in g_items.c), so both are greyed out for them and
+		// neither pickup is predicted -- no pickup sound, no item vanishing for a frame. (This used to
+		// be the reverse: neither color greyed for a logged-in player.) ui_loggedin is kept in step
+		// with sess.loggedin by the "supdateloggedin" server command, which the server sends on every
+		// login/logout transition and unconditionally from ClientBegin().
 		if (ui_loggedin.integer)
 		{
-			return qfalse;
+			return qtrue;
 		}
 
 		if (tag == PW_FORCE_ENLIGHTENED_LIGHT)

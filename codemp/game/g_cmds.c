@@ -3851,6 +3851,41 @@ void zyk_reset_fuel( gentity_t *ent )
 	ent->client->ps.cloakFuel = 100;
 }
 
+// DAJ_RP: [Force Enlightenment] the Force powerups a switch of account or character must not carry
+// over: Boon, both Enlightenments and Ysalamiri. Nothing in /new, /char new, /char use, /login or
+// /logout touched them -- only a respawn did, through ClientSpawn()'s wipe of the whole client -- so
+// with rp_seamlesslogin on (the default) they simply kept running on whoever the player became next:
+// a Ysalamiri kept the new character Force-blocked, a Boon kept its faster regeneration.
+//
+// Enlightenment did real damage. It only ever boosts a logged-OUT player, and it works by saving the
+// player's Force levels, raising them, and writing the saved copy back when it ends. Picked up while
+// logged in (allowed until the same change that added this), it did nothing until /logout -- then it
+// boosted the logged-out powers. /login loaded the next character's full Force, but the "boosted" flag
+// was still set, so on the very next frame the "end" branch wrote the logged-out copy back over it: a
+// fully trained character came out with a logged-out player's level-3, one-alignment powers until they
+// next died. WP_EndForceEnlightenment() (w_force.c) undoes the boost at once, before anything new loads.
+//
+// Call it BEFORE the next Force is loaded -- initialize_rpg_skills() for a character,
+// WP_InitForcePowers() (inside zyk_remove_guns()) for /logout -- next to zyk_stop_active_force_powers(),
+// so what is loaded is the last word.
+//
+// Not in Siege: a class there can grant powerups (Ysalamiri among them) meant to last the whole life,
+// the same reason zyk_reset_saber_style() leaves Siege alone.
+extern void WP_EndForceEnlightenment( gentity_t *self );
+void zyk_reset_force_powerups( gentity_t *ent )
+{
+	if (!ent || !ent->client)
+		return;
+
+	if (level.gametype == GT_SIEGE)
+		return;
+
+	WP_EndForceEnlightenment(ent);
+
+	ent->client->ps.powerups[PW_FORCE_BOON] = 0;
+	ent->client->ps.powerups[PW_YSALAMIRI] = 0;
+}
+
 extern qboolean WP_SaberStyleValidForSaber( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int saberAnimLevel );
 extern qboolean WP_UseFirstValidSaberStyle( saberInfo_t *saber1, saberInfo_t *saber2, int saberHolstered, int *saberAnimLevel );
 
@@ -4942,6 +4977,10 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 	// levels WP_ForcePowerStop() reads to clean up properly.
 	zyk_stop_active_force_powers(ent);
 
+	// DAJ_RP: [Force Enlightenment] and the Force powerups, before the next character's Force loads
+	// -- see zyk_reset_force_powerups().
+	zyk_reset_force_powerups(ent);
+
 	// GalaxyRP fix: [Account] and the outgoing character's running HOLDABLES, for the same reason
 	// and with the same ordering requirement -- see zyk_stop_active_holdables().
 	zyk_stop_active_holdables(ent);
@@ -5402,8 +5441,8 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ent->client->sess.loggedin = qtrue;
 
 		// GalaxyRP: [Force Enlightenment] push the login state to the client immediately -- see the
-		// matching comment in g_client.c -- so CG_GreyItem stops greying out the "wrong side"
-		// Enlightenment pickup for this player right away, not only after the Profile UI is opened.
+		// matching comment in g_client.c -- so CG_GreyItem greys out both Enlightenment pickups for
+		// this player right away, not only after the Profile UI is opened.
 		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
 		// GalaxyRP fix: [gameplay] Same bug as select_player_character() above, plus this copy
@@ -6376,6 +6415,10 @@ void Cmd_Login_F(gentity_t * ent)
 	// running before the incoming character's force levels replace the ones WP_ForcePowerStop()
 	// needs to read. See zyk_stop_active_force_powers().
 	zyk_stop_active_force_powers(ent);
+
+	// DAJ_RP: [Force Enlightenment] and the Force powerups, before the character's Force loads --
+	// see zyk_reset_force_powerups(). This is the /login this bug was found on.
+	zyk_reset_force_powerups(ent);
 
 	// GalaxyRP fix: [Account] same for the outgoing character's running holdables, and before the
 	// skills load for the same reason -- see zyk_stop_active_holdables().
@@ -12316,6 +12359,11 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	// See zyk_stop_active_force_powers().
 	zyk_stop_active_force_powers(ent);
 
+	// DAJ_RP: [Force Enlightenment] and the Force powerups, before zyk_remove_guns() rebuilds the
+	// logged-out Force -- see zyk_reset_force_powerups(). An Enlightenment still running here would
+	// otherwise start boosting the logged-out powers on the next frame.
+	zyk_reset_force_powerups(ent);
+
 	// GalaxyRP fix: [Account] and the running holdables. /logout takes every one of them away, so
 	// this is the path where leaving them running is least defensible -- see
 	// zyk_stop_active_holdables(). Above zyk_remove_guns() to match the other two commands; that
@@ -12378,8 +12426,8 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 	ent->client->sess.loggedin = qfalse;
 
 	// GalaxyRP: [Force Enlightenment] see the matching comment in g_client.c -- keeps cgame's
-	// CG_GreyItem in sync with login state right away (goes back to greying out the "wrong side"
-	// Enlightenment pickup once this player is logged out again).
+	// CG_GreyItem in sync with login state right away (goes back to the vanilla rule -- only the
+	// "wrong side" Enlightenment pickup greyed -- once this player is logged out again).
 	trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
 	trap->SendServerCommand(-1, va("chat \"^3%s ^2logged out\n\"", ent->client->pers.netname));

@@ -673,6 +673,9 @@ static void CG_TouchItem( centity_t *cent ) {
 	// cg.predictedPlayerState is the right playerstate to ask here (prediction runs ahead of the last
 	// snapshot, which is what the rendering callers pass); fd.forceSide is server-authoritative and
 	// never changes during prediction, so the two agree in practice as well as in principle.
+	// DAJ_RP: the rule itself has since changed -- a logged-in player can no longer take either color
+	// -- and this call follows it with no change here: both colors are refused, so neither pickup is
+	// predicted and no pickup sound plays.
 	if ( CG_GreyItem( item->giType, item->giTag, cg.predictedPlayerState.fd.forceSide ) )
 	{
 		return;

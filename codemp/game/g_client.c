@@ -2982,9 +2982,9 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		ent->client->sess.loggedin = qtrue;
 
 		// GalaxyRP: [Force Enlightenment] push the login state to the client immediately -- not just
-		// on the next Profile menu open (see Cmd_GalaxyRpUi_f) -- so cgame's CG_GreyItem stops
-		// greying out the "wrong side" Enlightenment pickup for this player as soon as they're
-		// actually logged in, not only after they happen to open the Profile UI.
+		// on the next Profile menu open (see Cmd_GalaxyRpUi_f) -- so cgame's CG_GreyItem greys out
+		// both Enlightenment pickups (DAJ_RP: logged-in players cannot take either color) as soon as
+		// they're actually logged in, not only after they happen to open the Profile UI.
 		trap->SendServerCommand(ent->s.number, va("supdateloggedin %i\n", ent->client->sess.loggedin));
 
 		sqlite3* db;
@@ -3012,9 +3012,10 @@ void ClientBegin( int clientNum, qboolean allowTeamReset ) {
 		// begins a map *without* an account session was never told so. ui_loggedin is CVAR_ROM|
 		// CVAR_INTERNAL and cgame never resets it (Cvar_Register does not clobber an existing value),
 		// so a player who was logged in on the previous map or server arrives here still holding a
-		// stale "1" -- and cgame would then both un-grey and, worse, *predict* a pickup of the
-		// wrong-side Force Enlightenment that Touch_Item() is going to refuse, mispredicting the
-		// pickup sound and hiding the item until the next snapshot corrects it. Send the real value
+		// stale "1" -- and cgame would then apply the wrong Enlightenment rule to them. (It used to
+		// un-grey and predict a pickup of the wrong-side color that Touch_Item() refuses; with the
+		// DAJ_RP rule, a stale "1" would instead grey out and refuse to predict their OWN side's
+		// color, which the server does grant, so the pickup sound would go missing.) Send the real value
 		// on this path too, so ui_loggedin is authoritative for every client from ClientBegin onward.
 		//
 		// Deliberately an else rather than a single unconditional push below the block: the block has

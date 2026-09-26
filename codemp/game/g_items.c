@@ -2965,14 +2965,20 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	}
 
 	if (ent->item->giType == IT_POWERUP &&
-		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK) &&
-		other->client->sess.loggedin == qfalse)
-	{ // GalaxyRP: [Force Enlightenment] logged-in players can no longer change their Force alignment
-	  // through traditional means (no /forcealign, no picking a new side at spawn -- see the RPG
-	  // account/character system), so they would otherwise be permanently locked out of whichever
-	  // Enlightenment pickup doesn't match the alignment they picked once, long ago. Restrict this
-	  // side check to logged-out players, who can still freely change alignment and so still get the
-	  // vanilla behavior; a logged-in player can pick up either color.
+		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK))
+	{ // GalaxyRP: [Force Enlightenment] DAJ_RP: logged-in players cannot pick up either color. The
+	  // effect never applied to them -- WP_ForcePowersUpdate() (w_force.c) only boosts players with
+	  // sess.amrpgmode < 2 -- so a pickup did nothing but bank a boost that kicked in after /logout
+	  // and then clobbered the next character's powers at /login. This used to be the opposite
+	  // carve-out (logged-in players could take either color); refusing both is the simpler rule.
+	  // cgame's CG_GreyItem() (cg_ents.c) carries the same rule for the grey-out and for pickup
+	  // prediction, so the item is drawn disabled and no pickup sound is predicted -- keep the two
+	  // in step. Logged-out players keep the vanilla rule: only their own side's color.
+		if (other->client->sess.loggedin == qtrue)
+		{
+			return;
+		}
+
 		if (ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{
 			if (other->client->ps.fd.forceSide != FORCE_LIGHTSIDE)
