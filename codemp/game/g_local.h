@@ -876,9 +876,9 @@ typedef struct clientPersistant_s {
 	// comment at its old gate in w_force.c's ForcePowerUsableOn()), freeing the bit for reuse rather
 	// than retiring it. It is now the Use Hint (/settings 4): whether the gfx/hud/useableHint hand
 	// icon is drawn while looking at a usable world entity. Inverted like the other toggles here
-	// (clear == ON, set == OFF), and because a zeroed player_settings therefore reads as ON, new
-	// accounts are created with this bit SET so the feature starts OFF -- see the hardcoded default in
-	// insert_accounts_table_row() (g_cmds.c), the same mechanism bit 13 uses.
+	// (clear == ON, set == OFF). New accounts are created with this bit CLEAR, so the hint starts ON
+	// -- see the hardcoded default in insert_accounts_table_row() (g_cmds.c). (It used to be SET there,
+	// starting new accounts OFF.)
 	// IMPORTANT, for anyone reusing a "free" bit after this one: free of readers is not the same as
 	// free of data. Bit 6 was /settings 2, "Allow Force Powers from allies", a live player-facing
 	// toggle right up until the settings cleanup that retired it -- so accounts that predate this

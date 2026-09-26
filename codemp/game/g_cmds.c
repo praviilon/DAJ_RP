@@ -2700,16 +2700,15 @@ qboolean insert_accounts_table_row(gentity_t* ent, char* username, char* passwor
 	sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt, 2, password, -1, SQLITE_TRANSIENT);
 	sqlite3_bind_int(stmt, 3, rp_default_account_permissions.integer);
-	// GalaxyRP: [Use hint] bit 6 (Use Hint) joins bit 13 here for the same reason -- it is inverted
-	// (clear == ON), so a new account whose PlayerSettings was plain 0 would come out of this INSERT
-	// with the hand icon already showing. Setting it makes the stored default OFF, which is what the
-	// feature ships as. Note this covers accounts created by /new only: the built-in "admin" account
-	// created by InitializeGalaxyRpTables() (g_main.c) still inserts PlayerSettings '0' literally and
-	// is deliberately left that way, so it keeps starting with both Admin Protect and the Use Hint ON.
-	// DAJ_RP: [Settings] and bit 5 (Sense Health Toggle, /settings 1) for the same reason: inverted, and
-	// meant to start OFF. It used to be "Language", left clear here for English.
+	// DAJ_RP: [Settings] bit 6 (Use Hint, /settings 4) is deliberately NOT set here: it is inverted
+	// (clear == ON), so leaving it clear makes new accounts start with the Use Hint ON. (It used to be
+	// set here, starting new accounts OFF.) Existing accounts keep whatever they have. The built-in
+	// "admin" account created by InitializeGalaxyRpTables() (g_main.c) inserts PlayerSettings '0'
+	// literally, so it starts with every setting ON, Use Hint included.
+	// DAJ_RP: [Settings] bit 5 (Sense Health Toggle, /settings 1) is set for the same reason as bit 13:
+	// inverted, and meant to start OFF. It used to be "Language", left clear here for English.
 	// DAJ_RP: [Settings] and bit 16 (Ignore Chat Distance, /settings 5), inverted too and meant to start OFF.
-	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 6) | (1 << 5) | (1 << 16)); // Admin Protect + Use Hint + Sense Health Toggle + Ignore Chat Distance OFF by default
+	sqlite3_bind_int(stmt, 4, (1 << 13) | (1 << 5) | (1 << 16)); // Admin Protect + Sense Health Toggle + Ignore Chat Distance OFF by default; Use Hint (bit 6) ON
 	sqlite3_bind_text(stmt, 5, username, -1, SQLITE_TRANSIENT);
 	rc = sqlite3_step(stmt);
 	// GalaxyRP fix: [stability] this used to never check the INSERT's own result -- an error here (most
@@ -14056,13 +14055,15 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// availability (that's Cmd_Jetpack_f, which checks unrelated fields), so toggling it never did
 		// anything.
 
+		// DAJ_RP: [Settings] worded like setting 5 -- the setting can only be turned ON with the "Admin
+		// Protect" admin power (see the gate further down), and only has any effect with it.
 		if (ent->client->pers.player_settings & (1 << 13))
 		{
-			len += sprintf(message + len, "\n^3 2 - Admin Protect ^1OFF");
+			len += sprintf(message + len, "\n^3 2 - Admin Protect (Requires Admin Protect admin power) - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 2 - Admin Protect ^2ON");
+			len += sprintf(message + len, "\n^3 2 - Admin Protect (Requires Admin Protect admin power) - ^2ON");
 		}
 
 		// GalaxyRP fix: [Settings] new setting: reuses player_settings bit 11, freed up when the old
@@ -14081,9 +14082,8 @@ void Cmd_Settings_f( gentity_t *ent ) {
 
 		// GalaxyRP: [Use hint] new setting: reuses player_settings bit 6, freed up when the old "Allow
 		// Force Powers from allies" toggle that used to own it was removed -- no DB migration needed.
-		// Inverted like every other toggle here (clear == ON, set == OFF). The default is OFF, which
-		// under that inversion means the bit must be SET, so insert_accounts_table_row() creates new
-		// accounts with it already set rather than this reading the convention backwards.
+		// Inverted like every other toggle here (clear == ON, set == OFF). New accounts start with it
+		// ON, i.e. insert_accounts_table_row() leaves the bit clear.
 		if (ent->client->pers.player_settings & (1 << 6))
 		{
 			len += sprintf(message + len, "\n^3 4 - Use Hint - ^1OFF");
@@ -14174,6 +14174,15 @@ void Cmd_Settings_f( gentity_t *ent ) {
 			return;
 		}
 
+		// DAJ_RP: [Settings] the same gate for Ignore Chat Distance (bit 16, /settings 5): turning it ON
+		// needs the "Ignore Chat Distance" admin power, the only thing it has any effect with (see
+		// zyk_ignores_chat_distance()). Turning it OFF is never gated. A player who switched it on before
+		// this gate existed keeps it on, harmlessly -- it still does nothing without the power.
+		if (value == 16 && (ent->client->pers.player_settings & (1 << value)) && !check_admin_command(ent, ADM_IGNORECHATDISTANCE, qtrue))
+		{
+			return;
+		}
+
 		if (ent->client->pers.player_settings & (1 << value))
 		{
 			ent->client->pers.player_settings &= ~(1 << value);
@@ -14242,16 +14251,9 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		}
 		else if (value == 16)
 		{
-			// DAJ_RP: [Settings] allowed without the admin power -- it just does nothing until the power
-			// is granted -- so warn rather than refuse, as the Sense Health Toggle does
-			if (!(ent->client->pers.player_settings & (1 << 16)) && !(ent->client->pers.bitvalue & (1 << ADM_IGNORECHATDISTANCE)))
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"Ignore Chat Distance %s\n^3You don't have the Ignore Chat Distance admin power, so this has no effect.\n\"", new_status) );
-			}
-			else
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"Ignore Chat Distance %s\n\"", new_status) );
-			}
+			// DAJ_RP: [Settings] no "no effect" warning any more: turning it ON without the admin power
+			// is now refused by the gate above, so ON always means it works.
+			trap->SendServerCommand( ent-g_entities, va("print \"Ignore Chat Distance %s\n\"", new_status) );
 		}
 		// GalaxyRP fix: [Challenge Mode] the value==14 (Boss Battle Music) and value==15 (Difficulty)
 		// print branches used to be here. Removed since 14 and 15 are now rejected above as invalid
@@ -16749,7 +16751,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_ADMPROTECT)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nWith this flag, a player can use Admin Protect option in ^3/settings ^7to self-protect from gameplay-related admin commands\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nWith this flag, a player can use the Admin Protect option (^3/settings 2^7) to self-protect from gameplay-related admin commands\n\n\"" );
 		}
 		else if (command_number == ADM_ENTITYSYSTEM)
 		{
