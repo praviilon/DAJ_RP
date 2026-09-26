@@ -2183,6 +2183,8 @@ void	G_CleanAllFakeClients(void);
 void	G_SetAnim(gentity_t *ent, usercmd_t *ucmd, int setAnimParts, int anim, int setAnimFlags, int blendTime);
 gentity_t *G_PickTarget (char *targetname);
 void	GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator);
+// GalaxyRP: [Shop] the Stun Baton Upgrade's effect on a mover it hits -- see g_mover.c.
+void	RP_StunBatonUseMover( gentity_t *mover, gentity_t *user );
 void	G_UseTargets2( gentity_t *ent, gentity_t *activator, const char *string );
 void	G_UseTargets (gentity_t *ent, gentity_t *activator);
 void	G_SetMovedir ( vec3_t angles, vec3_t movedir);

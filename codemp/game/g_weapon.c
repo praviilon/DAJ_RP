@@ -3559,10 +3559,13 @@ void WP_FireStunBaton( gentity_t *ent, qboolean alt_fire )
 	// GalaxyRP fix: [Shop] cvar renamed from zyk_allow_stun_baton_upgrade to rp_stun_baton_door_unlock
 	// to match its actual scope -- it only ever gated this door-unlock effect, never the upgrade's
 	// speed-debuff effect below.
+	// GalaxyRP: [Shop] doors, plats and buttons are unlocked and activated for good and opened in the
+	// same hit, even inactive ones single player's scripts or droids would have activated -- see
+	// RP_StunBatonUseMover() in g_mover.c; every other mover gets the GlobalUse() it always did.
 	if (ent->client->sess.amrpgmode == 2 && ent->client->pers.skill_levels[38] & (1 << 2) && tr_ent->s.eType == ET_MOVER &&
 		rp_stun_baton_door_unlock.integer == 1)
 	{
-		GlobalUse(tr_ent, ent, ent);
+		RP_StunBatonUseMover(tr_ent, ent);
 	}
 
 	if (tr_ent && tr_ent->takedamage && tr_ent->client)

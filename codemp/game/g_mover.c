@@ -930,6 +930,60 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator )
 	}
 }
 
+/*
+================
+RP_StunBatonUseMover
+
+GalaxyRP: [Shop] what the Stun Baton Upgrade does to a mover it hits. It used to be GlobalUse(),
+which gives up on an inactive mover (spawnflag INACTIVE, a target_deactivate, an ICARUS
+SET_INACTIVE) and only unlocks a locked door -- a second hit opened it, and UnLockDoors() also
+strips a non-toggle door's name, so that door's own button or script could never open it again.
+
+For the binary movers -- doors, plats and buttons -- the baton now unlocks and activates the whole
+team for good and opens it in the same hit: FL_INACTIVE and MOVER_LOCKED are cleared on every
+member (with the locked-door shader stepped to its unlocked frame, as UnLockDoors() does), the
+name is kept, and the master is used like any button would use it. A locked door already has its
+touch trigger from spawn (locked doors always get one), so from then on it opens for everyone;
+an inactive one answers its own trigger, button or use key again. The map can still lock or
+deactivate it later, and a map load restores it. Every other mover keeps plain GlobalUse().
+================
+*/
+void RP_StunBatonUseMover( gentity_t *mover, gentity_t *user )
+{
+	gentity_t *master, *member;
+
+	if ( !mover || !mover->inuse )
+	{
+		return;
+	}
+
+	if ( mover->use != Use_BinaryMover || !mover->classname ||
+		( Q_stricmp( mover->classname, "func_door" ) && Q_stricmp( mover->classname, "func_plat" ) &&
+		  Q_stricmp( mover->classname, "func_button" ) ) )
+	{
+		GlobalUse( mover, user, user );
+		return;
+	}
+
+	master = mover;
+	if ( ( master->flags & FL_TEAMSLAVE ) && master->teammaster && master->teammaster->inuse )
+	{
+		master = master->teammaster;
+	}
+
+	for ( member = master; member; member = member->teamchain )
+	{
+		member->flags &= ~FL_INACTIVE;
+		if ( member->spawnflags & MOVER_LOCKED )
+		{
+			member->spawnflags &= ~MOVER_LOCKED;
+			member->s.frame = 1;	// second stage of the locked-door shader anim, as UnLockDoors()
+		}
+	}
+
+	Use_BinaryMover( master, user, user );
+}
+
 
 
 /*
