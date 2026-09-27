@@ -3413,6 +3413,9 @@ void select_weapons_table_row_from_entity(gentity_t* ent, sqlite3* db, char* zEr
 		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 5);
 		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 6);
 		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 7);
+
+		// DAJ_RP: [Ammo] and never above the server's caps -- see RP_ClampAmmoToCaps() (g_items.c).
+		RP_ClampAmmoToCaps(ent);
 	}
 
 	// GalaxyRP fix: [stability] the finalize used to live inside the SQLITE_ROW branch above, so the
@@ -4915,6 +4918,9 @@ qboolean select_player_character(gentity_t* ent, char *character_name, sqlite3* 
 		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 82);
 		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 83);
 
+		// DAJ_RP: [Ammo] and never above the server's caps -- see RP_ClampAmmoToCaps() (g_items.c).
+		RP_ClampAmmoToCaps(ent);
+
 		// GalaxyRP (Alex): [Database] Apply the modelname and net name.
 		set_netname(ent, displayName);
 		set_model(ent, modelName);
@@ -5482,6 +5488,9 @@ void select_account_and_default_character_data(gentity_t* ent, char username[32]
 		ent->client->ps.ammo[AMMO_THERMAL] = sqlite3_column_int(stmt, 87);
 		ent->client->ps.ammo[AMMO_TRIPMINE] = sqlite3_column_int(stmt, 88);
 		ent->client->ps.ammo[AMMO_DETPACK] = sqlite3_column_int(stmt, 89);
+
+		// DAJ_RP: [Ammo] and never above the server's caps -- see RP_ClampAmmoToCaps() (g_items.c).
+		RP_ClampAmmoToCaps(ent);
 
 		sqlite3_finalize(stmt);
 

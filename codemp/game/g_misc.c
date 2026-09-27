@@ -1924,20 +1924,70 @@ void shield_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *a
 	}
 }
 
+// DAJ_RP: [Ammo] may an ammo dispenser top up this ammo type for this player? Only the types that
+// have a server cap (RP_MaxAmmo() > 0 -- which leaves out emplaced-gun ammo, never a dispenser's to
+// hand out), and explosives only for a player who already owns that weapon. Thermals, trip mines and
+// detpacks are both the ammo and the weapon: a logged-in character gets the weapon from its Thermals /
+// Trip Mines / Detpacks skill (initialize_rpg_skills), a logged-out player from whatever they are
+// carrying, and a dispenser must not be a way round either.
+static qboolean RP_DispenserMayGiveAmmo( gentity_t *activator, int ammoType )
+{
+	if ( RP_MaxAmmo( ammoType ) <= 0 )
+	{
+		return qfalse;
+	}
+
+	if ( ammoType == AMMO_THERMAL )
+	{
+		return ( activator->client->ps.stats[STAT_WEAPONS] & (1 << WP_THERMAL) ) ? qtrue : qfalse;
+	}
+	if ( ammoType == AMMO_TRIPMINE )
+	{
+		return ( activator->client->ps.stats[STAT_WEAPONS] & (1 << WP_TRIP_MINE) ) ? qtrue : qfalse;
+	}
+	if ( ammoType == AMMO_DETPACK )
+	{
+		return ( activator->client->ps.stats[STAT_WEAPONS] & (1 << WP_DET_PACK) ) ? qtrue : qfalse;
+	}
+
+	return qtrue;
+}
+
+// DAJ_RP: [Ammo] would an ammo dispenser give this player anything at all, were it charged?
+static qboolean RP_PlayerNeedsDispenserAmmo( gentity_t *activator )
+{
+	int i;
+
+	for ( i = AMMO_BLASTER; i < AMMO_MAX; i++ )
+	{
+		if ( RP_DispenserMayGiveAmmo( activator, i ) && activator->client->ps.ammo[i] < RP_MaxAmmo( i ) )
+		{
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
 //dispense generic ammo
+// DAJ_RP: [Ammo] misc_ammo_floor_unit. Reworked:
+// - It no longer hands out the Thermal, Trip Mine and Det Pack WEAPONS. zyk added that grant: any
+//   player below the explosive caps got all three, so a logged-in character bypassed the Thermals /
+//   Trip Mines / Detpacks skills entirely and kept the weapons until their next respawn. Explosive ammo
+//   is now topped up only for a weapon the player already has -- see RP_DispenserMayGiveAmmo().
+// - It drains its charge once per use, and only when it actually gave something (vanilla behaviour).
+//   It used to drain once per ammo TYPE on every use, given or not -- emplaced-gun ammo, which it never
+//   gives, included -- so a fully stocked player holding Use emptied it for everyone else.
+// - An empty unit (charge 0, not "nodrain") gives nothing. It used to give one type's worth before
+//   noticing it was empty.
+// - It only takes the unit over (self->activator, which pauses check_recharge()) when it gives
+//   something or is empty, so a player who needs nothing no longer stops it recharging by holding Use,
+//   while an empty unit still waits for the player to let go before it recharges, as before.
+// Caps are unchanged: Add_Ammo() fills to the rp_max_* cvars, as it always did here.
 void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *activator)
 {
-	int /*dif,*/ add;
-	//int ammoType;
+	int add;
 	int stop = 1;
-
-	int max_blasterpack_ammo = rp_max_blaster_pack_ammo.integer;
-	int max_powercell_ammo = rp_max_power_cell_ammo.integer;
-	int max_metalbolt_ammo = rp_max_metal_bolt_ammo.integer;
-	int max_rocket_ammo = rp_max_rocket_ammo.integer;
-	int max_thermal_ammo = rp_max_thermal_ammo.integer;
-	int max_tripmine_ammo = rp_max_tripmine_ammo.integer;
-	int max_detpack_ammo = rp_max_detpack_ammo.integer;
 
 	if (!activator || !activator->client)
 	{
@@ -1950,7 +2000,7 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 	if (self->setTime < level.time)
 	{
 		int i = AMMO_BLASTER;
-		int max_ammo = 0;
+		qboolean gave = qfalse;
 
 		if (!self->s.loopSound)
 		{
@@ -1958,26 +2008,15 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 			self->s.loopIsSoundset = qfalse;
 		}
 		//self->setTime = level.time + 100;
-		self->fly_sound_debounce_time = level.time + 500;
-		self->activator = activator;
+
+		if (!self->genericValue12 && self->count <= 0)
+		{ // empty: give nothing -- the block below plays the "empty" sound and waits for the recharge
+			i = AMMO_MAX;
+		}
+
 		while (i < AMMO_MAX)
 		{
-			if (i == AMMO_BLASTER)
-				max_ammo = max_blasterpack_ammo;
-			else if (i == AMMO_POWERCELL)
-				max_ammo = max_powercell_ammo;
-			else if (i == AMMO_METAL_BOLTS)
-				max_ammo = max_metalbolt_ammo;
-			else if (i == AMMO_ROCKETS)
-				max_ammo = max_rocket_ammo;
-			else if (i == AMMO_THERMAL)
-				max_ammo = max_thermal_ammo;
-			else if (i == AMMO_TRIPMINE)
-				max_ammo = max_tripmine_ammo;
-			else if (i == AMMO_DETPACK)
-				max_ammo = max_detpack_ammo;
-			else
-				max_ammo = 0;
+			int max_ammo = RP_MaxAmmo(i);
 
 			add = max_ammo * 0.008;
 
@@ -1986,60 +2025,49 @@ void ammo_generic_power_converter_use( gentity_t *self, gentity_t *other, gentit
 				add = 1;
 			}
 
-			if (activator->client->ps.ammo[i] < max_ammo)
+			// GalaxyRP fix: [RPG Class] removed the "some RPG classes cannot get ammo" early-break
+			// (rpg_class == 1/4/6/8) and the Force Guardian (rpg_class==9) explosive-weapon skip;
+			// pers.rpg_class is permanently 0, so both were dead code.
+			if (RP_DispenserMayGiveAmmo(activator, i) && activator->client->ps.ammo[i] < max_ammo)
 			{
 				// zyk: changed this. Now it will use Add_Ammo function
-				// activator->client->ps.ammo[i] += add;
-
-				// GalaxyRP fix: [RPG Class] removed the "some RPG classes cannot get ammo" early-break
-				// (rpg_class == 1/4/6/8) and the Force Guardian (rpg_class==9) explosive-weapon skip;
-				// pers.rpg_class is permanently 0, so both were dead code.
-
-				if (level.gametype != GT_SIEGE)
-				{
-					if (i == AMMO_THERMAL)
-					{
-						activator->client->ps.stats[STAT_WEAPONS] |= (1 << WP_THERMAL);
-					}
-					else if (i == AMMO_TRIPMINE)
-					{
-						activator->client->ps.stats[STAT_WEAPONS] |= (1 << WP_TRIP_MINE);
-					}
-					else if (i == AMMO_DETPACK)
-					{
-						activator->client->ps.stats[STAT_WEAPONS] |= (1 << WP_DET_PACK);
-					}
-				}
-
 				Add_Ammo(activator, i, add);
-				stop = 0;
+				gave = qtrue;
 			}
 
 			i++;
+		}
+
+		if (gave)
+		{
+			stop = 0;
+			self->fly_sound_debounce_time = level.time + 500;
+			self->activator = activator;
 
 			if (!self->genericValue12)
 			{
-				int sub = (add*0.2);
-				if (sub < 1)
-				{
-					sub = 1;
-				}
-				self->count -= sub;
+				self->count--;
 				if (self->count <= 0)
 				{
 					self->count = 0;
 					stop = 1;
-					break;
 				}
 			}
 		}
+		else if (!self->genericValue12 && self->count <= 0 && RP_PlayerNeedsDispenserAmmo(activator))
+		{ // empty and held by someone who needs ammo: keep hold of it, as vanilla did, so it does not
+		  // recharge (and trickle ammo back out) until they let go -- check_recharge() only recharges
+		  // a unit with no activator. A player who needs nothing does not hold it up.
+			self->fly_sound_debounce_time = level.time + 500;
+			self->activator = activator;
+		}
 	}
 
-	if (stop || self->count <= 0)
+	if (stop || (!self->genericValue12 && self->count <= 0))
 	{
 		if (self->s.loopSound && self->setTime < level.time)
 		{
-			if (self->count <= 0)
+			if (!self->genericValue12 && self->count <= 0)
 			{
 				G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/interface/ammocon_empty"));
 			}
@@ -2299,10 +2327,22 @@ void EnergyAmmoStationSettings(gentity_t *ent)
 ammo_power_converter_use
 ================
 */
+// DAJ_RP: [Ammo] misc_model_ammo_power_converter. Reworked -- it had four faults:
+// - Infinite ammo. "Has it got any power left?" was "if (self->count)", i.e. "not exactly 0", and each
+//   use took 3 off a default charge of 200 -- not a multiple of 3 -- so the charge went 2 -> -1 -> -4
+//   and never landed on 0: once it had been drained it gave forever. Empty is now "0 or less", and
+//   the charge is never taken below 0.
+// - It ignored the server's ammo caps, filling to the engine's ammoData[] maximums instead (1000
+//   blaster / powercell / metal bolts, 100 rockets, 30 of each explosive against caps of 300 / 25 /
+//   10). Ammo is saved to the database, so a logged-in character kept the overfill for good. It now
+//   fills through Add_Ammo(), to the rp_max_* caps, 10% of the cap per use (minimum 1) as before.
+// - It gave explosives to players without the weapon, and emplaced-gun ammo to anyone -- see
+//   RP_DispenserMayGiveAmmo().
+// - It drained 3 per use whether or not it gave anything, and never stopped its loop sound. It now
+//   drains only when it actually gave something, and stops the sound when it doesn't.
+#define RP_AMMO_CONVERTER_DRAIN	3	// the charge one giving use costs -- unchanged from before
 void ammo_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *activator)
 {
-	int			add = 0.0f;//,highest;
-//	int			difBlaster,difPowerCell,difMetalBolts;
 	int			stop = 1;
 
 	if (!activator || !activator->client)
@@ -2312,82 +2352,59 @@ void ammo_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *act
 
 	if (self->setTime < level.time)
 	{
-		if (!self->s.loopSound)
-		{
-			self->s.loopSound = G_SoundIndex("sound/player/pickupshield.wav");
-		}
-
 		self->setTime = level.time + 100;
 
-		if (self->count)	// Has it got any power left?
+		if (self->genericValue12 || self->count > 0)	// Has it got any power left?
 		{
-			int i = AMMO_BLASTER;
-			while (i < AMMO_MAX)
+			int i;
+			qboolean gave = qfalse;
+
+			for (i = AMMO_BLASTER; i < AMMO_MAX; i++)
 			{
-				add = ammoData[i].max*0.1;
+				int max_ammo = RP_MaxAmmo(i);
+				int add = max_ammo * 0.1;
+
+				if (!RP_DispenserMayGiveAmmo(activator, i) || activator->client->ps.ammo[i] >= max_ammo)
+				{
+					continue;
+				}
+
 				if (add < 1)
 				{
 					add = 1;
 				}
-				if (activator->client->ps.ammo[i] < ammoData[i].max)
+
+				Add_Ammo(activator, i, add);
+				gave = qtrue;
+			}
+
+			if (gave)
+			{
+				if (!self->s.loopSound)
 				{
-					activator->client->ps.ammo[i] += add;
-					if (activator->client->ps.ammo[i] > ammoData[i].max)
+					self->s.loopSound = G_SoundIndex("sound/player/pickupshield.wav");
+				}
+
+				if (!self->genericValue12)
+				{
+					self->count -= RP_AMMO_CONVERTER_DRAIN;
+					if (self->count < 0)
 					{
-						activator->client->ps.ammo[i] = ammoData[i].max;
+						self->count = 0;
 					}
 				}
-				i++;
-			}
-			if (!self->genericValue12)
-			{
-				self->count -= add;
-			}
-			stop = 0;
+				stop = 0;
 
+				self->fly_sound_debounce_time = level.time + 500;
+				self->activator = activator;
+			}
+		}
+		else if (RP_PlayerNeedsDispenserAmmo(activator))
+		{ // empty and held by someone who needs ammo: keep hold of it so it does not recharge until they
+		  // let go. check_recharge() refills a converter with no activator by 1 every frame (it has no
+		  // "chargerate"), which otherwise matched the drain and let a held, empty converter keep giving.
 			self->fly_sound_debounce_time = level.time + 500;
 			self->activator = activator;
-
-			/*
-			if (self->count > MAX_AMMO_GIVE)
-			{
-				add = MAX_AMMO_GIVE;
-			}
-			else if (self->count<0)
-			{
-				add = 0;
-			}
-			else
-			{
-				add = self->count;
-			}
-
-			activator->client->ps.ammo[AMMO_BLASTER] += add;
-			activator->client->ps.ammo[AMMO_POWERCELL] += add;
-			activator->client->ps.ammo[AMMO_METAL_BOLTS] += add;
-
-			self->count -= add;
-			stop = 0;
-
-			self->fly_sound_debounce_time = level.time + 500;
-			self->activator = activator;
-
-			difBlaster = activator->client->ps.ammo[AMMO_BLASTER] - ammoData[AMMO_BLASTER].max;
-			difPowerCell = activator->client->ps.ammo[AMMO_POWERCELL] - ammoData[AMMO_POWERCELL].max;
-			difMetalBolts = activator->client->ps.ammo[AMMO_METAL_BOLTS] - ammoData[AMMO_METAL_BOLTS].max;
-
-			// Find the highest one
-			highest = difBlaster;
-			if (difPowerCell>difBlaster)
-			{
-				highest = difPowerCell;
-			}
-
-			if (difMetalBolts > highest)
-			{
-				highest = difMetalBolts;
-			}
-			*/
 		}
 	}
 

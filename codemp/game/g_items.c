@@ -2528,6 +2528,58 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 //======================================================================
 
+// DAJ_RP: [Ammo] the server's cap for one ammo type -- the same rp_max_* cvar Add_Ammo() below fills
+// to, in one place so the ammo dispensers (g_misc.c) and the load-time clamp can ask for it instead of
+// carrying their own copy of this list. 0 for anything with no rp_max_* cvar (AMMO_NONE, AMMO_FORCE,
+// AMMO_EMPLACED), which Add_Ammo() never fills either.
+int RP_MaxAmmo( int ammoType )
+{
+	switch ( ammoType )
+	{
+	case AMMO_BLASTER:		return rp_max_blaster_pack_ammo.integer;
+	case AMMO_POWERCELL:	return rp_max_power_cell_ammo.integer;
+	case AMMO_METAL_BOLTS:	return rp_max_metal_bolt_ammo.integer;
+	case AMMO_ROCKETS:		return rp_max_rocket_ammo.integer;
+	case AMMO_THERMAL:		return rp_max_thermal_ammo.integer;
+	case AMMO_TRIPMINE:		return rp_max_tripmine_ammo.integer;
+	case AMMO_DETPACK:		return rp_max_detpack_ammo.integer;
+	default:				return 0;
+	}
+}
+
+// DAJ_RP: [Ammo] bring every capped ammo type down to its rp_max_* cap -- lowers only, never raises.
+// Called right after a character's saved ammo is read from the database (/login, /new, /char and
+// every respawn -- see g_cmds.c), so ammo saved above the caps is cut back on the next load and saved
+// correctly from then on. That covers the overfill the old misc_model_ammo_power_converter handed out
+// (it filled to the engine's ammoData[] maximums -- 1000 blaster packs against a cap of 300), and any
+// character left above a cap an admin has since lowered.
+void RP_ClampAmmoToCaps( gentity_t *ent )
+{
+	int i;
+
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	for ( i = AMMO_BLASTER; i < AMMO_MAX; i++ )
+	{
+		int cap;
+
+		if ( i == AMMO_EMPLACED )
+		{ // no rp_max_* cvar and no Weapons column -- not ours to touch
+			continue;
+		}
+
+		cap = RP_MaxAmmo( i );
+
+		if ( cap >= 0 && ent->client->ps.ammo[i] > cap )
+		{
+			ent->client->ps.ammo[i] = cap;
+		}
+	}
+}
+
 void Add_Ammo (gentity_t *ent, int weapon, int count)
 {
 	int max_blasterpack_ammo = rp_max_blaster_pack_ammo.integer;

@@ -2069,6 +2069,8 @@ gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity );
 void G_SpawnItem (gentity_t *ent, gitem_t *item);
 void FinishSpawningItem( gentity_t *ent );
 void	Add_Ammo (gentity_t *ent, int weapon, int count);
+int		RP_MaxAmmo( int ammoType );
+void	RP_ClampAmmoToCaps( gentity_t *ent );
 void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace);
 
 void ClearRegisteredItems( void );
