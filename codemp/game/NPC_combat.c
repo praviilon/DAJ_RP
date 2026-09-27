@@ -642,6 +642,10 @@ void ChangeWeapon( gentity_t *ent, int newWeapon )
 		if ( ent->NPC->scriptFlags & SCF_ALT_FIRE )
 		{
 			// zyk: increased 500 in burstSpacing in each difficulty level
+			// DAJ_RP: [NPC] "default" rather than "case 2": g_npcspskill above 2 (bots read the same cvar
+			// as 1-5) used to set nothing here, leaving whatever spacing the previous weapon had -- 0 for
+			// a fresh NPC, i.e. disruptor alt fire with no delay at all. Above 2 now acts as 2, as it
+			// does in every if/else ladder in this function.
 			switch( g_npcspskill.integer )
 			{
 			case 0:
@@ -650,7 +654,7 @@ void ChangeWeapon( gentity_t *ent, int newWeapon )
 			case 1:
 				ent->NPC->burstSpacing = 2000;//attackdebounce
 				break;
-			case 2:
+			default:
 				ent->NPC->burstSpacing = 1500;//attackdebounce
 				break;
 			}
@@ -673,24 +677,47 @@ void ChangeWeapon( gentity_t *ent, int newWeapon )
 		break;
 
 	case WP_REPEATER:
+		// DAJ_RP: [NPC] rate of fire rebalanced. zyk had cut this to bursts of 5-20 shots with a
+		// 0.10-0.15 s pause at every skill level -- in practice a continuous stream of ~9 bolts a
+		// second, plus a plasma bomb every 0.8 s, which made the Galak mech (a repeater NPC) a
+		// noticeable load on the server and clients. Now graded by g_npcspskill, landing near vanilla
+		// overall: bursts grow and pauses shrink with skill. The gun fires 10 shots a second inside a
+		// burst (weaponData fireTime 100), so roughly 2.3 / 3.8 / 5.6 shots a second at skill 0 / 1 /
+		// 2, against ~9 before and 3.0 / 3.9 / 5.7 in vanilla.
 		if ( ent->NPC->scriptFlags & SCF_ALT_FIRE )
-		{
+		{ // one plasma bomb at a time (the gun's own limit is one per 0.8 s); was 0.8 s at every level
 			ent->NPC->aiFlags &= ~NPCAI_BURST_WEAPON;
-			ent->NPC->burstSpacing = 800;//attackdebounce
+			if ( g_npcspskill.integer == 0 )
+				ent->NPC->burstSpacing = 2500;//attackdebounce
+			else if ( g_npcspskill.integer == 1 )
+				ent->NPC->burstSpacing = 2000;//attackdebounce
+			else
+				ent->NPC->burstSpacing = 1500;//attackdebounce
 		}
 		else
 		{
 			ent->NPC->aiFlags |= NPCAI_BURST_WEAPON;
-			ent->NPC->burstMin = 5;
-			ent->NPC->burstMean = 14;
-			ent->NPC->burstMax = 20;
-			// zyk: changed bursts and burstspacing
 			if ( g_npcspskill.integer == 0 )
-				ent->NPC->burstSpacing = 150;//attack debounce
+			{
+				ent->NPC->burstMin = 3;
+				ent->NPC->burstMean = 4;
+				ent->NPC->burstMax = 6;
+				ent->NPC->burstSpacing = 1500;//attack debounce
+			}
 			else if ( g_npcspskill.integer == 1 )
-				ent->NPC->burstSpacing = 120;//attack debounce
+			{
+				ent->NPC->burstMin = 4;
+				ent->NPC->burstMean = 6;
+				ent->NPC->burstMax = 8;
+				ent->NPC->burstSpacing = 1000;//attack debounce
+			}
 			else
-				ent->NPC->burstSpacing = 100;//attack debounce
+			{
+				ent->NPC->burstMin = 5;
+				ent->NPC->burstMean = 7;
+				ent->NPC->burstMax = 10;
+				ent->NPC->burstSpacing = 600;//attack debounce
+			}
 		}
 		break;
 
@@ -756,27 +783,41 @@ void ChangeWeapon( gentity_t *ent, int newWeapon )
 	*/
 
 	case WP_BLASTER:
+		// DAJ_RP: [NPC] rate of fire rebalanced, as for the repeater above. zyk's alt fire was bursts of
+		// 5-20 with a 0.12-0.25 s pause -- near-continuous, ~7.5 shots a second at every level -- and
+		// his main fire was 0.45 / 0.40 / 0.35 s, three levels barely apart.
 		if ( ent->NPC->scriptFlags & SCF_ALT_FIRE )
-		{
+		{ // bursts at the gun's alt rate (weaponData altFireTime 120): ~2.0 / 3.1 / 4.5 shots a second
 			ent->NPC->aiFlags |= NPCAI_BURST_WEAPON;
-			ent->NPC->burstMin = 5;
-			ent->NPC->burstMean = 14;
-			ent->NPC->burstMax = 20;
-			// zyk: changed bursts and burstspacing
 			if ( g_npcspskill.integer == 0 )
-				ent->NPC->burstSpacing = 250;//attack debounce
+			{
+				ent->NPC->burstMin = 3;
+				ent->NPC->burstMean = 4;
+				ent->NPC->burstMax = 5;
+				ent->NPC->burstSpacing = 1500;//attack debounce
+			}
 			else if ( g_npcspskill.integer == 1 )
-				ent->NPC->burstSpacing = 180;//attack debounce
+			{
+				ent->NPC->burstMin = 4;
+				ent->NPC->burstMean = 5;
+				ent->NPC->burstMax = 7;
+				ent->NPC->burstSpacing = 1100;//attack debounce
+			}
 			else
-				ent->NPC->burstSpacing = 120;//attack debounce
+			{
+				ent->NPC->burstMin = 5;
+				ent->NPC->burstMean = 7;
+				ent->NPC->burstMax = 9;
+				ent->NPC->burstSpacing = 700;//attack debounce
+			}
 		}
 		else
-		{
+		{ // single shots; skill 2 stays at 0.35 s, the gun's own limit (weaponData fireTime 350)
 			ent->NPC->aiFlags &= ~NPCAI_BURST_WEAPON;
 			if ( g_npcspskill.integer == 0 )
-				ent->NPC->burstSpacing = 450;//attack debounce
+				ent->NPC->burstSpacing = 700;//attack debounce
 			else if ( g_npcspskill.integer == 1 )
-				ent->NPC->burstSpacing = 400;//attack debounce
+				ent->NPC->burstSpacing = 500;//attack debounce
 			else
 				ent->NPC->burstSpacing = 350;//attack debounce
 		//	ent->NPC->burstSpacing = 1000;//attackdebounce
