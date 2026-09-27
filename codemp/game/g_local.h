@@ -221,6 +221,8 @@ extern vec3_t gPainPoint;
 
 #define FL_BBRUSH					0x04000000 //I am a breakable brush
 
+#define FL_NO_IMPACT_DMG			0x08000000 // Will not take impact/falling damage (SET_NO_IMPACT_DAMAGE) - GalaxyRP: [Scripts]
+
 #ifndef FINAL_BUILD
 #define DEBUG_SABER_BOX
 #endif
@@ -2496,6 +2498,7 @@ void CheckTeamLeader( int team );
 void G_RunThink (gentity_t *ent);
 // GalaxyRP: [ICARUS] see gentity_t::IcarusSoundTime.
 void RP_IcarusSoundCheck( gentity_t *ent );
+const char *RP_ScriptPath( const char *name );
 void RP_IcarusAnimTaskCheck( gentity_t *ent );
 int  RP_SoundDuration( const char *soundName );
 void RP_IcarusSoundCacheReset( void );

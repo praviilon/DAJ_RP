@@ -367,7 +367,7 @@ void DoImpact( gentity_t *self, gentity_t *other, qboolean damageSelf )
 			}
 		}
 
-		if ( damageSelf && self->takedamage )
+		if ( damageSelf && self->takedamage && !(self->flags & FL_NO_IMPACT_DMG) )
 		{
 			//Now damage me
 			//FIXME: more lenient falling damage, especially for when driving a vehicle
@@ -1651,6 +1651,11 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 
 				if ( dmflags.integer & DF_NO_FALLING )
 				{
+					break;
+				}
+
+				if ( ent->flags & FL_NO_IMPACT_DMG )
+				{ // GalaxyRP: [Scripts] SET_NO_IMPACT_DAMAGE
 					break;
 				}
 

@@ -71,6 +71,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define	SCF_NO_ACROBATICS	0x00800000	//Jedi won't jump, roll or cartwheel
 #define	SCF_USE_SUBTITLES	0x01000000	//Regardless of subtitle setting, this NPC will display subtitles when it speaks lines
 #define	SCF_NO_ALERT_TALK	0x02000000	//Will not say alert sounds, but still can be woken up by alerts
+#define	SCF_IGNORE_ENEMIES	0x04000000	//Will not acquire or keep enemies (SET_IGNOREENEMIES) - GalaxyRP: [Scripts] was an SP svFlag
+#define	SCF_SAFE_REMOVE		0x80000000	//Remove NPC when it's safe (no player has it in PVS) (SET_SAFE_REMOVE) - GalaxyRP: [Scripts]
 
 //#ifdef __DEBUG
 

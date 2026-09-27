@@ -697,6 +697,12 @@ void NPC_ApplyScriptFlags (void)
 	{
 		NPCS.NPCInfo->attackHold = (int)Distance(NPCS.client->ps.origin,NPCS.NPC->enemy->client->ps.origin) * 2;
 	}
+
+	// GalaxyRP: [Scripts] SET_SAFE_REMOVE -- leave as soon as no player can see us (same as BS_REMOVE)
+	if ( NPCS.NPCInfo->scriptFlags & SCF_SAFE_REMOVE )
+	{
+		NPC_RemoveIfOutOfPlayersPVS( NPCS.NPC );
+	}
 }
 
 void Q3_DebugPrint( int level, const char *format, ... );

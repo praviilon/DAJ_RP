@@ -856,7 +856,7 @@ void scriptrunner_run (gentity_t *self)
 			{
 				Com_Printf( "target_scriptrunner running %s on activator %s\n", self->behaviorSet[BSET_USE], self->activator->targetname );
 			}
-			trap->ICARUS_RunScript( (sharedEntity_t *)self->activator, va( "%s/%s", Q3_SCRIPT_DIR, self->behaviorSet[BSET_USE] ) );
+			trap->ICARUS_RunScript( (sharedEntity_t *)self->activator, RP_ScriptPath( self->behaviorSet[BSET_USE] ) );
 		}
 		else
 		{

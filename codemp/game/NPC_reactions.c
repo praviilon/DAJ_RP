@@ -111,9 +111,8 @@ static void NPC_CheckAttacker( gentity_t *other, int mod )
 		}
 	}
 
-	//OJKFIXME: clientnum 0
 	//Special case player interactions
-	if ( other == &g_entities[0] )
+	if ( other->s.number < MAX_CLIENTS )
 	{
 		//Account for the skill level to skew the results
 		float	luckThreshold;
@@ -266,7 +265,7 @@ void NPC_ChoosePainAnimation( gentity_t *self, gentity_t *other, vec3_t point, i
 			pain_chance = (200.0f-self->health)/100.0f + damage/50.0f;
 		}
 	}
-	else if ( self->client && self->client->playerTeam == NPCTEAM_PLAYER && other && !other->s.number )
+	else if ( self->client && self->client->playerTeam == NPCTEAM_PLAYER && other && other->s.number < MAX_CLIENTS )
 	{//ally shot by player always complains
 		pain_chance = 1.1f;
 	}
@@ -461,7 +460,7 @@ void NPC_Pain(gentity_t *self, gentity_t *attacker, int damage)
 				}
 				return;
 			}
-			else if ( self->NPC && !other->s.number )//should be assumed, but...
+			else if ( self->NPC && other->s.number < MAX_CLIENTS )//should be assumed, but...
 			{//dammit, stop that!
 				if ( self->NPC->charmedTime )
 				{//mindtricked
@@ -494,7 +493,8 @@ void NPC_Pain(gentity_t *self, gentity_t *attacker, int damage)
 					voiceEvent = EV_FFTURN;
 					self->NPC->behaviorState = self->NPC->tempBehavior = self->NPC->defaultBehavior = BS_DEFAULT;
 					other->flags &= ~FL_NOTARGET;
-					//self->svFlags &= ~(SVF_IGNORE_ENEMIES|SVF_ICARUS_FREEZE|SVF_NO_COMBAT_SOUNDS);
+					self->NPC->scriptFlags &= ~SCF_IGNORE_ENEMIES;
+					//self->svFlags &= ~(SVF_ICARUS_FREEZE|SVF_NO_COMBAT_SOUNDS);
 					self->r.svFlags &= ~SVF_ICARUS_FREEZE;
 					G_SetEnemy( self, other );
 					//self->svFlags |= SVF_LOCKEDENEMY; //rwwFIXMEFIXME: proper support for these flags.
@@ -631,7 +631,7 @@ void NPC_Touch(gentity_t *self, gentity_t *other, trace_t *trace)
 			NPCS.NPCInfo->aiFlags |= NPCAI_TOUCHED_GOAL;
 		}
 
-		if( /*!(self->svFlags&SVF_LOCKEDENEMY) && !(self->svFlags&SVF_IGNORE_ENEMIES) &&*/ !(other->flags & FL_NOTARGET) )
+		if( /*!(self->svFlags&SVF_LOCKEDENEMY) &&*/ !(self->NPC->scriptFlags&SCF_IGNORE_ENEMIES) && !(other->flags & FL_NOTARGET) )
 		{
 			if ( self->client->enemyTeam )
 			{//See if we bumped into an enemy
@@ -811,12 +811,9 @@ void NPC_Respond( gentity_t *self, int userNum )
 	case CLASS_JEDI:
 		if ( !self->enemy )
 		{
-			/*
-			if ( !(self->svFlags&SVF_IGNORE_ENEMIES)
+			if ( !(self->NPC->scriptFlags&SCF_IGNORE_ENEMIES)
 				&& (self->NPC->scriptFlags&SCF_LOOK_FOR_ENEMIES)
-				&& self->client->enemyTeam == TEAM_ENEMY )
-				*/
-			if (0) //rwwFIXMEFIXME: support flags!
+				&& self->client->enemyTeam == NPCTEAM_ENEMY )
 			{
 				event = Q_irand( EV_ANGER1, EV_ANGER3 );
 			}

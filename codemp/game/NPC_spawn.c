@@ -1874,13 +1874,12 @@ void NPC_ShySpawn( gentity_t *ent )
 	ent->nextthink = level.time + SHY_THINK_TIME;
 	ent->think = NPC_ShySpawn;
 
-	//rwwFIXMEFIXME: Care about other clients not just 0?
-	if ( DistanceSquared( g_entities[0].r.currentOrigin, ent->r.currentOrigin ) <= SHY_SPAWN_DISTANCE_SQR )
+	// GalaxyRP fix: [NPC] shy spawns waited for g_entities[0] only; wait until no player is near or watching
+	if ( DistanceToClosestPlayer( ent->r.currentOrigin, -1 ) <= SHY_SPAWN_DISTANCE )
 		return;
 
-	if ( (InFOV( ent, &g_entities[0], 80, 64 )) ) // FIXME: hardcoded fov
-		if ( (NPC_ClearLOS2( &g_entities[0], ent->r.currentOrigin )) )
-			return;
+	if ( InPlayersFOV( ent->r.currentOrigin, -1, 80, 64, qtrue ) ) // FIXME: hardcoded fov
+		return;
 
 	ent->think = 0;
 	ent->nextthink = 0;

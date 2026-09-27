@@ -920,9 +920,27 @@ qboolean G_ActivateBehavior (gentity_t *self, int bset )
 		{
 			G_DebugPrint( WL_VERBOSE, "%s attempting to run bSet %s (%s)\n", self->targetname, GetStringForID( BSETTable, bset ), bs_name );
 		}
-		trap->ICARUS_RunScript( (sharedEntity_t *)self, va( "%s/%s", Q3_SCRIPT_DIR, bs_name ) );
+		trap->ICARUS_RunScript( (sharedEntity_t *)self, RP_ScriptPath( bs_name ) );
 	}
 	return qtrue;
+}
+
+/*
+=============
+RP_ScriptPath
+
+GalaxyRP: [Scripts] script names in behaviour sets and target_scriptrunner usescripts are given
+without the "scripts/" directory, which is added here -- unless the map already wrote it, which
+some do, and which used to become "scripts/scripts/...".
+=============
+*/
+const char *RP_ScriptPath( const char *name )
+{
+	if ( !Q_stricmpn( name, Q3_SCRIPT_DIR "/", sizeof( Q3_SCRIPT_DIR ) ) )
+	{
+		return name;
+	}
+	return va( "%s/%s", Q3_SCRIPT_DIR, name );
 }
 
 
@@ -1296,6 +1314,160 @@ static int NPC_GetCheckDelta( void )
 
 /*
 -------------------------
+RP_PlayerIsActive
+
+GalaxyRP: [NPC] the SP NPC code assumed the one player lived in g_entities[0]. Every place that
+looked there now goes through these helpers, which walk the client slots and only count clients
+that are connected, in the game (not spectating) and alive. `team` is a player-team filter on
+client->playerTeam; -1 accepts any team.
+-------------------------
+*/
+static qboolean RP_PlayerIsActive( gentity_t *player, int team )
+{
+	if ( !player->inuse || !player->client )
+	{
+		return qfalse;
+	}
+	if ( player->client->pers.connected != CON_CONNECTED
+		|| player->client->sess.sessionTeam == TEAM_SPECTATOR
+		|| player->client->tempSpectate >= level.time )
+	{
+		return qfalse;
+	}
+	if ( team != -1 && player->client->playerTeam != team )
+	{
+		return qfalse;
+	}
+	if ( player->health <= 0 || (player->s.eFlags & EF_DEAD) )
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+gentity_t *FindClosestPlayer( vec3_t position, int team )
+{
+	gentity_t	*player;
+	gentity_t	*closest = NULL;
+	float		bestDist = 0;
+	float		dist;
+	int			i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		if ( !RP_PlayerIsActive( player, team ) )
+		{
+			continue;
+		}
+		dist = DistanceSquared( player->r.currentOrigin, position );
+		if ( !closest || dist < bestDist )
+		{
+			closest = player;
+			bestDist = dist;
+		}
+	}
+
+	return closest;
+}
+
+float DistanceToClosestPlayer( vec3_t position, int team )
+{
+	gentity_t *player = FindClosestPlayer( position, team );
+
+	if ( !player )
+	{
+		return Q3_INFINITE;
+	}
+	return Distance( player->r.currentOrigin, position );
+}
+
+qboolean InPlayersFOV( vec3_t position, int team, int hFOV, int vFOV, qboolean checkClearLOS )
+{
+	gentity_t	*player;
+	int			i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		if ( !RP_PlayerIsActive( player, team ) )
+		{
+			continue;
+		}
+		if ( !InFOV2( position, player, hFOV, vFOV ) )
+		{
+			continue;
+		}
+		if ( checkClearLOS && !G_ClearLOS5( player, position ) )
+		{
+			continue;
+		}
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+qboolean InPlayersPVS( vec3_t point )
+{
+	gentity_t	*player;
+	int			i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		// a dead player is still watching, so this is the only helper that does not need them alive
+		if ( !player->inuse || !player->client
+			|| player->client->pers.connected != CON_CONNECTED
+			|| player->client->sess.sessionTeam == TEAM_SPECTATOR )
+		{
+			continue;
+		}
+		if ( trap->InPVS( point, player->r.currentOrigin ) )
+		{
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
+/*
+-------------------------
+NPC_ClosestPlayerEnemy
+
+Closest player the current NPC would accept as an enemy (NPC_ValidEnemy), within maxDist of it.
+Needs the NPC globals set.
+-------------------------
+*/
+gentity_t *NPC_ClosestPlayerEnemy( float maxDist )
+{
+	gentity_t	*player;
+	gentity_t	*closest = NULL;
+	float		bestDist = maxDist * maxDist;
+	float		dist;
+	int			i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		if ( !RP_PlayerIsActive( player, -1 ) || !NPC_ValidEnemy( player ) )
+		{
+			continue;
+		}
+		dist = DistanceSquared( player->r.currentOrigin, NPCS.NPC->r.currentOrigin );
+		if ( dist <= bestDist )
+		{
+			closest = player;
+			bestDist = dist;
+		}
+	}
+
+	return closest;
+}
+
+/*
+-------------------------
 NPC_FindNearestEnemy
 -------------------------
 */
@@ -1383,9 +1555,8 @@ gentity_t *NPC_PickEnemyExt( qboolean checkAlerts )
 
 			if ( event->level >= AEL_DISCOVERED )
 			{
-				//If it's the player, attack him
-				//OJKFIXME: clientnum 0
-				if ( event->owner == &g_entities[0] )
+				//If it's a player, attack him
+				if ( event->owner->s.number < MAX_CLIENTS )
 					return event->owner;
 
 				//If it's on our team, then take its enemy as well
@@ -1406,8 +1577,18 @@ NPC_FindPlayer
 
 qboolean NPC_FindPlayer( void )
 {
-	//OJKFIXME: clientnum 0
-	return NPC_TargetVisible( &g_entities[0] );
+	gentity_t	*player;
+	int			i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		if ( RP_PlayerIsActive( player, -1 ) && NPC_TargetVisible( player ) )
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
 }
 
 /*
@@ -1418,36 +1599,53 @@ NPC_CheckPlayerDistance
 
 static qboolean NPC_CheckPlayerDistance( void )
 {
-	return qfalse;//MOOT in MP
-	/*
-	float distance;
+	gentity_t	*player;
+	gentity_t	*closest = NULL;
+	float		enemyDist;
+	float		closestDist;
+	float		dist;
+	int			i;
 
 	//Make sure we have an enemy
-	if ( NPC->enemy == NULL )
+	if ( NPCS.NPC->enemy == NULL )
 		return qfalse;
 
 	//Only do this for non-players
-	if ( NPC->enemy->s.number == 0 )
+	if ( NPCS.NPC->enemy->s.number < MAX_CLIENTS )
 		return qfalse;
 
-	//must be set up to get mad at player
-	if ( !NPC->client || NPC->client->enemyTeam != NPCTEAM_PLAYER )
+	if ( !NPCS.NPC->client )
 		return qfalse;
 
-	//Must be within our FOV
-	if ( InFOV( &g_entities[0], NPC, NPCInfo->stats.hfov, NPCInfo->stats.vfov ) == qfalse )
-		return qfalse;
+	enemyDist = Distance( NPCS.NPC->r.currentOrigin, NPCS.NPC->enemy->r.currentOrigin );
+	closestDist = enemyDist;
 
-	distance = DistanceSquared( NPC->r.currentOrigin, NPC->enemy->r.currentOrigin );
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		player = &g_entities[i];
+		if ( !RP_PlayerIsActive( player, -1 ) || !NPC_ValidEnemy( player ) )
+			continue;
 
-	if ( distance > DistanceSquared( NPC->r.currentOrigin, g_entities[0].r.currentOrigin ) )
-	{ //rwwFIXMEFIXME: care about all clients not just client 0
-		G_SetEnemy( NPC, &g_entities[0] );
+		//Must be within our FOV
+		if ( InFOV( player, NPCS.NPC, NPCS.NPCInfo->stats.hfov, NPCS.NPCInfo->stats.vfov ) == qfalse )
+			continue;
+
+		dist = Distance( NPCS.NPC->r.currentOrigin, player->r.currentOrigin );
+		if ( dist < closestDist )
+		{
+			closestDist = dist;
+			closest = player;
+		}
+	}
+
+	//the player has to be reasonably closer than the current enemy, or we would flip-flop
+	if ( closest && closestDist + 128 < enemyDist )
+	{
+		G_SetEnemy( NPCS.NPC, closest );
 		return qtrue;
 	}
 
 	return qfalse;
-	*/
 }
 
 /*
@@ -1461,8 +1659,7 @@ qboolean NPC_FindEnemy( qboolean checkAlerts )
 	gentity_t *newenemy;
 
 	//We're ignoring all enemies for now
-	//if( NPC->svFlags & SVF_IGNORE_ENEMIES )
-	if (0) //rwwFIXMEFIXME: support for flag
+	if ( NPCS.NPCInfo->scriptFlags & SCF_IGNORE_ENEMIES )
 	{
 		G_ClearEnemy( NPCS.NPC );
 		return qfalse;
@@ -1478,12 +1675,6 @@ qboolean NPC_FindEnemy( qboolean checkAlerts )
 	//rwwFIXMEFIXME: support for locked enemy
 	//if ( ( ValidEnemy( NPC->enemy ) ) && ( NPC->svFlags & SVF_LOCKEDENEMY ) )
 	//	return qtrue;
-
-	//See if the player is closer than our current enemy
-	if ( NPC_CheckPlayerDistance() )
-	{
-		return qtrue;
-	}
 
 	//Otherwise, turn off the flag
 //	NPC->svFlags &= ~SVF_LOCKEDENEMY;

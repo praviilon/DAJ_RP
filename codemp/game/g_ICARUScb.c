@@ -286,6 +286,15 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_USE_SUBTITLES),
 	ENUM2STRING(SET_CLEAN_DAMAGING_ENTS),
 	ENUM2STRING(SET_HUD),
+	// GalaxyRP: [Scripts] appended SP setters (see Q3_Interface.h)
+	ENUM2STRING(SET_SAFE_REMOVE),
+	ENUM2STRING(SET_FORCE_PULL),
+	ENUM2STRING(SET_FORCE_PROTECT),
+	ENUM2STRING(SET_FORCE_RAGE_LEVEL),
+	ENUM2STRING(SET_FORCE_PROTECT_LEVEL),
+	ENUM2STRING(SET_FORCE_ABSORB_LEVEL),
+	ENUM2STRING(SET_FORCE_DRAIN_LEVEL),
+	ENUM2STRING(SET_FORCE_SIGHT_LEVEL),
 
 //FIXME: add BOTH_ attributes here too
 	{"",	SET_},
@@ -1694,7 +1703,7 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 		break;
 
 	case SET_SKILL:
-		return 0;
+		*value = g_npcspskill.integer;
 		break;
 
 	case SET_XVELOCITY://## %f="0.0" # Velocity along X axis
@@ -1861,10 +1870,20 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 		break;
 	//# #sep booleans
 	case SET_IGNOREPAIN://## %t="BOOL_TYPES" # Do not react to pain
-		return 0;
+		if ( ent->NPC == NULL )
+		{
+			G_DebugPrint( WL_WARNING, "Q3_GetFloat: SET_IGNOREPAIN, %s not an NPC\n", ent->targetname );
+			return 0;
+		}
+		*value = ent->NPC->ignorePain;
 		break;
 	case SET_IGNOREENEMIES://## %t="BOOL_TYPES" # Do not acquire enemies
-		return 0;
+		if ( ent->NPC == NULL )
+		{
+			G_DebugPrint( WL_WARNING, "Q3_GetFloat: SET_IGNOREENEMIES, %s not an NPC\n", ent->targetname );
+			return 0;
+		}
+		*value = (ent->NPC->scriptFlags & SCF_IGNORE_ENEMIES) ? 1 : 0;
 		break;
 	case SET_IGNOREALERTS://## Do not get enemy set by allies in area(ambush)
 		return 0;
@@ -1904,7 +1923,7 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 		return 0;
 		break;
 	case SET_UNDYING://## %t="BOOL_TYPES" # Can take damage down to 1 but not die
-		return 0;
+		*value = (ent->flags & FL_UNDYING) ? 1 : 0;
 		break;
 	case SET_NOAVOID://## %t="BOOL_TYPES" # Will not avoid other NPCs or architecture
 		return 0;
@@ -1952,8 +1971,8 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 	case SET_LOCK_PLAYER_WEAPONS://## %t="BOOL_TYPES" # Makes it so player cannot switch weapons
 		return 0;
 		break;
-	case SET_NO_IMPACT_DAMAGE://## %t="BOOL_TYPES" # Makes it so player cannot switch weapons
-		return 0;
+	case SET_NO_IMPACT_DAMAGE://## %t="BOOL_TYPES" # Makes it so the ent cannot take impact damage
+		*value = (ent->flags & FL_NO_IMPACT_DMG) ? 1 : 0;
 		break;
 	case SET_NO_KNOCKBACK://## %t="BOOL_TYPES" # Stops this ent from taking knockback from weapons
 		*value = (ent->flags&FL_NO_KNOCKBACK);
@@ -2154,7 +2173,15 @@ int Q3_GetString( int entID, int type, const char *name, char **value )
 		break;
 
 	case SET_LOCATION:
-		return 0;
+		{
+			// GalaxyRP: [Scripts] nearest target_location in PVS (the MP location system); SP used trigger_location
+			locationData_t *loc = Team_GetLocation( ent );
+			if ( !loc || !loc->message[0] )
+			{
+				return 0;
+			}
+			*value = loc->message;
+		}
 		break;
 
 	//# #sep Scripts and other file paths
@@ -2206,7 +2233,11 @@ int Q3_GetString( int entID, int type, const char *name, char **value )
 		return 0;
 		break;
 	case SET_LEADER://## %s="NULL" # Set for BS_FOLLOW_LEADER
-		return 0;
+		if ( !ent->client || !ent->client->leader || !ent->client->leader->targetname )
+		{
+			return 0;
+		}
+		*value = ent->client->leader->targetname;
 		break;
 	case SET_CAPTURE://## %s="NULL" # Set captureGoal by targetname
 		return 0;
@@ -2225,7 +2256,24 @@ int Q3_GetString( int entID, int type, const char *name, char **value )
 		return 0;
 		break;
 	case SET_LOOK_TARGET://## %s="NULL" # object for NPC to look at
-		G_DebugPrint( WL_WARNING, "Q3_GetString: SET_LOOK_TARGET, NOT SUPPORTED IN MULTIPLAYER\n" );
+		if ( ent->client == NULL )
+		{
+			G_DebugPrint( WL_WARNING, "Q3_GetString: SET_LOOK_TARGET, %s not a client\n", ent->targetname );
+			return 0;
+		}
+		else
+		{
+			gentity_t *lookTarg = NULL;
+			if ( ent->client->renderInfo.lookTarget >= 0 && ent->client->renderInfo.lookTarget < ENTITYNUM_WORLD )
+			{
+				lookTarg = &g_entities[ent->client->renderInfo.lookTarget];
+			}
+			if ( !lookTarg || !lookTarg->inuse || !lookTarg->targetname )
+			{
+				return 0;
+			}
+			*value = lookTarg->targetname;
+		}
 		break;
 	case SET_TARGET2://## %s="NULL" # Set/change your target2: on NPC's: this fires when they're knocked out by the red hypo
 		return 0;
@@ -2246,8 +2294,11 @@ int Q3_GetString( int entID, int type, const char *name, char **value )
 		break;
 	//The below cannot be gotten
 	case SET_NAVGOAL://## %s="NULL" # *Move to this navgoal then continue script
-		G_DebugPrint( WL_WARNING, "Q3_GetString: SET_NAVGOAL not implemented\n" );
-		return 0;
+		if ( !ent->NPC || !ent->NPC->goalEntity || !ent->NPC->goalEntity->targetname || !ent->NPC->goalEntity->targetname[0] )
+		{
+			return 0;
+		}
+		*value = ent->NPC->goalEntity->targetname;
 		break;
 	case SET_VIEWTARGET://## %s="NULL" # Set angles toward ent by targetname
 		G_DebugPrint( WL_WARNING, "Q3_GetString: SET_VIEWTARGET not implemented\n" );
@@ -3577,8 +3628,23 @@ Q3_SetWidth
 */
 static void Q3_SetWidth( int entID, int data )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetWidth: NOT SUPPORTED IN MP\n");
-	return;
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetWidth: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetWidth: '%s' is not an NPC\n", ent->targetname );
+		return;
+	}
+
+	ent->r.maxs[0] = ent->r.maxs[1] = data;
+	ent->r.mins[0] = ent->r.mins[1] = -data;
+	trap->LinkEntity( (sharedEntity_t *)ent );
 }
 
 /*
@@ -4689,9 +4755,28 @@ Q3_SetIgnoreEnemies
 */
 static void Q3_SetIgnoreEnemies( int entID, qboolean data)
 {
+	gentity_t	*ent  = &g_entities[entID];
 
-	G_DebugPrint( WL_WARNING, "Q3_SetIgnoreEnemies: NOT SUPPORTED IN MP");
-	return;
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetIgnoreEnemies: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetIgnoreEnemies: '%s' is not an NPC!\n", ent->targetname );
+		return;
+	}
+
+	if ( data )
+	{
+		ent->NPC->scriptFlags |= SCF_IGNORE_ENEMIES;
+	}
+	else
+	{
+		ent->NPC->scriptFlags &= ~SCF_IGNORE_ENEMIES;
+	}
 }
 
 /*
@@ -4940,8 +5025,28 @@ Q3_SetNoMindTrick
 */
 static void Q3_SetNoMindTrick( int entID, qboolean add)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetNoMindTrick: NOT SUPPORTED IN MP\n");
-	return;
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetNoMindTrick: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNoMindTrick: '%s' is not an NPC!\n", ent->targetname );
+		return;
+	}
+
+	if ( add )
+	{
+		ent->NPC->scriptFlags |= SCF_NO_MIND_TRICK;
+	}
+	else
+	{
+		ent->NPC->scriptFlags &= ~SCF_NO_MIND_TRICK;
+	}
 }
 
 /*
@@ -5789,7 +5894,33 @@ static void Q3_SetLockAngle( int entID, const char *lockAngle)
 		return;
 	}
 
-	G_DebugPrint( WL_WARNING, "Q3_SetLockAngle is not currently available. Ask if you really need it.\n");
+	// GalaxyRP: [Scripts] NPCs only. MP has no RF_LOCKEDANGLE render flag; NPC_UpdateAngles instead
+	// keeps lockedDesiredYaw/Pitch while level.time < NPC->aimTime (its own comment asks for exactly
+	// this use), so the lock is aimTime and "off" clears it. Players stay unsupported.
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetLockAngle: '%s' is a player, only NPCs are supported\n", ent->targetname );
+		return;
+	}
+
+	if ( Q_stricmp( "off", lockAngle ) == 0 )
+	{//free it
+		ent->NPC->aimTime = 0;
+	}
+	else
+	{
+		if ( Q_stricmp( "auto", lockAngle ) == 0 )
+		{//use current yaw
+			ent->NPC->desiredYaw = ent->client->ps.viewangles[YAW];
+		}
+		else
+		{//specified yaw
+			ent->NPC->desiredYaw = atof( lockAngle );
+		}
+		ent->NPC->lockedDesiredYaw = ent->NPC->desiredYaw;
+		ent->NPC->lockedDesiredPitch = ent->NPC->desiredPitch;
+		ent->NPC->aimTime = INT_MAX;
+	}
 	/*
 	if(Q_stricmp("off", lockAngle) == 0)
 	{//free it
@@ -6007,7 +6138,250 @@ Q3_SetNoImpactDamage
 */
 static void Q3_SetNoImpactDamage( int entID, qboolean noImp )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetNoImpactDamage: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetNoImpactDamage: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( noImp )
+	{
+		ent->flags |= FL_NO_IMPACT_DMG;
+	}
+	else
+	{
+		ent->flags &= ~FL_NO_IMPACT_DMG;
+	}
+}
+
+/*
+============
+Q3_SetPlayerTeam / Q3_SetEnemyTeam
+
+GalaxyRP: [Scripts] were "Not in MP ATM" stubs; scripts that turn an NPC friendly or hostile
+mid-scene (SET_PLAYER_TEAM/SET_ENEMY_TEAM) now work. Team names come from TeamTable (NPC_stats.c).
+============
+*/
+extern stringID_table_t TeamTable[];
+
+// scripts (and .npc files) name teams the SP way, "TEAM_PLAYER"; the MP enum names are "NPCTEAM_PLAYER"
+static int Q3_TeamForString( const char *data )
+{
+	int team = GetIDForString( TeamTable, data );
+
+	if ( team < 0 && !Q_stricmpn( data, "TEAM_", 5 ) )
+	{
+		team = GetIDForString( TeamTable, va( "NPC%s", data ) );
+	}
+	return team;
+}
+
+static void Q3_SetPlayerTeam( int entID, const char *data )
+{
+	gentity_t	*ent  = &g_entities[entID];
+	int			team;
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetPlayerTeam: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetPlayerTeam: '%s' is not an NPC/player!\n", ent->targetname );
+		return;
+	}
+
+	team = Q3_TeamForString( data );
+	if ( team < 0 )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetPlayerTeam: unknown team '%s'\n", data );
+		return;
+	}
+
+	ent->client->playerTeam = (npcteam_t)team;
+	if ( ent->NPC )
+	{
+		ent->s.teamowner = ent->client->playerTeam;
+	}
+}
+
+static void Q3_SetEnemyTeam( int entID, const char *data )
+{
+	gentity_t	*ent  = &g_entities[entID];
+	int			team;
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetEnemyTeam: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetEnemyTeam: '%s' is not an NPC/player!\n", ent->targetname );
+		return;
+	}
+
+	team = Q3_TeamForString( data );
+	if ( team < 0 )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetEnemyTeam: unknown team '%s'\n", data );
+		return;
+	}
+
+	ent->client->enemyTeam = (npcteam_t)team;
+}
+
+/*
+============
+Q3_SetEntFlag / Q3_SetScriptFlag / Q3_SetAdjustAreaPortals / Q3_SetForcePower
+
+GalaxyRP: [Scripts] small SP setters that were "NOT SUPPORTED IN MP" stubs.
+============
+*/
+static void Q3_SetEntFlag( int entID, int flag, qboolean on, const char *who )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "%s: invalid entID %d\n", who, entID);
+		return;
+	}
+
+	if ( on )
+	{
+		ent->flags |= flag;
+	}
+	else
+	{
+		ent->flags &= ~flag;
+	}
+}
+
+static void Q3_SetScriptFlag( int entID, int flag, qboolean on, const char *who )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "%s: invalid entID %d\n", who, entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "%s: '%s' is not an NPC!\n", who, ent->targetname );
+		return;
+	}
+
+	if ( on )
+	{
+		ent->NPC->scriptFlags |= flag;
+	}
+	else
+	{
+		ent->NPC->scriptFlags &= ~flag;
+	}
+}
+
+static void Q3_SetAdjustAreaPortals( int entID, qboolean adjust )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetAdjustAreaPortals: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->r.bmodel )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetAdjustAreaPortals: '%s' is not a brush entity\n", ent->targetname );
+		return;
+	}
+
+	trap->AdjustAreaPortalState( (sharedEntity_t *)ent, adjust );
+}
+
+static void Q3_SetForcePower( int entID, forcePowers_t forcePower, qboolean powerOn )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetForcePower: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetForcePower: ent # %d not a client!\n", entID );
+		return;
+	}
+
+	switch ( forcePower )
+	{
+	case FP_PULL:
+		if ( powerOn )
+		{
+			ForceThrow( ent, qtrue );
+		}
+		break;
+	case FP_PROTECT:
+		if ( powerOn )
+		{
+			if ( !(ent->client->ps.fd.forcePowersActive & (1 << FP_PROTECT)) )
+			{
+				ForceProtect( ent );
+			}
+		}
+		else if ( ent->client->ps.fd.forcePowersActive & (1 << FP_PROTECT) )
+		{
+			WP_ForcePowerStop( ent, FP_PROTECT );
+		}
+		break;
+	default:
+		G_DebugPrint( WL_WARNING, "Q3_SetForcePower: force power %d cannot be toggled from a script\n", (int)forcePower );
+		break;
+	}
+}
+
+/*
+============
+Q3_ForcePowerForSetID
+
+GalaxyRP fix: [Scripts] the SET_FORCE_*_LEVEL cases used (toSet - SET_FORCE_HEAL_LEVEL) as the
+forcePowers_t index, which only lines up for the first eight; SET_SABER_THROW/DEFENSE/OFFENSE
+landed on FP_RAGE/FP_PROTECT/FP_ABSORB. Map them explicitly.
+============
+*/
+static int Q3_ForcePowerForSetID( int toSet )
+{
+	switch ( toSet )
+	{
+	case SET_FORCE_HEAL_LEVEL:		return FP_HEAL;
+	case SET_FORCE_JUMP_LEVEL:		return FP_LEVITATION;
+	case SET_FORCE_SPEED_LEVEL:		return FP_SPEED;
+	case SET_FORCE_PUSH_LEVEL:		return FP_PUSH;
+	case SET_FORCE_PULL_LEVEL:		return FP_PULL;
+	case SET_FORCE_MINDTRICK_LEVEL:	return FP_TELEPATHY;
+	case SET_FORCE_GRIP_LEVEL:		return FP_GRIP;
+	case SET_FORCE_LIGHTNING_LEVEL:	return FP_LIGHTNING;
+	case SET_FORCE_RAGE_LEVEL:		return FP_RAGE;
+	case SET_FORCE_PROTECT_LEVEL:	return FP_PROTECT;
+	case SET_FORCE_ABSORB_LEVEL:	return FP_ABSORB;
+	case SET_FORCE_DRAIN_LEVEL:		return FP_DRAIN;
+	case SET_FORCE_SIGHT_LEVEL:		return FP_SEE;
+	case SET_SABER_THROW:			return FP_SABERTHROW;
+	case SET_SABER_DEFENSE:			return FP_SABER_DEFENSE;
+	case SET_SABER_OFFENSE:			return FP_SABER_OFFENSE;
+	default:						return -1;
+	}
 }
 
 /*
@@ -6605,11 +6979,11 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_PLAYER_TEAM:
-		G_DebugPrint( WL_WARNING, "Q3_SetPlayerTeam: Not in MP ATM, let a programmer (ideally Rich) know if you need it\n");
+		Q3_SetPlayerTeam( entID, (char *) data );
 		break;
 
 	case SET_ENEMY_TEAM:
-		G_DebugPrint( WL_WARNING, "Q3_SetEnemyTeam: NOT SUPPORTED IN MP\n");
+		Q3_SetEnemyTeam( entID, (char *) data );
 		break;
 
 	case SET_HEALTH:
@@ -6708,7 +7082,6 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 	case SET_WIDTH:
 		int_data = atoi((char *) data);
 		Q3_SetWidth( entID, int_data );
-		return qfalse;
 		break;
 
 	case SET_YAWSPEED:
@@ -7301,19 +7674,31 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_ADJUST_AREA_PORTALS:
-		G_DebugPrint( WL_WARNING, "Q3_SetAdjustAreaPortals: NOT SUPPORTED IN MP\n");
+		Q3_SetAdjustAreaPortals( entID, (qboolean)(Q_stricmp( "true", (char *)data ) == 0) );
 		break;
 
 	case SET_DMG_BY_HEAVY_WEAP_ONLY:
-		G_DebugPrint( WL_WARNING, "Q3_SetDmgByHeavyWeapOnly: NOT SUPPORTED IN MP\n");
+		Q3_SetEntFlag( entID, FL_DMG_BY_HEAVY_WEAP_ONLY, (qboolean)(Q_stricmp( "true", (char *)data ) == 0), "Q3_SetDmgByHeavyWeapOnly" );
 		break;
 
 	case SET_SHIELDED:
-		G_DebugPrint( WL_WARNING, "Q3_SetShielded: NOT SUPPORTED IN MP\n");
+		Q3_SetEntFlag( entID, FL_SHIELDED, (qboolean)(Q_stricmp( "true", (char *)data ) == 0), "Q3_SetShielded" );
 		break;
 
 	case SET_NO_GROUPS:
-		G_DebugPrint( WL_WARNING, "Q3_SetNoGroups: NOT SUPPORTED IN MP\n");
+		Q3_SetScriptFlag( entID, SCF_NO_GROUPS, (qboolean)(Q_stricmp( "true", (char *)data ) == 0), "Q3_SetNoGroups" );
+		break;
+
+	case SET_SAFE_REMOVE:
+		Q3_SetScriptFlag( entID, SCF_SAFE_REMOVE, (qboolean)(Q_stricmp( "true", (char *)data ) == 0), "Q3_SetSafeRemove" );
+		break;
+
+	case SET_FORCE_PULL:
+		Q3_SetForcePower( entID, FP_PULL, (qboolean)(Q_stricmp( "true", (char *)data ) == 0) );
+		break;
+
+	case SET_FORCE_PROTECT:
+		Q3_SetForcePower( entID, FP_PROTECT, (qboolean)(Q_stricmp( "true", (char *)data ) == 0) );
 		break;
 
 	case SET_FIRE_WEAPON:
@@ -7494,8 +7879,13 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 	case SET_SABER_THROW:
 	case SET_SABER_DEFENSE:
 	case SET_SABER_OFFENSE:
+	case SET_FORCE_RAGE_LEVEL:
+	case SET_FORCE_PROTECT_LEVEL:
+	case SET_FORCE_ABSORB_LEVEL:
+	case SET_FORCE_DRAIN_LEVEL:
+	case SET_FORCE_SIGHT_LEVEL:
 		int_data = atoi((char *) data);
-		Q3_SetForcePowerLevel( entID, (toSet-SET_FORCE_HEAL_LEVEL), int_data );
+		Q3_SetForcePowerLevel( entID, Q3_ForcePowerForSetID( toSet ), int_data );
 		break;
 
 	default:

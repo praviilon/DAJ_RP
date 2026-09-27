@@ -5824,7 +5824,8 @@ qboolean Jedi_CheckDanger( void )
 {
 	int alertEvent = NPC_CheckAlertEvents( qtrue, qtrue, -1, qfalse, AEL_MINOR );
 
-	if ( level.alertEvents[alertEvent].level >= AEL_DANGER )
+	// GalaxyRP fix: [NPC] alertEvent is -1 when there is nothing to react to; this read level.alertEvents[-1]
+	if ( alertEvent > -1 && level.alertEvents[alertEvent].level >= AEL_DANGER )
 	{//run away!
 		if ( !level.alertEvents[alertEvent].owner
 			|| !level.alertEvents[alertEvent].owner->client
@@ -6031,7 +6032,7 @@ static void Jedi_Patrol( void )
 			{//have one to consider
 				if ( NPC_ClearLOS4( best_enemy ) )
 				{//we have a clear (of architecture) LOS to him
-					if ( best_enemy->s.number )
+					if ( best_enemy->s.number >= MAX_CLIENTS )
 					{//just attack
 						G_SetEnemy( NPCS.NPC, best_enemy );
 						NPCS.NPCInfo->stats.aggression = 3;

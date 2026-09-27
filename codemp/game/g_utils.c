@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 #include "bg_saga.h"
 #include "qcommon/q_shared.h"
+#include "g_nav.h"
 
 int remapCount = 0;
 
@@ -3220,6 +3221,13 @@ void G_SetOrigin( gentity_t *ent, vec3_t origin ) {
 	VectorClear( ent->s.pos.trDelta );
 
 	VectorCopy( origin, ent->r.currentOrigin );
+
+	// GalaxyRP: [NPC] a moved NPC's cached waypoints point at wherever it was (SP does this too)
+	if ( ent->client && ent->NPC )
+	{
+		ent->waypoint = WAYPOINT_NONE;
+		ent->lastWaypoint = WAYPOINT_NONE;
+	}
 }
 
 qboolean G_CheckInSolid (gentity_t *self, qboolean fix)

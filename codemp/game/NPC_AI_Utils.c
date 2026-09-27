@@ -1073,16 +1073,22 @@ gentity_t *AI_DistributeAttack( gentity_t *attacker, gentity_t *enemy, team_t te
 
 	numSurrounding = AI_GetGroupSize( enemy->r.currentOrigin, 48, team, attacker );
 
-	//First, see if we should look for the player
-	if ( enemy != &g_entities[0] )
+	//First, see if we should look for a player (on the enemy's team, alive, not spectating)
+	for ( i = 0; i < MAX_CLIENTS; i++ )
 	{
-		//rwwFIXMEFIXME: care about all clients not just 0
-		int	aroundPlayer = AI_GetGroupSize( g_entities[0].r.currentOrigin, 48, team, attacker );
-
-		//See if we're above our threshold
-		if ( aroundPlayer < threshold )
+		check = &g_entities[i];
+		if ( check == enemy || !check->inuse || !check->client
+			|| check->client->pers.connected != CON_CONNECTED
+			|| check->client->sess.sessionTeam == TEAM_SPECTATOR
+			|| check->health <= 0
+			|| check->client->playerTeam != enemy->client->playerTeam )
 		{
-			return &g_entities[0];
+			continue;
+		}
+		//See if we're above our threshold
+		if ( AI_GetGroupSize( check->r.currentOrigin, 48, team, attacker ) < threshold )
+		{
+			return check;
 		}
 	}
 
