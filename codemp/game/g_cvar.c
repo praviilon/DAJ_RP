@@ -200,6 +200,32 @@ int RP_CorpseSecondsToMs(int seconds)
 	return seconds * 1000;
 }
 
+// DAJ_RP: [Ammo] rp_add_ammo_scale scales the ammo an ammo item or a picked-up weapon gives, and a
+// dropped weapon stores its ammo divided by it (see RP_DropAmmoCount() in g_items.c). Out of range it
+// was an exploit or a trap: above 1 a weapon dropped with a round or two stored 0, which the pickup
+// reads as "the full default amount"; 0 used up items for nothing; a negative scale made pickups
+// subtract ammo, down past zero, and that was saved. So it is held to 0.01..1.0 -- snapped the moment
+// it changes and at registration, with a console line, so /rp_add_ammo_scale shows the value in
+// force. A non-number reads as 0 and a NaN fails both tests; both land on the minimum.
+// RP_AmmoScale() clamps again at every read, so the arithmetic never depends on this having run.
+void RP_CVU_addAmmoScale(void)
+{
+	const float value = rp_add_ammo_scale.value;
+	float snapped;
+
+	if (value >= RP_AMMO_SCALE_MIN && value <= RP_AMMO_SCALE_MAX)
+	{
+		return;
+	}
+
+	snapped = (value > RP_AMMO_SCALE_MAX) ? RP_AMMO_SCALE_MAX : RP_AMMO_SCALE_MIN;
+
+	trap->Print("rp_add_ammo_scale: %s is out of range (0.01 to 1.0) -- using %g.\n", rp_add_ammo_scale.string, snapped);
+
+	trap->Cvar_Set("rp_add_ammo_scale", va("%g", snapped));
+	trap->Cvar_Update(&rp_add_ammo_scale);
+}
+
 // GalaxyRP fix: [validation] rp_list_cmds_results_per_page is read as results_per_page in both
 // Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c), where it gates both pagination loop bounds:
 // results_per_page*(page-1) and results_per_page*page. When results_per_page is 0 (or negative),

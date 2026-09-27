@@ -14474,24 +14474,24 @@ void Cmd_Drop_f( gentity_t *ent ) {
 		if (has_ammo_type == qtrue)
 		{
 			// zyk: setting amount of ammo in this dropped weapon
+			// DAJ_RP: [Ammo] the ceiling and the stored count come from RP_ScaledAmmo() and
+			// RP_DropAmmoCount() (g_items.c), shared with the death drop and the Force Pull disarm. The
+			// scale is clamped to 0.01..1.0, and the count is never 0 -- which Pickup_Weapon() reads as
+			// the weapon's full default quantity, so above a scale of 1 dropping a weapon with a round
+			// or two left used to hand out a full pack -- and never gives back more than was taken off
+			// the dropper (at some scales the float quotient used to round up by one: +1 per drop).
 			current_ammo = ent->client->ps.ammo[weaponData[weapon].ammoIndex];
-			ammo_count = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity * rp_add_ammo_scale.value);
+			ammo_count = RP_ScaledAmmo(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity);
 
 			if (current_ammo < ammo_count)
 			{ // zyk: player does not have the default ammo to set in the weapon, so set the current_ammo of the player in the weapon
 				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= current_ammo;
-				if (rp_add_ammo_scale.value > 0 && current_ammo > 0)
-					launched->count = (current_ammo / rp_add_ammo_scale.value);
-				else
-					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+				launched->count = RP_DropAmmoCount(current_ammo); // zyk: -1 when the player has no ammo, so weapon should add no ammo to the player who picks up this weapon
 			}
 			else
 			{
 				ent->client->ps.ammo[weaponData[weapon].ammoIndex] -= ammo_count;
-				if (rp_add_ammo_scale.value > 0 && current_ammo > 0)
-					launched->count = (ammo_count / rp_add_ammo_scale.value);
-				else
-					launched->count = -1; // zyk: in this case, player has no ammo, so weapon should add no ammo to the player who picks up this weapon
+				launched->count = RP_DropAmmoCount(ammo_count);
 			}
 		}
 		else

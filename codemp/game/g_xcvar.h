@@ -434,7 +434,8 @@ XCVAR_DEF( rp_list_cmds_results_per_page,	"10",		RP_CVU_listCmdsResultsPerPage,	
 // 0 -- see its comment for why.
 XCVAR_DEF( rp_flame_thrower_cooldown,	"50",			RP_CVU_flameThrowerCooldown,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_flame_thrower_damage,	"2",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
-XCVAR_DEF( rp_add_ammo_scale,	"0.5",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// DAJ_RP: [Ammo] RP_CVU_addAmmoScale (g_cvar.c) snaps it into RP_AMMO_SCALE_MIN..RP_AMMO_SCALE_MAX.
+XCVAR_DEF( rp_add_ammo_scale,	"0.5",					RP_CVU_addAmmoScale,	CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_chat_protection_timer,	"0",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_change_map_gametype_vote, "1",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_vote_timer,	"0",						NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

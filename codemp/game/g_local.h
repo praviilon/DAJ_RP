@@ -2095,6 +2095,12 @@ void FinishSpawningItem( gentity_t *ent );
 void	Add_Ammo (gentity_t *ent, int weapon, int count);
 int		RP_MaxAmmo( int ammoType );
 void	RP_ClampAmmoToCaps( gentity_t *ent );
+// DAJ_RP: [Ammo] rp_add_ammo_scale, and the one rule every dropped weapon's ammo follows (g_items.c)
+#define RP_AMMO_SCALE_MIN	0.01f
+#define RP_AMMO_SCALE_MAX	1.0f
+float	RP_AmmoScale( void );
+int		RP_ScaledAmmo( int quantity );
+int		RP_DropAmmoCount( int give );
 void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace);
 
 void ClearRegisteredItems( void );
@@ -2557,6 +2563,8 @@ void RP_CVU_limbLifetime(void);
 void RP_CVU_playerCorpseTime(void);
 // DAJ_RP: [Items] rp_item_lifetime shares the same 0..RP_CORPSE_TIME_MAX clamp and conversion.
 void RP_CVU_itemLifetime(void);
+// DAJ_RP: [Ammo] rp_add_ammo_scale is held to RP_AMMO_SCALE_MIN..RP_AMMO_SCALE_MAX.
+void RP_CVU_addAmmoScale(void);
 int RP_CorpseSecondsToMs(int seconds);
 
 // GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in both

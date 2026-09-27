@@ -493,7 +493,7 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 	gitem_t *item;
 	gentity_t *launched;
 	int weapon = self->s.weapon;
-	int ammoSub;
+	int carried, give;
 
 	if (level.gametype == GT_SIEGE)
 	{ //no dropping weaps
@@ -531,17 +531,25 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 	// find the item type for this weapon
 	item = BG_FindItemForWeapon( weapon );
 
-	ammoSub = (self->client->ps.ammo[weaponData[weapon].ammoIndex] - bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity);
+	carried = self->client->ps.ammo[weaponData[weapon].ammoIndex];
 
-	if (ammoSub < 0)
+	if (carried <= 0)
+	{ //no ammo
+		return;
+	}
+
+	// DAJ_RP: [Ammo] the Force Pull disarm takes and stores the ammo the way /drop does (Cmd_Drop_f).
+	// It used to take up to the weapon's full default quantity off the victim -- 100 rifle rounds --
+	// and store it raw in count, which Pickup_Weapon() then multiplied by rp_add_ammo_scale: at the
+	// usual 0.5 whoever picked the weapon up got half of what the victim lost, and the other half was
+	// simply gone (and saved gone, for a logged-in victim, at their next death). Now the victim loses
+	// at most the scaled quantity (RP_ScaledAmmo, 50 rifle rounds at 0.5), never more than they carry,
+	// and the count is stored through RP_DropAmmoCount so the pickup gives exactly that back.
+	give = RP_ScaledAmmo(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity);
+
+	if (give > carried)
 	{
-		int ammoQuan = item->quantity;
-		ammoQuan -= (-ammoSub);
-
-		if (ammoQuan <= 0)
-		{ //no ammo
-			return;
-		}
+		give = carried;
 	}
 
 	vel[0] = direction[0]*speed;
@@ -553,20 +561,13 @@ void TossClientWeapon(gentity_t *self, vec3_t direction, float speed)
 	launched->s.generic1 = self->s.number;
 	launched->s.powerups = level.time + 1500;
 
-	launched->count = bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity;
-
-	self->client->ps.ammo[weaponData[weapon].ammoIndex] -= bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity;
-
-	if (self->client->ps.ammo[weaponData[weapon].ammoIndex] < 0)
-	{
-		launched->count -= (-self->client->ps.ammo[weaponData[weapon].ammoIndex]);
-		self->client->ps.ammo[weaponData[weapon].ammoIndex] = 0;
-	}
+	self->client->ps.ammo[weaponData[weapon].ammoIndex] -= give;
+	launched->count = RP_DropAmmoCount(give);
 
 	// GalaxyRP fix: [Drop] the first clause used to carry "&& weapon != WP_DET_PACK", and the second
 	// excludes the det pack as well, so for that one weapon the whole test could never be true and it
 	// was never taken off the victim. This is the same defect Cmd_Drop_f had, where it was an entity
-	// fountain; here it is only an inconsistency, because the ammoQuan check above refuses the toss
+	// fountain; here it is only an inconsistency, because the no-ammo check above refuses the toss
 	// once the charges are gone, so a det pack at zero simply sat in STAT_WEAPONS doing nothing while
 	// a thermal or a trip mine in the same state left properly. It leaves with its last charge now,
 	// like the other two.
@@ -686,9 +687,8 @@ void TossClientItems( gentity_t *self ) {
 		// fountain rather than an occasional windfall.
 		//
 		// The ceiling is Cmd_Drop_f's: at most ceil(quantity * rp_add_ammo_scale), and never more
-		// than the victim had. TossClientWeapon() below caps at the unscaled quantity instead;
-		// matching the command rather than the force-push disarm keeps the two drops a player can
-		// actually compare -- "I threw it" and "they killed me for it" -- worth the same.
+		// than the victim had. TossClientWeapon() above uses the same ceiling, so all three drops --
+		// "I threw it", "they pulled it off me" and "they killed me for it" -- are worth the same.
 		//
 		// count is stored in PRE-scale units, because Pickup_Weapon() multiplies by the scale
 		// again on the way out. That is the same round trip Cmd_Drop_f does (it divides for
@@ -708,16 +708,15 @@ void TossClientItems( gentity_t *self ) {
 		// since Add_Ammo() has no AMMO_NONE branch, but the arithmetic should not depend on that.
 		dropped = Drop_Item( self, item, 0 );
 
-		packGive = (int)ceil(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity
-							 * rp_add_ammo_scale.value);
+		// DAJ_RP: [Ammo] the ceiling and the stored count now come from RP_ScaledAmmo() and
+		// RP_DropAmmoCount() (g_items.c), shared with /drop and the Force Pull disarm: the scale is
+		// clamped, and the count is never 0 and never gives back more than "give".
+		packGive = RP_ScaledAmmo(bg_itemlist[BG_GetItemIndexByTag(weapon, IT_WEAPON)].quantity);
 		carried = (weaponData[weapon].ammoIndex != AMMO_NONE)
 					? self->client->ps.ammo[weaponData[weapon].ammoIndex] : 0;
 		give = (carried < packGive) ? carried : packGive;
 
-		if ( rp_add_ammo_scale.value > 0 && give > 0 )
-			dropped->count = (int)(give / rp_add_ammo_scale.value);
-		else
-			dropped->count = -1;	// carries nothing -- the same -1 Cmd_Drop_f uses
+		dropped->count = RP_DropAmmoCount(give);	// -1, carrying nothing, when give is 0 -- as Cmd_Drop_f
 	}
 
 	// drop all the powerups if not in teamplay

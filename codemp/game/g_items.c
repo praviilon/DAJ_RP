@@ -2630,6 +2630,68 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 //======================================================================
 
+// DAJ_RP: [Ammo] rp_add_ammo_scale as it is used: clamped to RP_AMMO_SCALE_MIN..RP_AMMO_SCALE_MAX
+// here as well as by its cvar callback (RP_CVU_addAmmoScale, g_cvar.c), so no reader depends on the
+// callback having run. A NaN fails the first test and comes back as the minimum.
+float RP_AmmoScale( void )
+{
+	const float scale = rp_add_ammo_scale.value;
+
+	if ( !( scale >= RP_AMMO_SCALE_MIN ) )
+	{
+		return RP_AMMO_SCALE_MIN;
+	}
+	if ( scale > RP_AMMO_SCALE_MAX )
+	{
+		return RP_AMMO_SCALE_MAX;
+	}
+	return scale;
+}
+
+// DAJ_RP: [Ammo] an amount of ammo as a pickup hands it out: quantity * scale, rounded up. Used by
+// Pickup_Ammo() and Pickup_Weapon() below, and as the most a dropped weapon may carry -- the weapon's
+// default quantity scaled -- by /drop (Cmd_Drop_f), the death drop (TossClientItems) and the Force
+// Pull disarm (TossClientWeapon), so those three take from the dropper exactly what a pickup of the
+// same weapon would give.
+int RP_ScaledAmmo( int quantity )
+{
+	return (int)ceil( quantity * RP_AmmoScale() );
+}
+
+// DAJ_RP: [Ammo] what a dropped weapon stores in its count so that picking it up gives back exactly
+// "give" rounds. Pickup_Weapon() multiplies count by the scale again, so the count is give / scale --
+// but not left to float arithmetic alone:
+//   - nothing to give is -1, which Pickup_Weapon() reads as "no ammo" (0 would mean "the weapon's
+//     full default quantity" -- the reason a count must never be 0: above a scale of 1 a round or two
+//     used to divide down to it and came back as a full pack);
+//   - at some scales (0.3, 0.6, ...) the float quotient rounds so that a pickup would give one round
+//     more than was dropped, a +1 per /drop and pick-up; the count is lowered until it does not.
+// Lowering the count by one lowers what a pickup gives by at most one, because the scale is at most 1,
+// so the result never undershoots either: a pickup gives back exactly "give".
+int RP_DropAmmoCount( int give )
+{
+	int count;
+
+	if ( give <= 0 )
+	{
+		return -1;
+	}
+
+	count = (int)( give / RP_AmmoScale() );
+
+	if ( count < 1 )
+	{
+		count = 1;
+	}
+
+	while ( count > 1 && RP_ScaledAmmo( count ) > give )
+	{
+		count--;
+	}
+
+	return count;
+}
+
 // DAJ_RP: [Ammo] the server's cap for one ammo type -- the same rp_max_* cvar Add_Ammo() below fills
 // to, in one place so the ammo dispensers (g_misc.c) and the load-time clamp can ask for it instead of
 // carrying their own copy of this list. 0 for anything with no rp_max_* cvar (AMMO_NONE, AMMO_FORCE,
@@ -2780,7 +2842,7 @@ int Pickup_Ammo (gentity_t *ent, gentity_t *other)
 	}
 	else
 	{
-		Add_Ammo (other, ent->item->giTag, (int)ceil(quantity * rp_add_ammo_scale.value)); // zyk: cvar to scale the add ammo amount
+		Add_Ammo (other, ent->item->giTag, RP_ScaledAmmo(quantity)); // zyk: cvar to scale the add ammo amount (DAJ_RP: [Ammo] clamped, see RP_AmmoScale)
 	}
 
 	return G_ItemRespawnTime(ent); // GalaxyRP fix: [Items] see G_ItemRespawnTime
@@ -2830,7 +2892,7 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other) {
 	other->client->ps.stats[STAT_WEAPONS] |= ( 1 << ent->item->giTag );
 
 	//Add_Ammo( other, ent->item->giTag, quantity );
-	Add_Ammo( other, weaponData[ent->item->giTag].ammoIndex, (int)ceil(quantity * rp_add_ammo_scale.value) ); // zyk: cvar to scale the add ammo amount
+	Add_Ammo( other, weaponData[ent->item->giTag].ammoIndex, RP_ScaledAmmo(quantity) ); // zyk: cvar to scale the add ammo amount (DAJ_RP: [Ammo] clamped, see RP_AmmoScale)
 
 	G_LogWeaponPickup(other->s.number, ent->item->giTag);
 
