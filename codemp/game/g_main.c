@@ -1186,6 +1186,102 @@ static void RP_SpawnTrigger( const vec3_t absmin, const vec3_t absmax, const cha
 	trap->LinkEntity( (sharedEntity_t *)trig );
 }
 
+extern void Think_SpawnNewDoorTrigger( gentity_t *ent );
+
+/*
+------------------
+RP_OpenUpDoor
+
+A door that only a single-player script opens -- one that runs inside an affect("kyle") block,
+waits on a signal sent from one, or needs a cutscene or a companion's walk -- stays shut for good
+in multiplayer. This makes every func_door with that name an ordinary door, before the first frame:
+  - a locked one is unlocked (every member of its team, the lock shader stepped to its unlocked
+    frame, as UnLockDoors() does). SP_func_door gave it the think that builds its walk-up trigger
+    one frame after spawn, and that still runs;
+  - a toggle one stops toggling, and gets the same walk-up-trigger think in place of
+    Think_MatchTeam (Think_SpawnNewDoorTrigger() ends with the same MatchTeam() call), so it opens
+    as anyone walks up and closes after its wait;
+  - an ordinary named door (named doors get no walk-up trigger) gets that think too.
+The name stays: a script that still reaches the door opens it as any use would. G_FindTeams() has
+already moved a team's name onto its master, so the name finds the master and the team is walked
+from there.
+------------------
+*/
+static void RP_OpenUpDoor( const char *name )
+{
+	gentity_t *ent, *member;
+	int count = 0;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( !ent->inuse || !ent->classname || Q_stricmp( ent->classname, "func_door" ) ||
+			!ent->targetname || Q_stricmp( ent->targetname, name ) )
+		{
+			continue;
+		}
+
+		for ( member = ent; member; member = member->teamchain )
+		{
+			if ( member->spawnflags & 16 )	// MOVER_LOCKED
+			{
+				member->spawnflags &= ~16;
+				member->s.frame = 1;	// second stage of the locked-door shader anim, as UnLockDoors()
+			}
+			member->spawnflags &= ~(8 | 128);	// MOVER_TOGGLE, MOVER_INACTIVE
+			member->flags &= ~FL_INACTIVE;
+		}
+
+		if ( ent->think != Think_SpawnNewDoorTrigger )
+		{
+			ent->think = Think_SpawnNewDoorTrigger;
+			ent->nextthink = level.time + FRAMETIME;
+		}
+		count++;
+	}
+
+	if ( !count )
+	{
+		G_Printf( "RP_OpenUpDoor: no func_door named %s on this map\n", name );
+	}
+}
+
+/*
+------------------
+RP_DisableLockedTrigger
+
+The use-button trigger by a locked door that plays the "locked" sound or a Kyle line when someone
+presses use at it. Single player switches it off (a target_deactivate or a script) when the door
+opens; a door opened by RP_OpenUpDoor() needs it off from the start. Only trigger_multiples with
+that name, and only the one with that brush model when model is given -- a name some maps share
+between several doors.
+------------------
+*/
+static void RP_DisableLockedTrigger( const char *name, const char *model )
+{
+	gentity_t *ent;
+	int count = 0;
+
+	RP_FOR_EACH_ENTITY( ent )
+	{
+		if ( !ent->inuse || !ent->classname || Q_stricmp( ent->classname, "trigger_multiple" ) ||
+			!ent->targetname || Q_stricmp( ent->targetname, name ) )
+		{
+			continue;
+		}
+		if ( model && ( !ent->model || Q_stricmp( ent->model, model ) ) )
+		{
+			continue;
+		}
+		ent->flags |= FL_INACTIVE;
+		count++;
+	}
+
+	if ( !count )
+	{
+		G_Printf( "RP_DisableLockedTrigger: no trigger_multiple named %s on this map\n", name );
+	}
+}
+
 /*
 ------------------
 RP_FixBespinStreets
@@ -1395,6 +1491,11 @@ across the landing just west of those points, so the beam falls ahead of whoever
 that way, as it did ahead of Kyle. The map's own trigger stays, for the ledge spawn point, whose
 way up to the landing crosses it. The scriptrunner allows one run (count 1), so the beam falls
 once whichever trigger fires first, and the other then does nothing.
+
+Two locked double doors open only in the warden's forced march, and only inside its
+affect("kyle") blocks, which MP skips: office_door (march_warden) and warden_door (warden_escape,
+run from the same block). Both are made ordinary doors (RP_OpenUpDoor), and the "locked" sound
+trigger in front of office_door (t424, which march_warden removes) is switched off.
 ------------------
 */
 static void RP_FixArtusDetention( void )
@@ -1403,6 +1504,10 @@ static void RP_FixArtusDetention( void )
 	const vec3_t maxs = { -288, 4568, 740 };
 
 	RP_SpawnTrigger( mins, maxs, "run_beam", 1, -1.0f );	// CLIENTONLY, fire once
+
+	RP_OpenUpDoor( "office_door" );
+	RP_OpenUpDoor( "warden_door" );
+	RP_DisableLockedTrigger( "t424", NULL );
 }
 
 /*
@@ -1498,6 +1603,12 @@ that trigger starts inactive and only a target_activate called hangar_ramp arms 
 hangar-attack script fires that, after a voice line nothing in MP ever finishes, so the door
 never opened. The trigger is armed here instead. hangar_ramp is not fired: the hangar ramp door
 answers to the same name.
+
+backdooropen, the locked double door further along, is unlocked by the same script, after Lando's
+line. That now plays out in MP, but only if Lando is still alive when the first player crosses the
+one-shot trigger that runs it; it is made an ordinary door here (RP_OpenUpDoor) so it does not
+depend on him, and its "locked" use trigger (no3, which the door's target_deactivate switches off
+in single player) is switched off.
 ------------------
 */
 static void RP_FixNsStarpad( void )
@@ -1514,6 +1625,91 @@ static void RP_FixNsStarpad( void )
 			ent->flags &= ~FL_INACTIVE;
 		}
 	}
+
+	RP_OpenUpDoor( "backdooropen" );
+	RP_DisableLockedTrigger( "no3", NULL );
+}
+
+/*
+------------------
+RP_FixKejimPost
+
+Three passage doors that only single-player scripts open, none of which gets there in MP:
+  - tower_door, a toggle door: check_bigdoor and finish_checking_door use it inside
+    affect("kyle"), after Jan finds the big door jammed;
+  - upper_door, a toggle door: the perimeter-defence script uses it inside affect("kyle"), with
+    upper_door_deac, which switches off its Kyle-line use trigger upper_door_l;
+  - monitor_room_door, two separate locked doors of one name, some 600 units apart: Jan opens
+    them from a console, after a trigger only she can fire and three walks. The door's
+    target_deactivate switches off their use triggers, green_room_l.
+All three are made ordinary doors (RP_OpenUpDoor) and those use triggers are switched off. The
+encounters the scripts start with them (tower troops, perimeter guns, the monitor-room squad)
+stay unspawned, as they are without this.
+------------------
+*/
+static void RP_FixKejimPost( void )
+{
+	RP_OpenUpDoor( "tower_door" );
+	RP_OpenUpDoor( "upper_door" );
+	RP_OpenUpDoor( "monitor_room_door" );
+	RP_DisableLockedTrigger( "upper_door_l", NULL );
+	RP_DisableLockedTrigger( "green_room_l", NULL );
+}
+
+/*
+------------------
+RP_FixKejimBase
+
+lab_door, a locked door, is unlocked by place_mines: two stormtroopers placing mines, after one of
+their lines. That now plays out in MP, but only if both miners -- spawned when someone first comes
+through the doors before them -- are still alive when a player crosses the one-shot trigger that
+runs it. Opening lab_door is what spawns lab_enemies, the officer carrying key3 among them, so a
+lab_door that never unlocked also left keydoor3 shut. It is made an ordinary door (RP_OpenUpDoor):
+its first opening still spawns lab_enemies (the spawners' count is 1, so later openings do not).
+------------------
+*/
+static void RP_FixKejimBase( void )
+{
+	RP_OpenUpDoor( "lab_door" );
+}
+
+/*
+------------------
+RP_FixNsHideout
+
+  - eye_door, the toggle door behind the eyeball: the eyeball script runs whole inside
+    affect("kyle"), so the eye never asks and the door never opens. Made an ordinary door, and its
+    "locked" use trigger (ed, which the door's target_deactivate switches off) is switched off;
+  - end_door, the three-door team Lando runs out through once freed (only its master is locked):
+    only the Lando rescue cutscene opens it (lando_free, run from cinematic19, with cutscene Kyle and Lando
+    actors, walks and signal waits), which never finishes in MP. Made an ordinary door. Its
+    "locked" use trigger is one of the many named roj (run_open_jail switches them all off when
+    the cells open), so only that one, brush model *307, is switched off.
+------------------
+*/
+static void RP_FixNsHideout( void )
+{
+	RP_OpenUpDoor( "eye_door" );
+	RP_OpenUpDoor( "end_door" );
+	RP_DisableLockedTrigger( "ed", NULL );
+	RP_DisableLockedTrigger( "roj", "*307" );
+}
+
+/*
+------------------
+RP_FixBespinUndercity
+
+vane_door is opened by reborn_dead, which the Reborn's death runs: it waits for a signal that is
+only sent inside affect("kyle"), so in MP it waits for good. It is made an ordinary door
+(RP_OpenUpDoor); its wait is -1, as the map has it, so the first player to walk up opens it for
+good, which is how single player leaves it. Its "locked" use trigger (t292, which the door's
+target_deactivate switches off) is switched off.
+------------------
+*/
+static void RP_FixBespinUndercity( void )
+{
+	RP_OpenUpDoor( "vane_door" );
+	RP_DisableLockedTrigger( "t292", NULL );
 }
 
 static void RP_JediOutcastMapFixes( const char *mapname )
@@ -1568,6 +1764,22 @@ static void RP_JediOutcastMapFixes( const char *mapname )
 		else if ( !Q_stricmp( mapname, "ns_starpad" ) )
 		{
 			RP_FixNsStarpad();
+		}
+		else if ( !Q_stricmp( mapname, "kejim_post" ) )
+		{
+			RP_FixKejimPost();
+		}
+		else if ( !Q_stricmp( mapname, "kejim_base" ) )
+		{
+			RP_FixKejimBase();
+		}
+		else if ( !Q_stricmp( mapname, "ns_hideout" ) )
+		{
+			RP_FixNsHideout();
+		}
+		else if ( !Q_stricmp( mapname, "bespin_undercity" ) )
+		{
+			RP_FixBespinUndercity();
 		}
 		return;
 	}
