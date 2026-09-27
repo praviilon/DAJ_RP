@@ -1522,6 +1522,24 @@ static void ClientCleanName( const char *in, char *out, int outSize )
 
 	out[outpos] = '\0';
 
+	// GalaxyRP: [Name] strip trailing spaces and trailing colour codes ("Bob ^1 ^7" -> "Bob"), so a
+	// name can't end in invisible padding. JA++ strips trailing spaces with an unguarded
+	// out[len-1] check that reads before the buffer once the name is empty; both checks here are
+	// bounded by outpos. Neither a space nor a whole colour code counts towards colorlessLen, so
+	// the empty-name check below still sees the right thing.
+	while ( outpos > 0 ) {
+		if ( out[outpos-1] == ' ' ) {
+			out[--outpos] = '\0';
+		}
+		else if ( outpos >= 2 && Q_IsColorStringExt( &out[outpos-2] ) ) {
+			outpos -= 2;
+			out[outpos] = '\0';
+		}
+		else {
+			break;
+		}
+	}
+
 	// don't allow empty names
 	if ( *out == '\0' || colorlessLen == 0 )
 		Q_strncpyz( out, "Padawan", outSize );
@@ -2031,31 +2049,41 @@ void G_ValidateSiegeClassForTeam(gentity_t *ent, int team);
 typedef struct userinfoValidate_s {
 	const char		*field, *fieldClean;
 	unsigned int	minCount, maxCount;
+	int				bit;	// GalaxyRP: [Userinfo] bit in g_userinfoValidate (layout in g_local.h)
 } userinfoValidate_t;
 
-#define UIF( x, _min, _max ) { STRING(\\) #x STRING(\\), STRING( x ), _min, _max }
+#define UIF( x, _min, _max, _bit ) { STRING(\\) #x STRING(\\), STRING( x ), _min, _max, _bit }
 static userinfoValidate_t userinfoFields[] = {
-	UIF( cl_guid,			0, 0 ), // not allowed, q3fill protection
-	UIF( cl_punkbuster,		0, 0 ), // not allowed, q3fill protection
-	UIF( ip,				0, 1 ), // engine adds this at the end
-	UIF( name,				1, 1 ),
-	UIF( rate,				1, 1 ),
-	UIF( snaps,				1, 1 ),
-	UIF( model,				1, 1 ),
-	UIF( forcepowers,		1, 1 ),
-	UIF( color1,			1, 1 ),
-	UIF( color2,			1, 1 ),
-	UIF( handicap,			1, 1 ),
-	UIF( sex,				0, 1 ),
-	UIF( cg_predictItems,	1, 1 ),
-	UIF( saber1,			1, 1 ),
-	UIF( saber2,			1, 1 ),
-	UIF( char_color_red,	1, 1 ),
-	UIF( char_color_green,	1, 1 ),
-	UIF( char_color_blue,	1, 1 ),
-	UIF( teamtask,			0, 1 ), // optional
-	UIF( password,			0, 1 ), // optional
-	UIF( teamoverlay,		0, 1 ), // only registered in cgame, not sent when connecting
+	UIF( cl_guid,			0, 0, 0 ), // not allowed, q3fill protection
+	UIF( cl_punkbuster,		0, 0, 1 ), // not allowed, q3fill protection
+	UIF( ip,				0, 1, 2 ), // engine adds this at the end
+	UIF( name,				1, 1, 3 ),
+	UIF( rate,				1, 1, 4 ),
+	UIF( snaps,				1, 1, 5 ),
+	UIF( model,				1, 1, 6 ),
+	UIF( forcepowers,		1, 1, 7 ),
+	UIF( color1,			1, 1, 8 ),
+	UIF( color2,			1, 1, 9 ),
+	UIF( handicap,			1, 1, 10 ),
+	UIF( sex,				0, 1, 11 ),
+	UIF( cg_predictItems,	1, 1, 12 ),
+	UIF( saber1,			1, 1, 13 ),
+	UIF( saber2,			1, 1, 14 ),
+	UIF( char_color_red,	1, 1, 15 ),
+	UIF( char_color_green,	1, 1, 16 ),
+	UIF( char_color_blue,	1, 1, 17 ),
+	UIF( teamtask,			0, 1, 18 ), // optional
+	UIF( password,			0, 1, 19 ), // optional
+	UIF( teamoverlay,		0, 1, 20 ), // only registered in cgame, not sent when connecting
+	// bits 21-24 are the extra checks (userinfoValidateExtra[] below)
+	// GalaxyRP: [Userinfo] keys this mod reads, each optional but never allowed twice. A duplicate
+	// matters most for cp_sbRGB1/cp_sbRGB2: when the server rewrites them (Info_SetValueForKey in
+	// g_cmds.c) only the FIRST copy is removed, so a second copy would move to the front and be
+	// re-adopted by the next ClientUserinfoChanged().
+	UIF( cp_sbRGB1,			0, 1, USERINFO_VALIDATION_NEW_FIELDS + 0 ), // saber RGB (g_client.c)
+	UIF( cp_sbRGB2,			0, 1, USERINFO_VALIDATION_NEW_FIELDS + 1 ), // saber RGB (g_client.c)
+	UIF( rpmod_client,		0, 1, USERINFO_VALIDATION_NEW_FIELDS + 2 ), // client plugin check
+	UIF( ja_guid,			0, 1, USERINFO_VALIDATION_NEW_FIELDS + 3 ), // logged on connect
 };
 static const size_t numUserinfoFields = ARRAY_LEN( userinfoFields );
 
@@ -2066,36 +2094,53 @@ static const char *userinfoValidateExtra[USERINFO_VALIDATION_MAX] = {
 	"Control characters",	// USERINFO_VALIDATION_CONTROLCHARS
 };
 
+// GalaxyRP: [Userinfo] the extra checks sit at fixed bits 21-24, not after the field count
+#define UIV_EXTRA_BIT( x )	(1 << (USERINFO_VALIDATION_LEGACY_FIELDS + (x)))
+
+// GalaxyRP: [Userinfo] name of a g_userinfoValidate bit, or NULL if the bit is unused
+static const char *G_UserinfoValidateBitName( int bit ) {
+	size_t i;
+
+	if ( bit >= USERINFO_VALIDATION_LEGACY_FIELDS && bit < USERINFO_VALIDATION_NEW_FIELDS )
+		return userinfoValidateExtra[bit - USERINFO_VALIDATION_LEGACY_FIELDS];
+
+	for ( i=0; i<numUserinfoFields; i++ ) {
+		if ( userinfoFields[i].bit == bit )
+			return userinfoFields[i].fieldClean;
+	}
+	return NULL;
+}
+
 void Svcmd_ToggleUserinfoValidation_f( void ) {
 	if ( trap->Argc() == 1 ) {
-		int i=0;
-		for ( i=0; i<numUserinfoFields; i++ ) {
-			if ( (g_userinfoValidate.integer & (1<<i)) )	trap->Print( "%2d [X] %s\n", i, userinfoFields[i].fieldClean );
-			else											trap->Print( "%2d [ ] %s\n", i, userinfoFields[i].fieldClean );
-		}
-		for ( ; i<numUserinfoFields+USERINFO_VALIDATION_MAX; i++ ) {
-			if ( (g_userinfoValidate.integer & (1<<i)) )	trap->Print( "%2d [X] %s\n", i, userinfoValidateExtra[i-numUserinfoFields] );
-			else											trap->Print( "%2d [ ] %s\n", i, userinfoValidateExtra[i-numUserinfoFields] );
+		int i;
+		for ( i=0; i<USERINFO_VALIDATION_NUM_BITS; i++ ) {
+			const char *bitName = G_UserinfoValidateBitName( i );
+
+			if ( !bitName )
+				continue;
+			if ( (g_userinfoValidate.integer & (1<<i)) )	trap->Print( "%2d [X] %s\n", i, bitName );
+			else											trap->Print( "%2d [ ] %s\n", i, bitName );
 		}
 		return;
 	}
 	else {
 		char arg[8]={0};
 		int index;
+		const char *bitName;
 
 		trap->Argv( 1, arg, sizeof( arg ) );
 		index = atoi( arg );
 
-		if ( index < 0 || index > numUserinfoFields+USERINFO_VALIDATION_MAX-1 ) {
-			Com_Printf( "ToggleUserinfoValidation: Invalid range: %i [0, %i]\n", index, numUserinfoFields+USERINFO_VALIDATION_MAX-1 );
+		if ( index < 0 || index > USERINFO_VALIDATION_NUM_BITS-1 || !(bitName = G_UserinfoValidateBitName( index )) ) {
+			Com_Printf( "ToggleUserinfoValidation: Invalid range: %i [0, %i]\n", index, USERINFO_VALIDATION_NUM_BITS-1 );
 			return;
 		}
 
-		trap->Cvar_Set( "g_userinfoValidate", va( "%i", (1 << index) ^ (g_userinfoValidate.integer & ((1 << (numUserinfoFields + USERINFO_VALIDATION_MAX)) - 1)) ) );
+		trap->Cvar_Set( "g_userinfoValidate", va( "%i", (1 << index) ^ (g_userinfoValidate.integer & ((1 << USERINFO_VALIDATION_NUM_BITS) - 1)) ) );
 		trap->Cvar_Update( &g_userinfoValidate );
 
-		if ( index < numUserinfoFields )	Com_Printf( "%s %s\n", userinfoFields[index].fieldClean,				((g_userinfoValidate.integer & (1<<index)) ? "Validated" : "Ignored") );
-		else								Com_Printf( "%s %s\n", userinfoValidateExtra[index-numUserinfoFields],	((g_userinfoValidate.integer & (1<<index)) ? "Validated" : "Ignored") );
+		Com_Printf( "%s %s\n", bitName, ((g_userinfoValidate.integer & (1<<index)) ? "Validated" : "Ignored") );
 	}
 }
 
@@ -2110,7 +2155,7 @@ char *G_ValidateUserinfo( const char *userinfo ) {
 	memset( fieldCount, 0, sizeof( fieldCount ) );
 
 	// size checks
-	if ( g_userinfoValidate.integer & (1<<(numUserinfoFields+USERINFO_VALIDATION_SIZE)) ) {
+	if ( g_userinfoValidate.integer & UIV_EXTRA_BIT( USERINFO_VALIDATION_SIZE ) ) {
 		if ( length < 1 )
 			return "Userinfo too short";
 		else if ( length >= MAX_INFO_STRING )
@@ -2118,7 +2163,7 @@ char *G_ValidateUserinfo( const char *userinfo ) {
 	}
 
 	// slash checks
-	if ( g_userinfoValidate.integer & (1<<(numUserinfoFields+USERINFO_VALIDATION_SLASH)) ) {
+	if ( g_userinfoValidate.integer & UIV_EXTRA_BIT( USERINFO_VALIDATION_SLASH ) ) {
 		// there must be a leading slash
 		if ( userinfo[0] != '\\' )
 			return "Missing leading slash";
@@ -2138,7 +2183,7 @@ char *G_ValidateUserinfo( const char *userinfo ) {
 	}
 
 	// extended characters are impossible to type, may want to disable
-	if ( g_userinfoValidate.integer & (1<<(numUserinfoFields+USERINFO_VALIDATION_EXTASCII)) ) {
+	if ( g_userinfoValidate.integer & UIV_EXTRA_BIT( USERINFO_VALIDATION_EXTASCII ) ) {
 		for ( i=0, count=0; i<length; i++ ) {
 			if ( userinfo[i] < 0 )
 				count++;
@@ -2147,9 +2192,10 @@ char *G_ValidateUserinfo( const char *userinfo ) {
 			return "Extended ASCII characters found";
 	}
 
-	// disallow \n \r ; and \"
-	if ( g_userinfoValidate.integer & (1<<(numUserinfoFields+USERINFO_VALIDATION_CONTROLCHARS)) ) {
-		if ( Q_strchrs( userinfo, "\n\r;\"" ) )
+	// disallow \n \r \t ; and \"
+	// GalaxyRP: [Userinfo] tab added (as JA++ does) -- no client can legitimately send one
+	if ( g_userinfoValidate.integer & UIV_EXTRA_BIT( USERINFO_VALIDATION_CONTROLCHARS ) ) {
+		if ( Q_strchrs( userinfo, "\n\r\t;\"" ) )
 			return "Invalid characters found";
 	}
 
@@ -2168,7 +2214,7 @@ char *G_ValidateUserinfo( const char *userinfo ) {
 
 	// count the number of fields
 	for ( i=0, info=userinfoFields; i<numUserinfoFields; i++, info++ ) {
-		if ( g_userinfoValidate.integer & (1<<i) ) {
+		if ( g_userinfoValidate.integer & (1<<info->bit) ) {
 			if ( info->minCount && !fieldCount[i] )
 				return va( "%s field not found", info->fieldClean );
 			else if ( fieldCount[i] > info->maxCount )

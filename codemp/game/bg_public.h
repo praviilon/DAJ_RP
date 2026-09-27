@@ -1307,6 +1307,7 @@ qboolean	BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 #define	DF_NO_FALLING			8
 #define DF_FIXED_FOV			16
 #define	DF_NO_FOOTSTEPS			32
+#define	DF_NO_DROWN				64	// GalaxyRP: [dmflags] no drowning damage (P_WorldEffects, g_active.c); same bit as JA++
 
 //rwwRMG - added in CONTENTS_TERRAIN
 // content masks

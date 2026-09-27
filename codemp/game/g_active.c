@@ -165,7 +165,12 @@ void P_WorldEffects( gentity_t *ent ) {
 	//
 	// check for drowning
 	//
-	if ( waterlevel == 3 ) {
+	// GalaxyRP: [dmflags] DF_NO_DROWN (64) switches drowning off by taking the "not under water"
+	// branch below, which keeps the air supply topped up (so clearing the flag mid-dive still
+	// gives the full 12 seconds) and resets the drowning damage ramp. Only drowning: lava and
+	// slime below, and any trigger_hurt a map puts in its water, still hurt. (JA++'s version
+	// returns from this function early, which switches lava and slime off as well.)
+	if ( waterlevel == 3 && !(dmflags.integer & DF_NO_DROWN) ) {
 		#ifdef BASE_COMPAT
 			// envirosuit give air
 			if ( envirosuit )

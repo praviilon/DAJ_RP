@@ -2818,15 +2818,27 @@ gentity_t	*RP_NextEntityInAnyRegion( gentity_t *from );
 
 // userinfo validation bitflags
 // default is all except extended ascii
-// numUserinfoFields + USERINFO_VALIDATION_MAX should not exceed 31
+//
+// GalaxyRP: [Userinfo] g_userinfoValidate bit layout (see userinfoFields[] in g_client.c):
+//   bits  0-20  the original 21 userinfo field checks
+//   bits 21-24  the extra checks below (USERINFO_VALIDATION_LEGACY_FIELDS + USERINFO_VALIDATION_*)
+//   bits 25-28  userinfo field checks added later (cp_sbRGB1, cp_sbRGB2, rpmod_client, ja_guid)
+// Upstream places the extra checks straight after however many fields there are, so adding a field
+// used to shift them: an existing g_userinfoValidate value would silently lose its size/slash/
+// control-character checks. The extras are pinned at 21-24 instead and new fields go from bit 25
+// up, so every existing value keeps its meaning. Stay below bit 31 (the cvar is a signed int).
 typedef enum userinfoValidationBits_e {
-	// validation & (1<<(numUserinfoFields+USERINFO_VALIDATION_BLAH))
+	// validation & (1<<(USERINFO_VALIDATION_LEGACY_FIELDS+USERINFO_VALIDATION_BLAH))
 	USERINFO_VALIDATION_SIZE=0,
 	USERINFO_VALIDATION_SLASH,
 	USERINFO_VALIDATION_EXTASCII,
 	USERINFO_VALIDATION_CONTROLCHARS,
 	USERINFO_VALIDATION_MAX
 } userinfoValidationBits_t;
+
+#define USERINFO_VALIDATION_LEGACY_FIELDS	21	// bits 0-20: the original field checks
+#define USERINFO_VALIDATION_NEW_FIELDS		(USERINFO_VALIDATION_LEGACY_FIELDS + USERINFO_VALIDATION_MAX)	// 25: first bit of the later field checks
+#define USERINFO_VALIDATION_NUM_BITS		29	// bits 0-28 are in use
 
 void Svcmd_ToggleUserinfoValidation_f( void );
 void Svcmd_ToggleAllowVote_f( void );
