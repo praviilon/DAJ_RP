@@ -1,8 +1,8 @@
-# Changelog. Dark Angels Fork
+# Changelog. Galaxy RP Ultimate Edition
 
 
 
-## [3.8.0]
+## [3.8.1]
 
 All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from.
 
@@ -34,6 +34,8 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - TaystJK write folder: the TaystJK client defaults `fs_forcegame` to `taystjk`, which sends everything the client writes -- config, screenshots, demos, downloaded pk3s -- to `taystjk/` instead of the mod folder, and the launchers work around it with `+set fs_forcegame GalaxyRP`. The client modules now do the same for a player who joined without the launcher: when `fs_forcegame` is still the engine default, cgame/ui set it to the mod folder, and the engine uses that from the next map or reconnect. A value the player or a launcher chose is never touched. It lasts for the client session, so a player who then plays another mod on the same TaystJK install writes to this folder instead of `taystjk/`; `rp_taystjk_writefolder 0` (archived) turns it off.
 - `/admghost`, `/admholo` and `/admsolid` admin commands, gated by a new "Ghost/Holo/Non-solid" admin bit: turn yourself or a named player into a Force ghost, a hologram, or just non-solid, so players and NPCs walk through them while they can still be hit and targeted as usual. Ghosts and holograms are hidden from the radar and keep their look on severed limbs and corpses; each command toggles, and the three are mutually exclusive.
 - `/npc effect <holo|ghost|nonsolid|clear>`: gives the NPC in your crosshair the same hologram, Force ghost or non-solid effect, which stays until `/npc effect clear`. `clear` also makes an NPC that the map spawned non-solid solid again.
+- Single Player map support has been expanded with fixes from OJP and well newly added support to play Jedi Outcast SP Maps in Jedi Academy.
+- New server cvars have been added for more control over item respawn and despawn rates.
 
 ### Changed
 - **Private duels are saber duels again**: the vanilla force restriction was commented out in this fork, making a private duel the only one in the JKA family with no restriction at all. It is back for `/duel` -- only Saber Offense, Saber Defense, Jump and Push-while-locked -- and a duel is once more sealed off from the rest of the map, so a duellist can no longer Grip, Mind Trick or Push a bystander and a bystander can no longer do the same back. Use `/engage_fullforceduel` for the old behaviour.

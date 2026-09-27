@@ -1,11 +1,11 @@
-# Galaxy RP Mod - Dark Angels Fork
+# Galaxy RP Mod - Ultimate Edition
 
-Dark Angels fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers and its logical entities system. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way. New features are also gradually added to the mod.
+Ultimate Edition fork modernises the **Galaxy RP** mod developed by Alex, making it natively playable on modern TaystJK engine with its Rend2 or Vulkan renderers and its logical entities system. It also introduces 64-bit mod version, as well as versions for Linux and macOS, and tackles some bugs and issues along the way. New features are also gradually added to the mod.
 
 ![cover_image](https://user-images.githubusercontent.com/16083854/130863860-95907912-39bf-4684-be9a-db8e04f73603.png)
 
 <div align="center">
-  
+
 This project is a fork of **Zyk Mod**, which is itself a fork of [OpenJK](https://github.com/JACoders/OpenJK). The aim is to improve on the work Zyk has done and move the project into a different direction: Player Roleplaying as opposed to an "RPG" game.
 This mod will be geared towards the RP community mainly. It will have features to prevent common occurences such as "spec-hiding", "Mary-sues" and more! It will also contain features that help player immersion.
 
@@ -52,10 +52,11 @@ The mod contains these following main features:
 - A client-side plugin with menus
 - Many cvars at server.cfg to customize mod features
 - Countless bugfixes and optimizations
+- Extended Single Player map support in MP (for both JA and JO maps)
 - And more...
 
 # Building
-The mod actually requires the only game-code files from the build project: `jampgamex86`, `cgamex86` and `uix86`. MP Engine files and SP files have been disabled for builds. You can follow the **OpenJK** guides for build process:
+The mod actually requires the only game-code files from the build project: `jampgame_`, `cgame_` and `ui_`. MP Engine files and SP files have been disabled for builds. You can follow the **OpenJK** guides for build process:
 
 * [Compilation guide](https://github.com/JACoders/OpenJK/wiki/Compilation-guide)
 * [Debugging guide](https://github.com/JACoders/OpenJK/wiki/Debugging)
@@ -87,6 +88,13 @@ The mod actually requires the only game-code files from the build project: `jamp
 - razor
 - Xycaleth
 - JACoders group
+
+**OJP Mod Authors:**
+- razorace
+- darthdieBowser
+- ensiformEnsiform
+- RoboPhred
+- OJP Team group
 
 # License
 **OpenJK** is licensed under GPLv2 as free software. You are free to use, modify and redistribute OpenJK following the terms in LICENSE.txt.
