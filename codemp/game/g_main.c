@@ -2896,6 +2896,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	level.sp_map = qfalse;
 
+	// GalaxyRP: [ICARUS] sound indices are per map, and so is the voice-line length cache keyed by them
+	RP_IcarusSoundCacheReset();
+
 	if (Q_stricmp(level.default_map_music, "") == 0)
 	{ // zyk: if the default map music is empty (the map has no music) then set a default music
 		// GalaxyRP fix: [Quests] this used to key off level.quest_map, the number the map blocks
@@ -8512,6 +8515,9 @@ void G_RunFrame( int levelTime ) {
 		if ( !ent->inuse ) {
 			continue;
 		}
+
+		// GalaxyRP: [ICARUS] a voice line that has ended completes the script task waiting on it
+		RP_IcarusSoundCheck( ent );
 
 		// clear events that are too old
 		if ( level.time - ent->eventTime > EVENT_VALID_MSEC ) {

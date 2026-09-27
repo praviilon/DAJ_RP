@@ -558,6 +558,14 @@ void AI_DeleteGroupMember( AIGroupInfo_t *group, int memberNum )
 {
 	int i;
 
+	// GalaxyRP fix: [NPC] nothing checked memberNum: a stale index (a member removed twice, a
+	// group whose count shrank under a caller) read and shifted memory past member[] and could
+	// drive numGroup negative. Refuse anything outside the live members.
+	if ( !group || memberNum < 0 || memberNum >= group->numGroup || memberNum >= MAX_GROUP_MEMBERS )
+	{
+		return;
+	}
+
 	if ( group->commander && group->commander->s.number == group->member[memberNum].number )
 	{
 		group->commander = NULL;

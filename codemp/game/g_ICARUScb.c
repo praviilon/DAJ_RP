@@ -65,6 +65,12 @@ enum
 
 #include "icarus/interpreter.h"
 
+// GalaxyRP: [ICARUS] MP's animation timer setters (bg_panimate.c), for Q3_SetAnimHoldTime()
+extern void BG_SetLegsAnimTimer(playerState_t *ps, int time );
+extern void BG_SetTorsoAnimTimer(playerState_t *ps, int time );
+// GalaxyRP: [ICARUS] g_utils.c's positioned sound event, for RP_IcarusVoiceSound()
+extern gentity_t *G_SoundTempEntity( vec3_t origin, int event, int channel );
+
 extern stringID_table_t animTable [MAX_ANIMATIONS+1];
 
 stringID_table_t setTable[] =
@@ -415,6 +421,433 @@ static char *Q3_GetAnimBoth( gentity_t *ent )
 	return lowerName;
 }
 
+
+/*
+==================================================================================================
+GalaxyRP: [ICARUS] voice-line task completion
+
+A script's task( sound(CHAN_VOICE, ...) ) dowait waits for TID_CHAN_VOICE, which Q3_PlaySound()
+sets below. In single player the engine completes it from its sound system when the line ends;
+the multiplayer engine has no such path, and nothing in the game module ever completed it either,
+so every cutscene script with dialogue stalled on its first line. The game module cannot ask the
+client how long a sound is, but it can read the file: RP_SoundDuration() opens the .mp3 or .wav
+behind the sound name and computes its length from the headers (MP3: an Xing/Info frame count when
+present, otherwise every frame walked; WAV: the data chunk over the byte rate). Q3_PlaySound()
+stores level.time plus that length in ent->IcarusSoundTime and RP_IcarusSoundCheck(), from the
+entity loop in G_RunFrame(), completes the task when it passes. One read per sound per map: the
+result is cached by sound index, and the cache is cleared with the map.
+
+Sizes: voice lines are a few hundred KB; the file is streamed through a 64 KB window and never
+held whole. A file that cannot be opened or parsed falls back to RP_SOUND_FALLBACK_MS -- the
+script then waits a fixed five seconds instead of forever, which is what OJP always did.
+==================================================================================================
+*/
+#define RP_SOUND_FALLBACK_MS	5000
+#define RP_SOUND_MIN_MS			100
+#define RP_SOUND_MAX_MS			120000
+#define RP_SOUND_WINDOW			65536
+#define RP_SOUND_MAX_BYTES		( 32 * 1024 * 1024 )	// give up on anything bigger, it is not a voice line
+#define RP_SOUND_CACHE_SIZE		128
+
+typedef struct rpSoundCacheEntry_s {
+	int		soundIndex;
+	int		ms;
+} rpSoundCacheEntry_t;
+
+static rpSoundCacheEntry_t	rp_soundCache[RP_SOUND_CACHE_SIZE];
+static int					rp_soundCacheNext = 0;
+static byte					rp_soundWindow[RP_SOUND_WINDOW];
+
+void RP_IcarusSoundCacheReset( void )
+{
+	memset( rp_soundCache, 0, sizeof( rp_soundCache ) );
+	rp_soundCacheNext = 0;
+}
+
+// A streamed read window over a file handle: bytes [0, len) are valid, pos is the parse cursor.
+typedef struct rpSoundStream_s {
+	fileHandle_t	f;
+	int				fileLen;		// bytes in the file
+	int				consumed;		// bytes of the file before window[0]
+	int				len;			// valid bytes in the window
+	int				pos;			// cursor inside the window
+	qboolean		eof;
+} rpSoundStream_t;
+
+// Makes sure at least `need` bytes are available at the cursor, reading more if the file has them.
+// Returns qfalse when the file has fewer than `need` bytes left from the cursor.
+static qboolean RP_SoundStreamEnsure( rpSoundStream_t *st, int need )
+{
+	int keep, got;
+
+	if ( need > RP_SOUND_WINDOW ) {
+		return qfalse;
+	}
+	if ( st->len - st->pos >= need ) {
+		return qtrue;
+	}
+	if ( st->eof ) {
+		return qfalse;
+	}
+	// slide what is left to the front, refill the rest
+	keep = st->len - st->pos;
+	if ( keep > 0 ) {
+		memmove( rp_soundWindow, rp_soundWindow + st->pos, keep );
+	}
+	st->consumed += st->pos;
+	st->pos = 0;
+	st->len = keep;
+	// fill the window; a short read is retried, only 0 (or an error) means the end
+	while ( st->len < RP_SOUND_WINDOW ) {
+		got = trap->FS_Read( rp_soundWindow + st->len, RP_SOUND_WINDOW - st->len, st->f );
+		if ( got <= 0 ) {
+			st->eof = qtrue;
+			break;
+		}
+		st->len += got;
+		if ( st->consumed + st->len >= st->fileLen ) {
+			st->eof = qtrue;
+			break;
+		}
+	}
+	return ( st->len - st->pos >= need ) ? qtrue : qfalse;
+}
+
+// Advances the cursor by `n` bytes, across window boundaries. Returns qfalse at end of file.
+static qboolean RP_SoundStreamSkip( rpSoundStream_t *st, int n )
+{
+	while ( n > 0 ) {
+		int chunk = n < RP_SOUND_WINDOW ? n : RP_SOUND_WINDOW;
+
+		if ( !RP_SoundStreamEnsure( st, chunk ) ) {
+			// the file ends inside the skip: consume what is there and report it
+			st->pos = st->len;
+			return qfalse;
+		}
+		st->pos += chunk;
+		n -= chunk;
+	}
+	return qtrue;
+}
+
+static const byte *RP_SoundStreamPeek( rpSoundStream_t *st, int need )
+{
+	if ( !RP_SoundStreamEnsure( st, need ) ) {
+		return NULL;
+	}
+	return rp_soundWindow + st->pos;
+}
+
+static int RP_ReadLE32( const byte *p ) { return p[0] | ( p[1] << 8 ) | ( p[2] << 16 ) | ( p[3] << 24 ); }
+static int RP_ReadBE32( const byte *p ) { return ( p[0] << 24 ) | ( p[1] << 16 ) | ( p[2] << 8 ) | p[3]; }
+
+// One MPEG audio frame header, decoded. Returns qfalse for anything that is not a valid header.
+typedef struct rpMp3Frame_s {
+	int		frameBytes;		// whole frame, header included
+	int		samples;		// PCM samples this frame decodes to (per channel)
+	int		sampleRate;
+	int		sideInfoBytes;	// Layer III side info after the header (for the Xing/Info lookup)
+} rpMp3Frame_t;
+
+static qboolean RP_Mp3DecodeHeader( const byte *h, rpMp3Frame_t *fr )
+{
+	static const int bitrateTable[2][3][16] = {
+		{	// MPEG-1: layer I, II, III
+			{ 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 },
+			{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0 },
+			{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 },
+		},
+		{	// MPEG-2 and 2.5: layer I, II, III
+			{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0 },
+			{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 },
+			{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 },
+		},
+	};
+	static const int sampleRateTable[4][3] = {
+		{ 11025, 12000, 8000 },		// MPEG-2.5
+		{ 0, 0, 0 },				// reserved
+		{ 22050, 24000, 16000 },	// MPEG-2
+		{ 44100, 48000, 32000 },	// MPEG-1
+	};
+	int version, layer, bitrateIndex, sampleRateIndex, padding, channelMode;
+	int bitrate, mpeg1, layerIndex;
+
+	if ( h[0] != 0xFF || ( h[1] & 0xE0 ) != 0xE0 ) {
+		return qfalse;
+	}
+	version = ( h[1] >> 3 ) & 3;			// 0 = 2.5, 1 = reserved, 2 = 2, 3 = 1
+	layer = ( h[1] >> 1 ) & 3;				// 0 = reserved, 1 = III, 2 = II, 3 = I
+	bitrateIndex = ( h[2] >> 4 ) & 15;
+	sampleRateIndex = ( h[2] >> 2 ) & 3;
+	padding = ( h[2] >> 1 ) & 1;
+	channelMode = ( h[3] >> 6 ) & 3;
+
+	if ( version == 1 || layer == 0 || bitrateIndex == 0 || bitrateIndex == 15 || sampleRateIndex == 3 ) {
+		return qfalse;
+	}
+	mpeg1 = ( version == 3 );
+	layerIndex = 3 - layer;					// 0 = I, 1 = II, 2 = III
+	bitrate = bitrateTable[mpeg1 ? 0 : 1][layerIndex][bitrateIndex] * 1000;
+	fr->sampleRate = sampleRateTable[version][sampleRateIndex];
+	if ( bitrate <= 0 || fr->sampleRate <= 0 ) {
+		return qfalse;
+	}
+
+	if ( layerIndex == 0 ) {				// layer I
+		fr->samples = 384;
+		fr->frameBytes = ( 12 * bitrate / fr->sampleRate + padding ) * 4;
+	} else if ( layerIndex == 1 ) {			// layer II
+		fr->samples = 1152;
+		fr->frameBytes = 144 * bitrate / fr->sampleRate + padding;
+	} else {								// layer III
+		fr->samples = mpeg1 ? 1152 : 576;
+		fr->frameBytes = ( mpeg1 ? 144 : 72 ) * bitrate / fr->sampleRate + padding;
+	}
+	if ( mpeg1 ) {
+		fr->sideInfoBytes = ( channelMode == 3 ) ? 17 : 32;
+	} else {
+		fr->sideInfoBytes = ( channelMode == 3 ) ? 9 : 17;
+	}
+	return ( fr->frameBytes >= 4 ) ? qtrue : qfalse;
+}
+
+// Duration of an MPEG audio stream in milliseconds, 0 when it cannot be read.
+static int RP_Mp3Duration( rpSoundStream_t *st )
+{
+	const byte		*p;
+	rpMp3Frame_t	fr;
+	double			samples = 0.0;
+	int				sampleRate = 0;
+	int				frames = 0;
+	int				resync = 0;
+
+	// ID3v2 tag in front of the audio
+	p = RP_SoundStreamPeek( st, 10 );
+	if ( p && p[0] == 'I' && p[1] == 'D' && p[2] == '3' ) {
+		int size = ( ( p[6] & 0x7F ) << 21 ) | ( ( p[7] & 0x7F ) << 14 ) | ( ( p[8] & 0x7F ) << 7 ) | ( p[9] & 0x7F );
+		int footer = ( p[5] & 0x10 ) ? 10 : 0;
+
+		if ( !RP_SoundStreamSkip( st, 10 + size + footer ) ) {
+			return 0;
+		}
+	}
+
+	while ( ( p = RP_SoundStreamPeek( st, 4 ) ) != NULL ) {
+		if ( !RP_Mp3DecodeHeader( p, &fr ) ) {
+			// not a frame: step one byte and look for the next sync word. Bounded, so a file
+			// that is not MPEG audio at all does not cost a full scan.
+			st->pos++;
+			if ( ++resync > 65536 && frames == 0 ) {
+				return 0;
+			}
+			continue;
+		}
+		if ( frames == 0 ) {
+			// Xing (VBR) / Info (CBR) header in the first frame: the frame count is exact and
+			// saves walking the file. Flags bit 0 = frames field present. One peek covers the tag,
+			// the flags and the count: a second peek could slide the window and stale the first.
+			const byte *x = RP_SoundStreamPeek( st, 4 + fr.sideInfoBytes + 12 );
+
+			if ( x ) {
+				const byte *tag = x + 4 + fr.sideInfoBytes;
+
+				if ( !memcmp( tag, "Xing", 4 ) || !memcmp( tag, "Info", 4 ) ) {
+					int flags = RP_ReadBE32( tag + 4 );
+
+					if ( flags & 1 ) {
+						int count = RP_ReadBE32( tag + 8 );
+
+						if ( count > 0 && count < 10000000 ) {
+							return (int)( (double)count * fr.samples * 1000.0 / fr.sampleRate );
+						}
+					}
+				}
+			}
+			sampleRate = fr.sampleRate;
+		}
+		frames++;
+		samples += fr.samples;
+		if ( !RP_SoundStreamSkip( st, fr.frameBytes ) ) {
+			break;		// last frame truncated: count it and stop
+		}
+	}
+	if ( frames == 0 || sampleRate <= 0 ) {
+		return 0;
+	}
+	return (int)( samples * 1000.0 / sampleRate );
+}
+
+// Duration of a RIFF WAVE file in milliseconds, 0 when it cannot be read.
+static int RP_WavDuration( rpSoundStream_t *st )
+{
+	const byte	*p;
+	int			byteRate = 0;
+
+	p = RP_SoundStreamPeek( st, 12 );
+	if ( !p || memcmp( p, "RIFF", 4 ) || memcmp( p + 8, "WAVE", 4 ) ) {
+		return 0;
+	}
+	st->pos += 12;
+	while ( ( p = RP_SoundStreamPeek( st, 8 ) ) != NULL ) {
+		int chunkSize = RP_ReadLE32( p + 4 );
+
+		if ( chunkSize < 0 ) {
+			return 0;
+		}
+		if ( !memcmp( p, "fmt ", 4 ) ) {
+			const byte *fmt = RP_SoundStreamPeek( st, 8 + 16 );
+
+			if ( !fmt || chunkSize < 16 ) {
+				return 0;
+			}
+			byteRate = RP_ReadLE32( fmt + 8 + 8 );
+		} else if ( !memcmp( p, "data", 4 ) ) {
+			if ( byteRate <= 0 ) {
+				return 0;
+			}
+			// the header may claim more than the file holds (a stream written without a fixup)
+			if ( st->consumed + st->pos + 8 + chunkSize > st->fileLen ) {
+				chunkSize = st->fileLen - ( st->consumed + st->pos + 8 );
+				if ( chunkSize <= 0 ) {
+					return 0;
+				}
+			}
+			return (int)( (double)chunkSize * 1000.0 / byteRate );
+		}
+		st->pos += 8;
+		if ( !RP_SoundStreamSkip( st, chunkSize + ( chunkSize & 1 ) ) ) {
+			return 0;
+		}
+	}
+	return 0;
+}
+
+// Milliseconds a sound plays for. `soundName` is the name as G_SoundIndex() takes it, with or
+// without an extension; .mp3 is tried first, then .wav. Never returns less than RP_SOUND_MIN_MS.
+int RP_SoundDuration( const char *soundName )
+{
+	static const char *exts[] = { ".mp3", ".wav" };
+	char			base[MAX_QPATH];
+	int				soundIndex, i, ms = 0;
+
+	if ( !soundName || !soundName[0] || soundName[0] == '*' ) {
+		return RP_SOUND_FALLBACK_MS;
+	}
+	soundIndex = G_SoundIndex( (char *)soundName );
+	for ( i = 0; i < RP_SOUND_CACHE_SIZE; i++ ) {
+		if ( rp_soundCache[i].ms && rp_soundCache[i].soundIndex == soundIndex ) {
+			return rp_soundCache[i].ms;
+		}
+	}
+
+	COM_StripExtension( soundName, base, sizeof( base ) );
+	Q_strlwr( base );
+	for ( i = 0; i < (int)ARRAY_LEN( exts ) && ms <= 0; i++ ) {
+		rpSoundStream_t	st;
+		int				len;
+
+		memset( &st, 0, sizeof( st ) );
+		len = trap->FS_Open( va( "%s%s", base, exts[i] ), &st.f, FS_READ );
+		if ( len <= 0 || !st.f ) {
+			if ( st.f ) {
+				trap->FS_Close( st.f );
+			}
+			continue;
+		}
+		st.fileLen = len;
+		if ( len <= RP_SOUND_MAX_BYTES ) {
+			ms = ( i == 0 ) ? RP_Mp3Duration( &st ) : RP_WavDuration( &st );
+		}
+		trap->FS_Close( st.f );
+	}
+
+	if ( ms <= 0 ) {
+		ms = RP_SOUND_FALLBACK_MS;
+	} else if ( ms < RP_SOUND_MIN_MS ) {
+		ms = RP_SOUND_MIN_MS;
+	} else if ( ms > RP_SOUND_MAX_MS ) {
+		ms = RP_SOUND_MAX_MS;
+	}
+
+	rp_soundCache[rp_soundCacheNext].soundIndex = soundIndex;
+	rp_soundCache[rp_soundCacheNext].ms = ms;
+	rp_soundCacheNext = ( rp_soundCacheNext + 1 ) % RP_SOUND_CACHE_SIZE;
+	return ms;
+}
+
+// Called for every networked entity each frame, before it thinks (G_RunFrame).
+void RP_IcarusSoundCheck( gentity_t *ent )
+{
+	if ( !ent->IcarusSoundTime || level.time < ent->IcarusSoundTime ) {
+		return;
+	}
+	ent->IcarusSoundTime = 0;
+	if ( trap->ICARUS_TaskIDPending( (sharedEntity_t *)ent, TID_CHAN_VOICE ) ) {
+		trap->ICARUS_TaskIDComplete( (sharedEntity_t *)ent, TID_CHAN_VOICE );
+	}
+}
+
+/*
+GalaxyRP fix: [ICARUS] animation task completion
+
+SET_ANIM_UPPER / SET_ANIM_LOWER / SET_ANIM_BOTH and the SET_ANIM_HOLDTIME_* setters (Q3_Set,
+below) register TID_ANIM_UPPER / TID_ANIM_LOWER / TID_ANIM_BOTH so a script can
+wait("ANIM_UPPER") for the animation to finish. Single player completes those from
+PM_SetLegsAnimTimer / PM_SetTorsoAnimTimer, the setters its timer countdown runs through; the
+multiplayer countdown (PM_DropTimers, bg_pmove.c) is shared with the client and cannot reach
+ICARUS, so nothing ever completed them and the wait never ended. ClientThink_real() calls this
+right after its Pmove, for players and NPCs alike: a timer that has reached 0 completes its task,
+and TID_ANIM_BOTH when both have. A -1 timer is a deliberate hold and never completes, as in SP.
+The engine clears the other task ids that share a completed task's number (Q3_TaskIDComplete),
+so SET_ANIM_BOTH's three registrations settle with the first of them that fires.
+*/
+void RP_IcarusAnimTaskCheck( gentity_t *ent )
+{
+	playerState_t *ps;
+
+	if ( !ent || !ent->client ) {
+		return;
+	}
+	ps = &ent->client->ps;
+	if ( ps->legsTimer == 0 && trap->ICARUS_TaskIDPending( (sharedEntity_t *)ent, TID_ANIM_LOWER ) ) {
+		trap->ICARUS_TaskIDComplete( (sharedEntity_t *)ent, TID_ANIM_LOWER );
+	}
+	if ( ps->torsoTimer == 0 && trap->ICARUS_TaskIDPending( (sharedEntity_t *)ent, TID_ANIM_UPPER ) ) {
+		trap->ICARUS_TaskIDComplete( (sharedEntity_t *)ent, TID_ANIM_UPPER );
+	}
+	if ( ps->legsTimer == 0 && ps->torsoTimer == 0 && trap->ICARUS_TaskIDPending( (sharedEntity_t *)ent, TID_ANIM_BOTH ) ) {
+		trap->ICARUS_TaskIDComplete( (sharedEntity_t *)ent, TID_ANIM_BOTH );
+	}
+}
+
+// GalaxyRP: [ICARUS] a voice line played on its speaker. G_Sound() made a temp entity that
+// played the sound at the point the speaker stood on when the line started; for a player or an
+// NPC this is G_EntitySound()'s EV_ENTITY_SOUND instead -- the client attaches the sound to the
+// entity, so it follows a walking NPC. Either way it now goes through the engine's real voice
+// channels: CHAN_VOICE and CHAN_VOICE_ATTEN attenuate, CHAN_VOICE_GLOBAL plays everywhere at
+// full volume. A speaker that is not a client (a target_scriptrunner narrating, a func_) keeps
+// the positioned temp entity: the client has no position for an entity it never receives. The
+// temp entity is broadcast for a global line, since it is otherwise only sent to clients whose
+// PVS holds it -- G_Sound()'s never was, so a CHAN_VOICE_GLOBAL line used to fade with distance.
+static void RP_IcarusVoiceSound( gentity_t *ent, int channel, int soundIndex, qboolean broadcast )
+{
+	gentity_t *te;
+
+	if ( ent->client ) {
+		te = G_TempEntity( ent->r.currentOrigin, EV_ENTITY_SOUND );
+		te->s.eventParm = soundIndex;
+		te->s.clientNum = ent->s.number;
+		te->s.trickedentindex = channel;
+	} else {
+		te = G_SoundTempEntity( ent->r.currentOrigin, EV_GENERAL_SOUND, channel );
+		te->s.eventParm = soundIndex;
+		te->s.saberEntityNum = channel;
+	}
+	if ( broadcast ) {
+		te->r.svFlags |= SVF_BROADCAST;
+	}
+}
+
 int Q3_PlaySound( int taskID, int entID, const char *name, const char *channel )
 {
 	gentity_t		*ent = &g_entities[entID];
@@ -445,14 +878,16 @@ int Q3_PlaySound( int taskID, int entID, const char *name, const char *channel )
 		voice_chan = CHAN_VOICE;
 		type_voice = qtrue;
 	}
+	// GalaxyRP fix: [ICARUS] these two mapped to CHAN_AUTO; the client engine handles both real
+	// channels (see RP_IcarusVoiceSound() above), so the script's choice now reaches it.
 	else if ( Q_stricmp( channel, "CHAN_VOICE_ATTEN" ) == 0 )
 	{
-		voice_chan = CHAN_AUTO;//CHAN_VOICE_ATTEN;
+		voice_chan = CHAN_VOICE_ATTEN;
 		type_voice = qtrue;
 	}
 	else if ( Q_stricmp( channel, "CHAN_VOICE_GLOBAL" ) == 0 ) // this should broadcast to everyone, put only casue animation on G_SoundOnEnt...
 	{
-		voice_chan = CHAN_AUTO;//CHAN_VOICE_GLOBAL;
+		voice_chan = CHAN_VOICE_GLOBAL;
 		type_voice = qtrue;
 		bBroadcast = qtrue;
 	}
@@ -513,10 +948,13 @@ int Q3_PlaySound( int taskID, int entID, const char *name, const char *channel )
 		else
 		{
 			//This the voice channel
-			G_Sound( ent, voice_chan, G_SoundIndex((char *) finalName) );
+			// GalaxyRP fix: [ICARUS] on the speaker and its real channel -- see RP_IcarusVoiceSound()
+			RP_IcarusVoiceSound( ent, voice_chan, soundHandle, bBroadcast );
 		}
 		//Remember we're waiting for this
 		trap->ICARUS_TaskIDSet( (sharedEntity_t *)ent, TID_CHAN_VOICE, taskID );
+		// GalaxyRP fix: [ICARUS] ...and complete it when the line ends -- see RP_IcarusSoundCheck()
+		ent->IcarusSoundTime = level.time + RP_SoundDuration( finalName );
 
 		return qfalse;
 	}
@@ -1083,8 +1521,11 @@ void Q3_RemoveEnt( gentity_t *victim )
 	{
 		if ( victim->s.eType != ET_NPC )
 		{
+			// GalaxyRP fix: [ICARUS] "remove" on a player -- an SP script's remove("player") at
+			// the end of a level, or a targetname that resolved to someone -- used to assert() and
+			// take the server down in a debug build. A player cannot be removed; say so and leave.
 			G_DebugPrint( WL_WARNING, "Q3_RemoveEnt: You can't remove clients in MP!\n" );
-			assert(0); //can't remove clients in MP
+			return;
 		}
 		else
 		{//remove the NPC
@@ -2209,6 +2650,13 @@ static void Q3_SetEnemy( int entID, const char *name )
 				G_SetEnemy( ent, enemy );
 				ent->cantHitEnemyCounter = 0;
 			}
+			else if ( !ent->client )
+			{
+				// GalaxyRP fix: [ICARUS] G_SetEnemy() reads self->client; a SET_ENEMY on a
+				// non-client entity (a func_, a scriptrunner) crashed the server.
+				G_DebugPrint( WL_ERROR, "Q3_SetEnemy: ent %d is NOT a player or NPC!\n", entID);
+				return;
+			}
 			else
 			{
 				G_SetEnemy(ent, enemy);
@@ -2490,7 +2938,32 @@ Q3_SetAnimHoldTime
 */
 static void Q3_SetAnimHoldTime( int entID, int int_data, qboolean lower )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetAnimHoldTime is not currently supported in MP\n");
+	// GalaxyRP fix: [ICARUS] was "not currently supported in MP": the SP body below, over MP's
+	// timer setters. The task registered by the caller completes through
+	// RP_IcarusAnimTaskCheck() when the timer runs out (-1 holds for good, as in SP).
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetAnimHoldTime: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetAnimHoldTime: ent %d is NOT a player or NPC!\n", entID);
+		return;
+	}
+
+	if ( lower )
+	{
+		BG_SetLegsAnimTimer( &ent->client->ps, int_data );
+	}
+	else
+	{
+		BG_SetTorsoAnimTimer( &ent->client->ps, int_data );
+	}
+	return;
 	/*
 	gentity_t	*ent  = &g_entities[entID];
 
@@ -2639,11 +3112,20 @@ static qboolean Q3_SetBState( int entID, const char *bs_name )
 	{
 		if ( bSID == BS_SEARCH || bSID == BS_WANDER )
 		{
+			// GalaxyRP fix: [ICARUS] NPC_BSSearchStart() writes through the NPC globals
+			// (NPCS.NPC / NPCS.NPCInfo), which are whatever NPC last thought -- NULL between
+			// thinks, or another NPC when this script runs inside that NPC's think and affects
+			// this one -- so a SET_BEHAVIOR_STATE BS_SEARCH / BS_WANDER from a script set some
+			// other NPC's home waypoint and temp behaviour, or crashed. Point the globals at this
+			// NPC around the calls and put back whatever they held, as the AI code does.
 			//FIXME: Reimplement
 
 			if( ent->waypoint != WAYPOINT_NONE )
 			{
+				SaveNPCGlobals();
+				SetNPCGlobals( ent );
 				NPC_BSSearchStart( ent->waypoint, bSID );
+				RestoreNPCGlobals();
 			}
 			else
 			{
@@ -2651,7 +3133,10 @@ static qboolean Q3_SetBState( int entID, const char *bs_name )
 
 				if( ent->waypoint != WAYPOINT_NONE )
 				{
+					SaveNPCGlobals();
+					SetNPCGlobals( ent );
 					NPC_BSSearchStart( ent->waypoint, bSID );
+					RestoreNPCGlobals();
 				}
 				/*else if( ent->lastWaypoint >=0 && ent->lastWaypoint < num_waypoints )
 				{
@@ -3370,15 +3855,44 @@ Q3_SetWeapon
 ============
 */
 extern void ChangeWeapon( gentity_t *ent, int newWeapon );
+extern void WP_DeactivateSaber( gentity_t *self, qboolean clearLength );
+extern void WP_ActivateSaber( gentity_t *self );
 static void Q3_SetWeapon (int entID, const char *wp_name)
 {
 	gentity_t	*ent  = &g_entities[entID];
 	int		wp = GetIDForString( WPTable, wp_name );
 
+	// GalaxyRP fix: [ICARUS] a SET_WEAPON on a non-client (a scriptrunner affecting a func_ or
+	// a misplaced target name) dereferenced ent->client. Refuse it.
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetWeapon: ent %d is NOT a player or NPC!\n", entID );
+		return;
+	}
+
+	// GalaxyRP fix: [ICARUS] SET_WEAPON WP_NONE is how single-player scripts disarm someone
+	// (cutscenes, prisoners). It was rejected below with the bad names; now it means what it
+	// says: an NPC keeps no weapon at all, a player is left with melee, since a weaponless player
+	// state is not one the client HUD or the weapon code expects.
+	if ( wp == WP_NONE )
+	{
+		if ( ent->NPC )
+		{
+			ent->client->ps.stats[STAT_WEAPONS] = 0;
+			ChangeWeapon( ent, WP_NONE );
+		}
+		else
+		{
+			ent->client->ps.stats[STAT_WEAPONS] = (1<<WP_MELEE);
+			ChangeWeapon( ent, WP_MELEE );
+		}
+		return;
+	}
+
 	// GalaxyRP fix: [bounds] wp is -1 for any name not in WPTable, and "1 << -1" is undefined
 	// behaviour before ChangeWeapon() even sees the bad index. Reject it and leave the weapon
 	// alone, the same way SP_misc_weapon_shooter now keeps its default.
-	if ( wp <= WP_NONE || wp >= WP_NUM_WEAPONS )
+	if ( wp < WP_NONE || wp >= WP_NUM_WEAPONS )
 	{
 		G_DebugPrint( WL_WARNING, "Q3_SetWeapon: unknown weapon \"%s\"\n", wp_name );
 		return;
@@ -5763,17 +6277,39 @@ static void Q3_SetSaberActive( int entID, qboolean active )
 
 	if (!ent->client)
 	{
+		// GalaxyRP fix: [ICARUS] warned, then dereferenced the NULL client anyway
 		G_DebugPrint( WL_WARNING, "Q3_SetSaberActive: %d is not a client\n", entID);
+		return;
 	}
 
-	//fixme: Take into account player being in state where saber won't toggle? For now we simply won't care.
-	if (!ent->client->ps.saberHolstered && active)
+	// GalaxyRP fix: [ICARUS] the two tests were inverted: "saber lit AND active requested" and
+	// "saber off AND off requested" each toggled the saber, so SET_SABERACTIVE true on a lit
+	// saber switched it OFF and did nothing on a holstered one -- the opposite of every script's
+	// intent. And Cmd_ToggleSaber_f() refuses unless the saber is the held weapon and weaponTime
+	// is 0, which a scripted NPC mid-animation rarely satisfies. This is single player's
+	// Q3_SetSaberActive over MP's own WP_ActivateSaber()/WP_DeactivateSaber(), which set the
+	// holster state and play the sounds directly; an NPC that owns a saber but holds another
+	// weapon is switched to it first, as SP does. A player is only toggled when the saber is
+	// already their weapon: the server cannot change a player's weapon under the client.
+	if ( active )
 	{
-		Cmd_ToggleSaber_f(ent);
+		if ( ent->client->ps.weapon != WP_SABER )
+		{
+			if ( ent->NPC && ( ent->client->ps.stats[STAT_WEAPONS] & ( 1 << WP_SABER ) ) )
+			{
+				ChangeWeapon( ent, WP_SABER );
+			}
+			else
+			{
+				G_DebugPrint( WL_WARNING, "Q3_SetSaberActive: %d does not hold a saber\n", entID );
+				return;
+			}
+		}
+		WP_ActivateSaber( ent );
 	}
-	else if (BG_SabersOff( &ent->client->ps ) && !active)
+	else
 	{
-		Cmd_ToggleSaber_f(ent);
+		WP_DeactivateSaber( ent, qfalse );
 	}
 }
 

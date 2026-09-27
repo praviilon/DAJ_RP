@@ -2967,7 +2967,10 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	// spectators don't do much
-	if ( client->sess.sessionTeam == TEAM_SPECTATOR || client->tempSpectate >= level.time ) {
+	// GalaxyRP fix: [NPC] real clients only. NPCTEAM_NEUTRAL and TEAM_SPECTATOR are both 3, and an
+	// NPC's sess.sessionTeam is read straight from its spawner's "team" key (NPC_spawn.c), so a
+	// neutral NPC spawned that way ran SpectatorThink() instead of moving.
+	if ( client->ps.clientNum < MAX_CLIENTS && ( client->sess.sessionTeam == TEAM_SPECTATOR || client->tempSpectate >= level.time ) ) {
 		if ( client->sess.spectatorState == SPECTATOR_SCOREBOARD ) {
 			return;
 		}
@@ -4164,6 +4167,10 @@ void ClientThink_real( gentity_t *ent ) {
 	RP_PhaseHideBodies( ent );
 	Pmove (&pmove);
 	RP_PhaseRestoreBodies();
+
+	// GalaxyRP fix: [ICARUS] Pmove just counted the animation timers down; a script waiting on
+	// one of them is told now -- see RP_IcarusAnimTaskCheck()
+	RP_IcarusAnimTaskCheck( ent );
 
 	if (ent->client->solidHack)
 	{

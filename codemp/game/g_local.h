@@ -339,6 +339,13 @@ struct gentity_s {
 	// EXPECTS THE FIELDS IN THAT ORDER!
 	//================================
 
+	// GalaxyRP: [ICARUS] level.time at which the voice line this entity is playing ends, 0 when
+	// none. Q3_PlaySound() sets it for a CHAN_VOICE* sound and RP_IcarusSoundCheck() (g_main.c's
+	// entity loop) completes the script's TID_CHAN_VOICE task when it passes -- the completion the
+	// single-player engine does from its sound system and multiplayer never did, so a script's
+	// task( sound(CHAN_VOICE, ...) ) dowait waited forever. See RP_SoundDuration() in g_ICARUScb.c.
+	int				IcarusSoundTime;
+
 	struct gclient_s	*client;			// NULL if not a client
 
 	gNPC_t		*NPC;//Only allocated if the entity becomes an NPC
@@ -2487,6 +2494,11 @@ void FindIntermissionPoint( void );
 void SetLeader(int team, int client);
 void CheckTeamLeader( int team );
 void G_RunThink (gentity_t *ent);
+// GalaxyRP: [ICARUS] see gentity_t::IcarusSoundTime.
+void RP_IcarusSoundCheck( gentity_t *ent );
+void RP_IcarusAnimTaskCheck( gentity_t *ent );
+int  RP_SoundDuration( const char *soundName );
+void RP_IcarusSoundCacheReset( void );
 void AddTournamentQueue(gclient_t *client);
 // GalaxyRP fix: restores the prototype for G_Printf (defined in g_syscalls.c), dropped from this
 // header by upstream OpenJK commit ce073087 ("Stripping the QVM layer for MP", 2013) alongside

@@ -214,7 +214,15 @@ void NPC_RemoveBody( gentity_t *self )
 		//			placed as dead NPCs by a designer...
 		//			For now we just assume that a corpse with no enemy was
 		//			placed in the map as a corpse
-		if ( self->enemy )
+		//
+		// GalaxyRP fix: [Corpses] the "if ( self->enemy )" that used to gate the removal below is
+		// gone. It was single player's test for a designer-placed corpse, which multiplayer cannot
+		// spawn: every NPC that reaches this function died through player_die(). What the test did
+		// here was keep every corpse whose killer was not its AI enemy -- a scripted death, a
+		// fall, a droid (they have no enemy) -- lying there for the rest of the map. It matters now
+		// that player_die() no longer frees non-humanoid NPCs on the spot (g_combat.c) so their
+		// death scripts can run: their bodies come through here instead, and must leave. The
+		// script and Rancor tests below still hold a body back while it is needed.
 		{
 			//if ( !self->taskManager || !self->taskManager->IsRunning() )
 			if (!trap->ICARUS_IsRunning(self->s.number))

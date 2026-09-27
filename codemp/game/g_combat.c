@@ -3130,12 +3130,13 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 				G_CheckForDismemberment(self, attacker, self->pos1, damage, anim, qfalse);
 			}
 		}
-		else if (self->NPC && self->client && self->client->NPC_class != CLASS_MARK1 &&
-			self->client->NPC_class != CLASS_VEHICLE)
-		{ //in this case if we're an NPC it's my guess that we want to get removed straight away.
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-		}
+		// GalaxyRP fix: [ICARUS] an NPC with no death animation (droids, creatures without a
+		// humanoid skeleton) used to be freed on the next frame right here -- "my guess that we
+		// want to get removed straight away". Its deathscript had just been started a few lines
+		// up, so any wait, task or effect in it was cut off with the entity, and an SP map that
+		// counts on a droid's death script (opening a door, firing a target) never got it. The
+		// body now leaves the way every other NPC corpse does, through NPC_RemoveBody() after
+		// rp_npc_corpse_time, which also removes a corpse that has no enemy.
 
 		//self->client->ps.legsAnim = anim;
 		//self->client->ps.torsoAnim = anim;
@@ -6210,6 +6211,15 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		{//take damage down to 1, but never die
 			if ( targ->health < 1 )
 			{
+				// GalaxyRP fix: [ICARUS] single player runs the entity's death script the moment an
+				// undying entity would have died -- it is how every scripted boss fight ends (Tavion,
+				// Desann, Alora, the Kothos twins, Rosh, Racto are all SET_UNDYING and their
+				// deathscript takes over when they are "beaten"). Multiplayer only clamped the
+				// health, so those fights could never be won. Exactly SP's rule, including that it
+				// fires on every hit that would have killed: SP scripts count on that and answer it
+				// by clearing FL_UNDYING, going invincible, retreating or removing the entity. An
+				// entity with no deathscript is unaffected (G_ActivateBehavior is a no-op for it).
+				G_ActivateBehavior( targ, BSET_DEATH );
 				targ->health = 1;
 			}
 		}
