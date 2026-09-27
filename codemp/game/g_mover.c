@@ -3440,3 +3440,122 @@ void SP_func_wall( gentity_t *ent )
 	trap->LinkEntity ((sharedEntity_t *)ent);
 
 }
+
+/*
+==================================================================================================
+GalaxyRP: [SP Maps] Jedi Outcast's brush-model key panels. Both are used with the use button;
+the keys are per client (RP_*Key in g_misc.c).
+==================================================================================================
+*/
+
+/*QUAKED func_security_panel (0 .5 .8) ? x x x x x x x INACTIVE
+A brush panel that opens when a player uses it while carrying the right security key.
+
+  INACTIVE - Start off, has to be activated to be usable
+
+  "message" - name of the key the player must have
+  "target" - what to use when successfully opened
+  "target2" - what to use when the panel is used without the key
+*/
+static void func_security_panel_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	if ( !activator || !activator->client || activator->s.number >= MAX_CLIENTS )
+	{
+		return;
+	}
+
+	if ( self->message && self->message[0] && !RP_HasSecurityKey( activator, self->message ) )
+	{//don't have the key
+		G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_fail.mp3" ) );
+		G_UseTargets2( self, activator, self->target2 );
+		return;
+	}
+
+	RP_TakeSecurityKey( activator );
+	G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_pass.mp3" ) );
+	G_UseTargets2( self, activator, self->target );
+
+	//spent
+	self->use = NULL;
+	self->r.svFlags &= ~SVF_PLAYER_USABLE;
+}
+
+void SP_func_security_panel( gentity_t *ent )
+{
+	zyk_set_brush_model( ent );
+
+	VectorCopy( ent->s.origin, ent->pos1 );
+	VectorCopy( ent->s.origin, ent->pos2 );
+
+	InitMover( ent );
+	VectorCopy( ent->s.origin, ent->s.pos.trBase );
+	VectorCopy( ent->s.origin, ent->r.currentOrigin );
+
+	G_SoundIndex( "sound/movers/sec_panel_pass.mp3" );
+	G_SoundIndex( "sound/movers/sec_panel_fail.mp3" );
+
+	if ( ent->spawnflags & 128 )
+	{
+		ent->flags |= FL_INACTIVE;
+	}
+
+	ent->r.svFlags |= SVF_PLAYER_USABLE;
+	ent->use = func_security_panel_use;
+
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
+/*QUAKED func_goodie_panel (0 .5 .8) ? x x x x x x x INACTIVE
+A brush panel that opens when a player uses it while carrying a goodie key; the key is used up.
+
+  INACTIVE - Start off, has to be activated to be usable
+
+  "target" - what to use when successfully opened
+  "target2" - what to use when the panel is used without a key
+*/
+static void func_goodie_panel_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	if ( !activator || !activator->client || activator->s.number >= MAX_CLIENTS )
+	{
+		return;
+	}
+
+	if ( !RP_TakeGoodieKey( activator ) )
+	{//don't have one
+		G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_fail.mp3" ) );
+		G_UseTargets2( self, activator, self->target2 );
+		return;
+	}
+
+	G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_pass.mp3" ) );
+	G_UseTargets2( self, activator, self->target );
+
+	//spent
+	self->use = NULL;
+	self->r.svFlags &= ~SVF_PLAYER_USABLE;
+}
+
+void SP_func_goodie_panel( gentity_t *ent )
+{
+	zyk_set_brush_model( ent );
+
+	VectorCopy( ent->s.origin, ent->pos1 );
+	VectorCopy( ent->s.origin, ent->pos2 );
+
+	InitMover( ent );
+	VectorCopy( ent->s.origin, ent->s.pos.trBase );
+	VectorCopy( ent->s.origin, ent->r.currentOrigin );
+
+	G_SoundIndex( "sound/movers/sec_panel_pass.mp3" );
+	G_SoundIndex( "sound/movers/sec_panel_fail.mp3" );
+
+	if ( ent->spawnflags & 128 )
+	{
+		ent->flags |= FL_INACTIVE;
+	}
+
+	ent->r.svFlags |= SVF_PLAYER_USABLE;
+	ent->use = func_goodie_panel_use;
+
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}

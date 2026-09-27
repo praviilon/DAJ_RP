@@ -127,6 +127,58 @@ Determines when it's ok to ditch the corpse
 #define REMOVE_DISTANCE		128
 #define REMOVE_DISTANCE_SQR (REMOVE_DISTANCE * REMOVE_DISTANCE)
 
+/*
+----------------------------------------
+G_OkayToRemoveCorpse
+
+GalaxyRP: [Corpses] single player's list of reasons a body has to stay: still riding a vehicle
+it cannot be ejected from, still carrying a key (NPC_Touch hands it over), still running a
+script, holding or held by a creature, being dragged.
+----------------------------------------
+*/
+qboolean G_OkayToRemoveCorpse( gentity_t *self )
+{
+	if ( self->client && self->client->NPC_class != CLASS_VEHICLE && self->s.m_iVehicleNum != 0 )
+	{//still on a vehicle, get off it first
+		Vehicle_t *pVeh = g_entities[self->s.m_iVehicleNum].m_pVehicle;
+
+		if ( pVeh && pVeh->m_pVehicleInfo && pVeh->m_pVehicleInfo->Eject )
+		{
+			if ( !pVeh->m_pVehicleInfo->Eject( pVeh, (bgEntity_t *)self, qtrue ) )
+			{//dammit, still can't get off the vehicle...
+				return qfalse;
+			}
+		}
+	}
+
+	if ( self->message )
+	{//I still have a key
+		return qfalse;
+	}
+
+	if ( trap->ICARUS_IsRunning( self->s.number ) )
+	{//still running a script
+		return qfalse;
+	}
+
+	if ( self->activator && self->activator->client && ( self->activator->client->ps.eFlags2 & EF2_HELD_BY_MONSTER ) )
+	{//still holding a victim
+		return qfalse;
+	}
+
+	if ( self->client && ( self->client->ps.eFlags2 & EF2_HELD_BY_MONSTER ) )
+	{//being held by a creature
+		return qfalse;
+	}
+
+	if ( self->client && self->client->ps.heldByClient )
+	{//being dragged
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
 void NPC_RemoveBody( gentity_t *self )
 {
 	CorpsePhysics( self );
@@ -140,7 +192,12 @@ void NPC_RemoveBody( gentity_t *self )
 	self->NPC->nextBStateThink = level.time + FRAMETIME;
 
 	if ( self->message )
-	{//I still have a key
+	{// GalaxyRP: [SP Maps] a dead key officer hands his key to whoever stands over the body
+		RP_CorpseKeyCheck( self );
+	}
+
+	if ( !G_OkayToRemoveCorpse( self ) )
+	{//a key, a script, a vehicle, a creature or a player still needs the body
 		return;
 	}
 
@@ -191,21 +248,18 @@ void NPC_RemoveBody( gentity_t *self )
 		{
 			self->nextthink = level.time + FRAMETIME; // try back in a second
 
-			/*
-			if ( DistanceSquared( g_entities[0].r.currentOrigin, self->r.currentOrigin ) <= REMOVE_DISTANCE_SQR )
+			// GalaxyRP: [Corpses] single player never removed a body in front of the player;
+			// the checks were commented out here ("Don't care about this for MP I guess") and
+			// bodies vanished while being looked at. Any player counts now.
+			if ( DistanceToClosestPlayer( self->r.currentOrigin, -1 ) <= REMOVE_DISTANCE )
 			{
 				return;
 			}
 
-			if ( (InFOV( self, &g_entities[0], 110, 90 )) ) // generous FOV check
+			if ( InPlayersFOV( self->r.currentOrigin, -1, 110, 90, qtrue ) ) // generous FOV check
 			{
-				if ( (NPC_ClearLOS2( &g_entities[0], self->r.currentOrigin )) )
-				{
-					return;
-				}
+				return;
 			}
-			*/
-			//Don't care about this for MP I guess.
 		}
 
 		//FIXME: there are some conditions - such as heavy combat - in which we want
@@ -435,6 +489,12 @@ DeadThink
 static void DeadThink ( void )
 {
 	trace_t	trace;
+
+	// GalaxyRP: [SP Maps] a dead key officer hands his key to whoever stands over the body
+	if ( NPCS.NPC->message )
+	{
+		RP_CorpseKeyCheck( NPCS.NPC );
+	}
 
 	//HACKHACKHACKHACKHACK
 	//We should really have a seperate G2 bounding box (seperate from the physics bbox) for G2 collisions only

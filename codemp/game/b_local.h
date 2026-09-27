@@ -291,6 +291,9 @@ extern qboolean InPlayersFOV( vec3_t position, int team, int hFOV, int vFOV, qbo
 extern qboolean InPlayersPVS( vec3_t point );
 extern gentity_t *NPC_ClosestPlayerEnemy( float maxDist );
 extern qboolean NPC_RemoveIfOutOfPlayersPVS( gentity_t *self );
+extern void RP_CorpseGiveKey( gentity_t *self, gentity_t *other );
+extern void RP_CorpseKeyCheck( gentity_t *self );
+extern qboolean G_OkayToRemoveCorpse( gentity_t *self );
 
 extern int NPC_CheckAlertEvents( qboolean checkSight, qboolean checkSound, int ignoreAlert, qboolean mustHaveOwner, int minAlertLevel ); //ignoreAlert = -1, mustHaveOwner = qfalse, minAlertLevel = AEL_MINOR
 extern qboolean NPC_CheckForDanger( int alertEvent );

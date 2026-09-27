@@ -1853,13 +1853,13 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 		return 0;
 		break;
 	case SET_STARTFRAME:	//## %d="0" # frame to start animation sequence on
-		return 0;
+		*value = ent->startFrame;
 		break;
 	case SET_ENDFRAME:	//## %d="0" # frame to end animation sequence on
-		return 0;
+		*value = ent->endFrame;
 		break;
 	case SET_ANIMFRAME:	//## %d="0" # of current frame
-		return 0;
+		*value = ent->s.frame;
 		break;
 
 	case SET_SHOT_SPACING://## %d="1000" # Time between shots for an NPC - reset to defaults when changes weapon
@@ -1936,7 +1936,7 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 		*value = (ent->r.svFlags&SVF_PLAYER_USABLE);
 		break;
 	case SET_LOOP_ANIM://## %t="BOOL_TYPES" # For non-NPCs: loop your animation sequence
-		return 0;
+		*value = ent->loopAnim ? 1 : 0;
 		break;
 	case SET_INTERFACE://## %t="BOOL_TYPES" # Player interface on/off
 		G_DebugPrint( WL_WARNING, "Q3_GetFloat: SET_INTERFACE not implemented\n" );
@@ -2174,13 +2174,20 @@ int Q3_GetString( int entID, int type, const char *name, char **value )
 
 	case SET_LOCATION:
 		{
-			// GalaxyRP: [Scripts] nearest target_location in PVS (the MP location system); SP used trigger_location
-			locationData_t *loc = Team_GetLocation( ent );
-			if ( !loc || !loc->message[0] )
+			// GalaxyRP: [Scripts] the trigger_location the entity stands in (single player's way),
+			// else the nearest target_location in PVS (the MP location system)
+			const char *name = RP_TriggerLocationName( ent );
+			locationData_t *loc = name ? NULL : Team_GetLocation( ent );
+
+			if ( !name && loc && loc->message[0] )
+			{
+				name = loc->message;
+			}
+			if ( !name )
 			{
 				return 0;
 			}
-			*value = loc->message;
+			*value = (char *)name;
 		}
 		break;
 
@@ -6569,7 +6576,24 @@ Q3_SetStartFrame
 */
 static void Q3_SetStartFrame( int entID, int startFrame )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetStartFrame: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetStartFrame: invalid entID %d\n", entID);
+		return;
+	}
+	if ( ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetStartFrame: command not valid on players/NPCs!\n" );
+		return;
+	}
+	if ( startFrame >= 0 )
+	{
+		ent->s.frame = startFrame;
+		ent->startFrame = startFrame;
+		ent->rpAnimating = qtrue;	// RP_Animate() (g_main.c's entity loop) steps the frames
+	}
 }
 
 
@@ -6584,7 +6608,23 @@ Q3_SetEndFrame
 */
 static void Q3_SetEndFrame( int entID, int endFrame )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetEndFrame: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetEndFrame: invalid entID %d\n", entID);
+		return;
+	}
+	if ( ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetEndFrame: command not valid on players/NPCs!\n" );
+		return;
+	}
+	if ( endFrame >= 0 )
+	{
+		ent->endFrame = endFrame;
+		ent->rpAnimating = qtrue;
+	}
 }
 
 /*
@@ -6598,7 +6638,31 @@ Q3_SetAnimFrame
 */
 static void Q3_SetAnimFrame( int entID, int animFrame )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetAnimFrame: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetAnimFrame: invalid entID %d\n", entID);
+		return;
+	}
+	if ( ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetAnimFrame: command not valid on players/NPCs!\n" );
+		return;
+	}
+	if ( animFrame >= ent->endFrame )
+	{
+		ent->s.frame = ent->endFrame;
+	}
+	else if ( animFrame >= ent->startFrame )
+	{
+		ent->s.frame = animFrame;
+	}
+	else
+	{
+		ent->s.frame = ent->startFrame;
+	}
+	ent->rpAnimating = qtrue;
 }
 
 /*
@@ -6612,7 +6676,23 @@ Q3_SetLoopAnim
 */
 static void Q3_SetLoopAnim( int entID, qboolean loopAnim )
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetLoopAnim: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetLoopAnim: invalid entID %d\n", entID);
+		return;
+	}
+	if ( ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetLoopAnim: command not valid on players/NPCs!\n" );
+		return;
+	}
+	ent->loopAnim = loopAnim;
+	if ( loopAnim )
+	{
+		ent->rpAnimating = qtrue;
+	}
 }
 
 

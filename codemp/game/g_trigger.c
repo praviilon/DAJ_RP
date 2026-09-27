@@ -2178,3 +2178,161 @@ void SP_trigger_asteroid_field(gentity_t *self)
 
     trap->LinkEntity((sharedEntity_t *)self);
 }
+
+/*
+==================================================================================================
+GalaxyRP: [SP Maps] single player's trigger_visible and trigger_location.
+==================================================================================================
+*/
+
+/*QUAKED trigger_visible (.1 .5 .1) (-8 -8 -8) (8 8 8) NOTRACE FORCESIGHT x x x x x INACTIVE
+Only fires when a player is looking at it, fires only once then removes itself.
+
+  NOTRACE - Doesn't check that the line of sight is clear (sees through walls, forcefields, etc)
+  FORCESIGHT - Only fires for a player with Force Sight active
+  INACTIVE - won't check for player visibility until activated
+
+  "radius" - how far this ent can be from the player's eyes, max, and still be considered "seen" (0 = any)
+  "FOV" - how far off the centre of the player's view this can be, max, and still be considered "seen" (0 = anywhere in front)
+  "target" - what to use when it fires
+*/
+extern qboolean InFOV3( vec3_t spot, vec3_t from, vec3_t fromAngles, int hFOV, int vFOV );
+
+static void trigger_visible_think( gentity_t *self )
+{
+	int i;
+
+	self->nextthink = level.time + 500;
+
+	if ( self->flags & FL_INACTIVE )
+	{
+		return;
+	}
+
+	for ( i = 0; i < MAX_CLIENTS; i++ )
+	{
+		gentity_t	*player = &g_entities[i];
+		vec3_t		eyes;
+
+		if ( !player->inuse || !player->client || player->health <= 0
+			|| player->client->pers.connected != CON_CONNECTED
+			|| player->client->sess.sessionTeam == TEAM_SPECTATOR
+			|| player->client->tempSpectate >= level.time )
+		{
+			continue;
+		}
+
+		if ( ( self->spawnflags & 2 ) && !( player->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) ) )
+		{//force sight only
+			continue;
+		}
+
+		VectorCopy( player->client->ps.origin, eyes );
+		eyes[2] += player->client->ps.viewheight;
+
+		if ( self->radius > 0 && Distance( self->s.origin, eyes ) > self->radius )
+		{
+			continue;
+		}
+
+		if ( self->genericValue1 > 0 )
+		{//FOV check
+			if ( !InFOV3( self->s.origin, eyes, player->client->ps.viewangles, self->genericValue1, self->genericValue1 ) )
+			{
+				continue;
+			}
+		}
+		else
+		{//in front of the player at all?
+			vec3_t fwd, dir;
+
+			AngleVectors( player->client->ps.viewangles, fwd, NULL, NULL );
+			VectorSubtract( self->s.origin, eyes, dir );
+			if ( DotProduct( fwd, dir ) <= 0 )
+			{
+				continue;
+			}
+		}
+
+		if ( !( self->spawnflags & 1 ) )
+		{//line of sight
+			trace_t tr;
+
+			trap->Trace( &tr, eyes, NULL, NULL, self->s.origin, player->s.number, MASK_OPAQUE, qfalse, 0, 0 );
+			if ( tr.fraction < 1.0f )
+			{
+				continue;
+			}
+		}
+
+		//seen: fire once and go away
+		self->think = G_FreeEntity;
+		self->nextthink = level.time + 100;
+		G_ActivateBehavior( self, BSET_USE );
+		G_UseTargets( self, player );
+		return;
+	}
+}
+
+static void trigger_visible_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	self->flags ^= FL_INACTIVE;
+}
+
+void SP_trigger_visible( gentity_t *self )
+{
+	G_SpawnInt( "FOV", "0", &self->genericValue1 );
+
+	if ( self->spawnflags & 128 )
+	{
+		self->flags |= FL_INACTIVE;
+	}
+
+	G_SetOrigin( self, self->s.origin );
+	self->use = trigger_visible_use;
+	self->think = trigger_visible_think;
+	self->nextthink = level.time + 500;
+}
+
+/*QUAKED trigger_location (.1 .5 .1) ?
+When an ent is asked for its location (a script's get(SET_LOCATION), team chat's location), it
+returns this ent's "message" field if it is in it.
+
+  "message" - location name
+
+  NOTE: always rectangular
+*/
+void SP_trigger_location( gentity_t *self )
+{
+	InitTrigger( self );
+	trap->LinkEntity( (sharedEntity_t *)self );
+}
+
+// the "message" of the trigger_location the entity stands in, or NULL when it is in none
+const char *RP_TriggerLocationName( gentity_t *ent )
+{
+	int			touch[MAX_GENTITIES];
+	int			i, num;
+	vec3_t		mins, maxs;
+
+	if ( !ent )
+	{
+		return NULL;
+	}
+
+	VectorAdd( ent->r.currentOrigin, ent->r.mins, mins );
+	VectorAdd( ent->r.currentOrigin, ent->r.maxs, maxs );
+	num = trap->EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+
+	for ( i = 0; i < num; i++ )
+	{
+		gentity_t *hit = &g_entities[touch[i]];
+
+		if ( hit->inuse && hit->classname && !strcmp( hit->classname, "trigger_location" ) && hit->message && hit->message[0] )
+		{
+			return hit->message;
+		}
+	}
+
+	return NULL;
+}

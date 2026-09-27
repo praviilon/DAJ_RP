@@ -1057,3 +1057,52 @@ void SP_target_play_music( gentity_t *self )
 
 	self->use = target_play_music_use;
 }
+
+/*
+==================================================================================================
+GalaxyRP: [SP Maps] single player's target_secret and target_autosave.
+==================================================================================================
+*/
+
+/*QUAKED target_secret (1 0 1) (-4 -4 -4) (4 4 4)
+Marks a secret area. Using it tells everyone who found it and plays the secret-area sound.
+
+  "count" - number of secret areas on the map (for the "x / y found" message)
+*/
+static void target_secret_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	if ( !activator || !activator->client || activator->s.number >= MAX_CLIENTS )
+	{
+		return;
+	}
+
+	self->genericValue1++;
+
+	G_Sound( activator, CHAN_AUTO, G_SoundIndex( "sound/interface/secret_area" ) );
+	if ( self->count > 0 )
+	{
+		trap->SendServerCommand( -1, va( "cp \"%s^7 found a secret area (%d / %d)\n\"", activator->client->pers.netname, self->genericValue1, self->count ) );
+	}
+	else
+	{
+		trap->SendServerCommand( -1, va( "cp \"%s^7 found a secret area\n\"", activator->client->pers.netname ) );
+	}
+
+	//found, done
+	self->use = NULL;
+}
+
+void SP_target_secret( gentity_t *self )
+{
+	G_SoundIndex( "sound/interface/secret_area" );
+	self->use = target_secret_use;
+}
+
+/*QUAKED target_autosave (1 0 0) (-4 -4 -4) (4 4 4)
+Single player saved the game when this was used. Multiplayer has nothing to save: the entity
+is accepted so single-player maps stop reporting it as unknown, and does nothing.
+*/
+void SP_target_autosave( gentity_t *self )
+{
+	G_FreeEntity( self );
+}

@@ -352,6 +352,18 @@ void SP_misc_holocron(gentity_t *ent);
 void SP_reference_tag ( gentity_t *ent );
 
 void SP_misc_weapon_shooter( gentity_t *self );
+// GalaxyRP: [SP Maps] single-player entities that had no spawn function in multiplayer
+void SP_misc_security_panel( gentity_t *self );
+void SP_item_security_key( gentity_t *self );
+void SP_misc_spotlight( gentity_t *self );
+void SP_misc_trip_mine( gentity_t *ent );
+void SP_misc_sentry_turret( gentity_t *base );
+void SP_trigger_visible( gentity_t *self );
+void SP_trigger_location( gentity_t *self );
+void SP_target_secret( gentity_t *self );
+void SP_target_autosave( gentity_t *self );
+void SP_func_security_panel( gentity_t *ent );
+void SP_func_goodie_panel( gentity_t *ent );
 
 void SP_misc_cubemap( gentity_t *ent );
 
@@ -539,16 +551,19 @@ void SP_gametype_item ( gentity_t* ent )
 void SP_emplaced_gun( gentity_t *ent );
 
 spawn_t	spawns[] = {
+	{ "emplaced_eweb",						SP_emplaced_gun }, // GalaxyRP: [SP Maps] single player's E-Web, served by the emplaced gun
 	{ "emplaced_gun",						SP_emplaced_gun },
 	{ "func_bobbing",						SP_func_bobbing },
 	{ "func_breakable",						SP_func_breakable },
 	{ "func_button",						SP_func_button },
 	{ "func_door",							SP_func_door },
 	{ "func_glass",							SP_func_glass },
+	{ "func_goodie_panel",					SP_func_goodie_panel },
 	{ "func_group",							SP_info_null },
 	{ "func_pendulum",						SP_func_pendulum },
 	{ "func_plat",							SP_func_plat },
 	{ "func_rotating",						SP_func_rotating },
+	{ "func_security_panel",				SP_func_security_panel },
 	{ "func_static",						SP_func_static },
 	{ "func_timer",							SP_func_timer }, // rename trigger_timer?
 	{ "func_train",							SP_func_train },
@@ -589,6 +604,7 @@ spawn_t	spawns[] = {
 	{ "info_siege_objective",				SP_info_siege_objective },
 	{ "info_siege_radaricon",				SP_info_siege_radaricon },
 	{ "item_botroam",						SP_item_botroam, qtrue },
+	{ "item_security_key",					SP_item_security_key },
 	{ "light",								SP_light },
 	{ "misc_ammo_floor_unit",				SP_misc_ammo_floor_unit },
 	{ "misc_bsp",							SP_misc_bsp },
@@ -613,12 +629,16 @@ spawn_t	spawns[] = {
 	{ "misc_model_shield_power_converter",	SP_misc_model_shield_power_converter },
 	{ "misc_model_static",					SP_misc_model_static, qtrue },
 	{ "misc_portal_camera",					SP_misc_portal_camera },
+	{ "misc_security_panel",				SP_misc_security_panel },
+	{ "misc_sentry_turret",					SP_misc_sentry_turret },
 	{ "misc_portal_surface",				SP_misc_portal_surface },
 	{ "misc_shield_floor_unit",				SP_misc_shield_floor_unit },
 	{ "misc_siege_item",					SP_misc_siege_item },
 	{ "misc_skyportal",						SP_misc_skyportal },
 	{ "misc_skyportal_orient",				SP_misc_skyportal_orient },
+	{ "misc_spotlight",						SP_misc_spotlight },
 	{ "misc_teleporter_dest",				SP_misc_teleporter_dest, qtrue },
+	{ "misc_trip_mine",						SP_misc_trip_mine },
 	{ "misc_turret",						SP_misc_turret },
 	{ "misc_turretG2",						SP_misc_turretG2 },
 	{ "misc_weapon_shooter",				SP_misc_weapon_shooter },
@@ -719,6 +739,7 @@ spawn_t	spawns[] = {
 	{ "ref_tag",							SP_reference_tag, qtrue },
 	{ "ref_tag_huge",						SP_reference_tag, qtrue },
 	{ "shooter_blaster",					SP_shooter_blaster },
+	{ "target_autosave",					SP_target_autosave, qtrue }, // GalaxyRP: [SP Maps] no-op
 	{ "target_activate",					SP_target_activate, qtrue },
 	{ "target_counter",						SP_target_counter, qtrue },
 	{ "target_deactivate",					SP_target_deactivate, qtrue },
@@ -736,6 +757,7 @@ spawn_t	spawns[] = {
 	{ "target_push",						SP_target_push, qtrue },
 	{ "target_random",						SP_target_random, qtrue },
 	{ "target_relay",						SP_target_relay, qtrue },
+	{ "target_secret",						SP_target_secret, qtrue },
 	{ "target_remove_powerups",				SP_target_remove_powerups, qtrue },
 	{ "target_score",						SP_target_score, qtrue },
 	{ "target_screenshake",					SP_target_screenshake, qtrue },
@@ -753,12 +775,14 @@ spawn_t	spawns[] = {
 	{ "trigger_hurt",						SP_trigger_hurt },
 	{ "trigger_hyperspace",					SP_trigger_hyperspace },
 	{ "trigger_lightningstrike",			SP_trigger_lightningstrike },
+	{ "trigger_location",					SP_trigger_location },
 	{ "trigger_multiple",					SP_trigger_multiple },
 	{ "trigger_once",						SP_trigger_once },
 	{ "trigger_push",						SP_trigger_push },
 	{ "trigger_shipboundary",				SP_trigger_shipboundary },
 	{ "trigger_space",						SP_trigger_space },
 	{ "trigger_teleport",					SP_trigger_teleport },
+	{ "trigger_visible",					SP_trigger_visible },
 	{ "waypoint",							SP_waypoint, qtrue },
 	{ "waypoint_navgoal",					SP_waypoint_navgoal, qtrue },
 	{ "waypoint_navgoal_1",					SP_waypoint_navgoal_1, qtrue },

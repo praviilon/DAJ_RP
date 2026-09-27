@@ -555,10 +555,82 @@ void NPC_Pain(gentity_t *self, gentity_t *attacker, int damage)
 
 /*
 -------------------------
+RP_CorpseGiveKey / RP_CorpseKeyCheck
+
+GalaxyRP: [SP Maps] single player's key pickup from a dead key officer, per client -- see
+RP_GiveSecurityKey(). A corpse is CONTENTS_CORPSE, which a player's movement passes through
+without a touch, so DeadThink() also runs RP_CorpseKeyCheck() to hand the key to any player
+standing over the body.
+-------------------------
+*/
+void RP_CorpseGiveKey( gentity_t *self, gentity_t *other )
+{
+	qboolean	keyTaken;
+	const char	*text;
+
+	if ( !self->message || self->health > 0
+		|| !other || !other->client || other->s.number >= MAX_CLIENTS || other->health <= 0
+		|| other->client->pers.connected != CON_CONNECTED || other->client->sess.sessionTeam == TEAM_SPECTATOR )
+	{
+		return;
+	}
+
+	//give him my key
+	if ( Q_stricmp( "goodie", self->message ) == 0 )
+	{//a goodie key
+		keyTaken = RP_GiveGoodieKey( other );
+		text = keyTaken ? "cp \"Took the goodie key\n\"" : "cp \"Can't carry any more goodie keys\n\"";
+	}
+	else
+	{//a named security key
+		keyTaken = RP_GiveSecurityKey( other, self->message );
+		text = keyTaken ? "cp \"Took the security key\n\"" : "cp \"Already carrying a security key\n\"";
+	}
+	if ( keyTaken )
+	{//remove my key
+		NPC_SetSurfaceOnOff( self, "l_arm_key", 0x00000100 /*TURN_OFF*/ );
+		self->message = NULL;
+		G_Sound( other, CHAN_AUTO, G_SoundIndex( "sound/weapons/key_pkup.wav" ) );
+		trap->SendServerCommand( other->s.number, text );
+	}
+	else if ( self->painDebounceTime < level.time )
+	{//standing on the body asks every frame; say it once in a while
+		self->painDebounceTime = level.time + 2000;
+		trap->SendServerCommand( other->s.number, text );
+	}
+}
+
+void RP_CorpseKeyCheck( gentity_t *self )
+{
+	int			touch[MAX_GENTITIES];
+	int			i, num;
+	vec3_t		mins, maxs;
+
+	if ( !self->message || self->health > 0 )
+	{
+		return;
+	}
+
+	VectorAdd( self->r.currentOrigin, self->r.mins, mins );
+	VectorAdd( self->r.currentOrigin, self->r.maxs, maxs );
+	mins[0] -= 16; mins[1] -= 16; mins[2] -= 8;
+	maxs[0] += 16; maxs[1] += 16; maxs[2] += 24;
+	num = trap->EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+
+	for ( i = 0; i < num && self->message; i++ )
+	{
+		if ( touch[i] < MAX_CLIENTS )
+		{
+			RP_CorpseGiveKey( self, &g_entities[touch[i]] );
+		}
+	}
+}
+
+/*
+-------------------------
 NPC_Touch
 -------------------------
 */
-extern qboolean INV_SecurityKeyGive( gentity_t *target, const char *keyname );
 void NPC_Touch(gentity_t *self, gentity_t *other, trace_t *trace)
 {
 
@@ -570,52 +642,7 @@ void NPC_Touch(gentity_t *self, gentity_t *other, trace_t *trace)
 
 	if ( self->message && self->health <= 0 )
 	{//I am dead and carrying a key
-		//if ( other && player && player->health > 0 && other == player )
-		if (other && other->client && other->s.number < MAX_CLIENTS)
-		{//player touched me
-			/*
-			char *text;
-			qboolean	keyTaken;
-			//give him my key
-			if ( Q_stricmp( "goodie", self->message ) == 0 )
-			{//a goodie key
-				if ( (keyTaken = INV_GoodieKeyGive( other )) == qtrue )
-				{
-					text = "cp @SP_INGAME_TOOK_IMPERIAL_GOODIE_KEY";
-					G_AddEvent( other, EV_ITEM_PICKUP, (FindItemForInventory( INV_GOODIE_KEY )-bg_itemlist) );
-				}
-				else
-				{
-					text = "cp @SP_INGAME_CANT_CARRY_GOODIE_KEY";
-				}
-			}
-			else
-			{//a named security key
-				if ( (keyTaken = INV_SecurityKeyGive( player, self->message )) == qtrue )
-				{
-					text = "cp @SP_INGAME_TOOK_IMPERIAL_SECURITY_KEY";
-					G_AddEvent( other, EV_ITEM_PICKUP, (FindItemForInventory( INV_SECURITY_KEY )-bg_itemlist) );
-				}
-				else
-				{
-					text = "cp @SP_INGAME_CANT_CARRY_SECURITY_KEY";
-				}
-			}
-			*/
-			//rwwFIXMEFIXME: support for goodie/security keys?
-			/*
-			if ( keyTaken )
-			{//remove my key
-				NPC_SetSurfaceOnOff( self, "l_arm_key", 0x00000002 );
-				self->message = NULL;
-				//FIXME: temp pickup sound
-				G_Sound( player, G_SoundIndex( "sound/weapons/key_pkup.wav" ) );
-				//FIXME: need some event to pass to cgame for sound/graphic/message?
-			}
-			//FIXME: temp message
-			trap->SendServerCommand( NULL, text );
-			*/
-		}
+		RP_CorpseGiveKey( self, other );
 	}
 
 	if ( other->client )

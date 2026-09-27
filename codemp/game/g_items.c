@@ -669,6 +669,17 @@ void SentryTouch(gentity_t *ent, gentity_t *other, trace_t *trace)
 	return;
 }
 
+// GalaxyRP: [SP Maps] the client that placed this sentry (ItemUse_Sentry), or NULL for a
+// map-placed misc_sentry_turret, which has no owner and lives as long as the map does
+static gentity_t *pas_owner( gentity_t *self )
+{
+	if ( self->genericValue3 < 0 || self->genericValue3 >= ENTITYNUM_WORLD )
+	{
+		return NULL;
+	}
+	return &g_entities[self->genericValue3];
+}
+
 //----------------------------------------------------------------
 void pas_fire( gentity_t *ent )
 //----------------------------------------------------------------
@@ -697,7 +708,7 @@ void pas_fire( gentity_t *ent )
 	// zyk: changed sentry gun shotspeed from 2300 to 2800
 	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter Upgrade damage bonus branch
 	// gated on pers.rpg_class == 2, which is permanently 0 now.
-	WP_FireTurretMissile(&g_entities[ent->genericValue3], myOrg, fwd, qfalse, 10, 2800, MOD_SENTRY, ent );
+	WP_FireTurretMissile( pas_owner( ent ) ? pas_owner( ent ) : ent, myOrg, fwd, qfalse, 10, 2800, MOD_SENTRY, ent );
 
 	G_RunObject(ent);
 }
@@ -801,7 +812,18 @@ static qboolean pas_find_enemies( gentity_t *self )
 
 		if ( target->client )
 		{
-			if (target->NPC && target->client->playerTeam == NPCTEAM_PLAYER && target->client->enemyTeam == NPCTEAM_ENEMY)
+			if ( target->client->sess.sessionTeam == TEAM_SPECTATOR || target->client->tempSpectate >= level.time )
+			{
+				continue;
+			}
+			if ( self->rpSpTurret )
+			{ // GalaxyRP: [SP Maps] a map-placed sentry: single player's team rule, leave its own team alone
+				if ( target->client->playerTeam == self->rpSpTurretTeam )
+				{
+					continue;
+				}
+			}
+			else if (target->NPC && target->client->playerTeam == NPCTEAM_PLAYER && target->client->enemyTeam == NPCTEAM_ENEMY)
 			{ // zyk: dont attack allied npcs
 				continue;
 			}
@@ -973,8 +995,8 @@ void pas_think( gentity_t *ent )
 		ent->r.contents = CONTENTS_SOLID;
 	}
 
-	if (!g_entities[ent->genericValue3].inuse || !g_entities[ent->genericValue3].client ||
-		g_entities[ent->genericValue3].client->sess.sessionTeam != ent->genericValue2)
+	if ( pas_owner( ent ) && ( !pas_owner( ent )->inuse || !pas_owner( ent )->client ||
+		pas_owner( ent )->client->sess.sessionTeam != ent->genericValue2 ) )
 	{
 		ent->think = G_FreeEntity;
 		ent->nextthink = level.time;
@@ -990,8 +1012,8 @@ void pas_think( gentity_t *ent )
 		return;
 	}
 
-	if ((ent->genericValue8+TURRET_LIFETIME) < level.time)
-	{
+	if ( !ent->rpSpTurret && (ent->genericValue8+TURRET_LIFETIME) < level.time )
+	{ // GalaxyRP: [SP Maps] a map-placed sentry has no lifetime
 		G_Sound( ent, CHAN_BODY, G_SoundIndex( "sound/chars/turret/shutdown.wav" ));
 		ent->s.bolt2 = ENTITYNUM_NONE;
 		ent->s.fireflag = 2;
@@ -1190,7 +1212,7 @@ void turret_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 		G_UseTargets( self, attacker );
 	}
 
-	if (!g_entities[self->genericValue3].inuse || !g_entities[self->genericValue3].client)
+	if ( pas_owner( self ) && ( !pas_owner( self )->inuse || !pas_owner( self )->client ) )
 	{
 		G_FreeEntity(self);
 		return;
@@ -1205,9 +1227,12 @@ void turret_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	VectorSet( self->s.angles, 0, 0, 1 );
 
 	G_PlayEffect(EFFECT_EXPLOSION_PAS, self->s.pos.trBase, self->s.angles);
-	G_RadiusDamage(self->s.pos.trBase, &g_entities[self->genericValue3], 30, 256, self, self, MOD_UNKNOWN);
+	G_RadiusDamage(self->s.pos.trBase, pas_owner( self ) ? pas_owner( self ) : self, 30, 256, self, self, MOD_UNKNOWN);
 
-	g_entities[self->genericValue3].client->ps.fd.sentryDeployed = qfalse;
+	if ( pas_owner( self ) )
+	{
+		pas_owner( self )->client->ps.fd.sentryDeployed = qfalse;
+	}
 
 	// GalaxyRP fix: [RPG classes] removed a dead Bounty Hunter placed-sentries decrement
 	// gated on pers.rpg_class == 2, which is permanently 0 now.
@@ -1218,13 +1243,13 @@ void turret_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 
 void turret_free(gentity_t *self)
 {
-	if (!g_entities[self->genericValue3].inuse || !g_entities[self->genericValue3].client)
+	if ( !pas_owner( self ) || !pas_owner( self )->inuse || !pas_owner( self )->client )
 	{
 		G_FreeEntity(self);
 		return;
 	}
 
-	g_entities[self->genericValue3].client->ps.fd.sentryDeployed = qfalse;
+	pas_owner( self )->client->ps.fd.sentryDeployed = qfalse;
 
 	G_FreeEntity( self );
 }
@@ -1265,6 +1290,83 @@ void SP_PAS( gentity_t *base )
 	base->physicsObject = qtrue;
 
 	G_Sound( base, CHAN_BODY, G_SoundIndex( "sound/chars/turret/startup.wav" ));
+}
+
+/*QUAKED misc_sentry_turret (1 0 0) (-8 -8 0) (8 8 24)
+model="models/items/psgun.glm"
+Single player's portable sentry turret placed in a map. The same gun as the sentry item, owned by
+nobody: it never expires, and shoots at everyone but the team named in "team".
+
+  "team" - the team it leaves alone: player, enemy (the default), neutral or free
+  "count" - shots before it runs out of ammo (default 500)
+  "health" - default 50
+  "target" - used when it is destroyed
+*/
+void SP_misc_sentry_turret( gentity_t *base )
+{
+	vec3_t mins, maxs;
+
+	base->classname = "misc_sentry_turret";
+	base->s.modelindex = G_ModelIndex( "models/items/psgun.glm" );
+	base->s.g2radius = 30.0f;
+	base->s.modelGhoul2 = 1;
+
+	G_SetOrigin( base, base->s.origin );
+	G_SetAngles( base, base->s.angles );
+	base->parent = NULL;
+	base->r.contents = CONTENTS_SOLID;
+	base->s.solid = 2;
+	base->clipmask = MASK_SOLID;
+	VectorSet( mins, -8, -8, 0 );
+	VectorSet( maxs, 8, 8, 24 );
+	VectorCopy( mins, base->r.mins );
+	VectorCopy( maxs, base->r.maxs );
+	base->genericValue3 = ENTITYNUM_NONE;	//no owner
+	base->genericValue2 = 0;
+	base->genericValue15 = HI_SENTRY_GUN;
+	base->s.eType = ET_GENERAL;
+	base->s.pos.trType = TR_GRAVITY;
+	base->s.pos.trTime = level.time;
+	base->touch = SentryTouch;
+	base->nextthink = level.time;
+	base->genericValue4 = ENTITYNUM_NONE;	//enemy index
+	base->genericValue5 = 1000;
+	base->genericValue8 = level.time;
+	base->s.owner = ENTITYNUM_NONE;
+	base->s.shouldtarget = qtrue;
+	base->s.teamowner = 16;
+
+	// the team it leaves alone, single player's "team" key (misc_turret reads it the same way)
+	base->rpSpTurret = qtrue;
+	base->rpSpTurretTeam = NPCTEAM_ENEMY;
+	if ( base->team && base->team[0] )
+	{
+		if ( !Q_stricmp( base->team, "player" ) )
+		{
+			base->rpSpTurretTeam = NPCTEAM_PLAYER;
+		}
+		else if ( !Q_stricmp( base->team, "enemy" ) )
+		{
+			base->rpSpTurretTeam = NPCTEAM_ENEMY;
+		}
+		else if ( !Q_stricmp( base->team, "neutral" ) )
+		{
+			base->rpSpTurretTeam = NPCTEAM_NEUTRAL;
+		}
+		else if ( !Q_stricmp( base->team, "free" ) )
+		{
+			base->rpSpTurretTeam = NPCTEAM_FREE;
+		}
+		else
+		{
+			base->rpSpTurretTeam = NPCTEAM_NUM_TEAMS;	//nobody is left alone
+		}
+		base->team = NULL;
+	}
+
+	trap->LinkEntity( (sharedEntity_t *)base );
+
+	SP_PAS( base );
 }
 
 //------------------------------------------------------------------------

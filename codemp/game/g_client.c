@@ -686,6 +686,49 @@ SelectRandomFurthestSpawnPoint
 Chooses a player start, deathmatch start, etc
 ============
 */
+/*
+================
+RP_ProbeAroundSpawnPoint
+
+GalaxyRP: [Spawning] every spawn point has somebody standing on it (a single-player map with
+one start, a small map that is full). Rather than telefrag whoever is on the first one, try
+nine spots around it -- the point itself and 60 units out along and across each axis -- and
+take the first with a clear player box and a floor within reach. qfalse when all nine are
+taken or blocked, and the caller telefrags as before.
+================
+*/
+static qboolean RP_ProbeAroundSpawnPoint( gentity_t *spot, vec3_t origin )
+{
+	static const float	offsets[9][2] = { { 0, 0 }, { 60, 0 }, { -60, 0 }, { 0, 60 }, { 0, -60 }, { 60, 60 }, { -60, 60 }, { 60, -60 }, { -60, -60 } };
+	vec3_t				playerMins = { -15, -15, DEFAULT_MINS_2 };
+	vec3_t				playerMaxs = { 15, 15, DEFAULT_MAXS_2 };
+	trace_t				tr;
+	vec3_t				start, end;
+	int					i;
+
+	for ( i = 0; i < 9; i++ )
+	{
+		VectorCopy( spot->s.origin, start );
+		start[0] += offsets[i][0];
+		start[1] += offsets[i][1];
+		start[2] += 9 + 32;	// a little above the point, dropped onto the floor
+		VectorCopy( start, end );
+		end[2] -= 200;
+
+		trap->Trace( &tr, start, playerMins, playerMaxs, end, ENTITYNUM_NONE, MASK_PLAYERSOLID, qfalse, 0, 0 );
+		if ( tr.startsolid || tr.allsolid || tr.fraction == 1.0f )
+		{//inside something (a wall, a player) or no floor within reach
+			continue;
+		}
+
+		VectorCopy( tr.endpos, origin );
+		origin[2] += 1;
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, vec3_t angles, team_t team, qboolean isbot ) {
 	gentity_t	*spot;
 	vec3_t		delta;
@@ -784,9 +827,26 @@ gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, ve
 			}
 		}
 		if (!numSpots) {
+			gentity_t *probe = NULL;
+
 			spot = G_Find( NULL, FOFS(classname), "info_player_deathmatch");
 			if (!spot)
 				trap->Error( ERR_DROP, "Couldn't find a spawn point" );
+
+			// GalaxyRP: [Spawning] every point is taken: look for room beside one before telefragging
+			while ( (probe = G_Find( probe, FOFS(classname), "info_player_deathmatch" )) != NULL )
+			{
+				if ( ((probe->flags & FL_NO_BOTS) && isbot) || ((probe->flags & FL_NO_HUMANS) && !isbot) )
+				{
+					continue;
+				}
+				if ( RP_ProbeAroundSpawnPoint( probe, origin ) )
+				{
+					VectorCopy( probe->s.angles, angles );
+					return probe;
+				}
+			}
+
 			VectorCopy (spot->s.origin, origin);
 			origin[2] += 9;
 			VectorCopy (spot->s.angles, angles);
@@ -4324,9 +4384,9 @@ void ClientSpawn(gentity_t *ent) {
 			// fire the targets of the spawn point
 			G_UseTargets(spawnPoint, ent);
 
-			// GalaxyRP: [SP Maps] on a Jedi Outcast SP map the spawn points' target is the map's
-			// single-player start script (player setup, intro, cinematic), copied onto every added
-			// spawn point. It is meant to run once, so the first spawn that fires it clears it from
+			// GalaxyRP: [SP Maps] on a single-player map (JO and JA) the spawn points' target is the
+			// map's start script (player setup, intro, cinematic), copied onto every added spawn
+			// point. It is meant to run once, so the first spawn that fires it clears it from
 			// every deathmatch spawn point on the map; later spawns fire nothing.
 			if ( level.rp_spawn_target_once && spawnPoint && spawnPoint->target )
 			{
@@ -4535,6 +4595,9 @@ void ClientDisconnect( int clientNum ) {
 	if ( !ent->client || ent->client->pers.connected == CON_DISCONNECTED ) {
 		return;
 	}
+
+	// GalaxyRP: [SP Maps] security / goodie keys leave with the player
+	RP_ClearKeys( ent );
 
 	// GalaxyRP: [Account] this is the server-side handler for every kind of disconnect -- a
 	// voluntary /quit or /disconnect, a /reconnect (which drops and reconnects to the same server,

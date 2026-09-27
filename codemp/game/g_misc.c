@@ -51,7 +51,23 @@ void SP_info_camp( gentity_t *self ) {
 Used as a positional target for calculations in the utilities (spotlights, etc), but removed during gameplay.
 */
 void SP_info_null( gentity_t *self ) {
-	G_FreeEntity( self );
+	// GalaxyRP fix: [SP Maps] single player keeps an info_null around for a few frames so the
+	// ref_tags, fx_runners, misc_weapon_shooters, spotlights and cameras that aim at one can
+	// resolve their "target" when they link; freeing it on the spot left all of those with no
+	// aim point (and a red "invalid target" line for every ref_tag). An info_null nothing can
+	// target (no targetname) is still freed at once, as is every one once the logical region
+	// runs low: a single-player map carries hundreds of them and G_SpawnLogical() drops the
+	// server when that region is exhausted. func_group shares this spawn function; it never
+	// has a targetname, so it is freed as before.
+	if ( !self->targetname || !self->targetname[0]
+		|| ( self->isLogical ? level.num_logicalents >= MAX_LOGICENTITIES - 256 : level.num_entities >= MAX_GENTITIES - 256 ) )
+	{
+		G_FreeEntity( self );
+		return;
+	}
+	G_SetOrigin( self, self->s.origin );
+	self->think = G_FreeEntity;
+	self->nextthink = level.time + START_TIME_REMOVE_ENTS;
 }
 
 
@@ -3802,6 +3818,20 @@ void GunRackAddItem( gitem_t *gun, vec3_t org, vec3_t angs, float ffwd, float fr
 		it_ent->classname = G_NewString(gun->classname);	//copy it so it can be freed safely
 		G_SpawnItem( it_ent, gun );
 
+		// GalaxyRP fix: [SP Maps] G_SpawnItem() frees the entity when the weapon is disabled
+		// (g_weaponDisable, disable_weapon_*) and leaves it without an item when G_ItemDisabled()
+		// says so; FinishSpawningItem() on either dereferenced a NULL item and crashed the server
+		// on any map with a misc_model_gun_rack.
+		if ( !it_ent->inuse )
+		{
+			return;
+		}
+		if ( !it_ent->item )
+		{
+			G_FreeEntity( it_ent );
+			return;
+		}
+
 		// FinishSpawningItem handles everything, so clear the thinkFunc that was set in G_SpawnItem
 		FinishSpawningItem( it_ent );
 
@@ -4976,6 +5006,10 @@ void misc_weapon_shooter_fire( gentity_t *self )
 	{//repeat
 		self->think = misc_weapon_shooter_fire;
 		self->nextthink = level.time + self->wait;
+		if ( self->random > 0 )
+		{ // GalaxyRP: [SP Maps] single player's refire jitter, "random" milliseconds at most
+			self->nextthink += (int)( Q_flrand( 0.0f, 1.0f ) * self->random );
+		}
 	}
 }
 
@@ -5003,10 +5037,15 @@ void misc_weapon_shooter_aim( gentity_t *self )
 		gentity_t *targ = G_Find( NULL, FOFS(targetname), self->target );
 		if ( targ )
 		{
+			vec3_t dir;
+
 			self->enemy = targ;
-			VectorSubtract( targ->r.currentOrigin, self->r.currentOrigin, self->pos1 );
+			// GalaxyRP fix: [SP Maps] the direction computed here was overwritten with the target's
+			// absolute position before vectoangles(), so the shooter aimed at the angles of a
+			// world coordinate instead of at its target.
+			VectorSubtract( targ->r.currentOrigin, self->r.currentOrigin, dir );
 			VectorCopy( targ->r.currentOrigin, self->pos1 );
-			vectoangles( self->pos1, self->client->ps.viewangles );
+			vectoangles( dir, self->client->ps.viewangles );
 			SetClientViewAngle( self, self->client->ps.viewangles );
 			//FIXME: don't keep doing this unless target is a moving target?
 			self->nextthink = level.time + FRAMETIME;
@@ -5110,5 +5149,375 @@ void SP_misc_weather_zone( gentity_t *ent )
 
 void SP_misc_cubemap( gentity_t *ent )
 {
+	G_FreeEntity( ent );
+}
+
+/*
+==================================================================================================
+GalaxyRP: [Scripts] server-driven map-model animation (SET_STARTFRAME / SET_ENDFRAME /
+SET_ANIMFRAME, misc_model_* entities). Single player animated these in G_RunFrame; the cgame
+renders s.frame for ET_GENERAL models, so stepping it here is all that is needed. Only entities
+a script set up through those commands (rpAnimating) are touched: s.frame is used as a plain
+state number by turrets, panels and others, and must not be walked for them.
+==================================================================================================
+*/
+void RP_Animate( gentity_t *self )
+{
+	if ( self->s.eFlags & EF_SHADER_ANIM )
+	{
+		return;
+	}
+
+	if ( self->s.frame == self->endFrame )
+	{
+		if ( self->loopAnim )
+		{
+			self->s.frame = self->startFrame;
+		}
+		else
+		{
+			self->rpAnimating = qfalse;
+		}
+		//Finished sequence - FIXME: only do this once even on looping anims?
+		if ( trap->ICARUS_TaskIDPending( (sharedEntity_t *)self, TID_ANIM_BOTH ) )
+		{
+			trap->ICARUS_TaskIDComplete( (sharedEntity_t *)self, TID_ANIM_BOTH );
+		}
+		return;
+	}
+
+	if ( self->startFrame < self->endFrame )
+	{
+		if ( self->s.frame < self->startFrame || self->s.frame > self->endFrame )
+		{
+			self->s.frame = self->startFrame;
+		}
+		else
+		{
+			self->s.frame++;
+		}
+	}
+	else if ( self->startFrame > self->endFrame )
+	{
+		if ( self->s.frame > self->startFrame || self->s.frame < self->endFrame )
+		{
+			self->s.frame = self->startFrame;
+		}
+		else
+		{
+			self->s.frame--;
+		}
+	}
+	else
+	{
+		self->s.frame = self->endFrame;
+	}
+}
+
+/*
+==================================================================================================
+GalaxyRP: [SP Maps] security and goodie keys, per client (clientPersistant_t::rp_securityKey /
+rp_goodieKeys). Single player kept these in the player's inventory; a key officer's corpse
+(NPC_Touch), an item_security_key or a script hands them out, a misc_security_panel /
+func_security_panel with the matching "message" or a func_goodie_panel uses them up. One named
+security key at a time, as in single player. Cleared on death (player_die) and on disconnect.
+==================================================================================================
+*/
+qboolean RP_GiveSecurityKey( gentity_t *player, const char *keyname )
+{
+	if ( !player || !player->client || !keyname || !keyname[0] )
+	{
+		return qfalse;
+	}
+	if ( player->client->pers.rp_securityKey[0] )
+	{//already carrying one
+		return qfalse;
+	}
+	Q_strncpyz( player->client->pers.rp_securityKey, keyname, sizeof( player->client->pers.rp_securityKey ) );
+	return qtrue;
+}
+
+qboolean RP_HasSecurityKey( gentity_t *player, const char *keyname )
+{
+	if ( !player || !player->client || !keyname || !keyname[0] )
+	{
+		return qfalse;
+	}
+	return (qboolean)( Q_stricmp( player->client->pers.rp_securityKey, keyname ) == 0 );
+}
+
+void RP_TakeSecurityKey( gentity_t *player )
+{
+	if ( player && player->client )
+	{
+		player->client->pers.rp_securityKey[0] = '\0';
+	}
+}
+
+#define RP_MAX_GOODIE_KEYS	5
+
+qboolean RP_GiveGoodieKey( gentity_t *player )
+{
+	if ( !player || !player->client || player->client->pers.rp_goodieKeys >= RP_MAX_GOODIE_KEYS )
+	{
+		return qfalse;
+	}
+	player->client->pers.rp_goodieKeys++;
+	return qtrue;
+}
+
+qboolean RP_TakeGoodieKey( gentity_t *player )
+{
+	if ( !player || !player->client || player->client->pers.rp_goodieKeys <= 0 )
+	{
+		return qfalse;
+	}
+	player->client->pers.rp_goodieKeys--;
+	return qtrue;
+}
+
+void RP_ClearKeys( gentity_t *player )
+{
+	if ( player && player->client )
+	{
+		player->client->pers.rp_securityKey[0] = '\0';
+		player->client->pers.rp_goodieKeys = 0;
+	}
+}
+
+/*QUAKED misc_security_panel (0 .5 .8) (-8 -8 -8) (8 8 8) x x x x x x x INACTIVE
+model="models/map_objects/kejim/sec_panel.md3"
+  A model that just sits there and opens when a player uses it and has right key
+
+INACTIVE - Start off, has to be activated to be usable
+
+"message"	name of the key player must have
+"target"	thing to use when successfully opened
+"target2"	thing to use when player uses the panel without the key
+*/
+static void panel_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	if ( !activator || !activator->client || activator->s.number >= MAX_CLIENTS )
+	{
+		return;
+	}
+
+	if ( self->message && self->message[0] && !RP_HasSecurityKey( activator, self->message ) )
+	{//don't have the key
+		G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_fail.mp3" ) );
+		G_UseTargets2( self, activator, self->target2 );
+		return;
+	}
+
+	//unlock
+	RP_TakeSecurityKey( activator );
+	G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_pass.mp3" ) );
+	self->s.frame = 1;
+	G_UseTargets2( self, activator, self->target );
+
+	//spent, only opens once
+	self->use = NULL;
+	self->r.svFlags &= ~SVF_PLAYER_USABLE;
+}
+
+void SP_misc_security_panel( gentity_t *self )
+{
+	if ( self->spawnflags & 128 )
+	{
+		self->flags |= FL_INACTIVE;
+	}
+
+	G_SoundIndex( "sound/movers/sec_panel_pass.mp3" );
+	G_SoundIndex( "sound/movers/sec_panel_fail.mp3" );
+
+	self->s.modelindex = G_ModelIndex( "models/map_objects/kejim/sec_panel.md3" );
+	G_SetOrigin( self, self->s.origin );
+	G_SetAngles( self, self->s.angles );
+	VectorSet( self->r.mins, -8, -8, -8 );
+	VectorSet( self->r.maxs, 8, 8, 8 );
+	self->r.contents = CONTENTS_SOLID;
+	self->r.svFlags |= SVF_PLAYER_USABLE;
+	self->use = panel_use;
+	trap->LinkEntity( (sharedEntity_t *)self );
+}
+
+/*QUAKED item_security_key (.3 .3 1) (-8 -8 0) (8 8 16) suspended
+model="models/items/key.md3"
+A security key, picked up by walking over it.
+
+"message" - the key's name, what the misc_security_panel / func_security_panel it opens has as its "message"
+*/
+static void key_touch( gentity_t *self, gentity_t *other, trace_t *trace )
+{
+	if ( !other || !other->client || other->s.number >= MAX_CLIENTS || other->health <= 0 )
+	{
+		return;
+	}
+	if ( !RP_GiveSecurityKey( other, self->message ) )
+	{//already carrying one
+		return;
+	}
+	G_Sound( other, CHAN_AUTO, G_SoundIndex( "sound/weapons/key_pkup.wav" ) );
+	trap->SendServerCommand( other->s.number, "cp \"Took the security key\n\"" );
+	G_UseTargets( self, other );
+	G_FreeEntity( self );
+}
+
+void SP_item_security_key( gentity_t *self )
+{
+	if ( !self->message || !self->message[0] )
+	{
+		Com_Printf( S_COLOR_YELLOW"WARNING: item_security_key at %s has no message (key name)\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
+	}
+
+	G_SoundIndex( "sound/weapons/key_pkup.wav" );
+
+	self->s.modelindex = G_ModelIndex( "models/items/key.md3" );
+	G_SetOrigin( self, self->s.origin );
+	G_SetAngles( self, self->s.angles );
+	VectorSet( self->r.mins, -8, -8, 0 );
+	VectorSet( self->r.maxs, 8, 8, 16 );
+	self->r.contents = CONTENTS_TRIGGER;
+	self->s.eType = ET_GENERAL;
+	self->touch = key_touch;
+	trap->LinkEntity( (sharedEntity_t *)self );
+}
+
+/*QUAKED misc_spotlight (1 0 0) (-10 -10 0) (10 10 10) START_OFF
+model="models/map_objects/imp_mine/spotlight.md3"
+Search spotlight that must be targeted at a func_train or other entity. Uses its target2 when it
+sees a player.
+
+  START_OFF - the spotlight starts off and is turned on when used (using it again turns it off)
+
+  "wait" - how long between target2 firings while a player stays in the beam (seconds, default 0.5)
+  "target" - what to point at
+  "target2" - what to use when it detects a player
+*/
+#define RP_SPOTLIGHT_FOV	15
+extern qboolean InFOV3( vec3_t spot, vec3_t from, vec3_t fromAngles, int hFOV, int vFOV );
+
+static void spotlight_think( gentity_t *self )
+{
+	int i;
+
+	self->nextthink = level.time + FRAMETIME;
+
+	if ( self->spawnflags & 1 )
+	{//off
+		return;
+	}
+
+	//update my aim
+	if ( self->target )
+	{
+		gentity_t *targ = G_Find( NULL, FOFS(targetname), self->target );
+
+		if ( targ )
+		{
+			vec3_t angles, dir;
+
+			VectorSubtract( targ->r.currentOrigin, self->r.currentOrigin, dir );
+			vectoangles( dir, angles );
+			VectorCopy( self->r.currentAngles, self->s.apos.trBase );
+			for ( i = 0; i < 3; i++ )
+			{
+				angles[i] = AngleNormalize180( angles[i] );
+				self->s.apos.trDelta[i] = AngleNormalize180( ( angles[i] - self->r.currentAngles[i] ) * 10 );
+			}
+			self->s.apos.trTime = level.time;
+			self->s.apos.trDuration = FRAMETIME;
+			VectorCopy( angles, self->r.currentAngles );
+		}
+	}
+
+	//spot a player?
+	if ( self->target2 && self->target2[0] && self->painDebounceTime < level.time )
+	{
+		for ( i = 0; i < MAX_CLIENTS; i++ )
+		{
+			gentity_t *player = &g_entities[i];
+
+			if ( !player->inuse || !player->client || player->health <= 0
+				|| player->client->pers.connected != CON_CONNECTED
+				|| player->client->sess.sessionTeam == TEAM_SPECTATOR
+				|| player->client->tempSpectate >= level.time
+				|| ( player->flags & FL_NOTARGET ) )
+			{
+				continue;
+			}
+			if ( !InFOV3( player->r.currentOrigin, self->r.currentOrigin, self->r.currentAngles, RP_SPOTLIGHT_FOV, RP_SPOTLIGHT_FOV ) )
+			{
+				continue;
+			}
+			if ( !G_ClearLOS5( self, player->r.currentOrigin ) )
+			{
+				continue;
+			}
+			G_UseTargets2( self, player, self->target2 );
+			self->painDebounceTime = level.time + (int)( self->wait * 1000 );
+			break;
+		}
+	}
+}
+
+static void spotlight_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	self->spawnflags ^= 1;
+}
+
+void SP_misc_spotlight( gentity_t *self )
+{
+	G_SpawnFloat( "wait", "0.5", &self->wait );
+
+	self->s.modelindex = G_ModelIndex( "models/map_objects/imp_mine/spotlight.md3" );
+	G_SetOrigin( self, self->s.origin );
+	G_SetAngles( self, self->s.angles );
+	VectorCopy( self->s.angles, self->r.currentAngles );
+	self->s.apos.trType = TR_LINEAR_STOP;
+	VectorSet( self->r.mins, -8, -8, -12 );
+	VectorSet( self->r.maxs, 8, 8, 0 );
+	self->r.contents = CONTENTS_SOLID;
+	trap->LinkEntity( (sharedEntity_t *)self );
+
+	self->use = spotlight_use;
+	self->think = spotlight_think;
+	self->nextthink = level.time + START_TIME_LINK_ENTS;
+}
+
+/*QUAKED misc_trip_mine (0.2 0.8 0.2) (-4 -4 -4) (4 4 4) START_ON BROADCAST START_OFF
+Place in a map and point the angles at whatever surface you want it to attach to.
+The trip mine attaches to that surface and fires its beam away from it, at an angle
+perpendicular to it. Owned by the world: it hurts everyone who trips it.
+
+  START_ON / START_OFF - single player's toggling is not supported; the mine is always armed
+  BROADCAST - the trip wire and loop sound are sent through area portals
+*/
+extern void CreateLaserTrap( gentity_t *laserTrap, vec3_t start, gentity_t *owner );
+extern void laserTrapStick( gentity_t *ent, vec3_t endpos, vec3_t normal );
+
+void SP_misc_trip_mine( gentity_t *ent )
+{
+	gentity_t	*laserTrap = G_Spawn();
+	vec3_t		fwd;
+
+	RegisterItem( BG_FindItemForWeapon( WP_TRIP_MINE ) );
+
+	CreateLaserTrap( laserTrap, ent->s.origin, &g_entities[ENTITYNUM_WORLD] );
+	laserTrap->count = 1;	//a tripwire, not a proximity mine
+	trap->LinkEntity( (sharedEntity_t *)laserTrap );
+
+	AngleVectors( ent->s.angles, fwd, NULL, NULL );
+	VectorScale( fwd, -1, fwd );
+	laserTrapStick( laserTrap, ent->s.origin, fwd );
+
+	if ( ent->spawnflags & 2 )
+	{
+		laserTrap->r.svFlags |= SVF_BROADCAST;
+	}
+
+	//the placeholder has done its job
 	G_FreeEntity( ent );
 }

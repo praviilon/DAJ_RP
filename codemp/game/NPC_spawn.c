@@ -1500,6 +1500,7 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	{//has a key
 		newent->message = ent->message;//transfer the key name
 		newent->flags |= FL_NO_KNOCKBACK;//don't fall off ledges
+		G_SoundIndex( "sound/weapons/key_pkup.wav" );
 	}
 
 	// If this is a vehicle we need to see what kind it is so we properlly allocate it.
@@ -1764,6 +1765,11 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	else
 	{
 		newent->client->pers.credits_modifier = 0;
+	}
+
+	if ( !newent->message && newent->client->NPC_class == CLASS_IMPERIAL )
+	{ // GalaxyRP: [SP Maps] the imperial model carries a key by default; only a key officer keeps it (single player did this too)
+		NPC_SetSurfaceOnOff( newent, "l_arm_key", 0x00000100 /*TURN_OFF*/ );
 	}
 
 	trap->LinkEntity ((sharedEntity_t *)newent);

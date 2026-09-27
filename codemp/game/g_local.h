@@ -348,6 +348,14 @@ struct gentity_s {
 	// task( sound(CHAN_VOICE, ...) ) dowait waited forever. See RP_SoundDuration() in g_ICARUScb.c.
 	int				IcarusSoundTime;
 
+	// GalaxyRP: [Scripts] map-model animation driven by the server (SET_STARTFRAME/ENDFRAME/
+	// ANIMFRAME): RP_Animate() steps s.frame from startFrame to endFrame once rpAnimating is set
+	// and completes TID_ANIM_BOTH when it gets there; loopAnim restarts instead (misc_model_*).
+	int				startFrame;
+	int				endFrame;
+	qboolean		loopAnim;
+	qboolean		rpAnimating;
+
 	struct gclient_s	*client;			// NULL if not a client
 
 	gNPC_t		*NPC;//Only allocated if the entity becomes an NPC
@@ -1173,6 +1181,13 @@ typedef struct clientPersistant_s {
 	// running, and /getup and /helpup both refuse an admin paralysis, so they were stuck with no timer,
 	// no message and no way out. Keeping both halves in pers gives them one lifetime.
 	int				downedTime;
+
+	// GalaxyRP: [SP Maps] single player's key inventory, per client: the one named security key
+	// this player carries (taken from a dead key officer or an item_security_key; used up by the
+	// misc_security_panel / func_security_panel whose "message" matches) and how many goodie keys
+	// (func_goodie_panel). Cleared on death and on disconnect -- see RP_ClearKeys().
+	char			rp_securityKey[MAX_QPATH];
+	int				rp_goodieKeys;
 
 } clientPersistant_t;
 
@@ -2499,6 +2514,16 @@ void G_RunThink (gentity_t *ent);
 // GalaxyRP: [ICARUS] see gentity_t::IcarusSoundTime.
 void RP_IcarusSoundCheck( gentity_t *ent );
 const char *RP_ScriptPath( const char *name );
+void RP_Animate( gentity_t *ent );
+// GalaxyRP: [SP Maps] security / goodie keys (g_misc.c)
+qboolean RP_GiveSecurityKey( gentity_t *player, const char *keyname );
+qboolean RP_HasSecurityKey( gentity_t *player, const char *keyname );
+void RP_TakeSecurityKey( gentity_t *player );
+qboolean RP_GiveGoodieKey( gentity_t *player );
+qboolean RP_TakeGoodieKey( gentity_t *player );
+void RP_ClearKeys( gentity_t *player );
+// GalaxyRP: [SP Maps] the "message" of the trigger_location the entity stands in, or NULL (g_trigger.c)
+const char *RP_TriggerLocationName( gentity_t *ent );
 void RP_IcarusAnimTaskCheck( gentity_t *ent );
 int  RP_SoundDuration( const char *soundName );
 void RP_IcarusSoundCacheReset( void );

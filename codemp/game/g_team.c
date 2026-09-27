@@ -1011,6 +1011,15 @@ Report a location for the player. Uses placed nearby target_location entities
 qboolean Team_GetLocationMsg(gentity_t *ent, char *loc, int loclen)
 {
 	locationData_t *best;
+	const char *trig;
+
+	// GalaxyRP: [SP Maps] single-player maps name their areas with trigger_location volumes
+	trig = RP_TriggerLocationName( ent );
+	if ( trig )
+	{
+		Com_sprintf( loc, loclen, "%s", trig );
+		return qtrue;
+	}
 
 	best = Team_GetLocation( ent );
 

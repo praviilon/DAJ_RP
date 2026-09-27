@@ -1794,6 +1794,13 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	{
 		level.sp_map = qtrue;
 		level.rp_sp_game = RP_SP_GAME_JA;
+		// GalaxyRP fix: [SP Maps] the start's target -- the map's intro / setup script, copied onto
+		// every added spawn point by zyk_create_info_player_deathmatch() -- fires for the first
+		// spawn only, as it already does on the Jedi Outcast maps (RP_JediOutcastMapFixes). Every
+		// one of the 34 maps' start targets was checked: all are one-shot setup scriptrunners
+		// (intros, cranes, clips, objectives, Kyle's setup on vjun1) or, on vjun2, the NPC_Kyle
+		// spawner itself -- which spawned another Kyle on every respawn.
+		level.rp_spawn_target_once = qtrue;
 	}
 	else if ( RP_IsJediOutcastMap( zyk_mapname ) )
 	{
@@ -8518,6 +8525,12 @@ void G_RunFrame( int levelTime ) {
 
 		// GalaxyRP: [ICARUS] a voice line that has ended completes the script task waiting on it
 		RP_IcarusSoundCheck( ent );
+
+		// GalaxyRP: [Scripts] a map model animating under SET_STARTFRAME/ENDFRAME steps a frame
+		if ( ent->rpAnimating )
+		{
+			RP_Animate( ent );
+		}
 
 		// clear events that are too old
 		if ( level.time - ent->eventTime > EVENT_VALID_MSEC ) {

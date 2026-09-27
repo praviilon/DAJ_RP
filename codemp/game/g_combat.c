@@ -2236,6 +2236,12 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	if ( !attacker )
 		return;
 
+	// GalaxyRP: [SP Maps] security / goodie keys do not survive death (they are not dropped either)
+	if ( self->s.number < MAX_CLIENTS )
+	{
+		RP_ClearKeys( self );
+	}
+
 	// GalaxyRP fix: [Death System] this is where a death is counted, and the only place.
 	//
 	// It used to live further down, and unconditionally, straight out of stock JKA, until commit

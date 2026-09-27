@@ -806,7 +806,10 @@ static qboolean turretG2_find_enemies( gentity_t *self )
 
 			if ( enemyDist < bestDist || (target->client && !foundClient))// all things equal, keep current
 			{
-				if ( self->attackDebounceTime < level.time )
+				// GalaxyRP fix: [SP Maps] the 1400ms wind-up was re-armed every time this scan
+				// re-acquired the enemy it already had -- every 500ms for a non-client target -- so a
+				// turret facing NPCs wound up forever and never fired. Only wind up for a new enemy.
+				if ( self->attackDebounceTime < level.time && !self->enemy )
 				{
 					// We haven't fired or acquired an enemy in the last 2 seconds-start-up sound
 					if ( !(self->spawnflags&SPF_TURRETG2_TURBO) )
@@ -917,6 +920,15 @@ void turretG2_base_think( gentity_t *self )
 		}
 		else if ( self->enemy->client && self->enemy->client->tempSpectate >= level.time )
 		{//don't keep going after spectators
+			self->enemy = NULL;
+		}
+		else if ( self->enemy->client && ( ( self->rpSpTurret && self->enemy->client->playerTeam == self->rpSpTurretTeam )
+			|| ( self->alliedTeam && self->enemy->client->sess.sessionTeam == self->alliedTeam ) ) )
+		{ // GalaxyRP fix: [SP Maps] joined the team this turret leaves alone: let go (the scan would never have picked them)
+			self->enemy = NULL;
+		}
+		else if ( self->enemy->flags & FL_NOTARGET )
+		{
 			self->enemy = NULL;
 		}
 		else
@@ -1242,7 +1254,7 @@ void finish_spawning_turretG2( gentity_t *base )
 		// How quickly to fire
 		if ( !base->wait )
 		{
-			base->wait = 150 + Q_flrand(0.0f, 1.0f) * 55;
+			base->wait = 150; // GalaxyRP: [SP Maps] single player's rate (was 150 + up to 55ms of jitter)
 		}
 
 		if ( !base->splashDamage )
