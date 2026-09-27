@@ -638,7 +638,7 @@ spawn_t	spawns[] = {
 	{ "misc_skyportal_orient",				SP_misc_skyportal_orient },
 	{ "misc_spotlight",						SP_misc_spotlight },
 	{ "misc_teleporter_dest",				SP_misc_teleporter_dest, qtrue },
-	{ "misc_trip_mine",						SP_misc_trip_mine },
+	{ "misc_trip_mine",						SP_misc_trip_mine, qtrue }, // GalaxyRP: [SP Maps] the placeholder; the mine it spawns is networked
 	{ "misc_turret",						SP_misc_turret },
 	{ "misc_turretG2",						SP_misc_turretG2 },
 	{ "misc_weapon_shooter",				SP_misc_weapon_shooter },

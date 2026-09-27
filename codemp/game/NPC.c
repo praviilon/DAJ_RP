@@ -250,15 +250,19 @@ void NPC_RemoveBody( gentity_t *self )
 
 			// GalaxyRP: [Corpses] single player never removed a body in front of the player;
 			// the checks were commented out here ("Don't care about this for MP I guess") and
-			// bodies vanished while being looked at. Any player counts now.
-			if ( DistanceToClosestPlayer( self->r.currentOrigin, -1 ) <= REMOVE_DISTANCE )
+			// bodies vanished while being looked at. Any player counts now. A body nobody can
+			// see (the small droids are hidden on death, EF_NODRAW) has nothing to wait for.
+			if ( !( self->client->ps.eFlags & EF_NODRAW ) )
 			{
-				return;
-			}
+				if ( DistanceToClosestPlayer( self->r.currentOrigin, -1 ) <= REMOVE_DISTANCE )
+				{
+					return;
+				}
 
-			if ( InPlayersFOV( self->r.currentOrigin, -1, 110, 90, qtrue ) ) // generous FOV check
-			{
-				return;
+				if ( InPlayersFOV( self->r.currentOrigin, -1, 110, 90, qtrue ) ) // generous FOV check
+				{
+					return;
+				}
 			}
 		}
 

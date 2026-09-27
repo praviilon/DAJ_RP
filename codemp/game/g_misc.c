@@ -54,10 +54,13 @@ void SP_info_null( gentity_t *self ) {
 	// GalaxyRP fix: [SP Maps] single player keeps an info_null around for a few frames so the
 	// ref_tags, fx_runners, misc_weapon_shooters, spotlights and cameras that aim at one can
 	// resolve their "target" when they link; freeing it on the spot left all of those with no
-	// aim point (and a red "invalid target" line for every ref_tag). An info_null nothing can
-	// target (no targetname) is still freed at once, as is every one once the logical region
-	// runs low: a single-player map carries hundreds of them and G_SpawnLogical() drops the
-	// server when that region is exhausted. func_group shares this spawn function; it never
+	// aim point (and a red "invalid target" line for every ref_tag). Here a targeted one is
+	// kept for the whole map, inert: it is logical, so it costs no networked slot and no think,
+	// and it survives /entsave and /entload -- a preset reloads the aim targets with the map
+	// (an entity freed at spawn is never written to the preset). An info_null nothing can
+	// target (no targetname) is still freed at once, as is every one once its region runs
+	// low: a single-player map carries hundreds of them and G_SpawnLogical() drops the server
+	// when the logical region is exhausted. func_group shares this spawn function; it never
 	// has a targetname, so it is freed as before.
 	if ( !self->targetname || !self->targetname[0]
 		|| ( self->isLogical ? level.num_logicalents >= MAX_LOGICENTITIES - 256 : level.num_entities >= MAX_GENTITIES - 256 ) )
@@ -66,8 +69,6 @@ void SP_info_null( gentity_t *self ) {
 		return;
 	}
 	G_SetOrigin( self, self->s.origin );
-	self->think = G_FreeEntity;
-	self->nextthink = level.time + START_TIME_REMOVE_ENTS;
 }
 
 
@@ -5312,7 +5313,6 @@ static void panel_use( gentity_t *self, gentity_t *other, gentity_t *activator )
 	//unlock
 	RP_TakeSecurityKey( activator );
 	G_Sound( self, CHAN_AUTO, G_SoundIndex( "sound/movers/sec_panel_pass.mp3" ) );
-	self->s.frame = 1;
 	G_UseTargets2( self, activator, self->target );
 
 	//spent, only opens once
@@ -5490,7 +5490,9 @@ void SP_misc_spotlight( gentity_t *self )
 /*QUAKED misc_trip_mine (0.2 0.8 0.2) (-4 -4 -4) (4 4 4) START_ON BROADCAST START_OFF
 Place in a map and point the angles at whatever surface you want it to attach to.
 The trip mine attaches to that surface and fires its beam away from it, at an angle
-perpendicular to it. Owned by the world: it hurts everyone who trips it.
+perpendicular to it. Owned by the world: it hurts everyone who trips it. The misc_trip_mine
+entity itself stays in the map, inert (it is what /entsave writes and /entload respawns);
+the mine is the laser trap it creates.
 
   START_ON / START_OFF - single player's toggling is not supported; the mine is always armed
   BROADCAST - the trip wire and loop sound are sent through area portals
@@ -5517,7 +5519,4 @@ void SP_misc_trip_mine( gentity_t *ent )
 	{
 		laserTrap->r.svFlags |= SVF_BROADCAST;
 	}
-
-	//the placeholder has done its job
-	G_FreeEntity( ent );
 }
