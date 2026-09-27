@@ -2209,8 +2209,18 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 				fix_sp_func_door(ent);
 			}
 				
-			if (Q_stricmp(ent->targetname, "lobbydoor1") == 0 || Q_stricmp(ent->targetname, "lobbydoor2") == 0 || 
-				Q_stricmp(ent->targetname, "t7708018") == 0 || Q_stricmp(ent->targetname, "t7708017") == 0)
+			if (Q_stricmp(ent->targetname, "lobbydoor1") == 0 || Q_stricmp(ent->targetname, "lobbydoor2") == 0)
+			{ // zyk: fixing these doors so they will not lock
+				GlobalUse(ent, ent, ent);
+			}
+
+			// GalaxyRP: [SP Maps] t7708017 and t7708018 are the key_2 and key_3 security doors. Zyk unlocked
+			// them here at load because MP had no keys; it has them now (a dead key officer's body hands
+			// the key over, the misc_security_panel takes it and unlocks the door for everyone), so they
+			// stay locked until a player brings the key, as in single player. The key officers spawn only
+			// once, so in CTF, whose bases this map was set up with, they are still unlocked at load.
+			if (level.gametype == GT_CTF &&
+				(Q_stricmp(ent->targetname, "t7708018") == 0 || Q_stricmp(ent->targetname, "t7708017") == 0))
 			{ // zyk: fixing these doors so they will not lock
 				GlobalUse(ent, ent, ent);
 			}
@@ -2540,7 +2550,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity( ent );
 			}
-			if (Q_stricmp( ent->targetname, "t556") == 0)
+			// GalaxyRP: [SP Maps] t556 is the loading-room security door (key "loadingroom_key", carried by
+			// an officer of corridortroopers1), plus a target_deactivate of the same name that silences the
+			// door's "locked" sound trigger once the panel opens it. MP has the keys now, so both stay, as
+			// in single player; in CTF, whose bases this map was set up with, the door is still removed
+			// (the key officer spawns only once).
+			if (level.gametype == GT_CTF && Q_stricmp( ent->targetname, "t556") == 0)
 			{
 				fix_sp_func_door(ent);
 			}
@@ -2664,11 +2679,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		// GalaxyRP: [Logical Entities] both regions -- the entity looked for may be logical now.
 		RP_FOR_EACH_ENTITY( ent )
 		{
-			
-			if (Q_stricmp( ent->targetname, "wall_door1") == 0)
-			{
-				fix_sp_func_door(ent);
-			}
+			// GalaxyRP: [SP Maps] zyk removed wall_door1 here; it is the key1 security door, and MP has the
+			// keys now (the officer in the t4 group carries it), so it stays, as in single player.
 			if (Q_stricmp( ent->target, "field_counter1") == 0)
 			{
 				G_FreeEntity( ent );
@@ -2741,10 +2753,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				G_FreeEntity(ent);
 			}
-			if (Q_stricmp(ent->targetname, "bldg2_ext_door") == 0)
-			{
-				fix_sp_func_door(ent);
-			}
+			// GalaxyRP: [SP Maps] zyk removed bldg2_ext_door here; it is a security door (key
+			// "bldg2_ext_door_lock", carried by the commander in building2_3), with a target_deactivate of
+			// the same name that silences its "locked" sound trigger once the panel opens it. MP has the
+			// keys now, so both stay, as in single player.
 			if (Q_stricmp(ent->targetname, "end_level") == 0)
 			{
 				G_FreeEntity(ent);
