@@ -75,6 +75,13 @@ void G_InitMemory( void ) {
 	allocPoint = 0;
 }
 
+// GalaxyRP: [Entity System] bytes left in the pool. G_Alloc() Com_Error(ERR_DROP)s when it runs out,
+// and nothing ever returns memory to it within a map, so a caller about to allocate a lot -- a
+// misc_bsp rebuilding its sub-BSP's entities, see SP_misc_bsp() -- checks first.
+int G_AllocRemaining( void ) {
+	return POOLSIZE - allocPoint;
+}
+
 void Svcmd_GameMem_f( void ) {
 	float f = allocPoint;
 	f /= POOLSIZE;

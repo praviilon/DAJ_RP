@@ -418,6 +418,16 @@ struct gentity_s {
 	// one of its slot numbers means before porting a fix from it.
 	int			legacySlot;
 
+	// GalaxyRP: [Entity System] misc_bsp bookkeeping. rpBSPInstance is a misc_bsp's own instance
+	// number (level.mNumBSPInstances when it spawned -- never reused within a map, unlike a slot);
+	// rpSubBSPOf is set on every entity spawned from a misc_bsp's sub-BSP entity list to that
+	// misc_bsp's instance. /entsave does not write those entities -- the misc_bsp rebuilds them when
+	// it spawns again, which is the only way their "*N" models resolve (they count in the sub-BSP's
+	// own numbering) -- and /entremove and /entedit on a misc_bsp take them along. 0 otherwise.
+	// Both are zeroed with the rest of the entity when it is freed. See SP_misc_bsp() in g_misc.c.
+	int			rpBSPInstance;
+	int			rpSubBSPOf;
+
 	// GalaxyRP: [SP Maps] true on a misc_turret spawned on a single-player map as the turret that
 	// classname means there -- a misc_turretG2 (SP_misc_turret() in g_turret.c). It then behaves as
 	// single player's does towards rpSpTurretTeam, its "team" key: it does not target clients of
@@ -1910,6 +1920,21 @@ typedef struct level_locals_s {
 	char rp_subbsp_names[RP_MAX_SUBBSP_NAMES][MAX_QPATH];
 	int rp_num_subbsp_names;
 
+	// GalaxyRP fix: [Entity System] the highest "*N" each of those sub-BSPs' own entities named at map
+	// load. A sub-BSP entity's "*N" counts in the sub-BSP's numbering (the engine adds the offset
+	// while that sub-BSP is active), so when a misc_bsp rebuilds its entities after map load their
+	// models are checked against this, not the main map's bound. rp_active_subbsp is 1 + the slot in
+	// rp_subbsp_names of the sub-BSP whose entities are spawning right now (0 none, so the zeroed
+	// level needs no setup), and rp_subbsp_spawning_instance the instance number of the misc_bsp
+	// spawning them (0 none).
+	int rp_subbsp_max_inline[RP_MAX_SUBBSP_NAMES];
+	// true once a misc_bsp spawned that sub-BSP's entity list at map load: only then is the list known
+	// to parse, and only then does a misc_bsp rebuild it later (a "#name" the map used only as a
+	// brush model's model never had its entity list read)
+	qboolean rp_subbsp_entities_spawned[RP_MAX_SUBBSP_NAMES];
+	int rp_active_subbsp;
+	int rp_subbsp_spawning_instance;
+
 	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
 	// finished loading. Spawn selection falls back to it, instead of ending the server with
 	// "Couldn't find a spawn point", if every spawn point has since gone -- see
@@ -2092,6 +2117,11 @@ void		zyk_learn_inline_model( const char *name );
 void		zyk_learn_subbsp_name( const char *name );
 void		RP_RecordFallbackSpawnPoint( void );
 qboolean	zyk_subbsp_name_known( const char *name );
+int			zyk_subbsp_name_slot( const char *name );
+int			RP_FreeSubBSPEntities( int instance );
+int			RP_FreeEntityTriggers( gentity_t *target );
+int			G_AllocRemaining( void );
+gentity_t	*RP_MiscBspForInstance( int instance );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
 void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);
@@ -2237,6 +2267,8 @@ qboolean G_EntitySlotsAvailable( int needed );
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
 const char *RP_EntityRefusalReason( const gentity_t *ent );
+qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
+qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent );
 // GalaxyRP fix: [Configstrings] whether the gamestate can still take "needed" more bytes of
 // configstring, for a caller that is about to claim several at once and wants to find out before
 // it has claimed any of them.

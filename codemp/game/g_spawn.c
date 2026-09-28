@@ -1253,6 +1253,12 @@ void G_SpawnGEntityFromSpawnVars( qboolean inSubBSP ) {
 
 	level.zyk_spawn_strings_values_count[ent->s.number] = j;
 
+	// GalaxyRP: [Entity System] an entity from a misc_bsp's sub-BSP -- see gentity_t::rpSubBSPOf
+	if ( inSubBSP )
+	{
+		ent->rpSubBSPOf = level.rp_subbsp_spawning_instance;
+	}
+
 	// GalaxyRP fix: [Entity System] learn this map's inline-model bound HERE, before the four
 	// gametype culls below. Those free the entity and return without ever calling G_CallSpawn(),
 	// so a brush entity the current gametype does not want never reaches the SP_ function that
@@ -1537,6 +1543,43 @@ const char *RP_EntityRefusalReason( const gentity_t *ent )
 	return NULL;
 }
 
+/*
+=================
+RP_EntityIsSpawnPoint / RP_EntityIsCodeMadeSpawnPoint
+
+GalaxyRP fix: [Entity System] every info_player_* class counts as a spawn point: deathmatch (which
+info_player_start becomes when it spawns), start_red/blue, duel, duel1/2, intermission and its red/blue
+variants, and siegeteam1/2. /entremove never removes one.
+
+The code-made ones are those the per-map fixes create for the SP and Jedi Outcast maps
+(zyk_create_info_player_deathmatch, RP_CreateSpawnPoint -- through zyk_spawn_entity(), which leaves no
+key/value record). /entsave cannot write an entity without a record, so no preset ever holds them: the
+clearing pass of /entload and of the default entity file keeps them, or the first preset loaded on
+those maps would delete them for good and leave every spawn on the fallback spot.
+=================
+*/
+qboolean RP_EntityIsSpawnPoint( const gentity_t *ent )
+{
+	if ( !ent || !ent->inuse || !ent->classname )
+		return qfalse;
+
+	return ( Q_stricmpn( ent->classname, "info_player_", 12 ) == 0 ) ? qtrue : qfalse;
+}
+
+qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent )
+{
+	int num;
+
+	if ( RP_EntityIsSpawnPoint( ent ) == qfalse )
+		return qfalse;
+
+	num = (int)( ent - g_entities );
+	if ( num < 0 || num >= MAX_ENTITIESTOTAL )
+		return qfalse;
+
+	return ( level.zyk_spawn_strings_values_count[num] <= 0 ) ? qtrue : qfalse;
+}
+
 // GalaxyRP fix: [Entity System] one shared brush-model setter for the eleven mover classes that
 // zyk taught to carry an md3 model. Thirteen copies of the same block used to sit inline, and every
 // one of them handed an unvalidated "*N" straight to trap->SetBrushModel(). The engine resolves that
@@ -1576,7 +1619,11 @@ void zyk_learn_inline_model( const char *name )
 	if (!name || name[0] != '*')
 		return;
 
-	if (level.mBSPInstanceDepth > 0)
+	// GalaxyRP fix: [Entity System] only the map's own spawn pass teaches a bound. The entity parser
+	// calls this for every entity it spawns, and since a misc_bsp now rebuilds its sub-BSP's entities
+	// after map load through that same parser, a rebuilt entity would otherwise raise the very bound
+	// it is about to be checked against.
+	if (level.spawning == qfalse)
 		return;
 
 	for (p = name + 1; *p; p++)
@@ -1588,6 +1635,19 @@ void zyk_learn_inline_model( const char *name )
 	// zyk: "*" on its own needs no test of its own -- atoi("") is 0, and 0 never beats a bound
 	// that starts at 0 and only rises
 	index = atoi(name + 1);
+
+	// GalaxyRP fix: [Entity System] a sub-BSP entity's "*N" is in that sub-BSP's numbering: it never
+	// widens the map's own bound (see above), but it is that sub-BSP's bound, which a misc_bsp
+	// rebuilding its entities after map load is checked against -- see zyk_brush_model_allowed().
+	if (level.mBSPInstanceDepth > 0)
+	{
+		if (level.rp_active_subbsp > 0 && level.rp_active_subbsp <= RP_MAX_SUBBSP_NAMES &&
+			index > level.rp_subbsp_max_inline[level.rp_active_subbsp - 1])
+		{
+			level.rp_subbsp_max_inline[level.rp_active_subbsp - 1] = index;
+		}
+		return;
+	}
 
 	if (index > level.zyk_max_inline_model)
 		level.zyk_max_inline_model = index;
@@ -1619,19 +1679,101 @@ void zyk_learn_subbsp_name( const char *name )
 
 qboolean zyk_subbsp_name_known( const char *name )
 {
+	return (zyk_subbsp_name_slot(name) >= 0) ? qtrue : qfalse;
+}
+
+// zyk: the slot of a learned "#name" in level.rp_subbsp_names, or -1
+int zyk_subbsp_name_slot( const char *name )
+{
 	int i = 0;
 
 	if (!name || name[0] != '#')
-		return qfalse;
+		return -1;
 
 	for (i = 0; i < level.rp_num_subbsp_names; i++)
 	{
 		// zyk: the engine matches sub-BSP file names case-insensitively, so this does too
 		if (Q_stricmp(level.rp_subbsp_names[i], name) == 0)
-			return qtrue;
+			return i;
 	}
 
-	return qfalse;
+	return -1;
+}
+
+/*
+=================
+RP_MiscBspForInstance / RP_FreeEntityTriggers / RP_FreeSubBSPEntities
+
+GalaxyRP: [Entity System] the misc_bsp with this instance number, if it is still there; freeing the
+game-made triggers whose parent is an entity (a door's or platform's own trigger -- see RP_EntRemoveFree()
+in g_cmds.c for why they must go with it); and freeing everything a misc_bsp's sub-BSP spawned, each
+with its triggers. Called when a misc_bsp is removed (/entremove, /entundo) or about to spawn again in
+place (/entedit), so its entities neither outlive it nor come back twice. Returns how many were freed.
+=================
+*/
+gentity_t *RP_MiscBspForInstance( int instance )
+{
+	gentity_t *e;
+
+	if (instance <= 0)
+		return NULL;
+
+	RP_FOR_EACH_ENTITY( e )
+	{
+		if (e->inuse && e->rpBSPInstance == instance)
+			return e;
+	}
+
+	return NULL;
+}
+
+int RP_FreeEntityTriggers( gentity_t *target )
+{
+	gentity_t *other;
+	int children = 0;
+
+	RP_FOR_EACH_ENTITY( other )
+	{
+		if ( other == target || !other->inuse || other->parent != target )
+			continue;
+		if ( !(other->r.contents & CONTENTS_TRIGGER) )
+			continue;
+		if ( RP_EntityHasSpawnKeys( other ) )
+			continue;
+
+		G_FreeEntity( other );
+		children++;
+	}
+
+	return children;
+}
+
+int RP_FreeSubBSPEntities( int instance )
+{
+	gentity_t *e;
+	int freed = 0;
+
+	if (instance <= 0)
+		return 0;
+
+	RP_FOR_EACH_ENTITY( e )
+	{
+		if (!e->inuse || e->rpSubBSPOf != instance || e->s.number < MAX_CLIENTS + BODY_QUEUE_SIZE)
+			continue;
+
+		// zyk: a nested misc_bsp's own entities first; instance numbers only grow, so a nested
+		// one's is always higher than this one's and this cannot come back round to it
+		if (e->rpBSPInstance > instance)
+			freed += RP_FreeSubBSPEntities( e->rpBSPInstance );
+
+		// zyk: and the trigger a door or platform among them made for itself -- see RP_EntRemoveFree()
+		RP_FreeEntityTriggers( e );
+		G_FreeEntity( e );
+		if (!e->inuse)
+			freed++;
+	}
+
+	return freed;
 }
 
 // GalaxyRP fix: [Entity System] whether a model name may be handed to trap->SetBrushModel(). Every
@@ -1681,6 +1823,23 @@ qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 	if (level.spawning == qtrue)
 	{ // zyk: the map's own entities define what this map considers a valid index
 		zyk_learn_inline_model( name );
+
+		return qtrue;
+	}
+
+	// GalaxyRP fix: [Entity System] a misc_bsp rebuilding its sub-BSP's entities after map load: the
+	// "*N" counts in that sub-BSP's numbering, so it is checked against that sub-BSP's own bound
+	if (level.mBSPInstanceDepth > 0 && level.rp_active_subbsp > 0 && level.rp_active_subbsp <= RP_MAX_SUBBSP_NAMES)
+	{
+		int bound = level.rp_subbsp_max_inline[level.rp_active_subbsp - 1];
+
+		if (index < 0 || index > bound)
+		{
+			G_LogPrintf("brush model %s refused on entity %d: this sub-BSP only has inline models up to *%d\n",
+				name, ent ? ent->s.number : -1, bound);
+
+			return qfalse;
+		}
 
 		return qtrue;
 	}
@@ -2551,6 +2710,7 @@ void RP_PromoteShipboundaryTargets( void ) {
 		dst->target2		= src->target2;
 		dst->spawnflags		= src->spawnflags;
 		dst->legacySlot		= src->legacySlot;
+		dst->rpSubBSPOf		= src->rpSubBSPOf;	// GalaxyRP: a sub-BSP marker stays its misc_bsp's
 		dst->isLogical		= qfalse;
 
 		// exactly what SP_info_notnull/SP_target_position did for it in the logical region:
@@ -2659,6 +2819,14 @@ qboolean G_StartWorldSpawnScript( qboolean checkSlots )
 }
 
 void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
+	// GalaxyRP fix: [Entity System] a misc_bsp spawned after map load (/entadd, /entedit, /entload, the
+	// default entity file) rebuilds its sub-BSP's entities through here too. That run must leave the
+	// map-load state alone: it does not turn level.spawning on -- nothing turned it off again, which
+	// switched off the brush-model guard in zyk_brush_model_allowed() for the rest of the map -- and it
+	// skips the world spawnscript, location and soundset passes at the end, which belong to the map's
+	// own spawn (the soundset pass even has an ERR_DROP of its own). Map load is unchanged.
+	const qboolean runtimeSubBSP = ( inSubBSP && !level.spawning ) ? qtrue : qfalse;
+
 	// GalaxyRP: [Logical Entities] start the legacy-slot simulation with the table as it stands
 	// (clients and body queue). A sub-BSP spawns nested inside the main pass and must not restart it.
 	if (!inSubBSP)
@@ -2667,7 +2835,10 @@ void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
 	}
 
 	// allow calls to G_Spawn*()
-	level.spawning = qtrue;
+	if (!runtimeSubBSP)
+	{
+		level.spawning = qtrue;
+	}
 	level.numSpawnVars = 0;
 
 	// the worldspawn is not an actual entity, but it still
@@ -2693,6 +2864,11 @@ void G_SpawnEntitiesFromString( qboolean inSubBSP ) {
 	// parse ents
 	while( G_ParseSpawnVars(inSubBSP) ) {
 		G_SpawnGEntityFromSpawnVars(inSubBSP);
+	}
+
+	if (runtimeSubBSP)
+	{
+		return;
 	}
 
 	// GalaxyRP fix: [Entity System] the world's spawnscript is started by G_StartWorldSpawnScript()

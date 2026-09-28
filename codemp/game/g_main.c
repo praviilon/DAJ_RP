@@ -2036,10 +2036,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// parse the key/value pairs and spawn gentities
 	G_SpawnEntitiesFromString(qfalse);
 
-	// GalaxyRP fix: [Spawning] remember where the map's first spawn point is, for the selectors to
-	// fall back on if an entity preset later leaves the map with none -- see g_client.c.
-	RP_RecordFallbackSpawnPoint();
-
 	if (level.gametype == GT_CTF)
 	{ // zyk: maps that will now have support to CTF gametype (like some SP maps) must have the CTF flags placed before the G_CheckTeamItems function call
 		if (Q_stricmp(zyk_mapname, "t1_fatal") == 0)
@@ -3154,6 +3150,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	zyk_create_dir(va("entities/%s", zyk_mapname));
 
+	// GalaxyRP fix: [Spawning] remember where the map's first spawn point is, for the selectors to
+	// fall back on if an entity preset later leaves the map with none -- see g_client.c. Here, after
+	// every per-map fix above has added its spawn points and removed the bad originals (the Jedi
+	// Outcast table does both), and before the default entity file below clears anything.
+	RP_RecordFallbackSpawnPoint();
+
 	// zyk: loading entities set as default (Entity System)
 	zyk_entities_file = fopen(va("GalaxyRP/entities/%s/default.txt",zyk_mapname),"r");
 
@@ -3185,6 +3187,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			{
 				i = target_ent - g_entities;
 				if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
+					continue;
+
+				// GalaxyRP fix: [Entity System] and not the spawn points the per-map fixes above built in
+				// code: no preset can hold them, so clearing them here lost them for good -- see
+				// RP_EntityIsCodeMadeSpawnPoint() in g_spawn.c.
+				if (target_ent->inuse && RP_EntityIsCodeMadeSpawnPoint(target_ent))
 					continue;
 
 				if (target_ent->inuse && Q_stricmp(target_ent->classname, "team_CTF_redflag") != 0 && Q_stricmp(target_ent->classname, "team_CTF_blueflag") != 0)
@@ -8500,6 +8508,7 @@ void G_RunFrame( int levelTime ) {
 		// GalaxyRP fix: [Entity System] only so the refusal below can say where in the file it gave up
 		int zyk_lines_read = 0;
 		int zyk_spawned = 0;
+		int zyk_sub_bsp_lines = 0;
 
 		strcpy(content,"");
 
@@ -8646,6 +8655,31 @@ void G_RunFrame( int levelTime ) {
 					}
 				}
 
+				// GalaxyRP fix: [Entity System] a line /entsave wrote, before it learned not to, for an entity
+				// a misc_bsp's sub-BSP spawned. Every such entity carries the BSPInstanceID key
+				// HandleEntityAdjustment() gives it. The preset's misc_bsp line rebuilds those entities
+				// itself now (see SP_misc_bsp), and this copy could not load right anyway -- its "*N" model
+				// counts in the sub-BSP's numbering -- so loading it as well would put two of each in.
+				{
+					int m;
+					qboolean sub_bsp_line = qfalse;
+
+					for (m = 0; m < j; m += 2)
+					{
+						if (Q_stricmp(zyk_keys[m / 2], "BSPInstanceID") == 0)
+						{
+							sub_bsp_line = qtrue;
+							break;
+						}
+					}
+
+					if (sub_bsp_line)
+					{
+						zyk_sub_bsp_lines++;
+						continue;
+					}
+				}
+
 				// GalaxyRP fix: [Entity System] a good line is not enough on its own. This loop takes an
 				// entity per line and nothing bounds the number of lines, so it was the one player-driven
 				// spawn path with no check at all -- /entadd, /npc, npc_spawner and the asteroid field all
@@ -8713,6 +8747,13 @@ void G_RunFrame( int levelTime ) {
 			}
 
 			fclose(this_file);
+
+			if (zyk_sub_bsp_lines > 0)
+			{
+				G_LogPrintf("entity file %s: %d lines saved from a misc_bsp's sub-BSP skipped -- the misc_bsp "
+					"rebuilds those entities itself. Re-save the preset to drop the lines.\n",
+					level.load_entities_file, zyk_sub_bsp_lines);
+			}
 		}
 
 		// GalaxyRP fix: [Logical Entities] the preset just respawned every entity through

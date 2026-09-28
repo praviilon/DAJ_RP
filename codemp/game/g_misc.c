@@ -1157,12 +1157,15 @@ void SP_misc_portal_camera(gentity_t *ent) {
 /*QUAKED misc_bsp (1 0 0) (-16 -16 -16) (16 16 16)
 "bspmodel"		arbitrary .bsp file to display
 */
+extern void G_FindTeams( void );
+
 void SP_misc_bsp(gentity_t *ent)
 {
 	char	temp[MAX_QPATH];
 	char	*out;
 	float	newAngle;
 	int		tempint;
+	int		subSlot;
 
 	G_SpawnFloat( "angle", "0", &newAngle );
 	if (newAngle != 0.0)
@@ -1191,13 +1194,16 @@ void SP_misc_bsp(gentity_t *ent)
 	//    Com_Error(ERR_DROP)s on a file it cannot load and on a 33rd unique sub-BSP. On a dedicated
 	//    server that is a process exit. So after map load only a sub-BSP the map itself loaded is
 	//    accepted; the engine hands that one back by name without loading anything.
-	//  - The nested G_SpawnEntitiesFromString(qtrue) sets level.spawning and only the outer, map-load
-	//    pass ever clears it. Run from a command it stayed set for the rest of the map, which
+	//  - The nested G_SpawnEntitiesFromString(qtrue) set level.spawning and only the outer, map-load
+	//    pass ever cleared it. Run from a command it stayed set for the rest of the map, which
 	//    switched off the "*N"/"#name" brush-model guard in zyk_brush_model_allowed() -- the next
-	//    out-of-range model any entity command named went straight to the engine's ERR_DROP.
+	//    out-of-range model any entity command named went straight to the engine's ERR_DROP. The
+	//    nested pass now leaves it alone after map load (see G_SpawnEntitiesFromString()).
 	//  - The same nested pass spawned the sub-BSP's whole entity list again on every respawn, on top
-	//    of the copies already there (an entity preset saves those as entities of their own).
-	// So after map load this places the geometry only. Map load itself is unchanged.
+	//    of the copies an entity preset had saved. /entsave no longer writes those copies (see
+	//    gentity_t::rpSubBSPOf) -- they could not load back right anyway, their "*N" models count in
+	//    the sub-BSP's numbering -- so rebuilding them here, once per spawn, is the only way they come
+	//    back, and /entremove and /entedit on this misc_bsp take its old ones along first.
 	if (level.spawning == qfalse)
 	{
 		if (!out[0] || zyk_subbsp_name_known(temp) == qfalse)
@@ -1213,39 +1219,23 @@ void SP_misc_bsp(gentity_t *ent)
 		zyk_learn_subbsp_name( temp );
 	}
 
+	subSlot = zyk_subbsp_name_slot( temp );
+
 	trap->SetBrushModel( (sharedEntity_t *)ent, temp );  // SV_SetBrushModel -- sets mins and maxs
 	G_BSPIndex(temp);
 
-	if (level.spawning == qfalse)
-	{ // zyk: the geometry only -- see above
-		VectorCopy( ent->s.origin, ent->s.pos.trBase );
-		VectorCopy( ent->s.origin, ent->r.currentOrigin );
-		VectorCopy( ent->s.angles, ent->s.apos.trBase );
-		VectorCopy( ent->s.angles, ent->r.currentAngles );
-
-		ent->s.eType = ET_MOVER;
-
-		trap->LinkEntity ((sharedEntity_t *)ent);
-
-		return;
-	}
-
 	level.mNumBSPInstances++;
+	ent->rpBSPInstance = level.mNumBSPInstances;
 	Com_sprintf(temp, MAX_QPATH, "%d-", level.mNumBSPInstances);
-	VectorCopy(ent->s.origin, level.mOriginAdjust);
-	level.mRotationAdjust = ent->s.angles[1];
-	level.mTargetAdjust = temp;
-	//level.hasBspInstances = qtrue; //rww - also not referenced anywhere.
-	level.mBSPInstanceDepth++;
+
 	/*
 	G_SpawnString("filter", "", &out);
 	strcpy(level.mFilter, out);
 	*/
 	// GalaxyRP fix: [Entity System] was strcpy() into the MAX_QPATH-byte level.mTeamFilter from a
 	// spawn value bounded only by MAX_STRING_CHARS, so a long "teamfilter" wrote past it into the
-	// rest of level_locals_t.
+	// rest of level_locals_t. Read here, while the spawn vars are still this entity's.
 	G_SpawnString("teamfilter", "", &out);
-	Q_strncpyz(level.mTeamFilter, out, sizeof(level.mTeamFilter));
 
 	VectorCopy( ent->s.origin, ent->s.pos.trBase );
 	VectorCopy( ent->s.origin, ent->r.currentOrigin );
@@ -1256,13 +1246,112 @@ void SP_misc_bsp(gentity_t *ent)
 
 	trap->LinkEntity ((sharedEntity_t *)ent);
 
-	trap->SetActiveSubBSP(ent->s.modelindex);
-	G_SpawnEntitiesFromString(qtrue);
-	trap->SetActiveSubBSP(-1);
+	// GalaxyRP fix: [Entity System] a misc_bsp inside another's sub-BSP places its geometry only. The
+	// engine keeps one sub-BSP parse point: the inner SetActiveSubBSP(-1) below ended the outer one, so
+	// at map load the outer misc_bsp went on reading the MAIN map's entity string as if it were its own
+	// -- the rest of the map's entities spawned shifted and renamed, and the map's own pass then found
+	// nothing left -- and after map load the outer rebuild simply stopped there. Leaving the inner list
+	// alone keeps the outer one intact.
+	if (level.mBSPInstanceDepth > 0)
+	{
+		G_LogPrintf( "misc_bsp %d at %s: inside another misc_bsp's sub-BSP, so its own sub-BSP entities are not spawned.\n",
+			ent->s.number, vtos( ent->s.origin ) );
+		return;
+	}
 
-	level.mBSPInstanceDepth--;
-	//level.mFilter[0] = level.mTeamFilter[0] = 0;
-	level.mTeamFilter[0] = 0;
+	{
+		const char *entityString = trap->SetActiveSubBSP(ent->s.modelindex);
+		const int savedInstance = level.rp_subbsp_spawning_instance;
+		const int savedActive = level.rp_active_subbsp;
+
+		if (level.spawning == qfalse)
+		{
+			// GalaxyRP fix: [Entity System] after map load, only a sub-BSP whose entity list a misc_bsp
+			// already spawned at map load (so it is known to parse -- G_ParseSpawnVars() has its own
+			// ERR_DROPs), and only if there is room for all of it. G_Spawn(), G_SpawnLogical() and
+			// G_Alloc() each end the server when they run out:
+			//  - entity slots: one entity per '{' can only over-count, and twice that covers the
+			//    classes that make a second entity at once (func_plat's trigger, a door's a frame
+			//    later) -- the margin /entadd and the preset loader keep for the same reason. None at
+			//    all would reach G_SpawnEntitiesFromString()'s "no entities" ERR_DROP;
+			//  - the game's memory pool, which never gets memory back within a map: every key and
+			//    value is stored at least twice (the spawn-key record and the parsed field), in 32-byte
+			//    steps, so four times the text plus a fixed margin.
+			// Otherwise the geometry stays, without its entities, and the log says why.
+			int needed = 0;
+			int textLength = entityString ? (int)strlen(entityString) : 0;
+			const char *p;
+			const char *refusal = NULL;
+
+			for (p = entityString; p && *p; p++)
+			{
+				if (*p == '{')
+					needed++;
+			}
+
+			if (subSlot < 0 || !level.rp_subbsp_entities_spawned[subSlot])
+				refusal = "the map never spawned this sub-BSP's entity list";
+			else if (needed <= 0)
+				refusal = "its entity list is empty";
+			else if (G_EntitySlotsAvailable(needed * 2) == qfalse || G_FreeLogicalEntityCount() < needed * 2)
+				refusal = va("%d entities would not fit", needed);
+			else if (G_AllocRemaining() < textLength * 4 + 65536)
+				refusal = "the game's memory pool is nearly full";
+
+			if (refusal)
+			{
+				trap->SetActiveSubBSP(-1);
+				G_LogPrintf( "misc_bsp %d at %s: sub-BSP entities not rebuilt (%s).\n", ent->s.number, vtos( ent->s.origin ), refusal );
+				return;
+			}
+		}
+		else if (subSlot >= 0)
+		{
+			level.rp_subbsp_entities_spawned[subSlot] = qtrue;
+		}
+
+		VectorCopy(ent->s.origin, level.mOriginAdjust);
+		level.mRotationAdjust = ent->s.angles[1];
+		level.mTargetAdjust = temp;
+		//level.hasBspInstances = qtrue; //rww - also not referenced anywhere.
+		level.mBSPInstanceDepth++;
+		Q_strncpyz(level.mTeamFilter, out, sizeof(level.mTeamFilter));
+		level.rp_subbsp_spawning_instance = ent->rpBSPInstance;
+		level.rp_active_subbsp = subSlot + 1;
+
+		G_SpawnEntitiesFromString(qtrue);
+		trap->SetActiveSubBSP(-1);
+
+		level.rp_subbsp_spawning_instance = savedInstance;
+		level.rp_active_subbsp = savedActive;
+		level.mBSPInstanceDepth--;
+		//level.mFilter[0] = level.mTeamFilter[0] = 0;
+		level.mTeamFilter[0] = 0;
+
+		if (level.spawning == qfalse)
+		{
+			gentity_t *child;
+
+			// GalaxyRP: [Entity System] what the map's own spawn pass does for these at the end, and a
+			// runtime rebuild skips there (see G_SpawnEntitiesFromString()): their soundset indexes,
+			// one at a time -- G_PrecacheSoundsets() walks every entity and has an ERR_DROP of its own.
+			RP_FOR_EACH_ENTITY( child )
+			{
+				if (child->inuse && child->rpSubBSPOf == ent->rpBSPInstance && child->soundSet && child->soundSet[0])
+					child->s.soundSetIndex = G_SoundSetIndex(child->soundSet);
+			}
+
+			// GalaxyRP: [Entity System] and, unless an entity preset is being loaded -- the loader does
+			// both once, after its last line -- a sub-BSP trigger_shipboundary's marker promoted out of
+			// the logical region, and door teams linked, in the order the map's spawn pass uses
+			// (G_FindTeams() builds pointer chains, so the promotion's free-and-reallocate goes first)
+			if (level.load_entities_timer == 0)
+			{
+				RP_PromoteShipboundaryTargets();
+				G_FindTeams();
+			}
+		}
+	}
 
 	/*
 	if ( g_debugRMG.integer )

@@ -908,7 +908,13 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator )
 		// GlobalUse()'s limits. Team links are raw pointers kept from G_FindTeams() while entities
 		// are removed and slots reused under them, so follow the master only when it is a live
 		// entity that is not this one and not a slave itself; otherwise the slave does nothing.
-		if ( !master || master == ent || !master->inuse || ( master->flags & FL_TEAMSLAVE ) )
+		// And only when it is still a team master, a mover, and of this slave's own team (the "team"
+		// key G_FindTeams() linked them by, which movers keep): after /entremove of the master door,
+		// /entadd can hand its slot to anything -- another team's door included -- which a slave
+		// would otherwise run door logic on, setting an unrelated entity moving.
+		if ( !master || master == ent || !master->inuse || ( master->flags & FL_TEAMSLAVE ) ||
+			master->teammaster != master || master->s.eType != ET_MOVER ||
+			!master->team || !ent->team || strcmp( master->team, ent->team ) )
 		{
 			return;
 		}

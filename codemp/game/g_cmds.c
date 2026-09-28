@@ -15053,6 +15053,10 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 	{ // zyk: removes the last entity spawned by /entadd, /spawnplatform or /spawndummy
 		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", level.last_spawned_entity->s.number));
 
+		// GalaxyRP: [Entity System] a misc_bsp takes its sub-BSP's entities with it -- see RP_EntRemoveFree()
+		if (level.last_spawned_entity->rpBSPInstance > 0)
+			RP_FreeSubBSPEntities(level.last_spawned_entity->rpBSPInstance);
+
 		G_FreeEntity(level.last_spawned_entity);
 
 		// G_FreeEntity() clears this itself now, for entities freed by any other route as well --
@@ -15451,6 +15455,16 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
+		// GalaxyRP: [Entity System] an entity from a misc_bsp's sub-BSP is rebuilt by its misc_bsp, not
+		// saved, so an edit to it could never last -- and respawned here, outside its sub-BSP, its "*N"
+		// model would resolve against the main map. See gentity_t::rpSubBSPOf.
+		if (this_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(this_ent->rpSubBSPOf))
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d belongs to misc_bsp %d: edit or remove the misc_bsp instead.\n\"",
+				entity_id, RP_MiscBspForInstance(this_ent->rpSubBSPOf)->s.number) );
+			return;
+		}
+
 		if ( number_of_args % 2 != 0)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments, because they are key/value pairs.\n\"") );
@@ -15546,6 +15560,14 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 				// arguments itself, so these two allocations were discarded the moment it returned.
 				zyk_main_set_entity_field(this_ent, key, arg2);
 			}
+		}
+
+		// GalaxyRP: [Entity System] a misc_bsp rebuilds its sub-BSP's entities when it spawns again, so
+		// the ones it has now go first, or there would be two of each
+		if (this_ent->rpBSPInstance > 0)
+		{
+			RP_FreeSubBSPEntities(this_ent->rpBSPInstance);
+			this_ent->rpBSPInstance = 0;
 		}
 
 		zyk_main_spawn_entity(this_ent);
@@ -15734,6 +15756,7 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 	// DAJ_RP: corpses and exploding vehicles left out, and vehicles written as NPC_Vehicle lines
 	int dead_skipped = 0;
 	int vehicles_saved = 0;
+	int sub_bsp_skipped = 0;
 	char skipped_note[256] = {0};
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
@@ -15791,6 +15814,17 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 		i = this_ent - g_entities;
 		if (i < (MAX_CLIENTS + BODY_QUEUE_SIZE))
 			continue;
+
+		// GalaxyRP: [Entity System] entities a misc_bsp's sub-BSP spawned are not written: the misc_bsp
+		// rebuilds them whenever it spawns, and a written copy could not load back right anyway -- its
+		// "*N" model counts in the sub-BSP's numbering, and nothing is loaded inside the sub-BSP. See
+		// gentity_t::rpSubBSPOf. (One whose misc_bsp is gone is left out too: nothing would rebuild it.)
+		if (this_ent->inuse && this_ent->rpSubBSPOf > 0)
+		{
+			if (level.zyk_spawn_strings_values_count[this_ent->s.number] > 0)
+				sub_bsp_skipped++;
+			continue;
+		}
 
 		if (this_ent && this_ent->inuse)
 		{ // zyk: freed entities will not be saved
@@ -15940,6 +15974,11 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 		Q_strcat(skipped_note, sizeof(skipped_note), va("^7Vehicles saved at their current positions: %d.\n", vehicles_saved));
 	}
 
+	if (sub_bsp_skipped > 0)
+	{
+		Q_strcat(skipped_note, sizeof(skipped_note), va("^7Not written: %d entities a misc_bsp rebuilds.\n", sub_bsp_skipped));
+	}
+
 	if (over_long > 0 || not_encodable > 0)
 	{
 		trap->SendServerCommand( ent->s.number, va("print \"Entities saved in %s file. ^3%d entity(s) will not load back and %d could not be written; see the server log.\n%s\"",
@@ -15953,19 +15992,32 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 
 /*
 ==================
-RP_EntLoadKeepsEntity
+RP_EntLoadKeepsEntity / RP_EntLoadPickKept
 
-GalaxyRP fix: [Entity System] whether /entload's clearing pass must leave this entity alone: one the
-game made (no key/value record, see RP_EntityHasSpawnKeys in g_spawn.c) that belongs to a player --
-the player's saber entity, and anything whose owner or parent is a player slot (missiles, grapple
-hooks, sentries, force fields, an item just dropped). Everything with a record, and every NPC and
-vehicle, is still cleared: the file brings its own, and a vehicle's riders are put out by
-G_FreeEntity() itself (EjectAll).
+GalaxyRP fix: [Entity System] which entities /entload's clearing pass must leave alone. The file being
+loaded replaces the map's entities and the entity system's; it has nothing to say about these, and
+nothing would bring them back:
+
+  - what a player is holding or has made, as the game made it (no key/value record, see
+    RP_EntityHasSpawnKeys in g_spawn.c): the player's saber entity, and anything whose owner or parent
+    is a player slot -- missiles, grapple hooks, sentries, force fields, an item just dropped, a
+    seeker drone, and a vehicle while a player is riding it (the pilot owns it);
+  - and, repeated until nothing changes, anything the game made for one of THOSE: an NPC's goal
+    entity (its parent is the NPC), a vehicle's droid (owned by the vehicle), the droid's own goal
+    entity. Keeping the NPC but freeing these left it pointing at slots the preset then filled, so
+    removing the NPC later freed an unrelated preset entity, its movement code wrote into one, and a
+    dying vehicle "ejected" and damaged whatever held the droid's old slot;
+  - the spawn points the per-map fixes build in code -- see RP_EntityIsCodeMadeSpawnPoint().
+
+Everything with a key/value record is cleared, whoever owns it: the file brings its own.
 ==================
 */
 static qboolean RP_EntLoadKeepsEntity( gentity_t *target )
 {
 	int i;
+
+	if ( RP_EntityIsCodeMadeSpawnPoint( target ) )
+		return qtrue;
 
 	if ( RP_EntityHasSpawnKeys( target ) )
 		return qfalse;
@@ -15989,6 +16041,59 @@ static qboolean RP_EntLoadKeepsEntity( gentity_t *target )
 	}
 
 	return qfalse;
+}
+
+static qboolean rp_entload_kept[MAX_ENTITIESTOTAL];
+
+// zyk: fills kept[] for every slot from MAX_CLIENTS + BODY_QUEUE_SIZE up: the entities kept directly,
+// then anything without a record whose owner or parent is kept, until a pass adds nothing
+static void RP_EntLoadPickKept( qboolean *kept )
+{
+	gentity_t *target_ent;
+	qboolean added = qtrue;
+	int passes = 0;
+
+	memset( kept, 0, sizeof( qboolean ) * MAX_ENTITIESTOTAL );
+
+	RP_FOR_EACH_ENTITY( target_ent )
+	{
+		int i = target_ent - g_entities;
+
+		if ( i < (MAX_CLIENTS + BODY_QUEUE_SIZE) || !target_ent->inuse )
+			continue;
+
+		kept[i] = RP_EntLoadKeepsEntity( target_ent );
+	}
+
+	// zyk: each pass can only add; a chain is at most as long as there are entities, and in practice
+	// three links (player, vehicle, droid, goal), so the bound is only a guard
+	while ( added && passes < 16 )
+	{
+		added = qfalse;
+		passes++;
+
+		RP_FOR_EACH_ENTITY( target_ent )
+		{
+			int i = target_ent - g_entities;
+			int owner = target_ent->r.ownerNum;
+			int parent = target_ent->parent ? (int)( target_ent->parent - g_entities ) : -1;
+
+			if ( i < (MAX_CLIENTS + BODY_QUEUE_SIZE) || !target_ent->inuse || kept[i] )
+				continue;
+
+			if ( RP_EntityHasSpawnKeys( target_ent ) )
+				continue;
+
+			if ( ( owner >= (MAX_CLIENTS + BODY_QUEUE_SIZE) && owner < MAX_GENTITIES && owner != ENTITYNUM_WORLD
+					&& owner != ENTITYNUM_NONE && kept[owner] && g_entities[owner].inuse ) ||
+				( parent >= (MAX_CLIENTS + BODY_QUEUE_SIZE) && parent < MAX_ENTITIESTOTAL && kept[parent]
+					&& g_entities[parent].inuse ) )
+			{
+				kept[i] = qtrue;
+				added = qtrue;
+			}
+		}
+	}
 }
 
 /*
@@ -16055,6 +16160,8 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 		// GalaxyRP: [Logical Entities] both regions -- a preset saved before this feature holds the
 		// map's spawn points and targets, and they must go before it is read back or the map
 		// would end up with two of each.
+		RP_EntLoadPickKept( rp_entload_kept );
+
 		RP_FOR_EACH_ENTITY( target_ent )
 		{
 			i = target_ent - g_entities;
@@ -16074,7 +16181,7 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 			// so G_FreeEntity() unlinked them from the world and then gave up, leaving the blade with
 			// no collision), their missiles, sentries and force fields. The file being loaded replaces
 			// the map's entities; it has nothing to say about those, and nothing brings them back.
-			if (RP_EntLoadKeepsEntity(target_ent))
+			if (rp_entload_kept[i])
 				continue;
 
 			G_FreeEntity( target_ent );
@@ -16399,26 +16506,6 @@ void Cmd_EntList_f( gentity_t *ent ) {
 
 /*
 ==================
-RP_EntIsSpawnPoint
-
-GalaxyRP fix: [Entity System] /entremove leaves every info_player_* class alone: deathmatch (which
-info_player_start becomes when it spawns), start_red/blue, duel, duel1/2, intermission and its
-red/blue variants, and siegeteam1/2. Removing the last info_player_deathmatch used to end the server
-at the next spawn with "Couldn't find a spawn point"; spawn selection now has a fallback for that
-(RP_FallbackSpawnPoint() in g_client.c), but a spawn point is still never something to delete by
-accident. They can be moved with /entedit, and /entundo still takes back one just added.
-==================
-*/
-static qboolean RP_EntIsSpawnPoint( gentity_t *target )
-{
-	if (!target || !target->inuse || !target->classname)
-		return qfalse;
-
-	return (Q_stricmpn(target->classname, "info_player_", 12) == 0) ? qtrue : qfalse;
-}
-
-/*
-==================
 RP_EntRemoveFree
 
 GalaxyRP fix: [Entity System] free one entity for /entremove, together with the trigger it made for
@@ -16429,25 +16516,25 @@ linked to the freed slot. Its touch function works through ->parent, so once G_S
 slot to something else, walking into the old trigger ran door or platform logic on that new entity.
 Only game-made triggers whose parent is this entity go with it; an entity with a record of its own is
 never collateral. Returns how many triggers went with it.
+
+GalaxyRP: [Entity System] and a misc_bsp takes the entities its sub-BSP spawned (their count goes to
+*subEntities): they belong to it, /entsave does not write them, and the misc_bsp rebuilds them when it
+spawns again -- see gentity_t::rpSubBSPOf.
 ==================
 */
-static int RP_EntRemoveFree( gentity_t *target )
+static int RP_EntRemoveFree( gentity_t *target, int *subEntities )
 {
-	gentity_t *other;
-	int children = 0;
+	int children;
 
-	RP_FOR_EACH_ENTITY( other )
+	if ( target->rpBSPInstance > 0 )
 	{
-		if ( other == target || !other->inuse || other->parent != target )
-			continue;
-		if ( !(other->r.contents & CONTENTS_TRIGGER) )
-			continue;
-		if ( RP_EntityHasSpawnKeys( other ) )
-			continue;
+		int freed = RP_FreeSubBSPEntities( target->rpBSPInstance );
 
-		G_FreeEntity( other );
-		children++;
+		if ( subEntities )
+			*subEntities += freed;
 	}
+
+	children = RP_FreeEntityTriggers( target );
 
 	G_FreeEntity( target );
 	return children;
@@ -16516,6 +16603,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			if ((target_ent-g_entities) == entity_id && target_ent->inuse)
 			{
 				int children;
+				int subEntities = 0;
 
 				// GalaxyRP fix: [Entity System] only an entity with a key/value record -- one the
 				// map, an entity file or the entity commands made. See RP_EntityHasSpawnKeys()
@@ -16528,20 +16616,42 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 
-				if (RP_EntIsSpawnPoint(target_ent) == qtrue)
+				if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
 				{
 					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is a spawn point (%s) and cannot be removed. Use ^3/entedit^7 to move it.\n\"", i, target_ent->classname) );
 					return;
 				}
 
-				children = RP_EntRemoveFree( target_ent );
+				// GalaxyRP fix: [Entity System] refuse a permanent entity (neverFree: a siege item)
+				// before touching it. G_FreeEntity() keeps it alive, but only after it has unlinked it
+				// and freed its ICARUS state, and RP_EntRemoveFree() had already freed its triggers --
+				// so the admin read "cannot be removed" about an item that had gone invisible and
+				// non-solid.
+				if (target_ent->neverFree)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is a permanent game entity and cannot be removed.\n\"", i) );
+					return;
+				}
+
+				// GalaxyRP: [Entity System] an entity from a misc_bsp's sub-BSP goes and comes back with
+				// its misc_bsp -- see gentity_t::rpSubBSPOf. One whose misc_bsp is gone is an ordinary
+				// entity again as far as this is concerned.
+				if (target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d belongs to misc_bsp %d: edit or remove the misc_bsp instead.\n\"",
+						i, RP_MiscBspForInstance(target_ent->rpSubBSPOf)->s.number) );
+					return;
+				}
+
+				children = RP_EntRemoveFree( target_ent, &subEntities );
 				if (target_ent->inuse)
-				{ // G_FreeEntity() keeps a neverFree entity (a siege item) alive
+				{ // zyk: G_FreeEntity() can still keep an entity alive (a Jedi Master saber, for one)
 					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot be removed.\n\"", i) );
 					return;
 				}
-				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed%s.\n\"", i,
-					children == 1 ? " (and its trigger)" : children > 1 ? va(" (and %d triggers it made)", children) : "") );
+				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed%s%s.\n\"", i,
+					children == 1 ? " (and its trigger)" : children > 1 ? va(" (and %d triggers it made)", children) : "",
+					subEntities > 0 ? va(" (and the %d entities of its sub-BSP)", subEntities) : "") );
 				return;
 			}
 		}
@@ -16624,6 +16734,9 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			int children = 0;
 			int skipped = 0;
 			int spawnPoints = 0;
+			int permanent = 0;
+			int subEntities = 0;
+			int subKept = 0;
 
 			// GalaxyRP: [Logical Entities] both regions.
 			RP_FOR_EACH_ENTITY( target_ent )
@@ -16632,7 +16745,9 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of
 				// a few hundred slots is mostly free slots, and each one was being freed again.
 				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
-					&& RP_EntityHasSpawnKeys(target_ent) && !RP_EntIsSpawnPoint(target_ent)) ? qtrue : qfalse;
+					&& RP_EntityHasSpawnKeys(target_ent) && !RP_EntityIsSpawnPoint(target_ent)
+					&& !target_ent->neverFree
+					&& !(target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))) ? qtrue : qfalse;
 			}
 
 			RP_FOR_EACH_ENTITY( target_ent )
@@ -16640,7 +16755,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				i = target_ent - g_entities;
 				if (rp_entremove_pick[i] && target_ent->inuse)
 				{
-					children += RP_EntRemoveFree( target_ent );
+					children += RP_EntRemoveFree( target_ent, &subEntities );
 					if (!target_ent->inuse)
 						removed++;
 				}
@@ -16652,8 +16767,12 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				i = target_ent - g_entities;
 				if (i >= entity_id && i <= entity_id2 && target_ent->inuse)
 				{
-					if (RP_EntIsSpawnPoint(target_ent) == qtrue)
+					if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
 						spawnPoints++;
+					else if (target_ent->neverFree && RP_EntityHasSpawnKeys(target_ent))
+						permanent++;
+					else if (target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))
+						subKept++;
 					else
 						skipped++;
 				}
@@ -16663,6 +16782,8 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				char childNote[64] = "";
 				char skipNote[128] = "";
 				char spawnNote[128] = "";
+				char permanentNote[96] = "";
+				char subNote[160] = "";
 
 				if (children > 0)
 					Com_sprintf(childNote, sizeof(childNote), " (and %d trigger%s they made)", children, children == 1 ? "" : "s");
@@ -16670,9 +16791,15 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					Com_sprintf(skipNote, sizeof(skipNote), " Skipped %d that cannot be removed (created by the game: marked G in /entlist).", skipped);
 				if (spawnPoints > 0)
 					Com_sprintf(spawnNote, sizeof(spawnNote), " Kept %d spawn point%s (spawn points cannot be removed).", spawnPoints, spawnPoints == 1 ? "" : "s");
+				if (permanent > 0)
+					Com_sprintf(permanentNote, sizeof(permanentNote), " Kept %d permanent entit%s.", permanent, permanent == 1 ? "y" : "ies");
+				if (subEntities > 0)
+					Q_strcat(subNote, sizeof(subNote), va(" %d sub-BSP entit%s went with their misc_bsp.", subEntities, subEntities == 1 ? "y" : "ies"));
+				if (subKept > 0)
+					Q_strcat(subNote, sizeof(subNote), va(" Kept %d that belong to a misc_bsp outside the range.", subKept));
 
-				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s%s\n\"",
-					removed, removed == 1 ? "y" : "ies", childNote, skipNote, spawnNote) );
+				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s%s%s%s\n\"",
+					removed, removed == 1 ? "y" : "ies", childNote, skipNote, spawnNote, permanentNote, subNote) );
 			}
 		}
 		return;
