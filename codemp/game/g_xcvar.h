@@ -36,7 +36,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #endif
 
 XCVAR_DEF( bg_fighterAltControl,		"0",			NULL,				CVAR_SYSTEMINFO,								qtrue )
-XCVAR_DEF( capturelimit,				"8",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
+// GalaxyRP fix: [Scoreboard] capturelimit, duel_fraglimit, fraglimit and timelimit are pinned at 0 by
+// RP_CVU_timelimit() and friends (g_cvar.c) -- see the comment there.
+XCVAR_DEF( capturelimit,				"0",			RP_CVU_capturelimit,	CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( com_optvehtrace,				"0",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( d_altRoutes,					"0",			NULL,				CVAR_CHEAT,										qfalse )
 XCVAR_DEF( d_asynchronousGroupAI,		"0",			NULL,				CVAR_CHEAT,										qfalse )
@@ -64,8 +66,8 @@ XCVAR_DEF( d_siegeSeekerNPC,			"0",			NULL,				CVAR_CHEAT,										qtrue )
 XCVAR_DEF( dedicated,					"0",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( developer,					"0",			NULL,				CVAR_NONE,										qfalse )
 XCVAR_DEF( dmflags,						"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE,					qtrue )
-XCVAR_DEF( duel_fraglimit,				"10",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
-XCVAR_DEF( fraglimit,					"20",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
+XCVAR_DEF( duel_fraglimit,				"0",			RP_CVU_duelFraglimit,	CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )	// pinned at 0, see capturelimit
+XCVAR_DEF( fraglimit,					"0",			RP_CVU_fraglimit,	CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )	// pinned at 0, see capturelimit
 XCVAR_DEF( g_adaptRespawn,				"1",			NULL,				CVAR_NONE,										qtrue )
 XCVAR_DEF( g_allowDuelSuicide,			"1",			NULL,				CVAR_ARCHIVE,									qtrue )
 // GalaxyRP: [Grapple Hook] the MODE switch, not the permission: 1 is the swing (TaystJK's "Tarzan"),
@@ -286,7 +288,7 @@ XCVAR_DEF( sv_maxclients,				"8",			NULL,				CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARC
 // Black is included because our palette really does offer it (/sabercolor black, the UI palette,
 // and its own shaders in ui_saber.c/cg_main.c) and TaystJK gates it on the same mechanism.
 XCVAR_DEF( taystJKinfo,					"11",			NULL,				CVAR_SERVERINFO|CVAR_ROM,						qfalse )
-XCVAR_DEF( timelimit,					"0",			NULL,				CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
+XCVAR_DEF( timelimit,					"0",			RP_CVU_timelimit,	CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )	// pinned at 0, see capturelimit
 XCVAR_DEF( rp_max_blaster_pack_ammo,	"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_max_power_cell_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_max_metal_bolt_ammo,		"300",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )

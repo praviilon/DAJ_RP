@@ -1420,9 +1420,6 @@ void CG_DrawHUD(centity_t	*cent)
 {
 	menuDef_t	*menuHUD = NULL;
 	itemDef_t	*focusItem = NULL;
-	const char *scoreStr = NULL;
-	int	scoreBias;
-	char scoreBiasStr[16];
 
 	if (cg_hudFiles.integer)
 	{
@@ -1494,64 +1491,15 @@ void CG_DrawHUD(centity_t	*cent)
 			//trap->Error( ERR_DROP, "CG_ChatBox_ArrayInsert: unable to locate HUD menu file ");
 		}
 
-		//scoreStr = va("Score: %i", cgs.clientinfo[cg.snap->ps.clientNum].score);
-		if ( cgs.gametype == GT_DUEL )
-		{//A duel that requires more than one kill to knock the current enemy back to the queue
-			//show current kills out of how many needed
-			scoreStr = va("%s: %i/%i", CG_GetStringEdString("MP_INGAME", "SCORE"), cg.snap->ps.persistant[PERS_SCORE], cgs.fraglimit);
-		}
-		else if (0 && cgs.gametype < GT_TEAM )
-		{	// This is a teamless mode, draw the score bias.
-			scoreBias = cg.snap->ps.persistant[PERS_SCORE] - cgs.scores1;
-			if (scoreBias == 0)
-			{	// We are the leader!
-				if (cgs.scores2 <= 0)
-				{	// Nobody to be ahead of yet.
-					Com_sprintf(scoreBiasStr, sizeof(scoreBiasStr), "");
-				}
-				else
-				{
-					scoreBias = cg.snap->ps.persistant[PERS_SCORE] - cgs.scores2;
-					if (scoreBias == 0)
-					{
-						Com_sprintf(scoreBiasStr, sizeof(scoreBiasStr), " (Tie)");
-					}
-					else
-					{
-						Com_sprintf(scoreBiasStr, sizeof(scoreBiasStr), " (+%d)", scoreBias);
-					}
-				}
-			}
-			else // if (scoreBias < 0)
-			{	// We are behind!
-				Com_sprintf(scoreBiasStr, sizeof(scoreBiasStr), " (%d)", scoreBias);
-			}
-			scoreStr = va("%s: %i%s", CG_GetStringEdString("MP_INGAME", "SCORE"), cg.snap->ps.persistant[PERS_SCORE], scoreBiasStr);
-		}
-		else
-		{	// Don't draw a bias.
-			scoreStr = va("%s: %i", CG_GetStringEdString("MP_INGAME", "SCORE"), cg.snap->ps.persistant[PERS_SCORE]);
-		}
-
 		menuHUD = Menus_FindByName("righthud");
 		Menu_Paint( menuHUD, qtrue );
 
 		if (menuHUD)
 		{
-			if (cgs.gametype != GT_POWERDUEL)
-			{
-				focusItem = Menu_FindItemByName(menuHUD, "score_line");
-				if (focusItem)
-				{
-					CG_DrawScaledProportionalString(
-						focusItem->window.rect.x,
-						focusItem->window.rect.y,
-						scoreStr,
-						UI_RIGHT|UI_DROPSHADOW,
-						focusItem->window.foreColor,
-						0.7f);
-				}
-			}
+			// GalaxyRP fix: [Scoreboard] the "score_line" item under the right HUD used to show
+			// "Score: <n>" (and "Score: <n>/<fraglimit>" in Duel) from PERS_SCORE. The mod no longer
+			// counts kills, so it read "Score: 0" for everyone, always. Not drawn any more; the
+			// empty item in hud.menu is harmless.
 
 			// Print scanline
 			focusItem = Menu_FindItemByName(menuHUD, "scanline");

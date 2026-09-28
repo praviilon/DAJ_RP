@@ -339,6 +339,29 @@ int CG_GetTeamCount(team_t team, int maxClients)
 	return count;
 
 }
+
+/*
+=================
+CG_PlayerCountString
+
+GalaxyRP: [Scoreboard] "1 player" / "<N> players" -- everyone connected, spectators and bots
+included. Counted from clientinfo rather than cg.numScores, which the scoreboard caps at
+MAX_CLIENT_SCORE_SEND. Replaces the stock "<Nth> place with <score>" lines, which only ever
+read "Tied for 1st ... with 0" since the mod stopped counting kills. Used by the scoreboard
+header and by CG_GetGameStatusText (cg_newDraw.c).
+=================
+*/
+char *CG_PlayerCountString( void ) {
+	int i, count = 0;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		if ( cgs.clientinfo[i].infoValid )
+			count++;
+	}
+
+	return va( "%i %s", count, (count == 1) ? "player" : "players" );
+}
+
 /*
 =================
 CG_DrawScoreboard
@@ -435,29 +458,14 @@ qboolean CG_DrawOldScoreboard( void ) {
 	{ //do nothing?
 	}
 	else if ( cgs.gametype < GT_TEAM) {
-		if (cg.snap->ps.persistant[PERS_TEAM] != TEAM_SPECTATOR )
-		{
-			char sPlace[256];
-			char sOf[256];
-			char sWith[256];
-
-			trap->SE_GetStringTextString("MP_INGAME_PLACE",	sPlace,	sizeof(sPlace));
-			trap->SE_GetStringTextString("MP_INGAME_OF",		sOf,	sizeof(sOf));
-			trap->SE_GetStringTextString("MP_INGAME_WITH",	sWith,	sizeof(sWith));
-
-			s = va("%s %s (%s %i) %s %i",
-				CG_PlaceString( cg.snap->ps.persistant[PERS_RANK] + 1 ),
-				sPlace,
-				sOf,
-				cg.numScores,
-				sWith,
-				cg.snap->ps.persistant[PERS_SCORE] );
-		//	w = CG_DrawStrlen( s ) * BIGCHAR_WIDTH;
-			x = ( SCREEN_WIDTH ) / 2;
-			y = 60;
-			//CG_DrawBigString( x, y, s, fade );
-			CG_DrawProportionalString(x, y, s, UI_CENTER|UI_DROPSHADOW, colorTable[CT_WHITE]);
-		}
+		// GalaxyRP fix: [Scoreboard] a plain player count, shown to spectators too. Stock JKA put
+		// "<Nth> place (of <N>) with <score>" here for non-spectators, from PERS_RANK and
+		// PERS_SCORE -- but the mod no longer counts kills, so it always read
+		// "Tied for 1st place (of N) with 0".
+		s = CG_PlayerCountString();
+		x = ( SCREEN_WIDTH ) / 2;
+		y = 60;
+		CG_DrawProportionalString(x, y, s, UI_CENTER|UI_DROPSHADOW, colorTable[CT_WHITE]);
 	}
 	else if (cgs.gametype != GT_SIEGE)
 	{

@@ -49,6 +49,9 @@
 	.checked {
 		color: blue;
 	}
+	.bitbox small {
+		font-size: 0.75em;
+	}
 	.cvar {
 		float: left;
 		font-weight: bold;
@@ -194,9 +197,9 @@
 	</div>
 
     <div class="bitboxes">
-		<label class="bitbox"><input class="box" name="allowVote" num="0" type="checkbox"> capturelimit</label>
+		<label class="bitbox"><input class="box" name="allowVote" num="0" type="checkbox"> capturelimit <small>(always refused)</small></label>
 		<label class="bitbox"><input class="box" name="allowVote" num="1" type="checkbox"> clientkick</label>
-		<label class="bitbox"><input class="box" name="allowVote" num="2" type="checkbox"> fraglimit</label>
+		<label class="bitbox"><input class="box" name="allowVote" num="2" type="checkbox"> fraglimit <small>(always refused)</small></label>
 		<label class="bitbox"><input class="box" name="allowVote" num="3" type="checkbox"> warm up</label>
 		<label class="bitbox"><input class="box" name="allowVote" num="4" type="checkbox"> gametype</label>
 		<label class="bitbox"><input class="box" name="allowVote" num="5" type="checkbox"> kick player</label>
@@ -204,7 +207,7 @@
 		<label class="bitbox"><input class="box" name="allowVote" num="7" type="checkbox"> map restart</label>
 		<label class="bitbox"><input class="box" name="allowVote" num="8" type="checkbox"> nextmap</label>
 		<label class="bitbox"><input class="box" name="allowVote" num="9" type="checkbox"> poll</label>
-		<label class="bitbox"><input class="box" name="allowVote" num="10" type="checkbox"> timelimit</label>
+		<label class="bitbox"><input class="box" name="allowVote" num="10" type="checkbox"> timelimit <small>(always refused)</small></label>
     </div>
 	
 	<!-- Section -->

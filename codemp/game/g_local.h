@@ -2585,6 +2585,10 @@ void RP_CVU_rpgMaxLevel(void);
 void RP_CVU_startingShield(void);
 void RP_CVU_debugMelee(void);
 void RP_CVU_jediVmerc(void);
+void RP_CVU_timelimit(void);
+void RP_CVU_fraglimit(void);
+void RP_CVU_capturelimit(void);
+void RP_CVU_duelFraglimit(void);
 // GalaxyRP: [Grapple Hook] g_allowGrapple back to 1 or 2, rp_allow_grapple_hook into 0..2.
 void RP_CVU_allowGrapple(void);
 void RP_CVU_allowGrappleHook(void);

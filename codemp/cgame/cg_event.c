@@ -309,15 +309,15 @@ clientkilled:
 			}
 			else
 			{
-				char sPlaceWith[256];
+				// GalaxyRP fix: [Scoreboard] just "You killed X", as in the team-gametype branch
+				// below. Stock JKA added a second line, "<Nth> place with <score>", built from
+				// PERS_RANK and PERS_SCORE -- but the mod no longer counts kills (AddScore() in
+				// g_combat.c leaves PERS_SCORE alone), so every player is tied at 0 and the line
+				// always read "Tied for 1st place with 0".
 				char sKilledStr[256];
-				trap->SE_GetStringTextString("MP_INGAME_PLACE_WITH",     sPlaceWith, sizeof(sPlaceWith));
 				trap->SE_GetStringTextString("MP_INGAME_KILLED_MESSAGE", sKilledStr, sizeof(sKilledStr));
 
-				s = va("%s %s.\n%s %s %i.", sKilledStr, targetName,
-					CG_PlaceString( cg.snap->ps.persistant[PERS_RANK] + 1 ),
-					sPlaceWith,
-					cg.snap->ps.persistant[PERS_SCORE] );
+				s = va("%s %s", sKilledStr, targetName );
 			}
 		} else {
 			char sKilledStr[256];

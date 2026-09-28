@@ -9208,12 +9208,17 @@ Cmd_CallVote_f
 */
 extern void SiegeClearSwitchData(void); //g_saga.c
 
+// GalaxyRP fix: [Scoreboard] capturelimit, fraglimit and timelimit are pinned at 0 (RP_CVU_timelimit()
+// and friends, g_cvar.c), so a vote for any of them is refused up front rather than passing and
+// then being snapped straight back. Their entries stay in validVoteStrings[] below: g_allowVote is
+// a bit mask over that table's positions, and removing a row would renumber every vote after it.
+static qboolean G_VoteRefusePinnedLimit( gentity_t *ent, const char *cvarName ) {
+	trap->SendServerCommand( ent-g_entities, va( "print \"%s is fixed at 0 on this server.\n\"", cvarName ) );
+	return qfalse;
+}
+
 qboolean G_VoteCapturelimit( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
-	int n = Com_Clampi( 0, 0x7FFFFFFF, atoi( arg2 ) );
-	Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %i", arg1, n );
-	Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
-	Q_strncpyz( level.voteStringClean, level.voteString, sizeof( level.voteStringClean ) );
-	return qtrue;
+	return G_VoteRefusePinnedLimit( ent, "capturelimit" );
 }
 
 qboolean G_VoteClientkick( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
@@ -9236,11 +9241,7 @@ qboolean G_VoteClientkick( gentity_t *ent, int numArgs, const char *arg1, const 
 }
 
 qboolean G_VoteFraglimit( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
-	int n = Com_Clampi( 0, 0x7FFFFFFF, atoi( arg2 ) );
-	Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %i", arg1, n );
-	Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
-	Q_strncpyz( level.voteStringClean, level.voteString, sizeof( level.voteStringClean ) );
-	return qtrue;
+	return G_VoteRefusePinnedLimit( ent, "fraglimit" );
 }
 
 qboolean G_VoteGametype( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
@@ -9498,14 +9499,7 @@ qboolean G_VoteNextmap( gentity_t *ent, int numArgs, const char *arg1, const cha
 }
 
 qboolean G_VoteTimelimit( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
-	float tl = Com_Clamp( 0.0f, 35790.0f, atof( arg2 ) );
-	if ( Q_isintegral( tl ) )
-		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %i", arg1, (int)tl );
-	else
-		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %.3f", arg1, tl );
-	Q_strncpyz( level.voteDisplayString, level.voteString, sizeof( level.voteDisplayString ) );
-	Q_strncpyz( level.voteStringClean, level.voteString, sizeof( level.voteStringClean ) );
-	return qtrue;
+	return G_VoteRefusePinnedLimit( ent, "timelimit" );
 }
 
 qboolean G_VoteWarmup( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {

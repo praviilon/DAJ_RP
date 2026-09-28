@@ -429,6 +429,40 @@ void RP_CVU_jediVmerc(void)
 	trap->Cvar_Update(&g_jediVmerc);
 }
 
+// GalaxyRP fix: [Scoreboard] timelimit, fraglimit, capturelimit and duel_fraglimit are pinned at 0.
+// Maps on an RP server are not meant to end on their own, and since the scoreboard switched to
+// downs/deaths the kill score these limits were built around is no longer counted (AddScore() in
+// g_combat.c leaves PERS_SCORE at 0), which left them half-working:
+//   timelimit      -- in FFA with two or more players everyone is tied at 0, and CheckExitRules()
+//                     (g_main.c) waits out a tie ("sudden death") before it even looks at the time,
+//                     so the limit never fired there; in other gametypes it would end the map
+//   fraglimit      -- did nothing in FFA and Duel (PERS_SCORE never reaches it), but in Team FFA it
+//                     would still end the map on the team kill total, which AddScore() does keep
+//   capturelimit   -- CTF/CTY, reachable because players may vote the gametype
+//   duel_fraglimit -- Duel/Power Duel win limit (and Power Duel's lone-player health/force-regen
+//                     scaling, which has its own fallback for 0)
+// Kept registered and in serverinfo, so server browsers and every client read an honest 0. Like
+// RP_CVU_debugMelee, guarded rather than unconditional: none of these is CVAR_LATCH, so a bad value
+// is already in effect when the callback runs and there is nothing queued to clear. The test is on
+// the string, which also catches values that only look like 0 as a number (a fractional timelimit,
+// or junk). G_RegisterCvars() runs the callbacks at registration, so an archived value or a config
+// line is corrected before the first frame; the console, rcon, a passed vote and the "fraglimit 1"
+// that g_fraglimitVoteCorrection issues when a vote switches to Duel are all corrected on change.
+static void RP_PinCvarToZero( vmCvar_t *vmCvar, const char *name )
+{
+	if ( strcmp( vmCvar->string, "0" ) )
+	{
+		trap->Print( "%s is fixed at 0 on this server.\n", name );
+		trap->Cvar_Set( name, "0" );
+		trap->Cvar_Update( vmCvar );
+	}
+}
+
+void RP_CVU_timelimit(void)			{ RP_PinCvarToZero( &timelimit, "timelimit" ); }
+void RP_CVU_fraglimit(void)			{ RP_PinCvarToZero( &fraglimit, "fraglimit" ); }
+void RP_CVU_capturelimit(void)		{ RP_PinCvarToZero( &capturelimit, "capturelimit" ); }
+void RP_CVU_duelFraglimit(void)		{ RP_PinCvarToZero( &duel_fraglimit, "duel_fraglimit" ); }
+
 // GalaxyRP: [Grapple Hook] g_allowGrapple is the mode switch and only the mode switch. TaystJK reads
 // 0 as "off" and >1 as the winch; here who may use the hook is rp_allow_grapple_hook, so a 0 typed
 // here by habit would otherwise leave the hook ON and pulling in a mode nobody asked for (the winch
