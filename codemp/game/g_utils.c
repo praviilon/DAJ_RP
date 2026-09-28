@@ -2137,10 +2137,13 @@ that for free -- the victim died and a corpse blocks nobody -- but here three th
   - the damage can be turned away before it lands: allies, chat protection, private duels, the arena
     rules, noclip, an NPC a script made invulnerable. The victim survives, still solid. They keep
     their protection; the arrival walks out of them instead (RP_StartOverlapRelease, g_active.c).
-  - an NPC arriving on a player -- /npc spawn puts the NPC 64 units in front of the admin whether
-    or not someone stands there, a map spawner fires on a player, an NPC takes a teleporter -- would
-    kill that player outright now. It no longer telefrags players at all; it walks out of them the
-    same way. NPCs arriving on NPCs still telefrag them, as stock.
+  - an NPC coming out of a teleporter onto a player -- NPCs use trigger_teleport like players do, a
+    script can fire target_teleporter with an NPC as activator, and trigger_hyperspace moves
+    vehicles -- would kill that player outright now. It no longer telefrags players at all; it
+    walks out of them the same way. NPCs arriving on NPCs still telefrag them, as stock.
+    (Spawning is not a case: NPC_Begin() (NPC_spawn.c) waits while NPC_SpotWouldTelefrag() finds a
+    solid body in the spot, and its call here only comes after that check has passed, so a newly
+    spawned NPC never lands on a live player. An NPC spawned not-solid, spawnflag 64, skips both.)
 
 And a body already passing through bodies -- /admsolid, /admghost, /admholo, /npc effect, or the
 tail of a release -- on either side cannot get stuck, so it is neither telefragged nor released.
