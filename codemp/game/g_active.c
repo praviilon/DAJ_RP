@@ -783,6 +783,43 @@ void RP_PhaseTrackNpc( gentity_t *npc )
 	}
 }
 
+/*
+=================
+RP_StartOverlapRelease
+
+GalaxyRP fix: [Telefrag] let a player or NPC that has just arrived inside another live body walk out of
+it. Used by G_KillBox() (g_utils.c) for an arrival that could not -- or must not -- telefrag what it
+landed on: an NPC arriving on a player, or a victim the damage never reached (an ally, chat
+protection, a private duel, the arena rules, noclip, an invulnerable NPC...). Without it both bodies
+stood inside each other and neither could move.
+
+It is the tail end of a phase mode (RP_ClearPhaseMode, g_cmds.c) with no mode in front of it: the
+arriver passes through bodies and is sent non-solid while it overlaps anyone, looks normal
+throughout, and RP_PhaseUpdate() ends the release by itself on the first end of frame that finds
+nothing solid overlapping it. An NPC is added to the phased-NPC list, which is what runs that
+check for it. A body already in a phase mode passes through anyway and is left exactly as it is.
+=================
+*/
+void RP_StartOverlapRelease( gentity_t *ent )
+{
+	if ( !ent || !ent->inuse || !ent->client )
+	{
+		return;
+	}
+
+	if ( ent->client->pers.phase_mode != RP_PHASE_NONE )
+	{
+		return;
+	}
+
+	ent->client->pers.phase_releasing = qtrue;
+
+	if ( ent->s.eType == ET_NPC )
+	{
+		RP_PhaseTrackNpc( ent );
+	}
+}
+
 static void RP_PhaseHideBody( gentity_t *other, const gentity_t *mover )
 {
 	if ( other == mover || !other->inuse || !other->client )

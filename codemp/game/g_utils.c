@@ -2127,6 +2127,23 @@ G_KillBox
 
 Kills all entities that would touch the proposed new positioning
 of ent.  Ent should be unlinked before calling this!
+
+GalaxyRP fix: [Telefrag] a telefrag must end with nobody standing inside anybody else. Stock JKA got
+that for free -- the victim died and a corpse blocks nobody -- but here three things broke it:
+
+  - the Death System downed the victim instead, and a downed player is a solid body, so the
+    arrival and the victim stood inside each other and neither could move. G_Damage() kills on
+    MOD_TELEFRAG outright now (the certain-death test in g_combat.c).
+  - the damage can be turned away before it lands: allies, chat protection, private duels, the arena
+    rules, noclip, an NPC a script made invulnerable. The victim survives, still solid. They keep
+    their protection; the arrival walks out of them instead (RP_StartOverlapRelease, g_active.c).
+  - an NPC arriving on a player -- /npc spawn puts the NPC 64 units in front of the admin whether
+    or not someone stands there, a map spawner fires on a player, an NPC takes a teleporter -- would
+    kill that player outright now. It no longer telefrags players at all; it walks out of them the
+    same way. NPCs arriving on NPCs still telefrag them, as stock.
+
+And a body already passing through bodies -- /admsolid, /admghost, /admholo, /npc effect, or the
+tail of a release -- on either side cannot get stuck, so it is neither telefragged nor released.
 =================
 */
 extern qboolean duel_tournament_is_duelist(gentity_t *ent);
@@ -2135,6 +2152,7 @@ void G_KillBox (gentity_t *ent) {
 	int			touch[MAX_GENTITIES];
 	gentity_t	*hit;
 	vec3_t		mins, maxs;
+	qboolean	release = qfalse;
 
 	VectorAdd( ent->client->ps.origin, ent->r.mins, mins );
 	VectorAdd( ent->client->ps.origin, ent->r.maxs, maxs );
@@ -2162,11 +2180,38 @@ void G_KillBox (gentity_t *ent) {
 			continue;
 		}
 
+		// GalaxyRP fix: [Telefrag] either side passing through bodies: nothing to resolve
+		if ( RP_PhasePassesThrough( ent ) || RP_PhasePassesThrough( hit ) )
+		{
+			continue;
+		}
+
+		// GalaxyRP fix: [Telefrag] an NPC does not telefrag a player; it walks out of them
+		if ( ent->s.eType == ET_NPC && hit->s.number < MAX_CLIENTS )
+		{
+			if ( hit->health > 0 && (hit->r.contents & CONTENTS_BODY) )
+			{
+				release = qtrue;
+			}
+			continue;
+		}
+
 		// nail it
 		G_Damage ( hit, ent, ent, NULL, NULL,
 			100000, DAMAGE_NO_PROTECTION, MOD_TELEFRAG);
+
+		// GalaxyRP fix: [Telefrag] still a live, solid body: the damage was turned away (ally, chat
+		// protection, duel, arena, noclip, invulnerable NPC...), so walk out of it instead
+		if ( hit->inuse && hit->client && hit->health > 0 && (hit->r.contents & CONTENTS_BODY) )
+		{
+			release = qtrue;
+		}
 	}
 
+	if ( release )
+	{
+		RP_StartOverlapRelease( ent );
+	}
 }
 
 //==============================================================================

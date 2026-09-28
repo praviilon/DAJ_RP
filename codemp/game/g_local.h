@@ -2646,6 +2646,7 @@ qboolean RP_PhasePassesThrough( const gentity_t *ent );
 void RP_ClearPhaseMode( gentity_t *ent );
 const char *RP_PhaseModeName( int mode );
 void RP_PhaseTrackNpc( gentity_t *npc );
+void RP_StartOverlapRelease( gentity_t *ent );
 void RP_PhaseNpcEndFrame( void );
 
 //

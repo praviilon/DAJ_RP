@@ -6431,6 +6431,16 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			// given two paragraphs up: a player ALREADY down who then falls into the void must still
 			// reach the clear-then-die arm.
 			//
+			// GalaxyRP fix: [Death System] MOD_TELEFRAG joins that pair. G_KillBox() (g_utils.c) passes
+			// the arriving player -- or NPC -- as attacker, so a telefrag downed its victim, and a downed
+			// player is still a solid body: the new arrival stood inside them and neither could move,
+			// /getup included, which only stood the victim up in the same spot. A corpse is
+			// CONTENTS_CORPSE and blocks nobody, so a telefrag kills outright now, as in stock JKA.
+			// Every MOD_TELEFRAG caller passes DAMAGE_NO_PROTECTION (G_KillBox, target_kill, the Seeker
+			// drone's self-destruct), so the pairing holds. NPCs arriving on a player no longer
+			// telefrag at all, and a victim whose protection turns the damage away is not left stuck
+			// either -- both are handled in G_KillBox.
+			//
 			// GalaxyRP fix: [Death System] "&& pm_type != PM_DEAD" -- a player who died earlier in THIS
 			// frame is not downed by a second hit on the corpse. The EF_DEAD test beside it cannot see
 			// such a death: s.eFlags gets EF_DEAD from health only once per frame, in
@@ -6449,7 +6459,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			if (!targ->NPC && targ->client && !(targ->s.eFlags & EF_DEAD) && targ->client->ps.pm_type != PM_DEAD && !targ->client->ps.m_iVehicleNum
 				&& !zyk_minigame_forces_death(targ)
 				&& ((RP_DownedSystemEnabled() && attacker && attacker->client
-					&& !((mod == MOD_FALLING || mod == MOD_SUICIDE) && (dflags & DAMAGE_NO_PROTECTION)))
+					&& !((mod == MOD_FALLING || mod == MOD_SUICIDE || mod == MOD_TELEFRAG) && (dflags & DAMAGE_NO_PROTECTION)))
 					|| G_PlayerIsDowned(targ))) {
 				//GalaxyRP (Alex): [New Death System] If player is paralyzed and was attacked fuirther, kill them permanently.
 				//
