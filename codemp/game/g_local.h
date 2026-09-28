@@ -1916,6 +1916,12 @@ typedef struct level_locals_s {
 	// RP_FallbackSpawnPoint() in g_client.c.
 	qboolean rp_fallback_spawn_set;
 	qboolean rp_fallback_spawn_warned;
+
+	// GalaxyRP fix: [Entity System] GlobalUse() has logged a use loop it cut short on this map --
+	// once per map is enough to find it (g_utils.c)
+	qboolean rp_use_limit_warned;
+	int rp_use_depth;	// GlobalUse(): uses nested inside each other right now
+	int rp_use_chain;	// GlobalUse(): uses so far under the current outermost one
 	vec3_t rp_fallback_spawn_origin;
 	vec3_t rp_fallback_spawn_angles;
 

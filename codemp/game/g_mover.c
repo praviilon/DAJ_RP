@@ -900,7 +900,20 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator )
 	// only the master should be used
 	if ( ent->flags & FL_TEAMSLAVE )
 	{
-		Use_BinaryMover( ent->teammaster, other, activator );
+		gentity_t *master = ent->teammaster;
+
+		// GalaxyRP fix: [Entity System] this handed the use to ent->teammaster unchecked. A NULL one
+		// crashed on the "->use" above, and a master that is itself marked as a slave recursed
+		// here -- forever if the two point at each other, since this call does not pass through
+		// GlobalUse()'s limits. Team links are raw pointers kept from G_FindTeams() while entities
+		// are removed and slots reused under them, so follow the master only when it is a live
+		// entity that is not this one and not a slave itself; otherwise the slave does nothing.
+		if ( !master || master == ent || !master->inuse || ( master->flags & FL_TEAMSLAVE ) )
+		{
+			return;
+		}
+
+		Use_BinaryMover( master, other, activator );
 		return;
 	}
 
@@ -1917,7 +1930,12 @@ void Reached_Train( gentity_t *ent ) {
 	}
 
 	// fire all other targets
-	G_UseTargets( next, NULL );
+	// GalaxyRP fix: [Entity System] the activator was NULL, and several use functions dereference it
+	// without a test: target_relay's red/blue-only flags, target_teleporter and target_give read
+	// activator->client, target_kill damages it. A path_corner targeting any of them crashed the
+	// server the moment a train reached it. The train is the activator now: it has no client, so
+	// those checks pass it by as they would any non-player, and it takes no damage.
+	G_UseTargets( next, ent );
 
 	// set the new trajectory
 	ent->nextTrain = next->nextTrain;
@@ -1967,6 +1985,8 @@ Think_SetupTrainTargets
 Link all the corners together
 ===============
 */
+static qboolean rp_train_path_seen[MAX_ENTITIESTOTAL];	// GalaxyRP: see Think_SetupTrainTargets()
+
 void Think_SetupTrainTargets( gentity_t *ent ) {
 	gentity_t		*path, *next, *start;
 
@@ -1978,16 +1998,22 @@ void Think_SetupTrainTargets( gentity_t *ent ) {
 		return;
 	}
 
-	//FIXME: this can go into an infinite loop if last path_corner doesn't link to first
-	//path_corner, like so:
+	// GalaxyRP fix: [Entity System] the FIXME that stood here was right: a path that loops back to
+	// any corner but the first one never came back to start, so this never ended -- 100% CPU, every
+	// client timing out, and three /entadd lines were enough to cause it:
 	// t1---->t2---->t3
 	//         ^      |
 	//          \_____|
+	// Each corner is marked as it is walked, and the walk stops once the corner it just linked has
+	// been walked already. Every corner is still linked exactly as before, so a train running along
+	// a tail into a loop keeps circling the loop, which is what such a path means.
+	memset( rp_train_path_seen, 0, sizeof( rp_train_path_seen ) );
 	start = NULL;
 	for ( path = ent->nextTrain ; path != start ; path = next ) {
 		if ( !start ) {
 			start = path;
 		}
+		rp_train_path_seen[path->s.number] = qtrue;
 
 		if ( !path->target ) {
 //			trap->Printf( "Train corner at %s without a target\n",
@@ -2013,6 +2039,10 @@ void Think_SetupTrainTargets( gentity_t *ent ) {
 		if ( next )
 		{
 			path->nextTrain = next;
+			if ( rp_train_path_seen[next->s.number] )
+			{ // zyk: walked already, so everything from here on is linked
+				break;
+			}
 		}
 		else
 		{

@@ -1130,6 +1130,33 @@ gentity_t *G_PickTarget (char *targetname)
 	return choice[rand() % num_choices];
 }
 
+/*
+==============================
+GlobalUse
+
+GalaxyRP fix: [Entity System] every entity that uses another -- G_UseTargets2() for all target_*,
+trigger_*, func_* and path_corner firing, target_relay's random pick, ICARUS "use", RP_LiftCallUse --
+reaches the next one's use function through here, so this is the one place that can see a chain of
+uses nesting. Nothing bounded it. G_UseTargets2() only skips an entity that targets itself, so two
+target_relays naming each other (three /entadd lines and a trigger) recursed until the stack
+overflowed and the server process died, and a random target_relay could pick itself even past that
+check. Worse, a loop that FANS OUT -- A targets "B" and two entities are named B, each targeting
+"A" -- doubles its calls at every level, so a depth limit alone would still leave ~2^64 calls:
+a hang instead of a crash.
+
+So two limits, both far above anything a map does (a button that fires 300 lights is 300 calls at
+depth 1; a long relay chain is a few dozen deep). 128 nested uses is a few hundred KB of stack at
+most, well inside even a 1 MB main-thread stack:
+  RP_MAX_USE_DEPTH   uses nested inside each other;
+  RP_MAX_USE_CHAIN   uses in total under one outermost use (the count restarts at depth 0).
+Past either, that use is skipped; the chain above it finishes normally. One log line per map names
+the entity where it stopped. The counters live in level, so a new map always starts them at zero,
+and the depth is restored on every return path.
+==============================
+*/
+#define RP_MAX_USE_DEPTH	128
+#define RP_MAX_USE_CHAIN	2048
+
 void GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator)
 {
 	if (!self || (self->flags & FL_INACTIVE))
@@ -1141,7 +1168,30 @@ void GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator)
 	{
 		return;
 	}
+
+	if (level.rp_use_depth == 0)
+	{
+		level.rp_use_chain = 0;
+	}
+
+	if (level.rp_use_depth >= RP_MAX_USE_DEPTH || level.rp_use_chain >= RP_MAX_USE_CHAIN)
+	{
+		if (!level.rp_use_limit_warned)
+		{
+			level.rp_use_limit_warned = qtrue;
+			G_LogPrintf("Entity %d (%s, targetname \"%s\") was not used: its targets use each other in a loop "
+				"(stopped at %s). Check the entities that target \"%s\".\n",
+				self->s.number, self->classname ? self->classname : "?", self->targetname ? self->targetname : "",
+				level.rp_use_depth >= RP_MAX_USE_DEPTH ? va("%d nested uses", RP_MAX_USE_DEPTH) : va("%d uses in one chain", RP_MAX_USE_CHAIN),
+				self->targetname ? self->targetname : "");
+		}
+		return;
+	}
+
+	level.rp_use_depth++;
+	level.rp_use_chain++;
 	self->use(self, other, activator);
+	level.rp_use_depth--;
 }
 
 void G_UseTargets2( gentity_t *ent, gentity_t *activator, const char *string ) {
