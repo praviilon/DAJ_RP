@@ -15336,8 +15336,27 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 					this_ent->isLogical ? "logical (not networked; classname cannot be changed to a networked class in place)" : "networked"));
 			}
 
+			// GalaxyRP fix: [Entity System] an entity the game created has no key/value record, so the
+			// listing below would print nothing at all for it. Show what it is and who it belongs to
+			// instead, and say why it cannot be edited or removed -- see RP_EntityHasSpawnKeys().
+			if (this_ent->inuse && RP_EntityHasSpawnKeys(this_ent) == qfalse)
+			{
+				Q_strcat(content, sizeof(content), va("^3classname: ^7%s\n^3origin: ^7%f %f %f\n",
+					this_ent->classname ? this_ent->classname : "<none>",
+					this_ent->r.currentOrigin[0], this_ent->r.currentOrigin[1], this_ent->r.currentOrigin[2]));
+				if (this_ent->r.ownerNum != ENTITYNUM_NONE)
+				{
+					Q_strcat(content, sizeof(content), va("^3owner: ^7%d\n", this_ent->r.ownerNum));
+				}
+				if (this_ent->parent)
+				{
+					Q_strcat(content, sizeof(content), va("^3parent: ^7%d\n", (int)(this_ent->parent - g_entities)));
+				}
+				Q_strcat(content, sizeof(content), "^3Created by the game, not by the map or the entity system: it cannot be edited or removed.\n");
+			}
+
 			if (this_ent->inuse)
-			{ 
+			{
 				// GalaxyRP fix: [overflow] each pair was appended with strcpy(content, va("%s...",
 				// content, ...)). va() formats into a 32000-byte buffer and knows nothing about the
 				// destination, so once the listing passed content's size that strcpy wrote off the
@@ -15417,6 +15436,18 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		if (!this_ent->inuse)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is not in use\n\"", entity_id) );
+			return;
+		}
+
+		// GalaxyRP fix: [Entity System] and only an entity with a key/value record: one the map, an
+		// entity file or the entity commands made. Anything the game created for itself has none,
+		// and re-running a spawn over it with no classname fails and frees it -- which is how
+		// /entedit on an NPC used to make it vanish, and on a player's saber entity left the player
+		// driving a freed slot. See RP_EntityHasSpawnKeys() in g_spawn.c. The world slot is refused
+		// here too, by name, although the id range above already keeps it out.
+		if (RP_EntityHasSpawnKeys(this_ent) == qfalse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d %s.\n\"", entity_id, RP_EntityRefusalReason(this_ent)) );
 			return;
 		}
 
@@ -15502,7 +15533,14 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 
 		zyk_main_spawn_entity(this_ent);
 
-		trap->SendServerCommand(ent-g_entities, va("print \"Entity %d edited\n\"", this_ent->s.number) );
+		// GalaxyRP fix: [Entity System] report the id that was asked for. This printed
+		// this_ent->s.number, and when the respawn freed the entity -- a failed spawn, or a class
+		// that removes itself on the server such as misc_model -- G_FreeEntity() had just zeroed it,
+		// so the admin read "Entity 0 edited" about something that no longer existed.
+		if (this_ent->inuse)
+			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d edited\n\"", entity_id) );
+		else
+			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d was edited, but it did not survive being spawned again (a class that removes itself on the server, or an edit its spawn function refused), so it is gone.\n\"", entity_id) );
 	}
 }
 
@@ -15898,6 +15936,46 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 
 /*
 ==================
+RP_EntLoadKeepsEntity
+
+GalaxyRP fix: [Entity System] whether /entload's clearing pass must leave this entity alone: one the
+game made (no key/value record, see RP_EntityHasSpawnKeys in g_spawn.c) that belongs to a player --
+the player's saber entity, and anything whose owner or parent is a player slot (missiles, grapple
+hooks, sentries, force fields, an item just dropped). Everything with a record, and every NPC and
+vehicle, is still cleared: the file brings its own, and a vehicle's riders are put out by
+G_FreeEntity() itself (EjectAll).
+==================
+*/
+static qboolean RP_EntLoadKeepsEntity( gentity_t *target )
+{
+	int i;
+
+	if ( RP_EntityHasSpawnKeys( target ) )
+		return qfalse;
+
+	if ( target->r.ownerNum >= 0 && target->r.ownerNum < MAX_CLIENTS
+		&& g_entities[target->r.ownerNum].inuse && g_entities[target->r.ownerNum].client )
+		return qtrue;
+
+	if ( target->parent && target->parent >= g_entities && target->parent < g_entities + MAX_CLIENTS
+		&& target->parent->inuse && target->parent->client )
+		return qtrue;
+
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gclient_t *cl = &level.clients[i];
+
+		if ( cl->pers.connected == CON_DISCONNECTED )
+			continue;
+		if ( cl->ps.saberEntityNum == target->s.number || cl->saberStoredIndex == target->s.number )
+			return qtrue;
+	}
+
+	return qfalse;
+}
+
+/*
+==================
 Cmd_EntLoad_f
 ==================
 */
@@ -15971,8 +16049,18 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 			// unconditionally, already-free ones included, each of which ran the whole of
 			// G_FreeEntity() (unlink, ICARUS free, Ghoul2 teardown, the "kls" broadcast) again on a
 			// zeroed entity. Test what was actually meant instead.
-			if (target_ent->inuse)
-				G_FreeEntity( target_ent );
+			if (!target_ent->inuse)
+				continue;
+
+			// GalaxyRP fix: [Entity System] but leave what the players are holding. This loop freed
+			// every entity from slot 40 up, the players' own included: their saber entities (neverFree,
+			// so G_FreeEntity() unlinked them from the world and then gave up, leaving the blade with
+			// no collision), their missiles, sentries and force fields. The file being loaded replaces
+			// the map's entities; it has nothing to say about those, and nothing brings them back.
+			if (RP_EntLoadKeepsEntity(target_ent))
+				continue;
+
+			G_FreeEntity( target_ent );
 		}
 
 		level.load_entities_timer = level.time + 1050;
@@ -16056,7 +16144,11 @@ static void zyk_entnear_append(char *message, int message_size, gentity_t *this_
 {
 	char row[RP_LIST_FLUSH_AT];
 
-	Com_sprintf(row, sizeof(row), "\n%d - %s", this_ent->s.number,
+	// GalaxyRP fix: [Entity System] the same L (logical) and G (created by the game, cannot be edited
+	// or removed -- see RP_EntityHasSpawnKeys in g_spawn.c) tags /entlist prints after the id
+	Com_sprintf(row, sizeof(row), "\n%d%s%s - %s", this_ent->s.number,
+		this_ent->isLogical ? "L" : "",
+		RP_EntityHasSpawnKeys(this_ent) ? "" : "G",
 		this_ent->classname ? this_ent->classname : "<none>");
 
 	Q_strcat(message, message_size, row);
@@ -16185,8 +16277,12 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 
 	// GalaxyRP: [Logical Entities] a logical entity's id carries an L so the admin can tell the
 	// two regions apart; the number itself (>= MAX_GENTITIES) is what every other command takes.
-	Com_sprintf(row, sizeof(row), "\n%d%s - %s - %s - %s", id,
+	// GalaxyRP fix: [Entity System] G after the id: created by the game, so /entedit and /entremove
+	// refuse it -- see RP_EntityHasSpawnKeys() in g_spawn.c. A free slot (the page listing shows
+	// those as "freed") is not tagged: there is nothing there to refuse.
+	Com_sprintf(row, sizeof(row), "\n%d%s%s - %s - %s - %s", id,
 		(target_ent && target_ent->isLogical) ? "L" : "",
+		(target_ent && target_ent->inuse && !RP_EntityHasSpawnKeys(target_ent)) ? "G" : "",
 		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
 		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
 		(target_ent && target_ent->target) ? target_ent->target : "<none>");
@@ -16286,6 +16382,42 @@ void Cmd_EntList_f( gentity_t *ent ) {
 
 /*
 ==================
+RP_EntRemoveFree
+
+GalaxyRP fix: [Entity System] free one entity for /entremove, together with the trigger it made for
+itself. A door (Think_SpawnNewDoorTrigger, "trigger_door") and a platform (SpawnPlatTrigger) each
+G_Spawn() their own trigger and point its ->parent at themselves. That trigger has no key/value
+record, so the entity commands never touch it -- and removing the door alone left it behind, still
+linked to the freed slot. Its touch function works through ->parent, so once G_Spawn() handed the
+slot to something else, walking into the old trigger ran door or platform logic on that new entity.
+Only game-made triggers whose parent is this entity go with it; an entity with a record of its own is
+never collateral. Returns how many triggers went with it.
+==================
+*/
+static int RP_EntRemoveFree( gentity_t *target )
+{
+	gentity_t *other;
+	int children = 0;
+
+	RP_FOR_EACH_ENTITY( other )
+	{
+		if ( other == target || !other->inuse || other->parent != target )
+			continue;
+		if ( !(other->r.contents & CONTENTS_TRIGGER) )
+			continue;
+		if ( RP_EntityHasSpawnKeys( other ) )
+			continue;
+
+		G_FreeEntity( other );
+		children++;
+	}
+
+	G_FreeEntity( target );
+	return children;
+}
+
+/*
+==================
 Cmd_EntRemove_f
 ==================
 */
@@ -16346,8 +16478,27 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			// not there. An already-free id is "not found", which is what it is.
 			if ((target_ent-g_entities) == entity_id && target_ent->inuse)
 			{
-				G_FreeEntity( target_ent );
-				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed.\n\"",i) );
+				int children;
+
+				// GalaxyRP fix: [Entity System] only an entity with a key/value record -- one the
+				// map, an entity file or the entity commands made. See RP_EntityHasSpawnKeys()
+				// (g_spawn.c): a game-made entity such as a player's saber entity, a door's trigger,
+				// a missile, an NPC or a dropped item is still referenced by its owner, which would
+				// go on working on the freed slot.
+				if (RP_EntityHasSpawnKeys(target_ent) == qfalse)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d %s.\n\"", i, RP_EntityRefusalReason(target_ent)) );
+					return;
+				}
+
+				children = RP_EntRemoveFree( target_ent );
+				if (target_ent->inuse)
+				{ // G_FreeEntity() keeps a neverFree entity (a siege item) alive
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot be removed.\n\"", i) );
+					return;
+				}
+				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed%s.\n\"", i,
+					children == 1 ? " (and its trigger)" : children > 1 ? va(" (and %d triggers it made)", children) : "") );
 				return;
 			}
 		}
@@ -16420,19 +16571,60 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			return;
 		}
 
-		// GalaxyRP: [Logical Entities] both regions.
-		RP_FOR_EACH_ENTITY( target_ent )
+		// GalaxyRP fix: [Entity System] the range removes only entities with a key/value record,
+		// like the single id above, and says how many it left alone. Two passes: the targets are
+		// picked first and freed second, so a door's trigger that sits in the range below its door
+		// is not reported as "skipped" a moment before it goes with the door.
 		{
-			// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of a
-			// few hundred slots is mostly free slots, and each one was being freed again.
-			if ((target_ent-g_entities) >= entity_id && (target_ent-g_entities) <= entity_id2
-				&& target_ent->inuse)
+			static qboolean rp_entremove_pick[MAX_ENTITIESTOTAL];
+			int removed = 0;
+			int children = 0;
+			int skipped = 0;
+
+			// GalaxyRP: [Logical Entities] both regions.
+			RP_FOR_EACH_ENTITY( target_ent )
 			{
-				G_FreeEntity( target_ent );
+				i = target_ent - g_entities;
+				// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of
+				// a few hundred slots is mostly free slots, and each one was being freed again.
+				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
+					&& RP_EntityHasSpawnKeys(target_ent)) ? qtrue : qfalse;
+			}
+
+			RP_FOR_EACH_ENTITY( target_ent )
+			{
+				i = target_ent - g_entities;
+				if (rp_entremove_pick[i] && target_ent->inuse)
+				{
+					children += RP_EntRemoveFree( target_ent );
+					if (!target_ent->inuse)
+						removed++;
+				}
+				rp_entremove_pick[i] = qfalse;
+			}
+
+			RP_FOR_EACH_ENTITY( target_ent )
+			{
+				i = target_ent - g_entities;
+				if (i >= entity_id && i <= entity_id2 && target_ent->inuse)
+				{
+					skipped++;
+				}
+			}
+
+			{
+				char childNote[64] = "";
+				char skipNote[128] = "";
+
+				if (children > 0)
+					Com_sprintf(childNote, sizeof(childNote), " (and %d trigger%s they made)", children, children == 1 ? "" : "s");
+				if (skipped > 0)
+					Com_sprintf(skipNote, sizeof(skipNote), " Skipped %d that cannot be removed (created by the game: marked G in /entlist).", skipped);
+
+				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s\n\"",
+					removed, removed == 1 ? "y" : "ies", childNote, skipNote) );
 			}
 		}
-
-		trap->SendServerCommand( ent-g_entities, "print \"Entities removed.\n\"" );
 		return;
 	}
 }
@@ -18103,12 +18295,13 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
 ^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes.\n\
+^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and cannot be edited or removed.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids).\n\
+^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it.\n\
+^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
 ^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\

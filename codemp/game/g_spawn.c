@@ -1473,6 +1473,70 @@ qboolean zyk_spawn_strings_full(gentity_t *ent)
 	return (level.zyk_spawn_strings_values_count[ent->s.number] + 1 >= ZYK_MAX_SPAWN_STRING_SLOTS) ? qtrue : qfalse;
 }
 
+/*
+=================
+RP_EntityHasSpawnKeys / RP_EntityRefusalReason
+
+GalaxyRP fix: [Entity System] which entities the entity commands may edit or remove: only the ones
+that have a spawn-key record -- everything the map spawned (G_SpawnGEntityFromSpawnVars), and
+everything /entadd, /entload, the default entity file, /spawnplatform, /spawndummy and the per-map
+fixes built through zyk_main_set_entity_field(). An entity the game creates for itself has no record:
+a player's saber entity, the trigger a door or platform makes for itself, missiles, NPCs and vehicles
+(spawners included), grapple hooks, sentries, force fields, dropped items, event entities. Something
+else holds a pointer to each of those -- the player's ps.saberEntityNum, the trigger's parent, the
+NPC's own bookkeeping -- so freeing or respawning one out from under its owner leaves that owner
+working on a freed slot, and on whatever takes the slot next. That is how /entremove on a saber
+entity corrupted or crashed the server, and how /entedit on an NPC deleted it (re-running a spawn
+with no classname fails, and a failed spawn frees the entity). Lugormod draws the same line: only
+spawnstring-backed entities are editable.
+
+The record cannot be stale. G_InitGentity() zeroes the count whenever a slot is handed out and
+G_FreeEntity() whenever one is freed, so a count above zero always belongs to the entity in the
+slot now.
+
+RP_EntityRefusalReason() returns NULL for an entity that may be touched, or the reason it may not,
+worded to follow "Entity <id> ".
+=================
+*/
+qboolean RP_EntityHasSpawnKeys( const gentity_t *ent )
+{
+	return RP_EntityRefusalReason( ent ) ? qfalse : qtrue;
+}
+
+const char *RP_EntityRefusalReason( const gentity_t *ent )
+{
+	int num;
+
+	if ( !ent )
+		return "does not exist";
+
+	num = (int)( ent - g_entities );
+
+	if ( num < 0 || num >= MAX_ENTITIESTOTAL )
+		return "does not exist";
+
+	if ( num < MAX_CLIENTS + BODY_QUEUE_SIZE )
+		return "is a reserved player or body slot";
+
+	if ( num == ENTITYNUM_WORLD || num == ENTITYNUM_NONE )
+		return "is the world";
+
+	if ( !ent->inuse )
+		return "is not in use";
+
+	if ( level.zyk_spawn_strings_values_count[num] <= 0 )
+	{
+		if ( ent->s.eType == ET_NPC || ent->NPC )
+			return va( "is an NPC (%s), created by the game rather than by the map or the entity system, and cannot be edited or removed here. Use /npc kill",
+				ent->NPC_type ? ent->NPC_type : ( ent->classname ? ent->classname : "no type" ) );
+
+		return va( "(%s) was created by the game, not by the map or the entity system, and cannot be edited or removed",
+			ent->classname ? ent->classname : "no classname" );
+	}
+
+	return NULL;
+}
+
 // GalaxyRP fix: [Entity System] one shared brush-model setter for the eleven mover classes that
 // zyk taught to carry an md3 model. Thirteen copies of the same block used to sit inline, and every
 // one of them handed an unvalidated "*N" straight to trap->SetBrushModel(). The engine resolves that

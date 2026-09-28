@@ -2204,6 +2204,10 @@ void	G_ResetGamestateEstimate( void );
 // by an older "is there at least one free slot" predicate, which this does not replace.)
 int		G_FreeEntityCount( void );
 qboolean G_EntitySlotsAvailable( int needed );
+// GalaxyRP fix: [Entity System] only entities with a spawn-key record may be edited or removed by
+// the entity commands -- g_spawn.c
+qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
+const char *RP_EntityRefusalReason( const gentity_t *ent );
 // GalaxyRP fix: [Configstrings] whether the gamestate can still take "needed" more bytes of
 // configstring, for a caller that is about to claim several at once and wants to find out before
 // it has claimed any of them.
