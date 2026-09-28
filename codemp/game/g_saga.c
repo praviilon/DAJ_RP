@@ -1255,7 +1255,10 @@ void SP_info_siege_radaricon (gentity_t *ent)
 	G_SpawnString( "icon", "", &s );
 	if (!s || !s[0])
 	{ //that's the whole point of the entity
-        Com_Error(ERR_DROP, "misc_siege_radaricon without an icon");
+		// GalaxyRP fix: [Entity System] was Com_Error(ERR_DROP) -- a fatal error and process exit on
+		// a dedicated server. Siege only, but reachable through the entity commands. Log and free.
+		G_LogPrintf( "info_siege_radaricon at %s has no \"icon\"; not spawned.\n", vtos( ent->s.origin ) );
+		G_FreeEntity( ent );
 		return;
 	}
 
@@ -1790,7 +1793,12 @@ void SP_misc_siege_item (gentity_t *ent)
 
 	if (!ent->model || !ent->model[0])
 	{
-		trap->Error( ERR_DROP, "You must specify a model for misc_siege_item types." );
+		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP) -- a fatal error and process exit
+		// on a dedicated server. Siege only, but reachable through the entity commands. Log and
+		// free, and return, since the old code relied on trap->Error never coming back.
+		G_LogPrintf( "misc_siege_item at %s has no model; not spawned.\n", vtos( ent->s.origin ) );
+		G_FreeEntity( ent );
+		return;
 	}
 
 	G_SpawnInt("canpickup", "1", &canpickup);

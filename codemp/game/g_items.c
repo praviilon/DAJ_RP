@@ -3043,25 +3043,71 @@ void G_ReturnPushedItem( gentity_t *ent )
 RespawnItem
 ===============
 */
+// GalaxyRP fix: [Entity System] whether one entity of an item "team" group can be the one that comes
+// back. G_FindTeams() builds the group as raw pointers, and nothing unhooks a member that is freed
+// later (/entremove, /entload, a preset respawn), so the chain can lead into a free slot or into one
+// that has since been reused by something else entirely.
+static qboolean RP_ItemTeamMemberValid( gentity_t *member, gentity_t *master )
+{
+	return ( member && member->inuse && member->s.eType == ET_ITEM && member->item &&
+		member->teammaster == master ) ? qtrue : qfalse;
+}
+
 void RespawnItem( gentity_t *ent ) {
 	// randomly select from teamed entities
 	if (ent->team) {
 		gentity_t	*master;
+		gentity_t	*member;
 		int	count;
 		int choice;
+		int steps;
 
-		if ( !ent->teammaster ) {
-			trap->Error( ERR_DROP, "RespawnItem: bad teammaster");
-		}
+		// GalaxyRP fix: [Entity System] this was trap->Error(ERR_DROP, "RespawnItem: bad teammaster"),
+		// a process exit on a dedicated server. Groups are only linked by G_FindTeams(), which runs at
+		// map load and after /entload, so any item given a "team" key by /entadd or /entedit has no
+		// master: the first time someone picked it up, its respawn ended the server. And when the
+		// master itself was removed, the others kept pointing at its freed slot. An item whose group
+		// is not intact now simply respawns on its own -- as does one the chain no longer reaches --
+		// and the random pick below only ever lands on a member that is still a live item of this
+		// group. steps bounds both walks, so a chain bent by slot reuse cannot loop.
 		master = ent->teammaster;
+		count = 0;
 
-		for (count = 0, ent = master; ent; ent = ent->teamchain, count++)
-			;
+		if ( RP_ItemTeamMemberValid( master, master ) && RP_ItemTeamMemberValid( ent, master ) )
+		{
+			qboolean reachable = qfalse;
 
-		choice = rand() % count;
+			for (member = master, steps = 0; member && steps < MAX_GENTITIES; member = member->teamchain, steps++)
+			{
+				if ( RP_ItemTeamMemberValid( member, master ) )
+					count++;
+				if ( member == ent )
+					reachable = qtrue;
+			}
 
-		for (count = 0, ent = master; count < choice; ent = ent->teamchain, count++)
-			;
+			// zyk: a freed member cuts the chain there (G_FreeEntity() zeroes its teamchain), so an
+			// item beyond it is no longer reachable from its master and could never be picked
+			// again. Bring that one back itself rather than lose it from the map.
+			if ( !reachable )
+				count = 0;
+		}
+
+		if ( count > 0 )
+		{
+			choice = rand() % count;
+
+			for (member = master, steps = 0; member && steps < MAX_GENTITIES; member = member->teamchain, steps++)
+			{
+				if ( !RP_ItemTeamMemberValid( member, master ) )
+					continue;
+				if ( choice == 0 )
+				{
+					ent = member;
+					break;
+				}
+				choice--;
+			}
+		}
 	}
 
 	// zyk: if a player pushed/pulled this item, make it return to its default origin

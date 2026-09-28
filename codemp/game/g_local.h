@@ -132,6 +132,10 @@ extern vec3_t gPainPoint;
 // writes its reason to the log first.
 #define ZYK_ENTITY_RESERVE			64
 
+// GalaxyRP fix: [Entity System] how many "#name" sub-BSP models a map can teach the game -- the
+// engine's own MAX_SUB_BSP (q_shared.h), past which CM_LoadSubBSP() Com_Error(ERR_DROP)s.
+#define RP_MAX_SUBBSP_NAMES			MAX_SUB_BSP
+
 // GalaxyRP fix: [Entity System] most asteroids one trigger_asteroid_field may keep alive. count is a
 // spawn key, so without a ceiling /entadd could ask for thousands. See SP_trigger_asteroid_field.
 #define ZYK_MAX_ASTEROIDS			64
@@ -1899,6 +1903,22 @@ typedef struct level_locals_s {
 	// entities referenced, which is what bounds a "*N" typed into /entadd later.
 	int zyk_max_inline_model;
 
+	// GalaxyRP fix: [Entity System] the "#name" sub-BSP models the map itself loaded while it
+	// spawned. After map load a "#name" is only accepted if it is one of these, because the engine
+	// Com_Error(ERR_DROP)s on a sub-BSP file it cannot load and on the 33rd unique one -- see
+	// zyk_brush_model_allowed() in g_spawn.c. RP_MAX_SUBBSP_NAMES is the engine's MAX_SUB_BSP.
+	char rp_subbsp_names[RP_MAX_SUBBSP_NAMES][MAX_QPATH];
+	int rp_num_subbsp_names;
+
+	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
+	// finished loading. Spawn selection falls back to it, instead of ending the server with
+	// "Couldn't find a spawn point", if every spawn point has since gone -- see
+	// RP_FallbackSpawnPoint() in g_client.c.
+	qboolean rp_fallback_spawn_set;
+	qboolean rp_fallback_spawn_warned;
+	vec3_t rp_fallback_spawn_origin;
+	vec3_t rp_fallback_spawn_angles;
+
 	qboolean ent_origin_set;
 	vec3_t ent_origin;
 	vec3_t ent_angles;
@@ -2063,6 +2083,9 @@ void ItemUse_Sentry(gentity_t *ent);
 void zyk_training_pole_damage(gentity_t *ent);
 void Cmd_AdmWeather_f( gentity_t *ent );
 void		zyk_learn_inline_model( const char *name );
+void		zyk_learn_subbsp_name( const char *name );
+void		RP_RecordFallbackSpawnPoint( void );
+qboolean	zyk_subbsp_name_known( const char *name );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
 void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);

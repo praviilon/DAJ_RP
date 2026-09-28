@@ -862,7 +862,13 @@ void SP_trigger_lightningstrike( gentity_t *ent )
 	G_SpawnString("lightningfx", "", &s);
 	if (!s || !s[0])
 	{
-		Com_Error(ERR_DROP, "trigger_lightningstrike with no lightningfx");
+		// GalaxyRP fix: [Entity System] was Com_Error(ERR_DROP) -- a fatal error and process exit
+		// on a dedicated server, reachable at runtime through the entity commands. Log and free,
+		// and return, since the old code relied on Com_Error never coming back. The use and think
+		// set above go with the entity.
+		G_LogPrintf( "trigger_lightningstrike at %s has no \"lightningfx\"; not spawned.\n", vtos( ent->s.origin ) );
+		G_FreeEntity( ent );
+		return;
 	}
 
 	//get a configstring index for it

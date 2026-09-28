@@ -2036,6 +2036,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// parse the key/value pairs and spawn gentities
 	G_SpawnEntitiesFromString(qfalse);
 
+	// GalaxyRP fix: [Spawning] remember where the map's first spawn point is, for the selectors to
+	// fall back on if an entity preset later leaves the map with none -- see g_client.c.
+	RP_RecordFallbackSpawnPoint();
+
 	if (level.gametype == GT_CTF)
 	{ // zyk: maps that will now have support to CTF gametype (like some SP maps) must have the CTF flags placed before the G_CheckTeamItems function call
 		if (Q_stricmp(zyk_mapname, "t1_fatal") == 0)

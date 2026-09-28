@@ -186,6 +186,22 @@ void SP_light( gentity_t *self ) {
 	G_SpawnInt( "style", "0", &self->count );
 	G_SpawnInt( "switch_style", "0", &self->bounceCount );
 	G_SpawnInt( "style_off", "0", &self->fly_sound_debounce_time );
+
+	// GalaxyRP fix: [Entity System] misc_lightstyle_set() uses all three as configstring offsets,
+	// CS_LIGHT_STYLES + style*3 + 0..2, with no bound. A value outside 0..MAX_LIGHT_STYLES-1 either
+	// ran off the configstring table (the engine's "bad index" ERR_DROP, a process exit on a dedicated
+	// server) or wrote into the neighbouring blocks for every client -- negative ones into the effect
+	// names below CS_LIGHT_STYLES, 64 and up into CS_TERRAINS and CS_BSP_MODELS. The keys come
+	// straight from /entadd, /entedit and /entload, so refuse the entity instead.
+	if ( self->count < 0 || self->count >= MAX_LIGHT_STYLES ||
+		self->bounceCount < 0 || self->bounceCount >= MAX_LIGHT_STYLES ||
+		self->fly_sound_debounce_time < 0 || self->fly_sound_debounce_time >= MAX_LIGHT_STYLES )
+	{
+		G_LogPrintf( "light at %s: style %d, switch_style %d and style_off %d must all be 0 to %d; not spawned.\n",
+			vtos( self->s.origin ), self->count, self->bounceCount, self->fly_sound_debounce_time, MAX_LIGHT_STYLES - 1 );
+		G_FreeEntity( self );
+		return;
+	}
 	G_SetOrigin( self, self->s.origin );
 	trap->LinkEntity( (sharedEntity_t *)self );
 
@@ -1168,8 +1184,51 @@ void SP_misc_bsp(gentity_t *ent)
 	ent->s.time = tempint;
 
 	Com_sprintf(temp, MAX_QPATH, "#%s", out);
+
+	// GalaxyRP fix: [Entity System] a misc_bsp spawned after map load -- /entadd, /entedit, /entload
+	// and the automatic default.txt preset -- used to be able to end the server three ways:
+	//  - SetBrushModel() below loads "maps/<bspmodel>.bsp" through CM_LoadSubBSP(), which
+	//    Com_Error(ERR_DROP)s on a file it cannot load and on a 33rd unique sub-BSP. On a dedicated
+	//    server that is a process exit. So after map load only a sub-BSP the map itself loaded is
+	//    accepted; the engine hands that one back by name without loading anything.
+	//  - The nested G_SpawnEntitiesFromString(qtrue) sets level.spawning and only the outer, map-load
+	//    pass ever clears it. Run from a command it stayed set for the rest of the map, which
+	//    switched off the "*N"/"#name" brush-model guard in zyk_brush_model_allowed() -- the next
+	//    out-of-range model any entity command named went straight to the engine's ERR_DROP.
+	//  - The same nested pass spawned the sub-BSP's whole entity list again on every respawn, on top
+	//    of the copies already there (an entity preset saves those as entities of their own).
+	// So after map load this places the geometry only. Map load itself is unchanged.
+	if (level.spawning == qfalse)
+	{
+		if (!out[0] || zyk_subbsp_name_known(temp) == qfalse)
+		{
+			G_LogPrintf( "misc_bsp at %s: bspmodel \"%s\" is not a sub-BSP this map loaded; not spawned.\n",
+				vtos( ent->s.origin ), out );
+			G_FreeEntity( ent );
+			return;
+		}
+	}
+	else
+	{
+		zyk_learn_subbsp_name( temp );
+	}
+
 	trap->SetBrushModel( (sharedEntity_t *)ent, temp );  // SV_SetBrushModel -- sets mins and maxs
 	G_BSPIndex(temp);
+
+	if (level.spawning == qfalse)
+	{ // zyk: the geometry only -- see above
+		VectorCopy( ent->s.origin, ent->s.pos.trBase );
+		VectorCopy( ent->s.origin, ent->r.currentOrigin );
+		VectorCopy( ent->s.angles, ent->s.apos.trBase );
+		VectorCopy( ent->s.angles, ent->r.currentAngles );
+
+		ent->s.eType = ET_MOVER;
+
+		trap->LinkEntity ((sharedEntity_t *)ent);
+
+		return;
+	}
 
 	level.mNumBSPInstances++;
 	Com_sprintf(temp, MAX_QPATH, "%d-", level.mNumBSPInstances);
@@ -1182,8 +1241,11 @@ void SP_misc_bsp(gentity_t *ent)
 	G_SpawnString("filter", "", &out);
 	strcpy(level.mFilter, out);
 	*/
+	// GalaxyRP fix: [Entity System] was strcpy() into the MAX_QPATH-byte level.mTeamFilter from a
+	// spawn value bounded only by MAX_STRING_CHARS, so a long "teamfilter" wrote past it into the
+	// rest of level_locals_t.
 	G_SpawnString("teamfilter", "", &out);
-	strcpy(level.mTeamFilter, out);
+	Q_strncpyz(level.mTeamFilter, out, sizeof(level.mTeamFilter));
 
 	VectorCopy( ent->s.origin, ent->s.pos.trBase );
 	VectorCopy( ent->s.origin, ent->r.currentOrigin );
@@ -4285,7 +4347,11 @@ void maglock_link( gentity_t *self )
 
 	if ( trace.allsolid || trace.startsolid )
 	{
-		Com_Error( ERR_DROP,"misc_maglock at %s in solid\n", vtos(self->s.origin) );
+		// GalaxyRP fix: [Entity System] was Com_Error(ERR_DROP) ahead of the free -- a fatal error
+		// and process exit on a dedicated server, so the free below never ran. A maglock placed with
+		// /entadd or moved with /entedit into a wall took the server down a moment later, from this
+		// think. Log it and let the free that was already here do its job.
+		G_LogPrintf( "misc_maglock at %s is in solid; removed.\n", vtos(self->s.origin) );
 		G_FreeEntity( self );
 		return;
 	}

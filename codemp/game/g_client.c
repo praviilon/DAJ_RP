@@ -729,6 +729,56 @@ static qboolean RP_ProbeAroundSpawnPoint( gentity_t *spot, vec3_t origin )
 	return qfalse;
 }
 
+/*
+================
+RP_RecordFallbackSpawnPoint / RP_FallbackSpawnPoint
+
+GalaxyRP fix: [Spawning] the spawn selectors below ended with
+trap->Error( ERR_DROP, "Couldn't find a spawn point" ) when the map had no info_player_deathmatch
+left, and on a dedicated server ERR_DROP is a process exit. /entremove refuses spawn points, but an
+/entload preset that holds none (hand-written, old, or saved before a map update) still frees every
+one of the map's and brings none back, and the next spawn, respawn or spectator join ended the server.
+
+So the map's first spawn point is remembered when the map finishes loading, and a selector that finds
+none uses that spot instead. It returns NULL as the spot, the same as SelectSpectatorSpawnPoint()
+always has: ClientSpawn() only fires the spot's targets through G_UseTargets(), which ignores NULL,
+and tests it before touching ->target. If the map had no spawn point even at load -- a broken map,
+which vanilla would also have dropped -- it uses the world origin rather than end the server.
+================
+*/
+void RP_RecordFallbackSpawnPoint( void )
+{
+	gentity_t *spot = G_Find( NULL, FOFS(classname), "info_player_deathmatch" );
+
+	level.rp_fallback_spawn_set = qfalse;
+	VectorClear( level.rp_fallback_spawn_origin );
+	VectorClear( level.rp_fallback_spawn_angles );
+
+	if ( spot )
+	{
+		VectorCopy( spot->s.origin, level.rp_fallback_spawn_origin );
+		VectorCopy( spot->s.angles, level.rp_fallback_spawn_angles );
+		level.rp_fallback_spawn_set = qtrue;
+	}
+}
+
+static gentity_t *RP_FallbackSpawnPoint( vec3_t origin, vec3_t angles )
+{
+	// zyk: once per map, so a map in this state does not write a line for every respawn
+	if ( !level.rp_fallback_spawn_warned )
+	{
+		level.rp_fallback_spawn_warned = qtrue;
+		G_LogPrintf( "No info_player_deathmatch left on this map: spawning players at %s instead.\n",
+			level.rp_fallback_spawn_set ? "the map's first spawn point" : "the world origin" );
+	}
+
+	VectorCopy( level.rp_fallback_spawn_origin, origin );
+	origin[2] += 9;
+	VectorCopy( level.rp_fallback_spawn_angles, angles );
+
+	return NULL;
+}
+
 gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, vec3_t angles, team_t team, qboolean isbot ) {
 	gentity_t	*spot;
 	vec3_t		delta;
@@ -830,8 +880,8 @@ gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, ve
 			gentity_t *probe = NULL;
 
 			spot = G_Find( NULL, FOFS(classname), "info_player_deathmatch");
-			if (!spot)
-				trap->Error( ERR_DROP, "Couldn't find a spawn point" );
+			if (!spot) // GalaxyRP fix: [Spawning] was trap->Error( ERR_DROP ) -- see RP_FallbackSpawnPoint()
+				return RP_FallbackSpawnPoint( origin, angles );
 
 			// GalaxyRP: [Spawning] every point is taken: look for room beside one before telefragging
 			while ( (probe = G_Find( probe, FOFS(classname), "info_player_deathmatch" )) != NULL )
@@ -939,8 +989,8 @@ tryAgain:
 
 		//If we got here we found no free duel or DM spots, just try the first DM spot
 		spot = G_Find( NULL, FOFS(classname), "info_player_deathmatch");
-		if (!spot)
-			trap->Error( ERR_DROP, "Couldn't find a spawn point" );
+		if (!spot) // GalaxyRP fix: [Spawning] was trap->Error( ERR_DROP ) -- see RP_FallbackSpawnPoint()
+			return RP_FallbackSpawnPoint( origin, angles );
 		VectorCopy (spot->s.origin, origin);
 		origin[2] += 9;
 		VectorCopy (spot->s.angles, angles);

@@ -15333,7 +15333,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			if (this_ent->inuse)
 			{
 				Q_strcat(content, sizeof(content), va("^3region: ^7%s\n",
-					this_ent->isLogical ? "logical (not networked; classname cannot be changed to a networked class in place)" : "networked"));
+					this_ent->isLogical ? "logical (not networked)" : "networked"));
 			}
 
 			// GalaxyRP fix: [Entity System] an entity the game created has no key/value record, so the
@@ -15457,6 +15457,22 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
+		// GalaxyRP fix: [Entity System] the classname is not editable. /entedit respawns the entity in
+		// place, in the slot it already has, through a different class's spawn function over state
+		// the old one set up -- and some classes are ones /entremove will not remove (spawn points),
+		// which a class change would have removed all the same. Refuse the whole command, before any
+		// pair is applied, if any key is "classname" in any case -- that includes removing it with
+		// "zykremovekey". /entremove and /entadd make a different class instead.
+		for (i = 2; i + 1 < number_of_args; i += 2)
+		{
+			trap->Argv(i, key, sizeof(key));
+			if (Q_stricmp(key, "classname") == 0)
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d: the classname cannot be changed with /entedit. Use ^3/entremove^7 and ^3/entadd^7 the new class instead.\n\"", entity_id) );
+				return;
+			}
+		}
+
 		// GalaxyRP fix: [Entity System] see zyk_main_set_entity_field(): a row that is already full
 		// silently dropped the pair rather than reporting it. Every key given here is worst case a
 		// new one, so refuse if they could not all fit. Keys that turn out to already exist are
@@ -15475,7 +15491,8 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// fatal error. So work out what region the entity would want after the edit -- its stored
 		// pairs overlaid with the ones given -- and refuse if that is not the region it is in.
 		// Only classname, nological and script_targetname can change the answer, so any other edit
-		// passes untouched. The escape is the obvious one: /entremove it and /entadd it again.
+		// passes untouched -- and classname is refused outright above, so in practice it is the
+		// other two. The escape is the obvious one: /entremove it and /entadd it again.
 		{
 			rpSpawnRoute_t route;
 			int j = 0;
@@ -16382,6 +16399,26 @@ void Cmd_EntList_f( gentity_t *ent ) {
 
 /*
 ==================
+RP_EntIsSpawnPoint
+
+GalaxyRP fix: [Entity System] /entremove leaves every info_player_* class alone: deathmatch (which
+info_player_start becomes when it spawns), start_red/blue, duel, duel1/2, intermission and its
+red/blue variants, and siegeteam1/2. Removing the last info_player_deathmatch used to end the server
+at the next spawn with "Couldn't find a spawn point"; spawn selection now has a fallback for that
+(RP_FallbackSpawnPoint() in g_client.c), but a spawn point is still never something to delete by
+accident. They can be moved with /entedit, and /entundo still takes back one just added.
+==================
+*/
+static qboolean RP_EntIsSpawnPoint( gentity_t *target )
+{
+	if (!target || !target->inuse || !target->classname)
+		return qfalse;
+
+	return (Q_stricmpn(target->classname, "info_player_", 12) == 0) ? qtrue : qfalse;
+}
+
+/*
+==================
 RP_EntRemoveFree
 
 GalaxyRP fix: [Entity System] free one entity for /entremove, together with the trigger it made for
@@ -16491,6 +16528,12 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 
+				if (RP_EntIsSpawnPoint(target_ent) == qtrue)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is a spawn point (%s) and cannot be removed. Use ^3/entedit^7 to move it.\n\"", i, target_ent->classname) );
+					return;
+				}
+
 				children = RP_EntRemoveFree( target_ent );
 				if (target_ent->inuse)
 				{ // G_FreeEntity() keeps a neverFree entity (a siege item) alive
@@ -16580,6 +16623,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			int removed = 0;
 			int children = 0;
 			int skipped = 0;
+			int spawnPoints = 0;
 
 			// GalaxyRP: [Logical Entities] both regions.
 			RP_FOR_EACH_ENTITY( target_ent )
@@ -16588,7 +16632,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of
 				// a few hundred slots is mostly free slots, and each one was being freed again.
 				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
-					&& RP_EntityHasSpawnKeys(target_ent)) ? qtrue : qfalse;
+					&& RP_EntityHasSpawnKeys(target_ent) && !RP_EntIsSpawnPoint(target_ent)) ? qtrue : qfalse;
 			}
 
 			RP_FOR_EACH_ENTITY( target_ent )
@@ -16608,21 +16652,27 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				i = target_ent - g_entities;
 				if (i >= entity_id && i <= entity_id2 && target_ent->inuse)
 				{
-					skipped++;
+					if (RP_EntIsSpawnPoint(target_ent) == qtrue)
+						spawnPoints++;
+					else
+						skipped++;
 				}
 			}
 
 			{
 				char childNote[64] = "";
 				char skipNote[128] = "";
+				char spawnNote[128] = "";
 
 				if (children > 0)
 					Com_sprintf(childNote, sizeof(childNote), " (and %d trigger%s they made)", children, children == 1 ? "" : "s");
 				if (skipped > 0)
 					Com_sprintf(skipNote, sizeof(skipNote), " Skipped %d that cannot be removed (created by the game: marked G in /entlist).", skipped);
+				if (spawnPoints > 0)
+					Com_sprintf(spawnNote, sizeof(spawnNote), " Kept %d spawn point%s (spawn points cannot be removed).", spawnPoints, spawnPoints == 1 ? "" : "s");
 
-				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s\n\"",
-					removed, removed == 1 ? "y" : "ies", childNote, skipNote) );
+				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s%s\n\"",
+					removed, removed == 1 ? "y" : "ies", childNote, skipNote, spawnNote) );
 			}
 		}
 		return;
@@ -18293,14 +18343,14 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	// grew to explain the logical ids, and one server command carries at most 1022 characters.
 	trap->SendServerCommand( ent-g_entities, va("print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
-^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified.\n\
+^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified. The classname cannot be changed.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
 ^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and cannot be edited or removed.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it.\n\
+^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
 ^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\

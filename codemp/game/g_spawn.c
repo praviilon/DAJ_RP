@@ -1593,12 +1593,88 @@ void zyk_learn_inline_model( const char *name )
 		level.zyk_max_inline_model = index;
 }
 
+// GalaxyRP fix: [Entity System] the "#name" counterpart of the inline-model bound above. The engine
+// resolves a "#name" model through CM_LoadSubBSP(), which Com_Error(ERR_DROP)s -- a process exit on a
+// dedicated server -- both when maps/<name>.bsp cannot be loaded and when a 33rd unique sub-BSP is
+// asked for. So once the map has loaded, the only "#name" that is safe is one the map already
+// loaded while it spawned: CM_LoadSubBSP() finds that one by name and returns it without loading
+// anything. This records those names. It is only called while level.spawning is set, from the two
+// places that hand a "#name" to trap->SetBrushModel() right afterwards (zyk_brush_model_allowed()
+// and SP_misc_bsp()), so a name is learned exactly when the map itself loads it -- a map naming a
+// sub-BSP that is not there never gets past that SetBrushModel() in the first place.
+void zyk_learn_subbsp_name( const char *name )
+{
+	if (!name || name[0] != '#' || strlen(name) >= MAX_QPATH)
+		return;
+
+	if (zyk_subbsp_name_known(name) == qtrue)
+		return;
+
+	if (level.rp_num_subbsp_names >= RP_MAX_SUBBSP_NAMES)
+		return;
+
+	Q_strncpyz(level.rp_subbsp_names[level.rp_num_subbsp_names], name, sizeof(level.rp_subbsp_names[0]));
+	level.rp_num_subbsp_names++;
+}
+
+qboolean zyk_subbsp_name_known( const char *name )
+{
+	int i = 0;
+
+	if (!name || name[0] != '#')
+		return qfalse;
+
+	for (i = 0; i < level.rp_num_subbsp_names; i++)
+	{
+		// zyk: the engine matches sub-BSP file names case-insensitively, so this does too
+		if (Q_stricmp(level.rp_subbsp_names[i], name) == 0)
+			return qtrue;
+	}
+
+	return qfalse;
+}
+
+// GalaxyRP fix: [Entity System] whether a model name may be handed to trap->SetBrushModel(). Every
+// caller does that straight afterwards when this says yes, and SV_SetBrushModel() Com_Error(ERR_DROP)s
+// on anything it cannot resolve, so this has to be exact about all three shapes it can be given:
+//
+//   "*N"    an inline model of the map's own BSP -- bounded by what the map used (see above).
+//   "#name" a sub-BSP -- only one the map itself loaded (see zyk_learn_subbsp_name()).
+//   anything else, including NULL and "" -- never. SV_SetBrushModel() answers "isn't a brush model"
+//           with ERR_DROP. zyk_set_brush_model() sends md3 names down its own path and never asks,
+//           but InitTrigger() and SP_trigger_asteroid_field() ask about whatever the "model" key
+//           holds, so "/entadd trigger_multiple model foo" used to reach that ERR_DROP.
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 {
 	int index = 0;
 
-	if (!name || name[0] != '*')
+	if (!name || (name[0] != '*' && name[0] != '#'))
+	{
+		G_LogPrintf("model \"%s\" refused on entity %d: not a brush model (\"*N\" or \"#name\")\n",
+			name ? name : "", ent ? ent->s.number : -1);
+
+		return qfalse;
+	}
+
+	if (name[0] == '#')
+	{
+		if (level.spawning == qtrue)
+		{ // zyk: the map's own entities define which sub-BSPs this map loads
+			zyk_learn_subbsp_name( name );
+
+			return qtrue;
+		}
+
+		if (zyk_subbsp_name_known(name) == qfalse)
+		{
+			G_LogPrintf("brush model %s refused on entity %d: this map did not load that sub-BSP\n",
+				name, ent ? ent->s.number : -1);
+
+			return qfalse;
+		}
+
 		return qtrue;
+	}
 
 	index = atoi(name + 1);
 

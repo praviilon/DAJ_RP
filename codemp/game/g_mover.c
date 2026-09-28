@@ -2299,6 +2299,12 @@ void SP_func_rotating (gentity_t *ent) {
 		int sav_spawnflags = ent->spawnflags;
 		ent->spawnflags = 0;
 		SP_func_breakable( ent );
+		// GalaxyRP fix: [Entity System] SP_func_breakable() frees an entity with no brush model
+		// instead of ending the server; everything below would then be written into a freed slot.
+		if ( !ent->inuse )
+		{
+			return;
+		}
 		ent->spawnflags = sav_spawnflags;
 	}
 	else
@@ -2973,7 +2979,14 @@ void SP_func_breakable( gentity_t *self )
 	}
 	self->team = NULL;
 	if (!self->model) {
-		trap->Error( ERR_DROP, "func_breakable with NULL model\n" );
+		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP), which a dedicated server promotes
+		// to a fatal error and process exit. A func_breakable (or a func_rotating with health, which
+		// comes through here) without a brush model is reachable at runtime from /entadd, /entedit
+		// and /entload, so one missing key took the server down. Log it and free the entity instead;
+		// the return matters, because the old code relied on trap->Error never coming back.
+		G_LogPrintf( "%s at %s has no model; not spawned.\n", self->classname ? self->classname : "func_breakable", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 	InitBBrush( self );
 

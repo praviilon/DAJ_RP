@@ -224,6 +224,17 @@ void Use_Target_Print (gentity_t *ent, gentity_t *other, gentity_t *activator)
 #endif
 
 	G_ActivateBehavior(ent,BSET_USE);
+
+	// GalaxyRP fix: [Entity System] every branch below reads ent->message[0], and nothing ever gave a
+	// target_print without a "message" key one -- so the first use of such an entity (an /entadd,
+	// /entedit or /entload away, and then any player walking into the trigger that fires it) was a
+	// NULL dereference that took the server down. Tested after the use script, which may set it.
+	// Only NULL: an empty message is left alone, since sending one clears the centre print.
+	if ( !ent->message )
+	{
+		return;
+	}
+
 	if ( ( ent->spawnflags & 4 ) )
 	{//private, to one client only
 		if (!activator || !activator->inuse)
@@ -343,7 +354,12 @@ void SP_target_speaker( gentity_t *ent ) {
 	}
 
 	if ( !G_SpawnString( "noise", "NOSOUND", &s ) ) {
-		trap->Error( ERR_DROP, "target_speaker without a noise key at %s", vtos( ent->s.origin ) );
+		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP) -- a fatal error and process exit
+		// on a dedicated server, reachable at runtime through /entadd, /entedit and /entload. Log it
+		// and free the entity instead, and return, since the old code relied on never coming back.
+		G_LogPrintf( "target_speaker at %s has no \"noise\" key; not spawned.\n", vtos( ent->s.origin ) );
+		G_FreeEntity( ent );
+		return;
 	}
 
 	// force all client reletive sounds to be "activator" speakers that
@@ -1018,7 +1034,10 @@ void SP_target_level_change( gentity_t *self )
 
 	if ( !self->message || !self->message[0] )
 	{
-		trap->Error( ERR_DROP, "target_level_change with no mapname!\n");
+		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP) -- a fatal error and process exit
+		// on a dedicated server, reachable at runtime through the entity commands. Log and free.
+		G_LogPrintf( "target_level_change at %s has no \"mapname\"; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
 		return;
 	}
 
@@ -1050,7 +1069,12 @@ void SP_target_play_music( gentity_t *self )
 	G_SetOrigin( self, self->s.origin );
 	if (!G_SpawnString( "music", "", &s ))
 	{
-		trap->Error( ERR_DROP, "target_play_music without a music key at %s", vtos( self->s.origin ) );
+		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP) -- a fatal error and process exit
+		// on a dedicated server, reachable at runtime through the entity commands. Log and free,
+		// and return, since the old code relied on trap->Error never coming back.
+		G_LogPrintf( "target_play_music at %s has no \"music\" key; not spawned.\n", vtos( self->s.origin ) );
+		G_FreeEntity( self );
+		return;
 	}
 
 	self->message = G_NewString(s);
