@@ -15354,12 +15354,18 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			zyk_main_spawn_entity(new_ent);
 
 			// GalaxyRP: [Entity System] now the box is known: set it against the surface and make it
-			// again where it rests -- if it has a box, was not placed by a player's box already, and its
+			// again where it rests -- if it has a box it is placed by (not one that collides with
+			// nothing, see RP_EntGrabPlaceBox), was not placed by a player's box already, and its
 			// spawn made nothing but perhaps a trigger of its own (which goes with it). Freed and made
 			// anew in another slot rather than spawned again in place, so nothing its spawn function set
 			// up (a Ghoul2 model, ICARUS state) is set up twice on the same entity.
+			VectorClear(mins);
+			VectorClear(maxs);
+			if (new_ent->inuse && !new_ent->isLogical && !placed_by_player_box)
+				RP_EntGrabPlaceBox(NULL, new_ent, mins, maxs);
+
 			if (new_ent->inuse && !new_ent->isLogical && !placed_by_player_box &&
-				(!VectorCompare(new_ent->r.mins, vec3_origin) || !VectorCompare(new_ent->r.maxs, vec3_origin)))
+				(!VectorCompare(mins, vec3_origin) || !VectorCompare(maxs, vec3_origin)))
 			{
 				gentity_t *other;
 				int triggers = 0;
@@ -15372,7 +15378,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 						triggers++;
 				}
 
-				RP_EntGrabPlace(aim_point, aim_normal, new_ent->r.mins, new_ent->r.maxs, origin);
+				RP_EntGrabPlace(aim_point, aim_normal, mins, maxs, origin);
 
 				if (free_before - G_FreeEntityCount() <= triggers && !VectorCompare(origin, new_ent->s.origin) &&
 					G_EntitySlotsAvailable(4))

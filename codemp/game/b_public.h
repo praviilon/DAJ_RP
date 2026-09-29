@@ -282,6 +282,11 @@ typedef struct
 	int			ffireCount;		//sigh... you'd think I'd be able to find a way to do this without having to use 3 int fields, but...
 	int			ffireDebounce;
 	int			ffireFadeDebounce;
+
+	// DAJ_RP: [Corpses] level.time the NPC died. timeOfDeath above is pushed forward again and again
+	// while the body waits to be removed, so this keeps the moment itself: a body no longer waits for
+	// players to look away once RP_CORPSE_WATCH_LIMIT has passed since it (NPC_RemoveBody, NPC.c).
+	int			rpDeathTime;
 } gNPC_t;
 
 void G_SquadPathsInit(void);

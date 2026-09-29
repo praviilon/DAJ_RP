@@ -2681,6 +2681,10 @@ void RP_CVU_flameThrowerCooldown(void);
 // all held to 0..RP_CORPSE_TIME_MAX. RP_CorpseSecondsToMs() is how every reader turns one into
 // milliseconds, clamping again so a bad value can never reach a timer. See g_xcvar.h and g_cvar.c.
 #define RP_CORPSE_TIME_MAX 200
+// DAJ_RP: [Corpses] how long after its death an NPC's body may still be kept because a player is near
+// it or looking at it -- the longest rp_npc_corpse_time allows, in ms (NPC_RemoveBody, NPC.c)
+#define RP_CORPSE_WATCH_LIMIT (RP_CORPSE_TIME_MAX * 1000)
+qboolean RP_CorpseKeptByWatchers(gentity_t *self);
 void RP_CVU_npcCorpseTime(void);
 void RP_CVU_limbLifetime(void);
 void RP_CVU_playerCorpseTime(void);

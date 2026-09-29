@@ -406,7 +406,9 @@ RP_EntGrabPlaceBox
 The box the entity is placed by. A spawn point, an NPC spawner and a teleport destination put a player
 or an NPC where they are, so they are placed by a player's box -- standing on the floor rather than
 buried in it. Anything else by its own collision box; a point entity, and anything not in the world,
-has none and is placed by its origin.
+has none and is placed by its origin. So is an entity whose box collides with nothing -- neither solid
+nor a trigger nor a brush model: an fx_runner's box only makes it reach the players near it, and set on
+a floor by that box its effect would play 33 units above it; a non-solid model is drawn from its origin.
 ==================
 */
 void RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs )
@@ -421,6 +423,13 @@ void RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins,
 
 	if ( e && e->inuse && !e->isLogical )
 	{
+		if ( !e->r.bmodel && !( e->r.contents & ( MASK_SHOT | CONTENTS_TRIGGER ) ) )
+		{
+			VectorClear( mins );
+			VectorClear( maxs );
+			return;
+		}
+
 		// zyk: a turned brush entity collides as its model turned, and the engine's world box for it
 		// (less the unit SV_LinkEntity() adds each way) encloses that; its own bounds are unturned
 		if ( e->r.bmodel && e->r.linked && ( e->r.currentAngles[0] || e->r.currentAngles[1] || e->r.currentAngles[2] ) )

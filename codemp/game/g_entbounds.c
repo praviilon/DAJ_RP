@@ -219,13 +219,39 @@ static qboolean RP_EntBoundsSelectable( const gentity_t *viewer, const gentity_t
 
 /*
 ==================
+RP_EntBoundsSoftVolume
+
+GalaxyRP: [Entity System] a box the aim trace passes straight through, which RP_EntBoundsAim() tests
+itself: a trigger; or an entity the map or the entity system made (it has a key/value record) that has a
+box but nothing a shot stops at -- an fx_runner (a box only so it reaches the players near it), a
+misc_model_breakable without its SOLID flag, an md3 func_ entity that is not solid, a func_usable turned
+off. Without this they could be neither aimed at (nothing to hit) nor marked (they have a size).
+==================
+*/
+static qboolean RP_EntBoundsSoftVolume( const gentity_t *e )
+{
+	if ( e->r.contents & CONTENTS_TRIGGER )
+		return qtrue;
+
+	if ( e->r.contents & MASK_SHOT )
+		return qfalse;
+
+	if ( VectorCompare( e->r.mins, vec3_origin ) && VectorCompare( e->r.maxs, vec3_origin ) )
+		return qfalse;
+
+	return RP_EntityHasSpawnKeys( e );
+}
+
+/*
+==================
 RP_EntBoundsAim
 
 The entity at the viewer's crosshair, or NULL. The trace finds the first solid thing along the view --
 an entity or the world, which is where the view ends. Triggers are not solid, so a trace that stops at
 them cannot tell the one the viewer stands in (it would start inside it, and every look would land on
 it) from the ones ahead; so they are tested separately, as their world boxes against the ray, and the
-nearest one entered in front of the viewer, before the solid hit, wins.
+nearest one entered in front of the viewer, before the solid hit, wins. So are the other boxes the
+trace passes through (RP_EntBoundsSoftVolume), the same way.
 ==================
 */
 gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
@@ -258,10 +284,10 @@ gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
 		int k;
 		qboolean miss = qfalse;
 
-		if ( !(e->r.contents & CONTENTS_TRIGGER) || !RP_EntBoundsSelectable( viewer, e ) )
+		if ( !RP_EntBoundsSelectable( viewer, e ) || !RP_EntBoundsSoftVolume( e ) )
 			continue;
 
-		// zyk: the slab test, against the box one unit wider each way than the trigger's world box
+		// zyk: the slab test, against the box one unit wider each way than the entity's world box
 		for ( k = 0; k < 3; k++ )
 		{
 			float lo = e->r.absmin[k] - 1.0f, hi = e->r.absmax[k] + 1.0f;

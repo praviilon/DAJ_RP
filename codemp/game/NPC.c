@@ -179,6 +179,45 @@ qboolean G_OkayToRemoveCorpse( gentity_t *self )
 	return qtrue;
 }
 
+/*
+----------------------------------------
+RP_CorpseKeptByWatchers
+
+GalaxyRP: [Corpses] whether an enemy's body, due for removal, waits because a player is within
+REMOVE_DISTANCE of it or has it in view -- single player's rule, so a body does not vanish in front of
+someone. A body nobody can see (the small droids are hidden on death, EF_NODRAW) has nothing to wait for.
+
+DAJ_RP: [Corpses] and not for ever: players who keep a room in view (a long fight in one place) kept
+every body in it, each an NPC holding an entity slot, with no end. Once RP_CORPSE_WATCH_LIMIT has passed
+since the death the body goes whoever is looking. Only this wait is capped -- a body G_OkayToRemoveCorpse()
+keeps (a key, a script, a vehicle, a creature, being dragged) is still needed and stays until that is over.
+----------------------------------------
+*/
+qboolean RP_CorpseKeptByWatchers( gentity_t *self )
+{
+	if ( self->client->ps.eFlags & EF_NODRAW )
+	{
+		return qfalse;
+	}
+
+	if ( self->NPC && self->NPC->rpDeathTime && level.time - self->NPC->rpDeathTime >= RP_CORPSE_WATCH_LIMIT )
+	{
+		return qfalse;
+	}
+
+	if ( DistanceToClosestPlayer( self->r.currentOrigin, -1 ) <= REMOVE_DISTANCE )
+	{
+		return qtrue;
+	}
+
+	if ( InPlayersFOV( self->r.currentOrigin, -1, 110, 90, qtrue ) ) // generous FOV check
+	{
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
 void NPC_RemoveBody( gentity_t *self )
 {
 	CorpsePhysics( self );
@@ -250,19 +289,11 @@ void NPC_RemoveBody( gentity_t *self )
 
 			// GalaxyRP: [Corpses] single player never removed a body in front of the player;
 			// the checks were commented out here ("Don't care about this for MP I guess") and
-			// bodies vanished while being looked at. Any player counts now. A body nobody can
-			// see (the small droids are hidden on death, EF_NODRAW) has nothing to wait for.
-			if ( !( self->client->ps.eFlags & EF_NODRAW ) )
+			// bodies vanished while being looked at. Any player counts now -- see
+			// RP_CorpseKeptByWatchers() above.
+			if ( RP_CorpseKeptByWatchers( self ) )
 			{
-				if ( DistanceToClosestPlayer( self->r.currentOrigin, -1 ) <= REMOVE_DISTANCE )
-				{
-					return;
-				}
-
-				if ( InPlayersFOV( self->r.currentOrigin, -1, 110, 90, qtrue ) ) // generous FOV check
-				{
-					return;
-				}
+				return;
 			}
 		}
 

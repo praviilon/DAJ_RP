@@ -3216,6 +3216,7 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	if ( self->NPC )
 	{
 		self->NPC->timeOfDeath = level.time;//this will change - used for debouncing post-death events
+		self->NPC->rpDeathTime = level.time;	// DAJ_RP: [Corpses] and this will not -- see NPC_RemoveBody
 	}
 
 	// Start any necessary death fx for this entity
