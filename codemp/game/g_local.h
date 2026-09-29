@@ -1251,6 +1251,10 @@ typedef struct clientPersistant_s {
 	// GalaxyRP: [Slot Reuse] level.time before which this player's next /playsound is refused
 	// (RP_PLAYSOUND_COOLDOWN) -- see Cmd_ZykSound_f in g_cmds.c
 	int			rpPlaySoundNextTime;
+
+	// GalaxyRP: [Extras] level.time before which a listing this player's Extras menu asks for is not built
+	// (RPX_BUILD_COOLDOWN) -- see RP_ListDataCommand() in g_rplist.c
+	int			rpxListNextTime;
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -2020,6 +2024,9 @@ typedef struct level_locals_s {
 	// every name in every pk3 several times, and the per-player cooldown alone lets every logged-in
 	// player start one each second (RP_ListCommand() in g_rplist.c)
 	int rp_list_fs_next_time;
+	// GalaxyRP: [Extras] the listings kept for the Extras menus were emptied for this map -- see
+	// RP_ListDataCommand() in g_rplist.c
+	qboolean rp_rpx_cache_ready;
 
 	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
 	// finished loading. Spawn selection falls back to it, instead of ending the server with
@@ -2403,6 +2410,7 @@ void		Cmd_EntSlots_f( gentity_t *ent );
 // checks of /playsound and /playmusic -- g_rplist.c
 qboolean	RP_ListCommand( gentity_t *ent, const char *what );
 void		RP_ListVotableMaps( gentity_t *ent, int page );
+void		RP_ListDataCommand( gentity_t *ent );
 int			RP_ListParsePage( const char *s );
 qboolean	RP_SoundFileExists( const char *name );
 qboolean	RP_MusicFileExists( const char *music );

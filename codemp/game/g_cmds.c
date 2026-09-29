@@ -22675,6 +22675,11 @@ typedef struct command_s {
 	int			flags;
 } command_t;
 
+// GalaxyRP: [Extras] see RP_ListDataCommand() in g_rplist.c
+static void Cmd_RpxList_f( gentity_t *ent ) {
+	RP_ListDataCommand( ent );
+}
+
 int cmdcmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((command_t*)b)->name );
 }
@@ -22844,6 +22849,9 @@ command_t commands[] = {
 	{ "removepickups",		Cmd_RemovePickups_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "roll",				Cmd_Roll_f,				CMD_NOINTERMISSION|CMD_ALIVE },
 	{ "rollall",			Cmd_RollAll_f,			CMD_NOINTERMISSION },
+	// GalaxyRP: [Extras] the listings the Extras menus show (g_rplist.c); it checks the login itself, so the
+	// menu is told why instead of the chat line CMD_LOGGEDIN prints
+	{ "rpxlist",			Cmd_RpxList_f,				0 },
 	{ "scale",				Cmd_Scale_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "silence",			Cmd_Silence_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "skilldown",			Cmd_RpModeDown_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },

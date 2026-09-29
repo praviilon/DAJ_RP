@@ -404,6 +404,13 @@ extern uiInfo_t uiInfo;
 qboolean	UI_ConsoleCommand( int realTime );
 void		UI_DrawHandlePic( float x, float y, float w, float h, qhandle_t hShader );
 void		UI_FillRect( float x, float y, float width, float height, const float *color );
+// GalaxyRP: [Extras] the Extras menus -- ui_rpextras.c
+int			UI_RpxFeederCount( void );
+const char	*UI_RpxFeederItemText( int index );
+qboolean	UI_RpxFeederSelection( int index );
+qboolean	UI_RpxScript( const char *name, char **args );
+qboolean	UI_RpxOwnerDraw( int ownerDraw, rectDef_t *rect, float scale, vec4_t color, int iMenuFont );
+void		UI_RpxRegisterCvars( void );
 char		*UI_Cvar_VariableString( const char *var_name );
 
 

@@ -1808,7 +1808,10 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 
 	cg.refdef.time = cg.time;
 
-	if ( !cg.hyperspace)
+	// GalaxyRP: [Extras] not while the Effects menu's preview is drawn: its effect is a sky-portal
+	// effect too, and CG_RpxFxPass() (cg_rpextras.c) updates them all then -- twice in one frame would
+	// run the sky's effects at double speed
+	if ( !cg.hyperspace && !CG_RpxFxPassActive() )
 	{ //rww - also had to add this to add effects being rendered in portal sky areas properly.
 		trap->FX_AddScheduledEffects(qtrue);
 	}
@@ -2535,6 +2538,10 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		return;
 	}
 
+	// GalaxyRP: [Extras] the Extras menus' requests, and whether the effect preview pass runs this
+	// frame -- before the sky portal below, which leaves its effects to that pass when it does
+	CG_RpxFrame();
+
 	// let the client system know what our weapon and zoom settings are
 	if (cg.snap && cg.snap->ps.saberLockTime > cg.time)
 	{
@@ -2766,6 +2773,10 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	CG_DrawActive( stereoView );
 
 	CG_DrawAutoMap();
+
+	// GalaxyRP: [Extras] last of all: the effect preview's effects are left in the scene for the Effects
+	// menu to render, so nothing may render or clear a scene after this
+	CG_RpxFxPass();
 
 	if ( cg_stats.integer ) {
 		trap->Print( "cg.clientFrame:%i\n", cg.clientFrame );

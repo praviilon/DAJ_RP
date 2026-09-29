@@ -461,11 +461,13 @@ static const rpListSource_t rp_listSources[] = {
 RP_ListCleanFolder
 
 The folder a player typed, relative to the source's root: "\" read as "/", slashes at either end
-dropped, the root itself allowed in front ("models/map_objects" = "map_objects"), "." or "/" for
-the root. Refused: anything with "..", "//", ":", ";", quotes or control characters, or too long.
+dropped, the root itself allowed in front ("models/map_objects" = "map_objects") when stripRoot, "."
+or "/" for the root. Refused: anything with "..", "//", ":", ";", quotes or control characters, or
+too long. The Extras menus always send the folder relative to the root, so for them a first part
+named like the root is a real subfolder (sound/sound) and is kept.
 ==================
 */
-static qboolean RP_ListCleanFolder( const char *root, const char *in, char *out, int outSize ) {
+static qboolean RP_ListCleanFolder( const char *root, const char *in, char *out, int outSize, qboolean stripRoot ) {
 	char tmp[MAX_QPATH];
 	char *s;
 	int i, len, rl;
@@ -498,7 +500,7 @@ static qboolean RP_ListCleanFolder( const char *root, const char *in, char *out,
 	}
 
 	rl = strlen( root );
-	if ( rl && !Q_stricmpn( s, root, rl ) && ( s[rl] == '/' || s[rl] == '\0' ) ) {
+	if ( stripRoot && rl && !Q_stricmpn( s, root, rl ) && ( s[rl] == '/' || s[rl] == '\0' ) ) {
 		s += rl;
 		while ( *s == '/' ) {
 			s++;
@@ -647,29 +649,37 @@ static qboolean RP_ListCheckSub( rpListSet_t *set, const char *path, const char 
 	return ( f->state == 1 ) ? qtrue : qfalse;
 }
 
-static void RP_ListFiles( gentity_t *ent, const rpListSource_t *src, const char *folderArg, int page ) {
+/*
+==================
+RP_ListCollectFiles
+
+The files and subfolders of one folder of a source into rp_files, sorted, folders first, each once:
+what /list prints a page of and what the Extras menus are sent (RP_ListDataCommand()). folderArg is
+the folder as typed, NULL for the source's default one; folder gets it cleaned, relative to the
+source's root, and path the root joined with it. qfalse, with *error saying why, when it is not a
+folder name that can be listed.
+==================
+*/
+static qboolean RP_ListCollectFiles( const rpListSource_t *src, const char *folderArg, qboolean stripRoot,
+	char *folder, int folderSize, char *path, int pathSize, const char **error ) {
 	rpListSet_t *set = &rp_files;
-	char folder[MAX_QPATH];
-	char path[MAX_QPATH * 2];
-	char title[MAX_QPATH * 3];
-	char nextCmd[MAX_QPATH * 3];
 	char name[RP_LIST_LONGEST_NAME + 1];
 	int e, n, i, d, numDirs, checks;
 	const char *p;
 
 	if ( folderArg ) {
-		if ( !RP_ListCleanFolder( src->root, folderArg, folder, sizeof( folder ) ) ) {
-			trap->SendServerCommand( ent - g_entities, "print \"^7That is not a folder name that can be listed.\n\"" );
-			return;
+		if ( !RP_ListCleanFolder( src->root, folderArg, folder, folderSize, stripRoot ) ) {
+			*error = "That is not a folder name that can be listed.";
+			return qfalse;
 		}
 	} else {
-		Q_strncpyz( folder, src->defaultFolder, sizeof( folder ) );
+		Q_strncpyz( folder, src->defaultFolder, folderSize );
 	}
 
-	RP_ListJoin( path, sizeof( path ), src->root, folder, NULL );
+	RP_ListJoin( path, pathSize, src->root, folder, NULL );
 	if ( strlen( path ) >= MAX_QPATH ) {
-		trap->SendServerCommand( ent - g_entities, "print \"^7That folder name is too long.\n\"" );
-		return;
+		*error = "That folder name is too long.";
+		return qfalse;
 	}
 
 	RP_ListReset( set );
@@ -849,6 +859,21 @@ static void RP_ListFiles( gentity_t *ent, const rpListSource_t *src, const char 
 	}
 
 	RP_ListSortUnique( set );
+	return qtrue;
+}
+
+static void RP_ListFiles( gentity_t *ent, const rpListSource_t *src, const char *folderArg, int page ) {
+	rpListSet_t *set = &rp_files;
+	char folder[MAX_QPATH];
+	char path[MAX_QPATH * 2];
+	char title[MAX_QPATH * 3];
+	char nextCmd[MAX_QPATH * 3];
+	const char *error = NULL;
+
+	if ( !RP_ListCollectFiles( src, folderArg, qtrue, folder, sizeof( folder ), path, sizeof( path ), &error ) ) {
+		trap->SendServerCommand( ent - g_entities, va( "print \"^7%s\n\"", error ) );
+		return;
+	}
 
 	Com_sprintf( title, sizeof( title ), "%s in %s", src->title, path );
 	if ( folder[0] ) {
@@ -917,12 +942,9 @@ static void RP_ListBuildTypes( rpListSet_t *set, const char *text ) {
 extern char NPCParms[];
 extern char VehicleParms[];
 
-static void RP_ListTypes( gentity_t *ent, qboolean vehicles, const char *text, int page ) {
+// the NPC or vehicle types, read the first time they are asked for on this map
+static rpListSet_t *RP_ListTypeSet( qboolean vehicles ) {
 	rpListSet_t *set = vehicles ? &rp_vehicles : &rp_npcs;
-	char title[MAX_QPATH * 2];
-	char nextCmd[MAX_QPATH * 2];
-	const char *what = vehicles ? "vehicles" : "npcs";
-	int i, num = 0;
 
 	if ( vehicles ) {
 		if ( !level.rp_list_vehicles_ready ) {
@@ -933,6 +955,15 @@ static void RP_ListTypes( gentity_t *ent, qboolean vehicles, const char *text, i
 		RP_ListBuildTypes( set, NPCParms );
 		level.rp_list_npcs_ready = qtrue;
 	}
+	return set;
+}
+
+static void RP_ListTypes( gentity_t *ent, qboolean vehicles, const char *text, int page ) {
+	rpListSet_t *set = RP_ListTypeSet( vehicles );
+	char title[MAX_QPATH * 2];
+	char nextCmd[MAX_QPATH * 2];
+	const char *what = vehicles ? "vehicles" : "npcs";
+	int i, num = 0;
 
 	if ( text && ( strlen( text ) >= MAX_QPATH || !RP_ListNameOk( text ) ) ) {
 		trap->SendServerCommand( ent - g_entities, "print \"^7That is not a name that can be searched for.\n\"" );
@@ -1110,6 +1141,314 @@ void RP_ListVotableMaps( gentity_t *ent, int page ) {
 
 	RP_ListPrintPage( ent, set->entries, set->num, page, "Maps you can vote for", "/maplist",
 		"^7Vote for one with ^3/callvote map <name>^7.\n", NULL, set->truncated, 0 );
+}
+
+/*
+===========================================================================
+Extras menus
+
+/rpxlist <kind> <request id> <offset> <folder>: the same listings as /list, for the Extras menus of
+the Galaxy RP menu (cg_rpextras.c in cgame asks and collects, the UI shows them). Not typed by
+players. kind is models, effects, sounds, music, npcs or vehicles; the folder is relative to the
+kind's root ("." for the root itself) and ignored for npcs and vehicles.
+
+The answer is one or more
+
+	rpxl <kind> <request id> <total> <offset> <flags> "<name>|<name>|<folder>/|..."
+
+-- the names of one folder, from offset on, only the last part of each (a folder ends in "/"), in
+pieces of at most RPX_CHUNK_CHARS characters and never more than RPX_MAX_CHUNKS of them for one
+request. The flags are "c" when another piece of this answer follows, "m" when this is the last
+piece of this answer but not of the list (the client asks again from where it got to), "e" at the
+end of the list, and a "t" after it when the listing was cut short by the engine's limits. Or
+
+	rpxl <kind> <request id> busy			(ask again in a moment)
+	rpxl <kind> <request id> err "<why>"
+
+The client asks for the next part only once a piece flagged "m" arrives, so however long the list,
+at most RPX_MAX_CHUNKS of these are waiting to go to one client at a time, and sv_floodProtect
+spaces its requests. A listing is built once and kept (RPX_CACHE_SLOTS of them, least recently asked
+for goes first) until the map changes, so asking for the rest of it, or for a folder another player
+just opened, costs nothing; building one has the same limits as /list, RP_LIST_FS_GAP between any two
+on the server, and RPX_BUILD_COOLDOWN between two from one player.
+
+Names that could not be used safely are left out: besides what RP_ListNameOk() refuses, "|" (the
+separator), ";" (ends a console command), "%" (the network turns it into ".") and, for NPC and
+vehicle types, "/". The folder is always relative to the kind's root, so, unlike /list, a first part
+named like the root is not dropped (a folder sound/sound).
+===========================================================================
+*/
+
+#define RPX_CACHE_SLOTS		4
+#define RPX_CACHE_DATA		0x40000		// 4096 names of up to 63 characters, and their ends
+#define RPX_CHUNK_CHARS		900			// names in one answer, well inside SV_SendServerCommand's 1022
+#define RPX_MAX_CHUNKS		4
+#define RPX_BUILD_COOLDOWN	500
+
+typedef struct {
+	const char	*name;
+	int			source;		// index into rp_listSources, -1 for NPC types, -2 for vehicle types
+} rpxKind_t;
+
+static const rpxKind_t rpx_kinds[] = {
+	{ "models",		0 },
+	{ "effects",	1 },
+	{ "sounds",		2 },
+	{ "music",		3 },
+	{ "npcs",		-1 },
+	{ "vehicles",	-2 },
+};
+
+typedef struct {
+	qboolean	used;
+	int			kind;
+	char		folder[MAX_QPATH];	// cleaned, relative to the kind's root; "" for the root and for types
+	int			lastUse;
+	int			num;
+	qboolean	truncated;
+	int			dataUsed;
+	int			offs[RP_LIST_MAX_ENTRIES];
+	char		data[RPX_CACHE_DATA];
+} rpxCacheSlot_t;
+
+static rpxCacheSlot_t	rpx_cache[RPX_CACHE_SLOTS];
+static int				rpx_useCounter;
+
+static qboolean RPX_NameOk( const char *name ) {
+	if ( !RP_ListNameOk( name ) || strlen( name ) >= MAX_QPATH ) {
+		return qfalse;
+	}
+	// '%': a server command carries it as '.' (MSG_ReadString()), so the name would come back wrong
+	return ( strchr( name, '|' ) || strchr( name, ';' ) || strchr( name, '%' ) ) ? qfalse : qtrue;
+}
+
+static void RPX_Reply( gentity_t *ent, const char *kind, const char *req, const char *rest ) {
+	trap->SendServerCommand( ent - g_entities, va( "rpxl %s %s %s", kind, req, rest ) );
+}
+
+static rpxCacheSlot_t *RPX_FindSlot( int kind, const char *folder ) {
+	int i;
+
+	for ( i = 0; i < RPX_CACHE_SLOTS; i++ ) {
+		if ( rpx_cache[i].used && rpx_cache[i].kind == kind && !Q_stricmp( rpx_cache[i].folder, folder ) ) {
+			return &rpx_cache[i];
+		}
+	}
+	return NULL;
+}
+
+// a free slot, or the one asked for least recently
+static rpxCacheSlot_t *RPX_TakeSlot( void ) {
+	rpxCacheSlot_t *best = &rpx_cache[0];
+	int i;
+
+	for ( i = 0; i < RPX_CACHE_SLOTS; i++ ) {
+		if ( !rpx_cache[i].used ) {
+			return &rpx_cache[i];
+		}
+		if ( rpx_cache[i].lastUse < best->lastUse ) {
+			best = &rpx_cache[i];
+		}
+	}
+	return best;
+}
+
+// the names of set, as the menus are sent them, into a slot
+static rpxCacheSlot_t *RPX_Pack( int kind, const char *folder, const rpListSet_t *set, qboolean types ) {
+	rpxCacheSlot_t *slot = RPX_TakeSlot();
+	int i;
+
+	slot->used = qtrue;
+	slot->kind = kind;
+	Q_strncpyz( slot->folder, folder, sizeof( slot->folder ) );
+	slot->num = 0;
+	slot->dataUsed = 0;
+	slot->truncated = set->truncated;
+
+	for ( i = 0; i < set->num; i++ ) {
+		const char *name = set->entries[i].name;
+		char leaf[MAX_QPATH + 1];
+		int len;
+
+		if ( types ) {
+			if ( strchr( name, '/' ) || !RPX_NameOk( name ) ) {
+				continue;
+			}
+			Q_strncpyz( leaf, name, sizeof( leaf ) );
+		} else {
+			const char *slash = strrchr( name, '/' );
+
+			if ( slash ) {
+				name = slash + 1;
+			}
+			if ( !RPX_NameOk( name ) ) {
+				continue;
+			}
+			Com_sprintf( leaf, sizeof( leaf ), "%s%s", name, set->entries[i].folder ? "/" : "" );
+		}
+
+		len = strlen( leaf ) + 1;
+		if ( slot->num >= RP_LIST_MAX_ENTRIES || slot->dataUsed + len > (int)sizeof( slot->data ) ) {
+			slot->truncated = qtrue;
+			break;
+		}
+		memcpy( slot->data + slot->dataUsed, leaf, len );
+		slot->offs[slot->num++] = slot->dataUsed;
+		slot->dataUsed += len;
+	}
+	return slot;
+}
+
+// up to RPX_MAX_CHUNKS pieces of the names from offset on (an offset past the end: the end, empty)
+static void RPX_SendNames( gentity_t *ent, const char *kind, const char *req, const rpxCacheSlot_t *slot, int offset ) {
+	char buf[RPX_CHUNK_CHARS + 1];
+	int i = offset, chunks = 0;
+
+	if ( i > slot->num ) {
+		i = slot->num;
+	}
+
+	do {
+		int len = 0, start = i;
+		char flag;
+
+		buf[0] = '\0';
+		while ( i < slot->num ) {
+			const char *name = slot->data + slot->offs[i];
+			int nl = strlen( name );
+
+			if ( len + ( len ? 1 : 0 ) + nl > RPX_CHUNK_CHARS ) {
+				break;
+			}
+			if ( len ) {
+				buf[len++] = '|';
+			}
+			memcpy( buf + len, name, nl );
+			len += nl;
+			buf[len] = '\0';
+			i++;
+		}
+		chunks++;
+
+		if ( i >= slot->num ) {
+			flag = 'e';
+		} else if ( chunks >= RPX_MAX_CHUNKS ) {
+			flag = 'm';
+		} else {
+			flag = 'c';
+		}
+		RPX_Reply( ent, kind, req, va( "%d %d %c%s \"%s\"", slot->num, start, flag, slot->truncated ? "t" : "", buf ) );
+	} while ( i < slot->num && chunks < RPX_MAX_CHUNKS );
+}
+
+static qboolean RPX_IsNumber( const char *s, int maxLen ) {
+	return ( RP_ListIsNumber( s ) && (int)strlen( s ) <= maxLen ) ? qtrue : qfalse;
+}
+
+/*
+==================
+RP_ListDataCommand
+
+/rpxlist, from the Extras menus -- see above. Logged-in players only, like /list.
+==================
+*/
+void RP_ListDataCommand( gentity_t *ent ) {
+	char kindArg[MAX_STRING_CHARS], req[MAX_STRING_CHARS], offArg[MAX_STRING_CHARS], folderArg[MAX_STRING_CHARS];
+	char folder[MAX_QPATH];
+	const rpxKind_t *kind = NULL;
+	rpxCacheSlot_t *slot;
+	int argc = trap->Argc();
+	int k, offset;
+
+	if ( argc < 4 || argc > 5 ) {
+		trap->SendServerCommand( ent - g_entities, "print \"^7This command is used by the Extras menus of the Galaxy RP menu.\n\"" );
+		return;
+	}
+	trap->Argv( 1, kindArg, sizeof( kindArg ) );
+	trap->Argv( 2, req, sizeof( req ) );
+	trap->Argv( 3, offArg, sizeof( offArg ) );
+	folderArg[0] = '\0';
+	if ( argc == 5 ) {
+		trap->Argv( 4, folderArg, sizeof( folderArg ) );
+	}
+
+	for ( k = 0; k < (int)ARRAY_LEN( rpx_kinds ); k++ ) {
+		if ( !Q_stricmp( kindArg, rpx_kinds[k].name ) ) {
+			kind = &rpx_kinds[k];
+			break;
+		}
+	}
+	// nothing to answer to: the reply names the kind and the request, and neither can be trusted
+	if ( !kind || !RPX_IsNumber( req, 9 ) || !RPX_IsNumber( offArg, 6 ) ) {
+		trap->SendServerCommand( ent - g_entities, "print \"^7This command is used by the Extras menus of the Galaxy RP menu.\n\"" );
+		return;
+	}
+	offset = atoi( offArg );
+
+	if ( ent->client->sess.amrpgmode != 2 ) {
+		RPX_Reply( ent, kind->name, req, "err \"Log in to use the Extras menus.\"" );
+		return;
+	}
+
+	if ( !level.rp_rpx_cache_ready ) {
+		// the files and the types are the same all game, but a map is when the server owner can have
+		// changed a loose folder, and the NPC and vehicle types are read again then too
+		memset( rpx_cache, 0, sizeof( rpx_cache ) );
+		rpx_useCounter = 0;
+		level.rp_rpx_cache_ready = qtrue;
+	}
+
+	folder[0] = '\0';
+	if ( kind->source >= 0 ) {
+		const rpListSource_t *src = &rp_listSources[kind->source];
+
+		if ( !RP_ListCleanFolder( src->root, folderArg, folder, sizeof( folder ), qfalse ) ) {
+			RPX_Reply( ent, kind->name, req, "err \"That is not a folder name that can be listed.\"" );
+			return;
+		}
+	}
+
+	slot = RPX_FindSlot( k, folder );
+	if ( !slot ) {
+		gclient_t *cl = ent->client;
+
+		if ( kind->source >= 0 ) {
+			if ( level.rp_list_fs_next_time > level.time + RP_LIST_FS_GAP ) {
+				level.rp_list_fs_next_time = 0;	// only a guard, as in RP_ListCooldown()
+			}
+			if ( level.time < level.rp_list_fs_next_time ) {
+				RPX_Reply( ent, kind->name, req, "busy" );
+				return;
+			}
+		}
+		if ( cl->pers.rpxListNextTime > level.time + RPX_BUILD_COOLDOWN ) {
+			cl->pers.rpxListNextTime = 0;
+		}
+		if ( level.time < cl->pers.rpxListNextTime ) {
+			RPX_Reply( ent, kind->name, req, "busy" );
+			return;
+		}
+		cl->pers.rpxListNextTime = level.time + RPX_BUILD_COOLDOWN;
+
+		if ( kind->source >= 0 ) {
+			const rpListSource_t *src = &rp_listSources[kind->source];
+			char cleaned[MAX_QPATH];
+			char path[MAX_QPATH * 2];
+			const char *error = NULL;
+
+			level.rp_list_fs_next_time = level.time + RP_LIST_FS_GAP;
+			if ( !RP_ListCollectFiles( src, folderArg, qfalse, cleaned, sizeof( cleaned ), path, sizeof( path ), &error ) ) {
+				RPX_Reply( ent, kind->name, req, va( "err \"%s\"", error ) );
+				return;
+			}
+			slot = RPX_Pack( k, folder, &rp_files, qfalse );
+		} else {
+			slot = RPX_Pack( k, "", RP_ListTypeSet( kind->source == -2 ? qtrue : qfalse ), qtrue );
+		}
+	}
+
+	slot->lastUse = ++rpx_useCounter;
+	RPX_SendNames( ent, kind->name, req, slot, offset );
 }
 
 /*

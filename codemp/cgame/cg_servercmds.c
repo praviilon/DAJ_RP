@@ -2057,6 +2057,7 @@ static serverCommand_t	commands[] = {
 	{ "print",				CG_Print_f },
 	{ "rcg",				CG_RestoreClientGhoul_f },
 	{ "remapShader",		CG_RemapShader_f },
+	{ "rpxl",				CG_RpxReply },	// GalaxyRP: [Extras] a listing for the Extras menus, cg_rpextras.c
 	{ "sb",					CG_SiegeBriefingDisplay_f },
 	{ "scl",				CG_SiegeClassSelect_f },
 	{ "scores",				CG_ParseScores },

@@ -1802,6 +1802,14 @@ const char *CG_Argv( int arg );
 
 void CG_StartMusic( qboolean bForceStart );
 
+// GalaxyRP: [Extras] the Extras menus -- cg_rpextras.c
+void CG_RpxInit( void );
+void CG_RpxFrame( void );
+void CG_RpxFxPass( void );
+qboolean CG_RpxFxPassActive( void );
+void CG_RpxReply( void );
+void CG_Rpx_f( void );
+
 void CG_UpdateCvars( void );
 
 int CG_CrosshairPlayer( void );

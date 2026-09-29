@@ -65,6 +65,9 @@
 			hide 			buyWeaponsControls ;
 			hide 			buyMiscControls ;
 			hide 			cameraControls ;
+			hide 			extrasControls ;
+			// GalaxyRP: [Extras] back from an Extras menu: its Extras tab (ui_rpextras.c)
+			uiScript		rpxBackTab
 		}
 
 		itemDef 
@@ -171,6 +174,7 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
+				hide 			extrasControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		listButton		forecolor 1 1 1 1 ;
 			}
@@ -254,6 +258,7 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
+				hide 			extrasControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		upButton		forecolor 1 1 1 1 ;
 				// GalaxyRP fix: [Profile UI] clear the tab strip's own highlight too. setitemcolor
@@ -350,6 +355,7 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
+				hide 			extrasControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		charButton		forecolor 1 1 1 1 ;
 			}
@@ -432,6 +438,7 @@
 				hide 			buyWeaponsControls ;
 				hide 			buyMiscControls ;
 				hide 			cameraControls ;
+				hide 			extrasControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		commandsButton		forecolor 1 1 1 1 ;
 				// GalaxyRP fix: [Shop] clear the Upgrades/Ammo/Misc strip's own highlight too, the same
@@ -453,6 +460,323 @@
 		// GalaxyRP: [Profile UI] the "Games" sidebar button (gamesButton/gamesButton_glow, rect y 168)
 		// used to sit here, between Shop above and Camera below. See the matching note further down
 		// where its panel was.
+		// GalaxyRP: [Extras] the "Extras" button took its place: props, effects, NPCs and vehicles,
+		// music and sounds, each in a menu of its own (ingame_rpx_*.menu, ui_rpextras.c). The server
+		// refuses what a player may not do, so only the login gates it, as the buttons above.
+
+		itemDef
+		{
+			name				extrasButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				5 168 140 30
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+		}
+
+		itemDef
+		{
+			name				extrasButton
+			group				mainButtons
+			text				"Extras"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				10 168 140 30
+			font				3
+			textscale			0.8
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			cvarTest			"ui_loggedin"
+			showCvar
+			{
+				"1"
+			}
+			descText			"Spawn props, effects, NPCs and vehicles, play music and sounds"
+
+			mouseEnter
+			{
+				show			extrasButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				show 			extrasControls ;
+				hide			charControls ;
+				hide			changePassControls ;
+				hide 			rpgClassControls ;
+				hide 			upControls ;
+				hide 			forceLoginSkillsControls ;
+				hide			weaponSkillsControls ;
+				hide			otherSkillsControls ;
+				hide			ammoSkillsControls ;
+				hide			itemsSkillsControls ;
+				hide			questControls ;
+				hide			universeControls ;
+				hide			lightControls ;
+				hide			darkControls ;
+				hide			eternityControls ;
+				hide			questMapsControls ;
+				hide 			listControls ;
+				hide 			commandsControls ;
+				hide			levelweapon ;
+				hide			levelother ;
+				hide			levelammo ;
+				hide			levelitem ;
+				hide 			buyControls ;
+				hide 			buyAmmoControls ;
+				hide 			buyWeaponsControls ;
+				hide 			buyMiscControls ;
+				hide 			cameraControls ;
+				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
+				setitemcolor		extrasButton		forecolor 1 1 1 1 ;
+				setitemcolor		extrasControls		forecolor 1 .682 0 1 ;
+			}
+		}
+
+		itemDef
+		{
+			name				extrasPropsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 50 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				extrasPropsButton
+			group				extrasControls
+			text				"Props"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 50 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Browse the server's models, preview one and spawn it where you aim"
+
+			mouseEnter
+			{
+				show			extrasPropsButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasPropsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasPropsButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_props
+			}
+		}
+
+		itemDef
+		{
+			name				extrasEffectsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 75 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				extrasEffectsButton
+			group				extrasControls
+			text				"Effects"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 75 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Browse the server's effects, preview one and spawn it where you aim"
+
+			mouseEnter
+			{
+				show			extrasEffectsButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasEffectsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasEffectsButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_effects
+			}
+		}
+
+		itemDef
+		{
+			name				extrasNpcsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 100 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				extrasNpcsButton
+			group				extrasControls
+			text				"NPCs & Vehicles"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 100 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Spawn an NPC or a vehicle from the server's list"
+
+			mouseEnter
+			{
+				show			extrasNpcsButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasNpcsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasNpcsButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_npcs
+			}
+		}
+
+		itemDef
+		{
+			name				extrasMusicButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 125 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				extrasMusicButton
+			group				extrasControls
+			text				"Music"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 125 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Play music from the server's list, for you or for everyone"
+
+			mouseEnter
+			{
+				show			extrasMusicButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasMusicButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasMusicButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_music
+			}
+		}
+
+		itemDef
+		{
+			name				extrasSoundsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 150 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		itemDef
+		{
+			name				extrasSoundsButton
+			group				extrasControls
+			text				"Sounds"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 150 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Play a sound from the server's list for everyone around"
+
+			mouseEnter
+			{
+				show			extrasSoundsButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasSoundsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasSoundsButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_sounds
+			}
+		}
+
 
 		itemDef
 		{
@@ -527,6 +851,7 @@
 				hide 				buyAmmoControls ;
 				hide 				buyWeaponsControls ;
 				hide 				buyMiscControls ;
+				hide 				extrasControls ;
 				setitemcolor		mainButtons 		forecolor 1 .682 0 1 ;
 				setitemcolor		cameraButton	forecolor 1 1 1 1 ;
 			}

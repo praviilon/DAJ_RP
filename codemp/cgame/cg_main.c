@@ -2618,6 +2618,9 @@ Ghoul2 Insert End
 
 	CG_InitConsoleCommands();
 
+	// GalaxyRP: [Extras] the Extras menus start this map afresh -- cg_rpextras.c
+	CG_RpxInit();
+
 	cg.renderingThirdPerson = cg_thirdPerson.integer;
 
 	cg.weaponSelect = WP_BRYAR_PISTOL;

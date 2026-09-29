@@ -3030,6 +3030,11 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 	rect.w = w;
 	rect.h = h;
 
+	// GalaxyRP: [Extras] the Extras menus' previews and colour swatch -- ui_rpextras.c
+	if ( UI_RpxOwnerDraw( ownerDraw, &rect, scale, color, iMenuFont ) ) {
+		return;
+	}
+
   switch (ownerDraw)
   {
     case UI_HANDICAP:
@@ -6103,6 +6108,12 @@ static void UI_RunMenuScript(char **args)
 
 	if (String_Parse(args, &name))
 	{
+		// GalaxyRP: [Extras] the Extras menus' scripts (rpx...) -- ui_rpextras.c
+		if ( UI_RpxScript( name, args ) )
+		{
+			return;
+		}
+
 		if (Q_stricmp(name, "StartServer") == 0)
 		{
 			int i, added = 0;
@@ -8286,6 +8297,12 @@ static int UI_FeederCount(float feederID)
 	int team,baseClass,count=0,i;
 	static char info[MAX_STRING_CHARS];
 
+	// GalaxyRP: [Extras] the list of the open Extras menu -- ui_rpextras.c
+	if ( (int)feederID == FEEDER_RPX_LIST )
+	{
+		return UI_RpxFeederCount();
+	}
+
 	switch ( (int)feederID )
 	{
 		case FEEDER_SABER_SINGLE_INFO:
@@ -8572,6 +8589,12 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	static int lastColumn = -1;
 	static int lastTime = 0;
 	*handle1 = *handle2 = *handle3 = -1;
+
+	// GalaxyRP: [Extras] the list of the open Extras menu -- ui_rpextras.c
+	if ( (int)feederID == FEEDER_RPX_LIST )
+	{
+		return UI_RpxFeederItemText( index );
+	}
 
 	if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
@@ -9159,6 +9182,12 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 {
 	static char info[MAX_STRING_CHARS];
 	const int feederID = feederFloat;
+
+	// GalaxyRP: [Extras] the list of the open Extras menu -- ui_rpextras.c
+	if ( feederID == FEEDER_RPX_LIST )
+	{
+		return UI_RpxFeederSelection( index );
+	}
 
 	if (feederID == FEEDER_Q3HEADS)
 	{
