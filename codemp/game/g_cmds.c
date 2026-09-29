@@ -12687,14 +12687,15 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// GalaxyRP: [Force Duel] the two private-duel commands, listed together. Neither was
 				// documented anywhere before -- /duel has no commands[] row at all (it arrives as
 				// GENCMD_ENGAGE_DUEL from a bound key), so a player had no way to learn either one
-				// existed. Put in this half of Misc rather than the block above it: that one runs at
-				// 402 of SV_SendServerCommand's hard 1022 characters and this one at 607, and the
+				// existed. Put in this half of Misc rather than the block above it: that one ran at
+				// 402 of SV_SendServerCommand's hard 1022 characters and this one at 607 (941 now, with
+				// the longer /playsound line -- a longer addition goes in a message of its own), and the
 				// whole message is dropped rather than truncated once a block passes it.
 				trap->SendServerCommand(ent - g_entities, "print \"\
 ^3/duel: ^7Challenges the player you are looking at to a private saber duel. Force powers are disabled for both of you; bind a key to ^3engage_duel^7.\n\
 ^3/engage_fullforceduel: ^7The same duel with force powers allowed, on your opponent only. Both players must ask for this kind before it starts.\n\
 ^3/anim ^7or ^3/emote <id/name/list>: ^7Plays an animation by id or name. ^3List ^7and ^3list 2 ^7are for listing all the available animations.\n\
-^3/playsound <channel> <file path>: ^7Plays chosen sound on the map on selected channel.\n\
+^3/playsound <channel> <file path>: ^7Plays a sound on the chosen channel, once every 15 seconds. ^3/list sounds ^7shows them.\n\
 ^3/datetime: ^7Shows current server date and time.\n\
 ^3/drop: ^7Drops the current weapon of the player. If current weapon is melee, drops the selected Holdable Item from inventory.\n\
 ^3/ignore <player name or id>: ^7Enable/disable ignoring a player. Covers every chat type.\n\
@@ -18616,7 +18617,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
 ^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\
-^3/entslots: ^7Shows how full the map's model and effect slots are, and how many can be reused.\n\"" );
+^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
 ^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
@@ -18639,7 +18640,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ==================
 Cmd_EntSlots_f
 
-GalaxyRP: [Slot Reuse] /entslots: how full the map's effect and model slots and its gamestate are,
+GalaxyRP: [Slot Reuse] /entslots: how full the map's effect, model and sound slots and its gamestate are,
 how many slots only Entity System props asked for, how many of those nothing uses now (the ones a new
 name can be given once the table or the gamestate is full), and how many of this map's reuses are
 spent -- see RP_SlotReclaim() in g_utils.c. For the admin whose prop was refused for lack of room.
@@ -18662,8 +18663,12 @@ void Cmd_EntSlots_f( gentity_t *ent ) {
 	Q_strcat( text, sizeof( text ), va( "^3Models: ^7%d of %d slots in use. %d only by Entity System props, %d of them free to reuse now. Reused this map: %d of %d.\n",
 		used, slots, esOnly, reusable, reuses, limit ) );
 
+	RP_SlotStats( CS_SOUNDS, &used, &slots, &esOnly, &reusable, &reuses, &limit );
+	Q_strcat( text, sizeof( text ), va( "^3Sounds: ^7%d of %d slots in use. %d only by /playsound (at most %d at once), %d of them free to reuse now. Reused this map: %d of %d.\n",
+		used, slots, esOnly, RP_PLAYSOUND_POOL, reusable, reuses, limit ) );
+
 	Q_strcat( text, sizeof( text ), va( "^3Gamestate: ^7%d of %d bytes.\n", G_GamestateBytesUsed(), ZYK_GAMESTATE_BUDGET ) );
-	Q_strcat( text, sizeof( text ), "^7A slot is reused only when there is no free one, or no room in the gamestate, for a new name.\n\n" );
+	Q_strcat( text, sizeof( text ), va( "^7A slot is reused only when there is no free one, or no room in the gamestate, for a new name -- or, for /playsound, once it holds %d.\n\n", RP_PLAYSOUND_POOL ) );
 
 	trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", text ) );
 }
@@ -22055,13 +22060,68 @@ const sound_channels_t sound_channels[] = {
 
 /*
 ==================
+RP_PlaySound
+
+/playsound's play, for both of its forms: the player's cooldown, the file, the slot, the sound.
+
+GalaxyRP: [Slot Reuse] one sound every RP_PLAYSOUND_COOLDOWN (15 s) per player, whatever the name: the
+engine's flood protection lets a command through every second, or every frame when a server turns it
+off, and each new name is a configstring every client downloads and a sound file every client loads.
+Only a sound that plays starts the wait -- a typo, a missing file or a refusal do not.
+
+GalaxyRP: [Listings] a name no client can load took a slot of the sound table until the map changed,
+and played nothing -- see RP_SoundFileExists() in g_rplist.c.
+
+GalaxyRP fix: [security] G_SoundIndex() used to crash the whole server (ERR_DROP) once its sound table
+filled up with never-before-seen names, and this is a raw player-typed string. The slot now comes from
+RP_PlaySoundIndex() (g_utils.c): /playsound holds at most RP_PLAYSOUND_POOL slots at once, reusing the
+one played least recently, and a refusal says why instead of handing G_Sound() an invalid index. The
+name goes in as typed: the configstring is a copy, and a G_NewString() of it spent level memory that is
+never given back.
+==================
+*/
+static void RP_PlaySound(gentity_t *ent, int channel, const char *path)
+{
+	char reason[256];
+	int soundIndex;
+
+	if (ent->client->pers.rpPlaySoundNextTime > level.time + RP_PLAYSOUND_COOLDOWN)
+	{
+		ent->client->pers.rpPlaySoundNextTime = 0;	// only a guard: pers is cleared on every map
+	}
+	if (level.time < ent->client->pers.rpPlaySoundNextTime)
+	{
+		int seconds = (ent->client->pers.rpPlaySoundNextTime - level.time + 999) / 1000;
+
+		trap->SendServerCommand(ent->s.number, va("print \"You can play another sound in %d second%s.\n\"", seconds, seconds == 1 ? "" : "s"));
+		return;
+	}
+
+	if (!RP_SoundFileExists(path))
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Sound file not found: ^3%.64s ^7(see ^3/list sounds^7)\n\"", path));
+		return;
+	}
+
+	soundIndex = RP_PlaySoundIndex(path, reason, sizeof(reason));
+	if (soundIndex == 0)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Cannot play this sound right now: %s.\n\"", reason));
+		return;
+	}
+
+	G_Sound(ent, channel, soundIndex);
+	ent->client->pers.rpPlaySoundNextTime = level.time + RP_PLAYSOUND_COOLDOWN;
+}
+
+/*
+==================
 Cmd_ZykSound_f
 ==================
 */
 void Cmd_ZykSound_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
 	char arg2[MAX_STRING_CHARS];
-	int soundIndex;
 
 	if (rp_allow_playsound_command.integer < 1)
 	{
@@ -22098,32 +22158,7 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 
 		for (int i = 0; i < ARRAY_LEN(sound_channels); i++) {
 			if (strcmp(arg1, sound_channels[i].channel_name) == 0) {
-				// GalaxyRP: [Listings] a name no client can load took a slot of the 256-slot sound table
-				// until the map changed, and played nothing -- see RP_SoundFileExists() in g_rplist.c.
-				if (!RP_SoundFileExists(arg2))
-				{
-					trap->SendServerCommand(ent->s.number, va("print \"Sound file not found: ^3%.64s ^7(see ^3/list sounds^7)\n\"", arg2));
-					return;
-				}
-
-				// GalaxyRP fix: [security] G_SoundIndex() crashes the whole server (ERR_DROP) once its
-				// 256-slot sound table fills up with never-before-seen names -- and this path is a raw
-				// player-typed string with no cap on distinct values, so any connected player could
-				// crash the server with a couple hundred /playsound calls using unique nonsense paths.
-				// G_SoundIndexSafe() returns 0 instead of crashing when the table is full; refuse the
-				// request with a message in that case instead of handing G_Sound() an invalid index.
-				// GalaxyRP: [Listings] the name straight from arg2: G_SoundIndexSafe() copies it into the
-				// configstring and keeps no pointer to it, and G_NewString() spent level memory that is
-				// never given back on every /playsound.
-				soundIndex = G_SoundIndexSafe(arg2);
-				if (soundIndex == 0)
-				{
-					trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (the server cannot register more sounds on this map).\n\"");
-					return;
-				}
-
-				G_Sound(ent, sound_channels[i].channel_code, soundIndex);
-
+				RP_PlaySound(ent, sound_channels[i].channel_code, arg2);
 				return;
 			}
 		}
@@ -22140,20 +22175,7 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 			return;
 		}
 
-		if (!RP_SoundFileExists(arg1))
-		{
-			trap->SendServerCommand(ent->s.number, va("print \"Sound file not found: ^3%.64s ^7(see ^3/list sounds^7)\n\"", arg1));
-			return;
-		}
-
-		soundIndex = G_SoundIndexSafe(arg1);
-		if (soundIndex == 0)
-		{
-			trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (the server cannot register more sounds on this map).\n\"");
-			return;
-		}
-
-		G_Sound(ent, CHAN_AUTO, soundIndex);
+		RP_PlaySound(ent, CHAN_AUTO, arg1);
 		return;
 	}
 

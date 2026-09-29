@@ -547,15 +547,23 @@ block by appending and checks that it is contiguous.
 
 The number of reuses a map allows is capped (RP_SLOT_REUSE_FX, RP_SLOT_REUSE_MODELS in g_local.h):
 each client keeps everything it has registered until the map changes, and has limits of its own.
+
+Sound slots work the same way for the names only /playsound asked for (level.rp_slot_ps_sound), with
+one difference: /playsound holds at most RP_PLAYSOUND_POOL of them at once, so past that a new name
+takes the one played least recently even while the table has room -- see RP_PlaySoundIndex(). A
+"*" sound name (a player-model sound) is never written into a reused slot: the client does not
+register those, so it would go on playing the handle of the sound the slot held before
+(CG_ConfigStringModified, EV_GENERAL_SOUND in cg_event.c).
 =================
 */
 #define RP_SLOT_REUSES_CVAR "rp_slot_reuses"
+#define RP_PLAYSOUND_SLOTS_CVAR "rp_playsound_slots"
 
 /*
 =================
 RP_SlotRestore
 
-The reuses a map has spent are kept in the cvar RP_SLOT_REUSES_CVAR ("<effects> <models>") as well as
+The reuses a map has spent are kept in the cvar RP_SLOT_REUSES_CVAR ("<effects> <models> <sounds>") as well as
 in level: map_restart reloads the game module and clears level, while every client keeps what it
 registered, so a restart must not give the map a fresh budget. A new map starts from 0. The owner
 markers are not kept -- after a restart every slot is permanent, which is the safe side.
@@ -566,7 +574,8 @@ void RP_SlotRestore( int restart ) {
 	const char *space;
 
 	if ( !restart ) {
-		trap->Cvar_Set( RP_SLOT_REUSES_CVAR, "0 0" );
+		trap->Cvar_Set( RP_SLOT_REUSES_CVAR, "0 0 0" );
+		trap->Cvar_Set( RP_PLAYSOUND_SLOTS_CVAR, "" );
 		return;
 	}
 
@@ -574,6 +583,55 @@ void RP_SlotRestore( int restart ) {
 	level.rp_slot_reuses_fx = Com_Clampi( 0, RP_SLOT_REUSE_FX, atoi( buf ) );
 	space = strchr( buf, ' ' );
 	level.rp_slot_reuses_model = Com_Clampi( 0, RP_SLOT_REUSE_MODELS, space ? atoi( space + 1 ) : 0 );
+	space = space ? strchr( space + 1, ' ' ) : NULL;
+	level.rp_slot_reuses_sound = Com_Clampi( 0, RP_SLOT_REUSE_SOUNDS, space ? atoi( space + 1 ) : 0 );
+
+	// the /playsound slots too: a restart (which any player can vote for) would otherwise make each of
+	// them the map's for good and let /playsound take RP_PLAYSOUND_POOL more. Anything the reloaded
+	// game asks for by name still becomes permanent, as it registers after this.
+	{
+		char list[MAX_CVAR_VALUE_STRING];
+		const char *p = list;
+
+		trap->Cvar_VariableStringBuffer( RP_PLAYSOUND_SLOTS_CVAR, list, sizeof( list ) );
+		while ( *p ) {
+			int k = atoi( p );
+
+			if ( k > 0 && k < MAX_SOUNDS )
+				level.rp_slot_ps_sound[k] = 1;
+			while ( *p && *p != ' ' )
+				p++;
+			while ( *p == ' ' )
+				p++;
+		}
+	}
+}
+
+static void RP_SlotSaveReuses( void ) {
+	trap->Cvar_Set( RP_SLOT_REUSES_CVAR, va( "%d %d %d", level.rp_slot_reuses_fx, level.rp_slot_reuses_model, level.rp_slot_reuses_sound ) );
+}
+
+// the /playsound slots, as "<slot> <slot> ...", for RP_SlotRestore() -- at most RP_PLAYSOUND_POOL of
+// them unless the table has room past it, 3 digits and a space each
+static void RP_SlotSaveSoundPool( void ) {
+	char list[MAX_CVAR_VALUE_STRING];
+	int k;
+
+	list[0] = '\0';
+	for ( k = 1; k < MAX_SOUNDS; k++ ) {
+		if ( level.rp_slot_ps_sound[k] == 1 )
+			Q_strcat( list, sizeof( list ), va( "%d ", k ) );
+	}
+	trap->Cvar_Set( RP_PLAYSOUND_SLOTS_CVAR, list );
+}
+
+// the owner marker of a slot, saving the /playsound slots whenever one of them comes or goes
+static void RP_SlotSetOwner( byte *owners, int which, int k, int value ) {
+	if ( owners[k] == value )
+		return;
+	owners[k] = (byte)value;
+	if ( which == 2 )
+		RP_SlotSaveSoundPool();
 }
 
 typedef struct {
@@ -582,7 +640,7 @@ typedef struct {
 	byte	*owners;
 	int		*reuses;
 	int		limit;
-	int		which;			// 0 models, 1 effects
+	int		which;			// 0 models, 1 effects, 2 sounds
 	const char *what;
 } rpSlotTable_t;
 
@@ -595,6 +653,11 @@ static qboolean RP_SlotTable( int start, rpSlotTable_t *t ) {
 	if ( start == CS_EFFECTS ) {
 		t->start = CS_EFFECTS; t->max = MAX_FX; t->owners = level.rp_slot_es_fx;
 		t->reuses = &level.rp_slot_reuses_fx; t->limit = RP_SLOT_REUSE_FX; t->which = 1; t->what = "effect";
+		return qtrue;
+	}
+	if ( start == CS_SOUNDS ) {
+		t->start = CS_SOUNDS; t->max = MAX_SOUNDS; t->owners = level.rp_slot_ps_sound;
+		t->reuses = &level.rp_slot_reuses_sound; t->limit = RP_SLOT_REUSE_SOUNDS; t->which = 2; t->what = "sound";
 		return qtrue;
 	}
 	return qfalse;
@@ -615,17 +678,21 @@ static void RP_SlotMarkUsed( const rpSlotTable_t *t, byte *used ) {
 		if ( !e->inuse )
 			continue;
 
-		if ( t->which == 1 ) {
+		if ( t->which == 2 ) {
+			// a sound event still on its way to the clients (G_Sound and the like): the only way a name
+			// only /playsound asked for is ever pointed at. A player's own events are left out: whatever
+			// they carry came from a lookup by name (which makes the slot permanent), and their last
+			// values stay behind until the player's next events, so they would hold a slot for nothing.
+			if ( e->s.eType >= ET_EVENTS || ( e->s.event && !e->client ) )
+				RP_SLOT_MARK( e->s.eventParm );
+			RP_SLOT_MARK( e->s.loopSound );
+		} else if ( t->which == 1 ) {
 			if ( e->s.eType == ET_FX )
 				RP_SLOT_MARK( e->s.modelindex );
-			// an effect event still on its way to the clients (G_PlayEffectID and the like)
-			if ( e->s.eType >= ET_EVENTS || e->s.event )
+			// an effect event still on its way to the clients (G_PlayEffectID and the like); not a
+			// player's own (see the sounds above)
+			if ( e->s.eType >= ET_EVENTS || ( e->s.event && !e->client ) )
 				RP_SLOT_MARK( e->s.eventParm );
-			if ( e->client ) {
-				RP_SLOT_MARK( e->client->ps.eventParms[0] );
-				RP_SLOT_MARK( e->client->ps.eventParms[1] );
-				RP_SLOT_MARK( e->client->ps.externalEventParm );
-			}
 		} else {
 			if ( e->s.eType != ET_FX ) {
 				if ( !e->r.bmodel )
@@ -659,7 +726,9 @@ static int RP_SlotCandidates( const rpSlotTable_t *t, int *candLen, int *firstFr
 		trap->GetConfigstring( t->start + k, s, sizeof( s ) );
 		if ( !s[0] )
 			break;
-		if ( t->owners[k] != 1 || s[0] == '*' || used[k] )
+		// an effect named "*" is a weather command (see the top), and models keep them as they were; a
+		// sound one (a player sound) may be written over, the client registering the new name
+		if ( t->owners[k] != 1 || ( t->which != 2 && s[0] == '*' ) || used[k] )
 			continue;
 		candLen[k] = (int)strlen( s ) + 1;
 		n++;
@@ -670,9 +739,15 @@ static int RP_SlotCandidates( const rpSlotTable_t *t, int *candLen, int *firstFr
 	return n;
 }
 
+// /playsound replaces the sound played least recently; the others the longest name
+static const int *RP_SlotLru( const rpSlotTable_t *t ) {
+	return ( t->which == 2 && level.rp_slot_es_context ) ? level.rp_slot_sound_played : NULL;
+}
+
 // the candidate a new name of length len (terminator included) should take, with bytes in use now:
-// the one holding the longest name, which leaves the gamestate the most room. 0 if none will do.
-static int RP_SlotPick( const rpSlotTable_t *t, const int *candLen, int len, int bytes ) {
+// the one holding the longest name, which leaves the gamestate the most room -- or, given lastUsed,
+// the one used least recently. 0 if none will do.
+static int RP_SlotPick( const rpSlotTable_t *t, const int *candLen, int len, int bytes, const int *lastUsed ) {
 	int k, best = 0;
 
 	for ( k = 1; k < t->max; k++ ) {
@@ -680,15 +755,16 @@ static int RP_SlotPick( const rpSlotTable_t *t, const int *candLen, int len, int
 			continue;
 		if ( bytes - candLen[k] + len > ZYK_GAMESTATE_BUDGET )
 			continue;
-		if ( !best || candLen[k] > candLen[best] )
+		if ( !best || ( lastUsed ? lastUsed[k] < lastUsed[best] : candLen[k] > candLen[best] ) )
 			best = k;
 	}
 	return best;
 }
 
 // give name (length len with its terminator; bytes in use now) a slot of a removed Entity System
-// prop, if there is one and the map's reuses are not spent. Returns the slot, or 0.
-static int RP_SlotReclaim( const rpSlotTable_t *t, const char *name, int len, int bytes ) {
+// prop (or a sound only /playsound played), if there is one and the map's reuses are not spent; the
+// least recently used one given lastUsed. Returns the slot, or 0.
+static int RP_SlotReclaim( const rpSlotTable_t *t, const char *name, int len, int bytes, const int *lastUsed ) {
 	static int candLen[MAX_MODELS];
 	char old[MAX_STRING_CHARS];
 	int best;
@@ -714,16 +790,16 @@ static int RP_SlotReclaim( const rpSlotTable_t *t, const char *name, int len, in
 	if ( !RP_SlotCandidates( t, candLen, NULL ) )
 		return 0;
 
-	best = RP_SlotPick( t, candLen, len, bytes );
+	best = RP_SlotPick( t, candLen, len, bytes, lastUsed );
 	if ( !best )
 		return 0;
 
 	trap->GetConfigstring( t->start + best, old, sizeof( old ) );
 	trap->SetConfigstring( t->start + best, name );
 	level.zyk_gamestate_bytes = bytes - candLen[best] + len;
-	t->owners[best] = level.rp_slot_es_context ? 1 : 0;
+	RP_SlotSetOwner( t->owners, t->which, best, level.rp_slot_es_context ? 1 : 0 );
 	(*t->reuses)++;
-	trap->Cvar_Set( RP_SLOT_REUSES_CVAR, va( "%d %d", level.rp_slot_reuses_fx, level.rp_slot_reuses_model ) );
+	RP_SlotSaveReuses();
 	if ( t->start == CS_MODELS )
 		level.rp_model_info_state[best] = 0;	// RP_ModelInfo() reads the new file
 
@@ -792,7 +868,7 @@ qboolean RP_SlotRoomFor( int start, const char **names, int count, int otherByte
 			continue;
 		}
 
-		pick = ( name[0] != '*' && reusesLeft > 0 ) ? RP_SlotPick( &t, candLen, len, bytes ) : 0;
+		pick = ( name[0] != '*' && reusesLeft > 0 ) ? RP_SlotPick( &t, candLen, len, bytes, NULL ) : 0;
 		if ( pick ) {
 			bytes = bytes - candLen[pick] + len;
 			candLen[pick] = 0;
@@ -873,7 +949,7 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 			// GalaxyRP: [Slot Reuse] anything but an Entity System prop asking for it may keep the
 			// index, so the slot can never be given away again
 			if ( tracked && !level.rp_slot_es_context ) {
-				slotTable.owners[i] = 0;
+				RP_SlotSetOwner( slotTable.owners, slotTable.which, i, 0 );
 			}
 			return i;
 		}
@@ -903,7 +979,7 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 
 		// GalaxyRP: [Slot Reuse] a slot a removed Entity System prop no longer needs
 		if ( tracked ) {
-			int reused = RP_SlotReclaim( &slotTable, name, (int)strlen( name ) + 1, zyk_gamestate_bytes_used() );
+			int reused = RP_SlotReclaim( &slotTable, name, (int)strlen( name ) + 1, zyk_gamestate_bytes_used(), RP_SlotLru( &slotTable ) );
 
 			if ( reused ) {
 				return reused;
@@ -944,7 +1020,7 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 		// GalaxyRP: [Slot Reuse] a slot a removed Entity System prop no longer needs, whose name makes
 		// room for this one
 		if ( tracked ) {
-			int reused = RP_SlotReclaim( &slotTable, name, len, level.zyk_gamestate_bytes );
+			int reused = RP_SlotReclaim( &slotTable, name, len, level.zyk_gamestate_bytes, RP_SlotLru( &slotTable ) );
 
 			if ( reused ) {
 				return reused;
@@ -964,7 +1040,7 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 	level.zyk_gamestate_bytes += len;
 
 	if ( tracked ) {
-		slotTable.owners[i] = level.rp_slot_es_context ? 1 : 0;
+		RP_SlotSetOwner( slotTable.owners, slotTable.which, i, level.rp_slot_es_context ? 1 : 0 );
 	}
 
 	return i;
@@ -1220,6 +1296,94 @@ int G_SoundIndex( const char *name ) {
 // in the 256 slots and dropped every connected client.
 int G_SoundIndexSafe( const char *name ) {
 	return G_FindConfigstringIndex( name, CS_SOUNDS, MAX_SOUNDS, qtrue );
+}
+
+/*
+=================
+RP_PlaySoundIndex
+
+GalaxyRP: [Slot Reuse] the sound slot for a /playsound name, or 0 with the reason in reason.
+
+A name already in the table plays at no cost: the map's own, or one of /playsound's (the played time is
+noted). A new name goes into the table marked as /playsound's while /playsound holds fewer than
+RP_PLAYSOUND_POOL slots; after that it takes the /playsound slot played least recently that no sound
+still on its way to the clients uses, overwriting it in place. That is a reuse, counted against
+RP_SLOT_REUSE_SOUNDS for the map. A "*" name only ever goes into a free slot (see the top).
+
+So /playsound never holds more than RP_PLAYSOUND_POOL of the map's slots, nor more than that many names
+of gamestate, and the rest stay for the map and the game -- which may in turn take an idle /playsound
+slot when the table or the gamestate is full (G_FindConfigstringIndex -> RP_SlotReclaim).
+=================
+*/
+int RP_PlaySoundIndex( const char *name, char *reason, int reasonSize ) {
+	static int candLen[MAX_MODELS];
+	rpSlotTable_t t;
+	char s[MAX_STRING_CHARS];
+	int k, firstFree, held = 0, index;
+
+	if ( reason && reasonSize > 0 )
+		reason[0] = '\0';
+	if ( !VALIDSTRING( name ) || !RP_SlotTable( CS_SOUNDS, &t ) )
+		return 0;
+
+	for ( k = 1; k < t.max; k++ ) {
+		trap->GetConfigstring( t.start + k, s, sizeof( s ) );
+		if ( !s[0] )
+			break;
+		if ( !strcmp( s, name ) ) {
+			if ( t.owners[k] == 1 )
+				level.rp_slot_sound_played[k] = level.time;
+			return k;
+		}
+		if ( t.owners[k] == 1 )
+			held++;
+	}
+	firstFree = k;
+
+	if ( held < RP_PLAYSOUND_POOL ) {
+		level.rp_slot_es_context = qtrue;
+		index = G_FindConfigstringIndex( name, CS_SOUNDS, MAX_SOUNDS, qtrue );
+		level.rp_slot_es_context = qfalse;
+
+		if ( index ) {
+			level.rp_slot_sound_played[index] = level.time;
+			return index;
+		}
+	}
+	else if ( name[0] != '*' ) {
+		level.rp_slot_es_context = qtrue;	// stays /playsound's
+		index = RP_SlotReclaim( &t, name, (int)strlen( name ) + 1, zyk_gamestate_bytes_used(), level.rp_slot_sound_played );
+		level.rp_slot_es_context = qfalse;
+
+		if ( index ) {
+			level.rp_slot_sound_played[index] = level.time;
+			return index;
+		}
+	}
+
+	if ( reason && reasonSize > 0 ) {
+		qboolean spent = ( *t.reuses >= t.limit ) ? qtrue : qfalse;
+
+		if ( name[0] == '*' ) {
+			if ( held >= RP_PLAYSOUND_POOL )
+				Com_sprintf( reason, reasonSize, "a player sound needs one of /playsound's %d slots for itself, and all of them hold sounds already played", RP_PLAYSOUND_POOL );
+			else
+				Com_sprintf( reason, reasonSize, "a player sound needs a free slot, and the map's %s", firstFree >= t.max ? "sound table is full" : "gamestate is full" );
+		}
+		else if ( spent && ( held >= RP_PLAYSOUND_POOL || RP_SlotCandidates( &t, candLen, NULL ) ) )
+			Com_sprintf( reason, reasonSize, "this map has used all its %d sound slot reuses; the sounds already played still work", t.limit );
+		else if ( held >= RP_PLAYSOUND_POOL ) {
+			if ( RP_SlotCandidates( &t, candLen, NULL ) )
+				Com_sprintf( reason, reasonSize, "the map's gamestate has no room for a name this long" );
+			else
+				Com_sprintf( reason, reasonSize, "every /playsound sound is still playing; try again in a moment" );
+		}
+		else if ( firstFree >= t.max )
+			Com_sprintf( reason, reasonSize, "the map's sound table is full" );
+		else
+			Com_sprintf( reason, reasonSize, "the map's gamestate is full" );
+	}
+	return 0;
 }
 
 int G_SoundSetIndex(const char *name)

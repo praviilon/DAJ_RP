@@ -106,6 +106,13 @@ extern vec3_t gPainPoint;
 // those limits.
 #define RP_SLOT_REUSE_FX			32
 #define RP_SLOT_REUSE_MODELS		128
+// ...and sound slots: /playsound holds at most RP_PLAYSOUND_POOL of the map's 255 at once, a new name
+// then taking the one played least recently (RP_PlaySoundIndex() in g_utils.c). Clients keep every
+// sound name they register (10000 a session, then the game closes: S_FindName in snd_dma.cpp), so
+// the names a map can put into reused slots are capped too.
+#define RP_SLOT_REUSE_SOUNDS		128
+#define RP_PLAYSOUND_POOL			32
+#define RP_PLAYSOUND_COOLDOWN		15000	// between two /playsound of one player
 
 // GalaxyRP fix: [Configstrings] how long G_RunFrame waits for the engine to finish writing the
 // gamestate before taking the map-load count anyway. SV_SpawnServer writes CS_SYSTEMINFO four
@@ -1240,6 +1247,10 @@ typedef struct clientPersistant_s {
 	// GalaxyRP: [Listings] level.time before which this player's next /list or /maplist listing is
 	// refused -- see RP_ListCooldown() in g_rplist.c
 	int			rpListNextTime;
+
+	// GalaxyRP: [Slot Reuse] level.time before which this player's next /playsound is refused
+	// (RP_PLAYSOUND_COOLDOWN) -- see Cmd_ZykSound_f in g_cmds.c
+	int			rpPlaySoundNextTime;
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -2073,10 +2084,14 @@ typedef struct level_locals_s {
 	// and what any other request for the name makes it. See RP_SlotReclaim() in g_utils.c.
 	byte rp_slot_es_model[MAX_MODELS];
 	byte rp_slot_es_fx[MAX_FX];
+	byte rp_slot_ps_sound[MAX_SOUNDS];				// the same for sound slots only /playsound asked for
+	int rp_slot_sound_played[MAX_SOUNDS];			// level.time /playsound last played each of those
 	int rp_slot_reuses_model;						// names put into a reused slot this map
 	int rp_slot_reuses_fx;
-	qboolean rp_slot_reuse_spent_warned[2];			// the per-map budget ran out: logged once each
+	int rp_slot_reuses_sound;
+	qboolean rp_slot_reuse_spent_warned[3];			// the per-map budget ran out: logged once each
 	qboolean rp_slot_es_context;					// the name being registered is an Entity System prop's own
+													// (or, for sounds, /playsound's): a slot it makes is reusable
 	qboolean rp_shipboundary_logical_warned;	// shipboundary_touch reports a logical target once per map
 	qboolean rp_shipboundary_target_warned;		// ...and a missing one, likewise once per map
 	qboolean rp_hyperspace_target_warned;		// hyperspace_touch, same idea for its two targets
@@ -2382,6 +2397,7 @@ qboolean	RP_SlotRoomFor( int start, const char **names, int count, int otherByte
 void		RP_SlotStats( int start, int *used, int *slots, int *esOnly, int *reusableNow, int *reuses, int *reuseLimit );
 int			G_GamestateBytesUsed( void );
 void		RP_SlotRestore( int restart );
+int			RP_PlaySoundIndex( const char *name, char *reason, int reasonSize );
 void		Cmd_EntSlots_f( gentity_t *ent );
 // GalaxyRP: [Listings] /list models|effects|sounds|music|maps|npcs|vehicles, /maplist and the file
 // checks of /playsound and /playmusic -- g_rplist.c
