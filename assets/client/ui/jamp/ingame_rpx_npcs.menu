@@ -242,7 +242,7 @@
 			textstyle           0
 			textalign           0
 			textaligny          0
-			columns             1 4 184 34
+			columns             1 4 184 184
 			border              1
 			bordercolor         1 .682 0 .6
 			forecolor           1 1 1 1

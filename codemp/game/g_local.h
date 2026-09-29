@@ -2411,6 +2411,7 @@ void		Cmd_EntSlots_f( gentity_t *ent );
 qboolean	RP_ListCommand( gentity_t *ent, const char *what );
 void		RP_ListVotableMaps( gentity_t *ent, int page );
 void		RP_ListDataCommand( gentity_t *ent );
+qboolean	RP_NpcTypeIsVehicle( const char *type );
 int			RP_ListParsePage( const char *s );
 qboolean	RP_SoundFileExists( const char *name );
 qboolean	RP_MusicFileExists( const char *music );

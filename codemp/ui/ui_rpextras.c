@@ -166,6 +166,11 @@ static void RPX_SetListCursor( int index ) {
 	}
 }
 
+// the selected name in full under the list: the list draws a name only as wide as its column
+static void RPX_ShowSelected( const char *name ) {
+	trap->Cvar_Set( "ui_rpx_selname", name[0] ? va( "Selected: ^7%s", name ) : "" );
+}
+
 static void RPX_UpdateInfo( void ) {
 	char folder[RPX_NAME_LEN];
 	const char *where;
@@ -227,6 +232,7 @@ static void RPX_BuildView( void ) {
 		}
 	}
 	RPX_SetListCursor( cursor );
+	RPX_ShowSelected( cursor >= 0 ? sel : "" );
 	RPX_UpdateInfo();
 }
 
@@ -457,6 +463,7 @@ qboolean UI_RpxFeederSelection( int index ) {
 	if ( row >= 0 && !rpxEntries[row].folder ) {
 		name = rpxEntries[row].name;
 	}
+	RPX_ShowSelected( name );
 	if ( strcmp( name, RPX_CvarStr( va( "ui_rpx_sel_%s", rpxKinds[rpxKind].name ) ) ) ) {
 		trap->Cvar_Set( va( "ui_rpx_sel_%s", rpxKinds[rpxKind].name ), name );
 		RPX_Msg( "" );
@@ -672,7 +679,7 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 			static const char *closing[] = { "spawnprop", "spawnfx", "spawnnpc", "musicme", "musicall", "soundall" };
 			int i;
 
-			if ( !Q_stricmp( arg, "musicstop" ) || !Q_stricmp( arg, "musicmap" ) || !Q_stricmp( arg, "undo" ) || !Q_stricmp( arg, "slots" ) ) {
+			if ( !Q_stricmp( arg, "musicstop" ) || !Q_stricmp( arg, "musicmap" ) || !Q_stricmp( arg, "undo" ) ) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va( "rpx do %s\n", arg ) );
 				return qtrue;
 			}

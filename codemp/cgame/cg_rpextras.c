@@ -827,8 +827,6 @@ void CG_Rpx_f( void ) {
 			rpx_fx.pendingId = 0;
 		} else if ( !Q_stricmp( arg, "undo" ) ) {
 			RPX_Queue( "entundo" );		// through the queue, so it keeps to the flood gap too
-		} else if ( !Q_stricmp( arg, "slots" ) ) {
-			RPX_Queue( "entslots" );
 		} else if ( !Q_stricmp( arg, "stop" ) ) {
 			// the menu closed: a listing still on its way stops asking (it would take the player's own
 			// commands' turns for as long as it lasts); the next menu asks again from the start

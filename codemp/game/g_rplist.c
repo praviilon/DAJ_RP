@@ -67,6 +67,7 @@ typedef struct {
 	const char	*name;		// what is printed
 	qboolean	folder;
 	int			order;		// when it was added: of two names that differ only in case, the first is kept
+	qboolean	vehicle;	// an NPC type that is a vehicle's (RP_ListBuildTypes())
 } rpListEntry_t;
 
 typedef struct {
@@ -158,6 +159,7 @@ static void RP_ListAdd( rpListSet_t *set, const char *name, qboolean folder ) {
 	set->entries[set->num].name = set->store + set->storeUsed;
 	set->entries[set->num].folder = folder;
 	set->entries[set->num].order = set->num;
+	set->entries[set->num].vehicle = qfalse;
 	set->storeUsed += len;
 	set->num++;
 }
@@ -902,11 +904,57 @@ NPC and vehicle types
 ===========================================================================
 */
 
+extern char NPCParms[];
+extern char VehicleParms[];
+
+/*
+==================
+RP_ListBlockIsVehicle
+
+Whether the block p starts at ("{ ... }", just after its name) says "class CLASS_VEHICLE" at its own
+level, as NPC_ParseParms() reads it: the NPC entry of a vehicle, which /npc spawn refuses ("Tried to
+spawn a vehicle NPC ... without using ... 'NPC spawn vehicle <vehiclename>'") -- every vehicle has
+one, and /npc spawn vehicle takes the vehicle's own (.veh) name instead.
+==================
+*/
+static qboolean RP_ListBlockIsVehicle( const char *p ) {
+	int depth = 0;
+
+	while ( p ) {
+		const char *token = COM_ParseExt( &p, qtrue );
+
+		if ( !token[0] ) {
+			break;
+		}
+		if ( !strcmp( token, "{" ) ) {
+			depth++;
+			continue;
+		}
+		if ( !strcmp( token, "}" ) ) {
+			if ( --depth <= 0 ) {
+				break;
+			}
+			continue;
+		}
+		if ( depth == 1 && !Q_stricmp( token, "class" ) ) {
+			token = COM_ParseExt( &p, qfalse );	// COM_ParseString(), as NPC_ParseParms() reads the value
+			if ( !Q_stricmp( token, "CLASS_VEHICLE" ) ) {
+				return qtrue;
+			}
+		}
+	}
+	return qfalse;
+}
+
 // the top-level "<name> { ... }" blocks of an NPC or vehicle text, as NPC_Precache() and
-// VEH_LoadVehicle() look them up: a name, then SkipBracedSection() over what follows it
-static void RP_ListBuildTypes( rpListSet_t *set, const char *text ) {
+// VEH_LoadVehicle() look them up: a name, then SkipBracedSection() over what follows it. For the NPC
+// types (skipVehicles), the entries of vehicles are left out: /npc spawn cannot spawn them (see
+// RP_ListBlockIsVehicle()), and /list vehicles lists the vehicles. The first block of a name is the
+// one the game uses, so it is the one that decides.
+static void RP_ListBuildTypes( rpListSet_t *set, const char *text, qboolean skipVehicles ) {
 	const char *p = text;
 	char name[MAX_QPATH];
+	int i, kept;
 
 	RP_ListReset( set );
 	COM_BeginParseSession( "RP_ListTypes" );
@@ -929,18 +977,58 @@ static void RP_ListBuildTypes( rpListSet_t *set, const char *text ) {
 		token = COM_ParseExt( &peek, qtrue );
 		block = !strcmp( token, "{" ) ? qtrue : qfalse;
 
-		SkipBracedSection( &p, 0 );
-
 		if ( block && name[0] && strcmp( name, "{" ) && strcmp( name, "}" ) ) {
+			int before = set->num;
+			qboolean vehicle = skipVehicles ? RP_ListBlockIsVehicle( p ) : qfalse;
+
 			RP_ListAdd( set, name, qfalse );
+			if ( set->num > before ) {
+				set->entries[set->num - 1].vehicle = vehicle;
+			}
 		}
+
+		SkipBracedSection( &p, 0 );
 	}
 
 	RP_ListSortUnique( set );
+
+	for ( i = 0, kept = 0; i < set->num; i++ ) {
+		if ( !set->entries[i].vehicle ) {
+			set->entries[kept++] = set->entries[i];
+		}
+	}
+	set->num = kept;
 }
 
-extern char NPCParms[];
-extern char VehicleParms[];
+/*
+==================
+RP_NpcTypeIsVehicle
+
+Whether /npc spawn <type> would find a vehicle's NPC entry for this type, looking it up the way
+NPC_ParseParms() does -- for /npc spawn to say so, instead of the refusal only the server console sees.
+==================
+*/
+qboolean RP_NpcTypeIsVehicle( const char *type ) {
+	const char *p = NPCParms;
+
+	if ( !VALIDSTRING( type ) ) {
+		return qfalse;
+	}
+	COM_BeginParseSession( "RP_NpcTypeIsVehicle" );
+	while ( p ) {
+		const char *token = COM_ParseExt( &p, qtrue );
+
+		if ( !token[0] ) {
+			break;
+		}
+		if ( !Q_stricmp( token, type ) ) {
+			return RP_ListBlockIsVehicle( p );
+		}
+		SkipBracedSection( &p, 0 );
+	}
+	return qfalse;
+}
+
 
 // the NPC or vehicle types, read the first time they are asked for on this map
 static rpListSet_t *RP_ListTypeSet( qboolean vehicles ) {
@@ -948,11 +1036,11 @@ static rpListSet_t *RP_ListTypeSet( qboolean vehicles ) {
 
 	if ( vehicles ) {
 		if ( !level.rp_list_vehicles_ready ) {
-			RP_ListBuildTypes( set, VehicleParms );
+			RP_ListBuildTypes( set, VehicleParms, qfalse );
 			level.rp_list_vehicles_ready = qtrue;
 		}
 	} else if ( !level.rp_list_npcs_ready ) {
-		RP_ListBuildTypes( set, NPCParms );
+		RP_ListBuildTypes( set, NPCParms, qtrue );
 		level.rp_list_npcs_ready = qtrue;
 	}
 	return set;

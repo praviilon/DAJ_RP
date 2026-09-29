@@ -4579,6 +4579,14 @@ void NPC_Spawn_f( gentity_t *ent )
 	else
 	{
 		trap->Argv(3, targetname, 1024);
+
+		// GalaxyRP: [NPC System] a vehicle's own NPC entry: NPC_ParseParms() refuses it, but says so only on
+		// the server console ("Shame on you!"), so the admin was left with nothing
+		if ( RP_NpcTypeIsVehicle( npc_type ) )
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"^7That is a vehicle's npc entry: use ^3/npc spawn vehicle <type>^7 (see ^3/list vehicles^7).\n\"" );
+			return;
+		}
 	}
 
 	// GalaxyRP fix: [NPC] a blocklist used to sit here: a guardian_boss_1..10 loop and 29 named

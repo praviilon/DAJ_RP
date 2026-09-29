@@ -120,6 +120,7 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_file",			"rpx/list.dat" )	/* cgame: which of rpxListFiles it wrote */ \
 	X( "ui_rpx_msg",			"" )		/* either: the result of the last button */ \
 	X( "ui_rpx_info",			"" )		/* ui: the folder and how many entries */ \
+	X( "ui_rpx_selname",		"" )		/* ui: the selected name in full, which the list may cut short */ \
 	X( "ui_rpx_fxbox",			"0" )		/* ui: when it last drew the effect preview box (Milliseconds) */ \
 	X( "ui_rpx_back",			"0" )		/* ui: the Back button asks the Galaxy RP menu for its Extras tab */ \
 	X( "ui_rpx_sent",			"0" )		/* ui: when a menu last sent the server a command (Milliseconds) */ \
