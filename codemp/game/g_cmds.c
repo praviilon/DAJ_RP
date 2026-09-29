@@ -15342,90 +15342,47 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			}
 		}
 
+		level.rp_spawn_refusal[0] = '\0';
+
 		if (aim)
 		{
 			vec3_t mins, maxs;
 			int free_before = G_FreeEntityCount();
-			qboolean placed_by_player_box;
 
 			RP_EntGrabPlaceBox(arg1, NULL, mins, maxs);
-			placed_by_player_box = (VectorCompare(mins, vec3_origin) && VectorCompare(maxs, vec3_origin)) ? qfalse : qtrue;
 
 			zyk_main_spawn_entity(new_ent);
 
-			// GalaxyRP: [Entity System] now the box is known: set it against the surface and make it
-			// again where it rests -- if it has a box it is placed by (not one that collides with
-			// nothing, see RP_EntGrabPlaceBox), was not placed by a player's box already, and its
-			// spawn made nothing but perhaps a trigger of its own (which goes with it). Freed and made
-			// anew in another slot rather than spawned again in place, so nothing its spawn function set
-			// up (a Ghoul2 model, ICARUS state) is set up twice on the same entity.
-			VectorClear(mins);
-			VectorClear(maxs);
-			if (new_ent->inuse && !new_ent->isLogical && !placed_by_player_box)
-				RP_EntGrabPlaceBox(NULL, new_ent, mins, maxs);
-
-			if (new_ent->inuse && !new_ent->isLogical && !placed_by_player_box &&
-				(!VectorCompare(mins, vec3_origin) || !VectorCompare(maxs, vec3_origin)))
+			// GalaxyRP: [Entity System] now the box is known: set it against the surface where it rests,
+			// unless it was placed by a player's box already -- see RP_EntGrabSettle() in g_entgrab.c
+			if (new_ent->inuse && VectorCompare(mins, vec3_origin) && VectorCompare(maxs, vec3_origin))
 			{
-				gentity_t *other;
-				int triggers = 0;
-				vec3_t origin;
+				gentity_t *settled = RP_EntGrabSettle(new_ent, aim_point, aim_normal, free_before);
 
-				RP_FOR_EACH_ENTITY( other )
+				if (!settled)
 				{
-					if (other != new_ent && other->inuse && other->parent == new_ent && (other->r.contents & CONTENTS_TRIGGER) &&
-						RP_EntityHasSpawnKeys(other) == qfalse)
-						triggers++;
+					trap->SendServerCommand( ent-g_entities, va("print \"The %s could not be placed%s%s.\n\"", arg1,
+						level.rp_spawn_refusal[0] ? ": " : " (no free entity slot, or it did not survive being spawned again)",
+						level.rp_spawn_refusal) );
+					return;
 				}
-
-				RP_EntGrabPlace(aim_point, aim_normal, mins, maxs, origin);
-
-				if (free_before - G_FreeEntityCount() <= triggers && !VectorCompare(origin, new_ent->s.origin) &&
-					G_EntitySlotsAvailable(4))
-				{
-					static char *pairs[ZYK_MAX_SPAWN_STRING_SLOTS];
-					int count = level.zyk_spawn_strings_values_count[new_ent->s.number];
-					rpSpawnRoute_t route;
-					gentity_t *moved;
-					int k;
-
-					if (count > ZYK_MAX_SPAWN_STRING_SLOTS)
-						count = ZYK_MAX_SPAWN_STRING_SLOTS;
-					memcpy(pairs, level.zyk_spawn_strings[new_ent->s.number], sizeof(pairs[0]) * count);
-
-					RP_SpawnRouteInit(&route);
-					for (k = 0; k + 1 < count; k += 2)
-						RP_SpawnRouteNoteKey(&route, pairs[k], pairs[k + 1]);
-
-					if (new_ent->rpBSPInstance > 0)
-						RP_FreeSubBSPEntities(new_ent->rpBSPInstance);
-					RP_FreeEntityTriggers(new_ent);
-					G_FreeEntity(new_ent);
-
-					moved = RP_SpawnForRoute(&route);
-					if (!moved)
-					{
-						trap->SendServerCommand( ent-g_entities, va("print \"The %s could not be placed: no free entity slot.\n\"", arg1) );
-						return;
-					}
-
-					for (k = 0; k < count; k++)
-						level.zyk_spawn_strings[moved->s.number][k] = pairs[k];
-					level.zyk_spawn_strings_values_count[moved->s.number] = count;
-					zyk_main_set_entity_field(moved, "origin", va("%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]));
-					zyk_main_spawn_entity(moved);
-					new_ent = moved;
-				}
-			}
-
-			if (!new_ent->inuse)
-			{
-				trap->SendServerCommand( ent-g_entities, va("print \"The %s did not survive being spawned there (a class that removes itself, or a spawn its spawn function refused).\n\"", arg1) );
-				return;
+				new_ent = settled;
 			}
 		}
 		else
 		zyk_main_spawn_entity(new_ent);
+
+		// GalaxyRP: [Entity System] the spawn can remove the entity at once: a model or effect file the
+		// server does not have (RP_EntitySystemSpawnRefused), or a class that removes itself. It used to
+		// report "Entity 0 spawned" -- the number of a freed slot.
+		if (!new_ent->inuse)
+		{
+			if (level.rp_spawn_refusal[0])
+				trap->SendServerCommand( ent-g_entities, va("print \"The %s was refused: %s.\n\"", arg1, level.rp_spawn_refusal) );
+			else
+				trap->SendServerCommand( ent-g_entities, va("print \"The %s did not survive being spawned (a class that removes itself, or a spawn its spawn function refused).\n\"", arg1) );
+			return;
+		}
 
 		if (new_ent->s.number != 0)
 		{
@@ -15774,6 +15731,8 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// so the admin read "Entity 0 edited" about something that no longer existed.
 		if (this_ent->inuse)
 			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d edited\n\"", entity_id) );
+		else if (level.rp_spawn_refusal[0])
+			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d was edited, but it was refused when spawned again (%s), so it is gone.\n\"", entity_id, level.rp_spawn_refusal) );
 		else
 			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d was edited, but it did not survive being spawned again (a class that removes itself on the server, or an edit its spawn function refused), so it is gone.\n\"", entity_id) );
 	}
@@ -17059,6 +17018,14 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		zyk_main_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
 
 		zyk_main_spawn_entity(new_ent);
+
+		// GalaxyRP: [Entity System] its model file must be on the server (RP_EntitySystemSpawnRefused)
+		if (!new_ent->inuse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"The platform was refused%s%s.\n\"",
+				level.rp_spawn_refusal[0] ? ": " : "", level.rp_spawn_refusal) );
+			return;
+		}
 
 		if (new_ent->s.number != 0)
 		{
@@ -18711,7 +18678,8 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
 ^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
 ^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not map or brush entities in place.\n\
-^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\n\"" );
+^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\
+^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n\n\"" );
 }
 
 /*

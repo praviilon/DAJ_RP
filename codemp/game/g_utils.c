@@ -625,6 +625,193 @@ int G_BoneIndex( const char *name ) {
 Ghoul2 Insert End
 */
 
+/*
+=================
+RP_FileExists / RP_ModelInfo / RP_PackConstantLight
+
+GalaxyRP: [Entity System] whether the server's file system holds this file (the pk3s included) -- the
+Entity System refuses a model or effect it does not have, rather than registering a name no client
+can load into one of the map's 512 model or 64 effect slots and a slice of the gamestate, until the
+map changes (see RP_EntitySystemSpawnRefused() in g_spawn.c).
+
+RP_ModelInfo(): the frame count and the frame-0 bounds of the md3 behind a model index, read from the
+file once per map and kept in level.rp_model_*. The header is checked before any of it is believed --
+the ident and version, a frame count and frame offset that fit in the file, bounds that are numbers of
+a sane size -- so a truncated, foreign or hostile file just reads as "unknown" and every caller keeps
+the behaviour it had without it. qfalse then, and for a path that is not an .md3.
+
+RP_PackConstantLight(): the "light" radius and "color" (0..1 each) packed into entityState_t's
+constantLight the way InitMover() does for movers: red, green, blue and radius/4 in the four bytes.
+=================
+*/
+qboolean RP_FileExists( const char *path )
+{
+	fileHandle_t f = 0;
+	int len;
+
+	if ( !VALIDSTRING( path ) )
+		return qfalse;
+
+	len = trap->FS_Open( path, &f, FS_READ );
+	if ( f )
+		trap->FS_Close( f );
+
+	return ( f && len > 0 ) ? qtrue : qfalse;
+}
+
+typedef struct {
+	int		ident;
+	int		version;
+	char	name[MAX_QPATH];
+	int		flags;
+	int		numFrames;
+	int		numTags;
+	int		numSurfaces;
+	int		numSkins;
+	int		ofsFrames;
+	int		ofsTags;
+	int		ofsSurfaces;
+	int		ofsEnd;
+} rpMd3Header_t;	// md3Header_t (qcommon/qfiles.h), which the game module does not include
+
+typedef struct {
+	vec3_t	bounds[2];
+	vec3_t	localOrigin;
+	float	radius;
+	char	name[16];
+} rpMd3Frame_t;		// md3Frame_t
+
+#define RP_MD3_IDENT		(('3'<<24)+('P'<<16)+('D'<<8)+'I')
+#define RP_MD3_VERSION		15
+#define RP_MD3_MAX_FRAMES	1024
+#define RP_MD3_MAX_BOUND	65536.0f
+
+static qboolean RP_ReadModelInfo( const char *path, int *frames, vec3_t mins, vec3_t maxs )
+{
+	fileHandle_t f = 0;
+	rpMd3Header_t header;
+	rpMd3Frame_t frame;
+	int len, skip, k;
+	qboolean ok = qfalse;
+
+	if ( !VALIDSTRING( path ) || strlen( path ) < 5 || Q_stricmp( path + strlen( path ) - 4, ".md3" ) != 0 )
+		return qfalse;
+
+	len = trap->FS_Open( path, &f, FS_READ );
+	if ( !f )
+		return qfalse;
+
+	if ( len < (int)sizeof( header ) + (int)sizeof( frame ) )
+		goto done;
+
+	trap->FS_Read( &header, sizeof( header ), f );
+	header.ident = LittleLong( header.ident );
+	header.version = LittleLong( header.version );
+	header.numFrames = LittleLong( header.numFrames );
+	header.ofsFrames = LittleLong( header.ofsFrames );
+
+	if ( header.ident != RP_MD3_IDENT || header.version != RP_MD3_VERSION )
+		goto done;
+	if ( header.numFrames < 1 || header.numFrames > RP_MD3_MAX_FRAMES )
+		goto done;
+	if ( header.ofsFrames < (int)sizeof( header ) || header.ofsFrames > len - header.numFrames * (int)sizeof( frame ) )
+		goto done;
+
+	// zyk: there is no seek, so read our way to the frames (they follow the header in every md3 the
+	// tools write, so this is normally nothing)
+	for ( skip = header.ofsFrames - (int)sizeof( header ); skip > 0; )
+	{
+		char scratch[256];
+		int n = skip > (int)sizeof( scratch ) ? (int)sizeof( scratch ) : skip;
+
+		trap->FS_Read( scratch, n, f );
+		skip -= n;
+	}
+
+	trap->FS_Read( &frame, sizeof( frame ), f );
+
+	for ( k = 0; k < 3; k++ )
+	{
+		float lo = LittleFloat( frame.bounds[0][k] );
+		float hi = LittleFloat( frame.bounds[1][k] );
+
+		// zyk: the negated comparisons also refuse a NaN
+		if ( !( lo > -RP_MD3_MAX_BOUND && lo < RP_MD3_MAX_BOUND ) || !( hi > -RP_MD3_MAX_BOUND && hi < RP_MD3_MAX_BOUND ) || !( lo <= hi ) )
+			goto done;
+
+		mins[k] = lo;
+		maxs[k] = hi;
+	}
+
+	*frames = header.numFrames;
+	ok = qtrue;
+
+done:
+	trap->FS_Close( f );
+	return ok;
+}
+
+qboolean RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs )
+{
+	if ( modelIndex <= 0 || modelIndex >= MAX_MODELS )
+		return qfalse;
+
+	if ( level.rp_model_info_state[modelIndex] == 0 )
+	{
+		int n = 0;
+		vec3_t lo, hi;
+
+		if ( RP_ReadModelInfo( path, &n, lo, hi ) )
+		{
+			level.rp_model_info_state[modelIndex] = 1;
+			level.rp_model_frames[modelIndex] = (short)n;
+			VectorCopy( lo, level.rp_model_mins[modelIndex] );
+			VectorCopy( hi, level.rp_model_maxs[modelIndex] );
+		}
+		else
+		{
+			level.rp_model_info_state[modelIndex] = -1;
+		}
+	}
+
+	if ( level.rp_model_info_state[modelIndex] != 1 )
+		return qfalse;
+
+	if ( frames )
+		*frames = level.rp_model_frames[modelIndex];
+	if ( mins )
+		VectorCopy( level.rp_model_mins[modelIndex], mins );
+	if ( maxs )
+		VectorCopy( level.rp_model_maxs[modelIndex], maxs );
+
+	return qtrue;
+}
+
+int RP_PackConstantLight( float light, const vec3_t color )
+{
+	int c[3], i, k;
+
+	// zyk: the negated tests also turn a NaN into 0 rather than into whatever converting it does
+	for ( k = 0; k < 3; k++ )
+	{
+		if ( !( color[k] > 0.0f ) )
+			c[k] = 0;
+		else if ( color[k] >= 1.0f )
+			c[k] = 255;
+		else
+			c[k] = (int)( color[k] * 255 );
+	}
+
+	if ( !( light > 0.0f ) )
+		i = 0;
+	else if ( light >= 1020.0f )
+		i = 255;
+	else
+		i = (int)( light / 4 );
+
+	return c[0] | ( c[1] << 8 ) | ( c[2] << 16 ) | ( i << 24 );
+}
+
 int G_ModelIndex( const char *name ) {
 #ifdef _DEBUG_MODEL_PATH_ON_SERVER
 	//debug to see if we are shoving data into configstrings for models that don't exist, and if

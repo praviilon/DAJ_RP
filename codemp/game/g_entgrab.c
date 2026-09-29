@@ -136,6 +136,9 @@ void RP_MarkMapEntities( void )
 
 	qsort( level.rp_map_fingerprints, n, sizeof( level.rp_map_fingerprints[0] ), RP_CompareFingerprints );
 	level.rp_num_map_fingerprints = n;
+
+	// zyk: from here on, an entity with a record that is not one of these is the Entity System's
+	level.rp_map_loaded = qtrue;
 }
 
 qboolean RP_RecordIsMapEntity( int num )
@@ -517,6 +520,122 @@ static qboolean RP_GrabOccupied( const vec3_t origin, const vec3_t mins, const v
 	}
 
 	return qfalse;
+}
+
+/*
+==================
+RP_EntGrabSettle
+
+An entity just spawned where the aim put it, placed by the box it was expected to have: now that its real
+box is known (a misc_model_breakable's comes from its model file, a brush entity's from its model), set
+that box against the surface at point and make the entity again there -- freed and spawned anew in
+another slot from its record with the new origin, rather than spawned again in place, so nothing its
+spawn function set up (a Ghoul2 model, ICARUS state) is set up twice on one entity. /entaddaim uses it
+for every new entity, and a dropped copy for one whose box is not the original's (a copy of one of the
+map's models gets its model's own box, the original keeps the map's).
+
+Left as it is when it has no box it is placed by (RP_EntGrabPlaceBox), is already where that box puts it,
+there is no room, or its spawn made other entities than a trigger of its own -- which goes with it, but
+the others a second spawn would make twice (a misc_bsp's sub-BSP). freeBefore is G_FreeEntityCount()
+from just before that spawn. Returns the entity as it now is: the same one, the one made anew, or NULL if
+the new one did not survive its spawn.
+==================
+*/
+/*
+==================
+RP_EntGrabScaleShift
+
+How far a misc_model_breakable's spawn function will lift the origin it is given: with a modelscale it
+raises it by what the scale took off the bottom of its box, as single player does, to keep the box's
+bottom where it was. The commands that put a model somewhere give it that much less, so it ends up
+exactly where they put it.
+==================
+*/
+static float RP_EntGrabScaleShift( const gentity_t *e )
+{
+	float scale = e->modelScale[2];
+
+	if ( !e->classname || Q_stricmp( e->classname, "misc_model_breakable" ) != 0 )
+		return 0.0f;
+	if ( !( scale > 0.0f ) || scale == 1.0f )
+		return 0.0f;
+
+	return e->r.mins[2] / scale - e->r.mins[2];
+}
+
+// zyk: an origin key for an entity that is to end up at origin
+static const char *RP_EntGrabOriginKey( const gentity_t *e, const vec3_t origin )
+{
+	return va( "%i %i %i", (int)origin[0], (int)origin[1], (int)floor( origin[2] - RP_EntGrabScaleShift( e ) + 0.5f ) );
+}
+
+gentity_t *RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t normal, int freeBefore )
+{
+	float shift;
+	static char *pairs[ZYK_MAX_SPAWN_STRING_SLOTS];
+	vec3_t mins, maxs, origin;
+	rpSpawnRoute_t route;
+	gentity_t *other, *moved;
+	int triggers = 0;
+	int count, k;
+
+	if ( !e || !e->inuse || e->isLogical )
+		return e;
+
+	RP_EntGrabPlaceBox( NULL, e, mins, maxs );
+	if ( VectorCompare( mins, vec3_origin ) && VectorCompare( maxs, vec3_origin ) )
+		return e;
+
+	RP_EntGrabPlace( point, normal, mins, maxs, origin );
+	if ( VectorCompare( origin, e->s.origin ) )
+		return e;
+
+	// zyk: a solid one is not made again around someone standing there
+	if ( ( e->r.contents & ( CONTENTS_SOLID | CONTENTS_BODY ) ) && RP_GrabOccupied( origin, mins, maxs ) )
+		return e;
+
+	RP_FOR_EACH_ENTITY( other )
+	{
+		if ( other != e && other->inuse && other->parent == e && ( other->r.contents & CONTENTS_TRIGGER ) && !RP_EntityHasSpawnKeys( other ) )
+			triggers++;
+	}
+
+	if ( freeBefore - G_FreeEntityCount() > triggers || !G_EntitySlotsAvailable( 4 ) )
+		return e;
+
+	shift = RP_EntGrabScaleShift( e );
+
+	count = level.zyk_spawn_strings_values_count[e->s.number];
+	if ( count > ZYK_MAX_SPAWN_STRING_SLOTS )
+		count = ZYK_MAX_SPAWN_STRING_SLOTS;
+	memcpy( pairs, level.zyk_spawn_strings[e->s.number], sizeof( pairs[0] ) * count );
+
+	RP_SpawnRouteInit( &route );
+	for ( k = 0; k + 1 < count; k += 2 )
+		RP_SpawnRouteNoteKey( &route, pairs[k], pairs[k + 1] );
+
+	if ( e->rpBSPInstance > 0 )
+		RP_FreeSubBSPEntities( e->rpBSPInstance );
+	RP_FreeEntityTriggers( e );
+	G_FreeEntity( e );
+
+	moved = RP_SpawnForRoute( &route );
+	if ( !moved )
+		return NULL;
+
+	for ( k = 0; k < count; k++ )
+		level.zyk_spawn_strings[moved->s.number][k] = pairs[k];
+	level.zyk_spawn_strings_values_count[moved->s.number] = count;
+
+	if ( !RP_GrabSetKey( moved, "origin", va( "%i %i %i", (int)origin[0], (int)origin[1], (int)floor( origin[2] - shift + 0.5f ) ) ) )
+	{
+		G_FreeEntity( moved );
+		return NULL;
+	}
+
+	zyk_main_spawn_entity( moved );
+
+	return moved->inuse ? moved : NULL;
 }
 
 /*
@@ -967,6 +1086,7 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 {
 	clientPersistant_t *pers = &ent->client->pers;
 	vec3_t point, normal, mins, maxs, origin, angles;
+	vec3_t playerMins, playerMaxs;
 	char originText[64];
 	const char *anglesKey;
 	qboolean rotated = pers->entHoldRotated;
@@ -977,6 +1097,8 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 	RP_EntGrabPlaceBox( held->classname, held, mins, maxs );
 	RP_EntGrabPlace( point, normal, mins, maxs, origin );
 	VectorCopy( pers->entHoldAngles, angles );
+	// zyk: the player's box a spawn point or NPC spawner is placed by, or none
+	RP_EntGrabPlaceBox( held->classname, NULL, playerMins, playerMaxs );
 
 	if ( ( held->r.contents & ( CONTENTS_SOLID | CONTENTS_BODY ) ) && RP_GrabOccupied( origin, mins, maxs ) )
 	{
@@ -1022,7 +1144,7 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 			level.zyk_spawn_strings[copy->s.number][i] = level.zyk_spawn_strings[num][i];
 		level.zyk_spawn_strings_values_count[copy->s.number] = count;
 
-		if ( !RP_GrabSetKey( copy, "origin", originText ) || ( rotated && !RP_GrabWriteAngles( copy, anglesKey, angles ) ) )
+		if ( !RP_GrabSetKey( copy, "origin", RP_EntGrabOriginKey( held, origin ) ) || ( rotated && !RP_GrabWriteAngles( copy, anglesKey, angles ) ) )
 		{
 			G_FreeEntity( copy );
 			trap->SendServerCommand( ent->s.number, "print \"Cannot drop the copy: its record has no room for its origin and angles.\n\"" );
@@ -1030,11 +1152,32 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 		}
 
 		RP_GrabClear( ent );
-		zyk_main_spawn_entity( copy );
+		{
+			int freeBefore = G_FreeEntityCount();
+
+			zyk_main_spawn_entity( copy );
+
+			// zyk: a copy can come out with a different box than the original it was placed by -- a
+			// copy of one of the map's models gets its model's own box (SP_misc_model_breakable)
+			if ( copy->inuse && VectorCompare( playerMins, vec3_origin ) && VectorCompare( playerMaxs, vec3_origin ) )
+			{
+				gentity_t *settled = RP_EntGrabSettle( copy, point, normal, freeBefore );
+
+				if ( !settled )
+				{
+					trap->SendServerCommand( ent->s.number, va( "print \"The copy of entity %d could not be placed (no free entity slot, or it did not survive being spawned again).\n\"", num ) );
+					return;
+				}
+				copy = settled;
+			}
+		}
 
 		if ( !copy->inuse )
 		{
-			trap->SendServerCommand( ent->s.number, va( "print \"The copy of entity %d did not survive being spawned there (a class that removes itself, or a spawn its spawn function refused).\n\"", num ) );
+			if ( level.rp_spawn_refusal[0] )
+				trap->SendServerCommand( ent->s.number, va( "print \"The copy of entity %d was refused: %s.\n\"", num, level.rp_spawn_refusal ) );
+			else
+				trap->SendServerCommand( ent->s.number, va( "print \"The copy of entity %d did not survive being spawned there (a class that removes itself, or a spawn its spawn function refused).\n\"", num ) );
 			return;
 		}
 
@@ -1054,7 +1197,7 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 			count = ZYK_MAX_SPAWN_STRING_SLOTS;
 		memcpy( backup, level.zyk_spawn_strings[num], sizeof( backup[0] ) * count );
 
-		if ( !RP_GrabSetKey( held, "origin", originText ) || ( rotated && !RP_GrabWriteAngles( held, anglesKey, angles ) ) )
+		if ( !RP_GrabSetKey( held, "origin", RP_EntGrabOriginKey( held, origin ) ) || ( rotated && !RP_GrabWriteAngles( held, anglesKey, angles ) ) )
 		{
 			// zyk: put back whatever part of it went in, and keep holding
 			memcpy( level.zyk_spawn_strings[num], backup, sizeof( backup[0] ) * count );
@@ -1065,6 +1208,26 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 
 		RP_GrabClear( ent );
 		RP_EntGrabRespawnInPlace( held );
+
+		// zyk: turned, a model's own box is not the one it was placed by -- set that against the
+		// surface and spawn it once more (see RP_EntGrabSettle; a cut entity keeps its slot)
+		if ( held->inuse && !held->isLogical && VectorCompare( playerMins, vec3_origin ) && VectorCompare( playerMaxs, vec3_origin ) )
+		{
+			vec3_t newMins, newMaxs, settled;
+
+			RP_EntGrabPlaceBox( NULL, held, newMins, newMaxs );
+			if ( !VectorCompare( newMins, vec3_origin ) || !VectorCompare( newMaxs, vec3_origin ) )
+			{
+				RP_EntGrabPlace( point, normal, newMins, newMaxs, settled );
+				if ( !VectorCompare( settled, held->s.origin ) &&
+					!( ( held->r.contents & ( CONTENTS_SOLID | CONTENTS_BODY ) ) && RP_GrabOccupied( settled, newMins, newMaxs ) ) &&
+					RP_GrabSetKey( held, "origin", RP_EntGrabOriginKey( held, settled ) ) )
+				{
+					RP_EntGrabRespawnInPlace( held );
+					Com_sprintf( originText, sizeof( originText ), "%i %i %i", (int)settled[0], (int)settled[1], (int)settled[2] );
+				}
+			}
+		}
 
 		if ( held->inuse )
 		{

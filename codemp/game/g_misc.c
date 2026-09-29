@@ -344,6 +344,52 @@ void SP_misc_model_static(gentity_t *ent)
 	G_FreeEntity( ent );
 }
 
+/*QUAKED rp_light (1 1 0) (-8 -8 -8) (8 8 8) START_OFF
+GalaxyRP: [Entity System] a light and nothing else: a dynamic light at its origin, drawn by every
+client, with no model. Unlike "light", which the map compiler bakes into the map, this one exists at
+run time, so the Entity System can add it anywhere. Using it (targetname) switches it between its on
+and off lights.
+
+"light"		radius when on (default 300)
+"color"		red green blue from 0 to 1 when on (default 1 1 1, white)
+"offlight"	radius when off (default 0: dark)
+"offcolor"	colour when off (default white)
+START_OFF	starts switched off
+*/
+static void rp_light_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	self->count = self->count ? 0 : 1;
+	self->s.constantLight = self->count ? self->genericValue1 : self->genericValue2;
+}
+
+void SP_rp_light( gentity_t *ent )
+{
+	float light, offLight;
+	vec3_t color, offColor;
+
+	G_SpawnFloat( "light", "300", &light );
+	G_SpawnVector( "color", "1 1 1", color );
+	G_SpawnFloat( "offlight", "0", &offLight );
+	G_SpawnVector( "offcolor", "1 1 1", offColor );
+
+	ent->genericValue1 = RP_PackConstantLight( light, color );
+	ent->genericValue2 = ( offLight > 0.0f ) ? RP_PackConstantLight( offLight, offColor ) : 0;
+	ent->count = ( ent->spawnflags & 1 ) ? 0 : 1;
+	ent->s.constantLight = ent->count ? ent->genericValue1 : ent->genericValue2;
+
+	// zyk: no model, nothing to collide with; the small box is where it is sent to players from, and
+	// what the Entity Bounds display and the entity commands aim at
+	ent->s.eType = ET_GENERAL;
+	ent->s.modelindex = 0;
+	ent->r.contents = 0;
+	VectorSet( ent->r.mins, -8, -8, -8 );
+	VectorSet( ent->r.maxs, 8, 8, 8 );
+	ent->use = rp_light_use;
+
+	G_SetOrigin( ent, ent->s.origin );
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
 /*QUAKED misc_model_breakable (1 0 0) (-16 -16 -16) (16 16 16) SOLID AUTOANIMATE DEADSOLID NO_DMODEL NO_SMOKE USE_MODEL USE_NOT_BREAK PLAYER_USE NO_EXPLOSION
 SOLID - Movement is blocked by it, if not set, can still be broken by explosions and shots if it has health
 AUTOANIMATE - Will cycle it's anim
@@ -399,6 +445,68 @@ custom explosion effect/sound?
 void misc_model_breakable_gravity_init( gentity_t *ent, qboolean dropToFloor );
 void misc_model_breakable_init( gentity_t *ent );
 
+// GalaxyRP: [Entity System] the axis-aligned box that holds this one turned by angles -- a turned
+// model still collides as an axis-aligned box, so this is the box that covers it
+static void RP_EncloseTurnedBox( vec3_t mins, vec3_t maxs, const vec3_t angles )
+{
+	matrix3_t axis;
+	vec3_t lo, hi;
+	int i, k;
+
+	if ( !angles[0] && !angles[1] && !angles[2] )
+		return;
+
+	// zyk: a box that is not a box (a NaN scale made it) is left as it is
+	for ( k = 0; k < 3; k++ )
+	{
+		if ( !( mins[k] <= maxs[k] ) )
+			return;
+	}
+
+	AnglesToAxis( angles, axis );
+	VectorSet( lo, 999999, 999999, 999999 );
+	VectorSet( hi, -999999, -999999, -999999 );
+
+	for ( i = 0; i < 8; i++ )
+	{
+		vec3_t local, p;
+
+		local[0] = ( i & 1 ) ? maxs[0] : mins[0];
+		local[1] = ( i & 2 ) ? maxs[1] : mins[1];
+		local[2] = ( i & 4 ) ? maxs[2] : mins[2];
+
+		for ( k = 0; k < 3; k++ )
+		{
+			p[k] = local[0] * axis[0][k] + local[1] * axis[1][k] + local[2] * axis[2][k];
+			if ( p[k] < lo[k] ) lo[k] = p[k];
+			if ( p[k] > hi[k] ) hi[k] = p[k];
+		}
+	}
+
+	VectorCopy( lo, mins );
+	VectorCopy( hi, maxs );
+}
+
+/*
+GalaxyRP: [Entity System] additions to misc_model_breakable:
+
+  "light" / "color"  a light on the model, as movers have them: "light" is the radius (default 100 when
+                     only "color" is given), "color" red green blue from 0 to 1 (default white). No light
+                     without either key; it goes out when the model is destroyed.
+  "modelscale"       now scales the model drawn as well as its box, as in single player -- through
+                     entityState_t::iModelScale, so 0.01 to 10.23. "zykmodelscale" (a percentage), if
+                     given, still decides the drawn size; "modelscale_vec" still scales the box only,
+                     since the client can only draw a model scaled the same on every axis.
+  AUTOANIMATE (2)    a model with several frames plays them over and over (RP_Animate, one frame per
+                     server frame), and stops when destroyed.
+
+And for one the Entity System made (RP_EntitySystemMade: /entadd, /entaddaim, copies, entity files --
+never the map's own): with no "mins"/"maxs" (and not spawnflag 65536), its box is the model's own
+frame-0 bounds from the md3 file, scaled and turned with it, rather than a 32-unit cube; and its damage
+and use models are only registered when those files exist. (A modelscale still lifts the origin by
+single player's amount, which keeps the box's bottom where it was; the entity commands that place a
+model allow for it -- RP_EntGrabScaleShift() in g_entgrab.c.)
+*/
 void SP_misc_model_breakable( gentity_t *ent )
 {
 	char	damageModel[MAX_QPATH];
@@ -406,6 +514,13 @@ void SP_misc_model_breakable( gentity_t *ent )
 	int		len;
 	float grav = 0;
 	qboolean bHasScale = qfalse;
+	qboolean esMade = RP_EntitySystemMade( ent );
+	qboolean boxGiven = qfalse;
+	qboolean autoBox = qfalse;
+	float uniformScale = 0.0f;
+	int modelFrames = 0;
+	vec3_t modelMins, modelMaxs;
+	qboolean haveModelInfo = qfalse;
 	
 	// Chris F. requested default for misc_model_breakable to be NONE...so don't arbitrarily change this.
 	G_SpawnInt( "material", "8", (int*)&ent->material );
@@ -417,20 +532,31 @@ void SP_misc_model_breakable( gentity_t *ent )
 	{
 		G_SpawnVector("mins", "-60 -60 -20", ent->r.mins);
 		G_SpawnVector("maxs", "60 60 42", ent->r.maxs);
+		boxGiven = qtrue;
 	}
 	else if (Q_stricmp(ent->targetname, "zyk_tree_of_life") == 0)
 	{
 		G_SpawnVector("mins", "-70 -70 -400", ent->r.mins);
 		G_SpawnVector("maxs", "70 70 250", ent->r.maxs);
+		boxGiven = qtrue;
 	}
 	else
 	{
 		if (!(ent->spawnflags & 65536))
 		{ // zyk: do not set default mins and maxs if this spawnflag is set
-			G_SpawnVector("mins", "-16 -16 -16", ent->r.mins);
-			G_SpawnVector("maxs", "16 16 16", ent->r.maxs);
+			if (G_SpawnVector("mins", "-16 -16 -16", ent->r.mins))
+				boxGiven = qtrue;
+			if (G_SpawnVector("maxs", "16 16 16", ent->r.maxs))
+				boxGiven = qtrue;
+		}
+		else
+		{
+			boxGiven = qtrue;
 		}
 	}
+
+	// GalaxyRP: [Entity System] the model's own box, for an entity the Entity System made
+	autoBox = (esMade && !boxGiven) ? qtrue : qfalse;
 
 	if (!bHasScale)
 	{
@@ -440,6 +566,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 		{
 			ent->modelScale[ 0 ] = ent->modelScale[ 1 ] = ent->modelScale[ 2 ] = temp;
 			bHasScale = qtrue;
+			uniformScale = temp;
 		}
 	}
 
@@ -483,15 +610,38 @@ void SP_misc_model_breakable( gentity_t *ent )
 
 	misc_model_breakable_init( ent );
 
+	// GalaxyRP: [Entity System] what the md3 file holds, when something here needs it: the model's own
+	// box, or its frame count for AUTOANIMATE
+	if (autoBox || (ent->spawnflags & 2))
+	{
+		haveModelInfo = RP_ModelInfo(ent->s.modelindex, ent->model, &modelFrames, modelMins, modelMaxs);
+	}
+
+	if (autoBox && haveModelInfo)
+	{
+		VectorCopy(modelMins, ent->r.mins);
+		VectorCopy(modelMaxs, ent->r.maxs);
+	}
+	else
+	{
+		autoBox = qfalse;
+	}
+
 	Q_strncpyz( damageModel, ent->model, sizeof(damageModel) );
 	damageModel[len] = 0;	//chop extension
 	Q_strncpyz( useModel, damageModel, sizeof(useModel));
+
+	// GalaxyRP: [Entity System] no longer registers a model file the server does not have, for an
+	// entity the Entity System made -- see RP_EntitySystemSpawnRefused() in g_spawn.c
+	ent->s.modelindex2 = 0;
+	ent->sound1to2 = 0;
 
 	if (ent->takedamage) {
 		//Dead/damaged model
 		if( !(ent->spawnflags & 8) ) {	//no dmodel
 			Q_strcat( damageModel, sizeof(damageModel), "_d1.md3" );
-			ent->s.modelindex2 = G_ModelIndex( damageModel );
+			if (!esMade || RP_FileExists(damageModel))
+				ent->s.modelindex2 = G_ModelIndex( damageModel );
 		}
 
 		// GalaxyRP fix: [SP Maps] the singleplayer "_c1.md3" chunk model used to be registered here
@@ -507,7 +657,8 @@ void SP_misc_model_breakable( gentity_t *ent )
 	//Use model
 	if( ent->spawnflags & 32 ) {	//has umodel
 		Q_strcat( useModel, sizeof(useModel), "_u1.md3" );
-		ent->sound1to2 = G_ModelIndex( useModel );
+		if (!esMade || RP_FileExists(useModel))
+			ent->sound1to2 = G_ModelIndex( useModel );
 	}
 
 	// Scale up the tie-bomber bbox a little.
@@ -515,6 +666,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 	{
 		VectorSet (ent->r.mins, -80, -80, -80);
 		VectorSet (ent->r.maxs, 80, 80, 80); 
+		autoBox = qfalse;
 
 		//ent->s.modelScale[ 0 ] = ent->s.modelScale[ 1 ] = ent->s.modelScale[ 2 ] *= 2.0f;
 		//bHasScale = qtrue;
@@ -536,6 +688,62 @@ void SP_misc_model_breakable( gentity_t *ent )
 		oldMins2 = ent->r.mins[2];
 		ent->r.mins[2] *= ent->modelScale[2];
 		ent->s.origin[2] += (oldMins2-ent->r.mins[2]);
+	}
+
+	// GalaxyRP: [Entity System] the model's own box, turned with the model
+	if (autoBox)
+	{
+		RP_EncloseTurnedBox(ent->r.mins, ent->r.maxs, ent->s.angles);
+	}
+
+	// GalaxyRP: [Entity System] the drawn size and the light. Only when spawning from key/value pairs:
+	// the game's own models (the duel and melee arenas) are set up field by field with no pairs, and
+	// their "zykmodelscale" is already in iModelScale -- nothing here may touch it. With pairs, keys
+	// that are gone must be undone too, since /entedit respawns an entity without clearing it.
+	if (level.numSpawnVars > 0)
+	{
+		int percent = 0;
+		float light = 100.0f;
+		vec3_t color;
+		qboolean lightSet, colorSet;
+
+		if (!G_SpawnInt("zykmodelscale", "0", &percent))
+		{
+			if (uniformScale > 0.0f)
+			{
+				percent = (int)(uniformScale * 100.0f + 0.5f);
+				if (percent < 1)
+					percent = 1;
+				if (percent > 1023)
+					percent = 1023;
+				ent->s.iModelScale = percent;
+			}
+			else
+			{
+				ent->s.iModelScale = 0;
+			}
+		}
+
+		lightSet = G_SpawnFloat("light", "100", &light);
+		colorSet = G_SpawnVector("color", "1 1 1", color);
+		ent->s.constantLight = (lightSet || colorSet) ? RP_PackConstantLight(light, color) : 0;
+	}
+
+	// GalaxyRP: [Entity System] AUTOANIMATE: play the model's frames over and over
+	if ((ent->spawnflags & 2) && haveModelInfo && modelFrames > 1)
+	{
+		ent->startFrame = 0;
+		ent->endFrame = modelFrames - 1;
+		ent->loopAnim = qtrue;
+		ent->rpAnimating = qtrue;
+		ent->rpAutoAnimate = qtrue;
+		ent->s.frame = 0;
+	}
+	else if (ent->rpAutoAnimate)
+	{
+		ent->rpAnimating = qfalse;
+		ent->rpAutoAnimate = qfalse;
+		ent->s.frame = 0;
 	}
 
 	G_SetOrigin( ent, ent->s.origin );
@@ -659,6 +867,12 @@ void misc_model_breakable_die( gentity_t *self, gentity_t *inflictor, gentity_t 
 	}
 	//NOTE: Stop any scripts that are currently running (FLUSH)... ?
 	//Turn off animation
+	// GalaxyRP: [Entity System] and the light (see SP_misc_model_breakable)
+	if ( self->rpAutoAnimate )
+		self->s.frame = 0;	// the damage model has frames of its own
+	self->rpAnimating = qfalse;
+	self->rpAutoAnimate = qfalse;
+	self->s.constantLight = 0;
 
 	self->health = 0;
 	//Throw some chunks
@@ -764,7 +978,10 @@ void misc_model_breakable_die( gentity_t *self, gentity_t *inflictor, gentity_t 
 	self->think = 0;
 	self->nextthink = -1;
 
-	if(self->s.modelindex2 != -1 && !(self->spawnflags & 8))
+	// GalaxyRP: [Entity System] was "!= -1", which modelindex2 never is: with no damage model (0 --
+	// its file was not on the server, see SP_misc_model_breakable) the broken model became no model
+	// and stayed as an invisible entity. It goes instead, as the FIXME below wanted.
+	if(self->s.modelindex2 > 0 && !(self->spawnflags & 8))
 	{//FIXME: modelindex doesn't get set to -1 if the damage model doesn't exist
 		self->s.modelindex = self->s.modelindex2;
 		G_ActivateBehavior( self, BSET_DEATH );
@@ -861,7 +1078,9 @@ void misc_model_use (gentity_t *self, gentity_t *other, gentity_t *activator)
 	//Don't explode if they've requested it to not
 	if ( self->spawnflags & 64 )
 	{//Usemodels toggling
-		if ( self->spawnflags & 32 )
+		// GalaxyRP: [Entity System] not when there is no use model to switch to (its file was not on
+		// the server, see SP_misc_model_breakable) -- that would switch to no model at all
+		if ( (self->spawnflags & 32) && self->sound1to2 )
 		{
 			if( self->s.modelindex == self->sound1to2 )
 			{

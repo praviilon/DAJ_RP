@@ -359,6 +359,9 @@ struct gentity_s {
 	int				endFrame;
 	qboolean		loopAnim;
 	qboolean		rpAnimating;
+	// GalaxyRP: [Entity System] rpAnimating was set by the AUTOANIMATE spawnflag of a
+	// misc_model_breakable (not by a script), so a respawn without the flag turns it off again
+	qboolean		rpAutoAnimate;
 
 	struct gclient_s	*client;			// NULL if not a client
 
@@ -1972,6 +1975,20 @@ typedef struct level_locals_s {
 	// when the map finished loading, sorted -- see gentity_t::rpMapEntity and g_entgrab.c
 	uint64_t rp_map_fingerprints[MAX_ENTITIESTOTAL];
 	int rp_num_map_fingerprints;
+	// GalaxyRP: [Entity System] true once the map and its per-map fixes have spawned
+	// (RP_MarkMapEntities): from then on an entity with a record that is not the map's is one the
+	// Entity System made -- see RP_EntitySystemMade() in g_spawn.c
+	qboolean rp_map_loaded;
+	// GalaxyRP: [Entity System] why the last Entity System spawn was refused ("" if it was not),
+	// for the command that asked for it to say -- see RP_EntitySystemSpawnRefused() in g_spawn.c
+	char rp_spawn_refusal[256];
+	// GalaxyRP: [Entity System] what the md3 file behind each model index holds, read once per map
+	// the first time it is asked for (RP_ModelInfo() in g_utils.c): 0 not read yet, 1 read, -1 not
+	// readable (no such file, or not an md3 this can trust)
+	signed char rp_model_info_state[MAX_MODELS];
+	short rp_model_frames[MAX_MODELS];
+	vec3_t rp_model_mins[MAX_MODELS];
+	vec3_t rp_model_maxs[MAX_MODELS];
 
 	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
 	// finished loading. Spawn selection falls back to it, instead of ending the server with
@@ -2311,6 +2328,12 @@ gentity_t	*RP_EntBoundsAim( const gentity_t *viewer );
 #define RP_HOLD_CUT		2
 void		RP_MarkMapEntities( void );
 qboolean	RP_RecordIsMapEntity( int num );
+qboolean	RP_EntitySystemMade( const gentity_t *ent );
+qboolean	RP_EntitySystemSpawnRefused( gentity_t *ent );
+qboolean	RP_FileExists( const char *path );
+qboolean	RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs );
+int			RP_PackConstantLight( float light, const vec3_t color );
+gentity_t	*RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t normal, int freeBefore );
 void		RP_EntGrabFrame( gentity_t *ent );
 void		RP_EntGrabCancel( gentity_t *ent, qboolean tell );
 qboolean	RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );

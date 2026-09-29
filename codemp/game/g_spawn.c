@@ -319,6 +319,7 @@ void SP_misc_model(gentity_t *ent);
 void SP_misc_model_static(gentity_t *ent);
 void SP_misc_exploding_crate( gentity_t *ent ); // zyk: added this function
 void SP_misc_model_breakable( gentity_t *ent ) ;
+void SP_rp_light( gentity_t *ent );
 void SP_misc_gas_tank( gentity_t *ent ); // zyk: added this function
 void SP_misc_G2model(gentity_t *ent);
 void SP_misc_portal_camera(gentity_t *ent);
@@ -738,6 +739,7 @@ spawn_t	spawns[] = {
 	{ "point_combat",						SP_point_combat, qtrue },
 	{ "ref_tag",							SP_reference_tag, qtrue },
 	{ "ref_tag_huge",						SP_reference_tag, qtrue },
+	{ "rp_light",							SP_rp_light },	// GalaxyRP: [Entity System] a light and nothing else, g_misc.c
 	{ "shooter_blaster",					SP_shooter_blaster },
 	{ "target_autosave",					SP_target_autosave, qtrue }, // GalaxyRP: [SP Maps] no-op
 	{ "target_activate",					SP_target_activate, qtrue },
@@ -1882,6 +1884,128 @@ void zyk_set_brush_model( gentity_t *ent )
 	VectorCopy( ent->s.angles2, ent->s.apos.trBase );
 }
 
+/*
+=================
+RP_EntitySystemMade / RP_EntitySystemSpawnRefused
+
+GalaxyRP: [Entity System] RP_EntitySystemMade(): whether this entity is one the Entity System made --
+/entadd, /entaddaim, a copy, an entity file's line -- rather than the map's own. It has a key/value
+record, the map (with its per-map fixes) had finished loading when it spawned, it is not marked as the
+map's (rpMapEntity: an entity file's line for a map entity keeps that mark), and no misc_bsp's sub-BSP
+spawned it. Entities the game makes for itself have no record and never count. The checks below and
+the model box of a misc_model_breakable (SP_misc_model_breakable) apply to these only, so no map
+changes what it spawns or how.
+
+RP_EntitySystemSpawnRefused(): for such an entity, called by zyk_main_spawn_entity() before the spawn
+function runs. A misc_model_breakable, or a func_ class carrying an md3 model, whose model file the
+server does not have is refused, and so is an fx_runner whose effect file it does not have: registering
+the name would take one of the map's 512 model or 64 effect slots and part of the gamestate every client
+downloads, for the rest of the map, for something nobody can see. A model path that is not there as
+given is tried as models/<path>, with .md3 added if it has no extension, so "map_objects/crate" works;
+the record keeps what was typed. A misc_model_breakable must end up with an .md3 model, as its spawn
+function requires. The reason is logged and left in level.rp_spawn_refusal for the command to print.
+=================
+*/
+qboolean RP_EntitySystemMade( const gentity_t *ent )
+{
+	int num;
+
+	if ( !ent || !level.rp_map_loaded || ent->rpMapEntity || ent->rpSubBSPOf > 0 )
+		return qfalse;
+
+	num = (int)( ent - g_entities );
+	if ( num < MAX_CLIENTS + BODY_QUEUE_SIZE || num >= MAX_ENTITIESTOTAL )
+		return qfalse;
+
+	return ( level.zyk_spawn_strings_values_count[num] > 0 ) ? qtrue : qfalse;
+}
+
+static qboolean RP_SpawnRefuse( gentity_t *ent, const char *reason )
+{
+	Q_strncpyz( level.rp_spawn_refusal, reason, sizeof( level.rp_spawn_refusal ) );
+	G_LogPrintf( "Entity %d (%s) refused: %s\n", ent->s.number, ent->classname ? ent->classname : "noclass", reason );
+	return qtrue;
+}
+
+qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
+{
+	qboolean breakable, md3Mover;
+
+	level.rp_spawn_refusal[0] = '\0';
+
+	if ( !RP_EntitySystemMade( ent ) || !ent->classname )
+		return qfalse;
+
+	breakable = ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 ) ? qtrue : qfalse;
+	md3Mover = ( Q_stricmpn( ent->classname, "func_", 5 ) == 0 && ent->model && ent->model[0] &&
+		ent->model[0] != '*' && ent->model[0] != '#' ) ? qtrue : qfalse;
+
+	if ( breakable || md3Mover )
+	{
+		const char *model = ent->model;
+
+		if ( !model || !model[0] )
+			return RP_SpawnRefuse( ent, "it has no model" );
+
+		if ( !RP_FileExists( model ) )
+		{
+			char candidate[MAX_QPATH];
+			const char *base = strrchr( model, '/' );
+			const char *path = model;
+			qboolean hasExtension;
+
+			while ( *path == '/' )
+				path++;
+			base = base ? base + 1 : path;
+			hasExtension = strchr( base, '.' ) ? qtrue : qfalse;
+
+			if ( (int)( strlen( path ) + 7 + 4 ) >= (int)sizeof( candidate ) )
+				return RP_SpawnRefuse( ent, va( "model %s is not on the server", model ) );
+
+			Com_sprintf( candidate, sizeof( candidate ), "%s%s%s", Q_stricmpn( path, "models/", 7 ) ? "models/" : "",
+				path, hasExtension ? "" : ".md3" );
+
+			if ( !RP_FileExists( candidate ) )
+				return RP_SpawnRefuse( ent, va( "model %s is not on the server", model ) );
+
+			ent->model = G_NewStringRaw( candidate );
+		}
+
+		if ( breakable && ( strlen( ent->model ) < 5 || Q_stricmp( ent->model + strlen( ent->model ) - 4, ".md3" ) != 0 ) )
+			return RP_SpawnRefuse( ent, va( "model %s is not an .md3 model", ent->model ) );
+
+		return qfalse;
+	}
+
+	if ( Q_stricmp( ent->classname, "fx_runner" ) == 0 )
+	{
+		char *fxFile = NULL;
+		char path[MAX_QPATH * 2];
+
+		G_SpawnString( "fxFile", "", &fxFile );
+		if ( !fxFile || !fxFile[0] )
+			return qfalse;
+
+		// zyk: the path the effect system itself opens (CFxScheduler::RegisterEffect): ".efx" added
+		// when the name has no '.' at all, "effects/" put in front unless it already starts with it
+		Q_strncpyz( path, fxFile, sizeof( path ) );
+		if ( !strchr( path, '.' ) )
+			Q_strcat( path, sizeof( path ), ".efx" );
+		if ( Q_strncmp( fxFile, "effects", 7 ) != 0 )
+		{
+			char tmp[MAX_QPATH * 2];
+
+			Q_strncpyz( tmp, path, sizeof( tmp ) );
+			Com_sprintf( path, sizeof( path ), "effects/%s", tmp );
+		}
+
+		if ( !RP_FileExists( path ) )
+			return RP_SpawnRefuse( ent, va( "effect %s is not on the server", fxFile ) );
+	}
+
+	return qfalse;
+}
+
 // zyk: function to spawn entities used by entity system
 void zyk_main_spawn_entity(gentity_t *ent) {
 	int			i = 0;
@@ -1898,6 +2022,9 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	{
 		return;
 	}
+
+	// GalaxyRP: [Entity System] no reason left over from an earlier spawn -- see RP_EntitySystemSpawnRefused()
+	level.rp_spawn_refusal[0] = '\0';
 
 	// GalaxyRP fix: [Entity System] i was bounded only by the key count, which nothing bounded, so a
 	// row that had been overrun carried straight on into level.spawnVars[MAX_SPAWN_VARS]. The row can
@@ -1965,6 +2092,13 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 				return;
 			}
 		}
+	}
+
+	// GalaxyRP: [Entity System] a model or effect file the server does not have is refused here,
+	// before anything registers its name -- see RP_EntitySystemSpawnRefused()
+	if (RP_EntitySystemSpawnRefused(ent)) {
+		G_FreeEntity(ent);
+		return;
 	}
 
 	// move editor origin to pos
