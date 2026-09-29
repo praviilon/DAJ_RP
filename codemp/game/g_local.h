@@ -1528,6 +1528,16 @@ struct gclient_s {
 
 	int	motdTime; // Tr!Force: [Motd] Server motd time
 
+	// DAJ_RP: [Entity Bounds] per-viewer state of the Entity Bounds display (/settings 6, see
+	// g_entbounds.c). Zeroed with the rest of gclient_s when the client connects or spawns, which is also
+	// what resets the level.time stamps on a map change.
+	int			entBoundsAimed;			// entity number whose box is drawn now, 0 for none
+	int			entBoundsNextBox;		// level.time the aimed box is redrawn
+	int			entBoundsNextMarkers;	// level.time the nearby point-entity markers are redrawn
+	int			entBoundsNextPrint;		// level.time the aimed entity's centre-print may be (re)sent
+	qboolean	entBoundsPrintPending;	// the aimed entity changed and its centre-print is still owed
+	qboolean	entBoundsPrinted;		// a centre-print of ours is on screen and needs clearing
+
 	// GalaxyRP fix: [Death System] downedTime used to live here, in gclient_s. It has moved into
 	// clientPersistant_t above -- see the comment on it there for why the two halves of the downed
 	// state must share a lifetime.
@@ -2263,6 +2273,7 @@ void	G_ResetGamestateEstimate( void );
 // by an older "is there at least one free slot" predicate, which this does not replace.)
 int		G_FreeEntityCount( void );
 qboolean G_EntitySlotsAvailable( int needed );
+void		RP_EntBoundsFrame( gentity_t *ent );
 // GalaxyRP fix: [Entity System] only entities with a spawn-key record may be edited or removed by
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );

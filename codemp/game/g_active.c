@@ -5077,6 +5077,12 @@ void ClientEndFrame( gentity_t *ent ) {
 		// unconditionally and every frame so it tracks /skillup, respawns and logout with no extra
 		// bookkeeping -- the playerState delta only spends bits on the frames where it changes.
 		ent->client->ps.stats[STAT_FORCE_JUMP_LEVEL] = ent->client->ps.fd.forcePowerLevel[FP_LEVITATION];
+
+		// DAJ_RP: [Entity Bounds] /settings 6 -- the aimed entity's box and the nearby point-entity
+		// markers, drawn for this client only. Here, with the use hint, so the view is final for the
+		// frame and a free-flying spectator (the early return below) still gets it. The function does
+		// its own gating and costs one comparison chain for anyone who has not turned it on.
+		RP_EntBoundsFrame( ent );
 	}
 
 	// GalaxyRP fix: [Shield] publish the shield ceiling so BG_CanItemBeGrabbed() -- which cgame runs
