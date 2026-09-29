@@ -9298,108 +9298,43 @@ qboolean G_VoteKick( gentity_t *ent, int numArgs, const char *arg1, const char *
 const char *G_GetArenaInfoByMap( const char *map );
 
 /*
-GalaxyRP fix: [Vote] the "/maplist bsp" listing, split out of Cmd_MapList_f() so /callvote map can show it
-too. G_VoteMap() used to call Cmd_MapList_f() itself when no map was named, and Cmd_MapList_f() reads its
-arguments from the command line -- which at that point is "callvote map", so it took "map" for a page
-number, atoi() made that 0, and the player asking which maps they could vote for was told "Invalid page
-number". Same listing as before: every map in the arena files that the current gametype supports.
+==================
+Cmd_MapList_f
 
-GalaxyRP fix: [Vote] map[] was 24 bytes, so a map name of 24 characters or more was cut off in the list
-and could not be copied into a vote. MAX_QPATH is the engine's own limit for a path; buf's flush check
-below already sends it in pieces whatever the entry length.
+GalaxyRP: [Listings] /maplist [page]: the maps you can vote for in the current gametype, from the
+arena files (RP_ListVotableMaps() in g_rplist.c) -- what "/maplist bsp" used to print, now sorted, each
+map once and a page at a time. The old paged mode read GalaxyRP/maplist.txt, a file the server owner
+had to write by hand and none shipped; it is gone. "/maplist bsp" still works, for the players used to
+typing it. /list maps lists every map file on the server.
+==================
 */
-static void G_PrintVotableMaps( gentity_t *ent ) {
-	int i, toggle=0;
-	char map[MAX_QPATH] = "--", buf[512] = {0};
+void Cmd_MapList_f( gentity_t *ent ) {
+	char arg[MAX_STRING_CHARS];
+	int argn = 1;
+	int page = 1;
 
-	Q_strcat( buf, sizeof( buf ), "Map list:" );
-
-	for ( i=0; i<level.arenas.num; i++ ) {
-		Q_strncpyz( map, Info_ValueForKey( level.arenas.infos[i], "map" ), sizeof( map ) );
-		Q_StripColor( map );
-
-		if ( G_DoesMapSupportGametype( map, level.gametype ) ) {
-			char *tmpMsg = va( " ^%c%s", (++toggle&1) ? COLOR_GREEN : COLOR_YELLOW, map );
-			if ( strlen( buf ) + strlen( tmpMsg ) >= sizeof( buf ) ) {
-				trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", buf ) );
-				buf[0] = '\0';
-			}
-			Q_strcat( buf, sizeof( buf ), tmpMsg );
+	if ( trap->Argc() >= 2 ) {
+		trap->Argv( 1, arg, sizeof( arg ) );
+		if ( Q_stricmp( arg, "bsp" ) == 0 ) {
+			argn = 2;
 		}
 	}
 
-	trap->SendServerCommand( ent-g_entities, va( "print \"%s\n\"", buf ) );
-}
-
-void Cmd_MapList_f( gentity_t *ent ) {
-	char arg1[MAX_STRING_CHARS];
-
-	if ( trap->Argc() < 2 )
-	{
-		trap->SendServerCommand( ent-g_entities, "print \"Use ^3/maplist <page number> ^7to see map list. Use ^3/maplist bsp ^7to show bsp files, which can be used in /callvote map <bsp file>\n\"" );
+	if ( trap->Argc() > argn + 1 ) {
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/maplist <page number (optional)>\n\"" );
 		return;
 	}
 
-	trap->Argv(1, arg1, sizeof( arg1 ));
-
-	if (Q_stricmp(arg1, "bsp") == 0)
-	{
-		G_PrintVotableMaps( ent );
-	}
-	else
-	{
-		int page = 1; // zyk: page the user wants to see
-		char file_content[MAX_STRING_CHARS];
-		char content[512];
-		int i = 0;
-		int results_per_page = rp_list_cmds_results_per_page.integer; // zyk: number of results per page
-		FILE *map_list_file;
-		strcpy(file_content,"");
-		strcpy(content,"");
-
-		page = atoi(arg1);
-
-		// GalaxyRP fix: [validation] atoi() only catches a page argument that parses to exactly 0;
-		// a negative page number (e.g. "/maplist -5") passed this check straight through and made
-		// both pagination loop bounds below negative, so neither loop below ever ran and the
-		// command silently printed a blank page instead of reporting the bad input.
-		if (page <= 0)
-		{
+	if ( trap->Argc() == argn + 1 ) {
+		trap->Argv( argn, arg, sizeof( arg ) );
+		page = RP_ListParsePage( arg );
+		if ( page <= 0 ) {
 			trap->SendServerCommand( ent-g_entities, "print \"Invalid page number\n\"" );
 			return;
 		}
-
-		map_list_file = fopen("GalaxyRP/maplist.txt","r");
-		if (map_list_file != NULL)
-		{
-			while(i < (results_per_page * (page-1)) && fgets(content, sizeof(content), map_list_file) != NULL)
-			{ // zyk: reads the file until it reaches the position corresponding to the page number
-				i++;
-			}
-
-			while(i < (results_per_page * page) && fgets(content, sizeof(content), map_list_file) != NULL)
-			{ // zyk: fgets returns NULL at EOF
-				// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s",
-				// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte)
-				// stack buffer, and that strcpy had no bounds check on the destination at all.
-				// Enough map entries on one page (or rp_list_cmds_results_per_page set too high)
-				// overflows it. Q_strcat never writes past the destination's declared size.
-				Q_strcat(file_content, sizeof(file_content), content);
-				i++;
-			}
-
-			fclose(map_list_file);
-			trap->SendServerCommand(ent-g_entities, va("print \"\n%s\n\"",file_content));
-		}
-		else
-		{
-			// GalaxyRP fix: [Vote] GalaxyRP/maplist.txt is a list the server owner writes by hand and none
-			// is shipped, so on most servers every paged /maplist ended here. Point at the listing that
-			// always works instead of stopping at a dead end.
-			trap->SendServerCommand( ent-g_entities, "print \"The maplist file does not exist. Use ^3/maplist bsp ^7to list the maps you can vote for.\n\"" );
-			return;
-		}
 	}
+
+	RP_ListVotableMaps( ent, page );
 }
 
 qboolean G_VotePoll( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
@@ -9424,10 +9359,13 @@ qboolean G_VoteMap( gentity_t *ent, int numArgs, const char *arg1, const char *a
 	const char *arenaInfo;
 
 	// didn't specify a map, show available maps
-	// GalaxyRP fix: [Vote] print the usage and the list directly -- see G_PrintVotableMaps()
+	// GalaxyRP fix: [Vote] print the usage and the list directly. This used to call Cmd_MapList_f(),
+	// which read its arguments from the command line -- "callvote map" at that point -- took "map" for
+	// a page number and told the player "Invalid page number".
+	// GalaxyRP: [Listings] the first page of /maplist (g_rplist.c), which points to the next one.
 	if ( numArgs < 3 ) {
 		trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/callvote map <map name>\n\"" );
-		G_PrintVotableMaps( ent );
+		RP_ListVotableMaps( ent, 1 );
 		return qfalse;
 	}
 
@@ -12598,7 +12536,17 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 
 			if (Q_stricmp( arg1, "help" ) == 0)
 			{
-				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list protect: ^7lists protection skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n^2/list chat: ^7lists chat commands and RP chat modifiers\n\n\"");
+				trap->SendServerCommand(ent-g_entities, "print \"\n^2/list force: ^7lists force power skills\n^2/list weapons: ^7lists weapon skills\n^2/list protect: ^7lists protection skills\n^2/list ammo: ^7lists ammo skills\n^2/list items: ^7lists holdable items skills\n^2/list [skill number]: ^7lists info about a skill\n^2/list commands: ^7lists the Galaxy Mod console commands\n^2/list chat: ^7lists chat commands and RP chat modifiers\n\"");
+				// GalaxyRP: [Listings] the server-side listings (g_rplist.c), in a message of their own so the
+				// one above keeps its headroom under SV_SendServerCommand's 1022 characters.
+				trap->SendServerCommand(ent-g_entities, "print \"^2/list models <folder> <page>: ^7lists the model files, starting in map_objects. ^2/ ^7for the models folder itself\n\
+^2/list effects <folder> <page>: ^7lists the effect files\n\
+^2/list sounds <folder> <page>: ^7lists the sound files\n\
+^2/list music <folder> <page>: ^7lists the music files\n\
+^2/list maps <page>: ^7lists every map file on the server\n\
+^2/list npcs <text> <page>: ^7lists the NPC types, or those with that text in their name\n\
+^2/list vehicles <text> <page>: ^7lists the vehicle types, or those with that text in their name\n\
+^7The folder, text and page are all optional.\n\n\"");
 			}
 			else if (Q_stricmp( arg1, "force" ) == 0 || Q_stricmp( arg1, "weapons" ) == 0 || Q_stricmp( arg1, "protect" ) == 0 || 
 					 Q_stricmp( arg1, "ammo" ) == 0 || Q_stricmp( arg1, "items" ) == 0)
@@ -12760,7 +12708,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				trap->SendServerCommand(ent - g_entities, "print \"^3/use_cloak: ^7Activates or deactivates your Cloak Item, on foot or while riding a vehicle. Never cloaks the vehicle itself.\n\
 ^3/vehicle_cloak: ^7While riding a vehicle with the Cloak Item and Holdable Items Upgrade, cloaks or decloaks the vehicle together with you.\n\
 ^3/updateforce: ^7Applies your force power menu pick instantly, no respawn needed (logged-out players only).\n\"");
-				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist: ^7Lists the maps available in the server.\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3/maplist <page (optional)>: ^7Lists the maps you can vote for in the current gametype, for /callvote map.\n\
 ^3/saber <saber1> <saber2>: ^7Changes lightsabers of the player.\n\
 ^3/sabercolor <1|2> <r g b>/<color name>: ^7Sets the RGB or a preset color of saber 1 or 2. Run with no arguments to see current colors.\n\
 ^3/saberblade <1|2> <type>: ^7Sets the RGB blade style (classic/flame1/electric1/flame2/electric2) of saber 1 or 2.\n\
@@ -12776,6 +12724,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/training <on|off>: ^7Turns training saber mode (near-zero damage) on or off.\n\
 ^3/voice_cmd <arg> <f or m>: ^7Activates the voice chat system.\n\
 ^3/where: ^7Displays your current coordinates.\n\n\"");
+			}
+			else if (RP_ListCommand(ent, arg1))
+			{ // GalaxyRP: [Listings] /list models, effects, sounds, music, maps, npcs, vehicles -- g_rplist.c
 			}
 			else if (Q_stricmp( arg1, "chat" ) == 0)
 			{
@@ -18663,7 +18614,8 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
 ^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
 ^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
-^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\"" );
+^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
+^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
 ^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
@@ -22112,16 +22064,27 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 
 		for (int i = 0; i < ARRAY_LEN(sound_channels); i++) {
 			if (strcmp(arg1, sound_channels[i].channel_name) == 0) {
+				// GalaxyRP: [Listings] a name no client can load took a slot of the 256-slot sound table
+				// until the map changed, and played nothing -- see RP_SoundFileExists() in g_rplist.c.
+				if (!RP_SoundFileExists(arg2))
+				{
+					trap->SendServerCommand(ent->s.number, va("print \"Sound file not found: ^3%.64s ^7(see ^3/list sounds^7)\n\"", arg2));
+					return;
+				}
+
 				// GalaxyRP fix: [security] G_SoundIndex() crashes the whole server (ERR_DROP) once its
 				// 256-slot sound table fills up with never-before-seen names -- and this path is a raw
 				// player-typed string with no cap on distinct values, so any connected player could
 				// crash the server with a couple hundred /playsound calls using unique nonsense paths.
 				// G_SoundIndexSafe() returns 0 instead of crashing when the table is full; refuse the
 				// request with a message in that case instead of handing G_Sound() an invalid index.
-				soundIndex = G_SoundIndexSafe(G_NewString(arg2));
+				// GalaxyRP: [Listings] the name straight from arg2: G_SoundIndexSafe() copies it into the
+				// configstring and keeps no pointer to it, and G_NewString() spent level memory that is
+				// never given back on every /playsound.
+				soundIndex = G_SoundIndexSafe(arg2);
 				if (soundIndex == 0)
 				{
-					trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (server's sound table is full).\n\"");
+					trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (the server cannot register more sounds on this map).\n\"");
 					return;
 				}
 
@@ -22143,10 +22106,16 @@ void Cmd_ZykSound_f(gentity_t *ent) {
 			return;
 		}
 
-		soundIndex = G_SoundIndexSafe(G_NewString(arg1));
+		if (!RP_SoundFileExists(arg1))
+		{
+			trap->SendServerCommand(ent->s.number, va("print \"Sound file not found: ^3%.64s ^7(see ^3/list sounds^7)\n\"", arg1));
+			return;
+		}
+
+		soundIndex = G_SoundIndexSafe(arg1);
 		if (soundIndex == 0)
 		{
-			trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (server's sound table is full).\n\"");
+			trap->SendServerCommand(ent->s.number, "print \"Cannot play this sound right now (the server cannot register more sounds on this map).\n\"");
 			return;
 		}
 
@@ -22185,6 +22154,14 @@ void Cmd_Music_f(gentity_t* ent) {
 		return;
 	}
 
+	// GalaxyRP: [Listings] a mistyped path stopped the music for everyone and played nothing -- see
+	// RP_MusicFileExists() in g_rplist.c.
+	if (!RP_MusicFileExists(audioPath))
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Music file not found: ^3%.64s ^7(see ^3/list music^7)\n\"", audioPath));
+		return;
+	}
+
 	trap->SendServerCommand(ent - g_entities, va("print \"^2You started playing the music file: ^7%s\n\"", audioPath));
 	trap->SetConfigstring(CS_MUSIC, audioPath);
 
@@ -22220,7 +22197,7 @@ void Cmd_DuelBoard_f(gentity_t *ent) {
 	char file_content[MAX_STRING_CHARS];
 	char content[512]; // GalaxyRP fix: [cleanup] was 64 -- too small for a player name longer than
 						// 63 characters, which would get split across two fgets() calls and desync
-						// that record's fields. Match Cmd_MapList_f's buffer size.
+						// that record's fields. 512, as the old /maplist file reader had.
 	int i = 0;
 	int results_per_page = rp_list_cmds_results_per_page.integer; // zyk: number of results per page
 	FILE *leaderboard_file;

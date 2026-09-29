@@ -857,32 +857,13 @@ int G_SoundIndex( const char *name ) {
 // This variant runs the identical scan/reuse logic but returns 0 instead of erroring out when the table
 // is full and the name isn't already registered, so a player-facing caller can print a friendly message
 // and refuse the request instead of taking the whole server down.
+//
+// GalaxyRP: [Listings] now simply G_FindConfigstringIndex(), which has since learned to return 0 on a
+// full table too -- and which also refuses a name that would take the gamestate past the 16000 bytes
+// every client enforces. This copy never checked that: a couple of hundred long /playsound names fit
+// in the 256 slots and dropped every connected client.
 int G_SoundIndexSafe( const char *name ) {
-	int i;
-	char s[MAX_STRING_CHARS];
-
-	if ( !VALIDSTRING( name ) ) {
-		return 0;
-	}
-
-	for ( i = 1; i < MAX_SOUNDS; i++ ) {
-		trap->GetConfigstring( CS_SOUNDS + i, s, sizeof( s ) );
-		if ( !s[0] ) {
-			break;
-		}
-		if ( !strcmp( s, name ) ) {
-			return i;
-		}
-	}
-
-	if ( i == MAX_SOUNDS ) {
-		// zyk: sound table is full and this name isn't already registered -- refuse instead of ERR_DROP
-		return 0;
-	}
-
-	trap->SetConfigstring( CS_SOUNDS + i, name );
-
-	return i;
+	return G_FindConfigstringIndex( name, CS_SOUNDS, MAX_SOUNDS, qtrue );
 }
 
 int G_SoundSetIndex(const char *name)

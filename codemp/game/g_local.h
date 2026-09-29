@@ -1228,6 +1228,10 @@ typedef struct clientPersistant_s {
 	vec3_t		entHoldOrigin;			// where it is now (moved live) or would land (preview only)
 	int			entHoldNextBox;			// level.time the preview is redrawn
 	int			entHoldGhost;			// entity number of the preview model, 0 for none
+
+	// GalaxyRP: [Listings] level.time before which this player's next /list or /maplist listing is
+	// refused -- see RP_ListCooldown() in g_rplist.c
+	int			rpListNextTime;
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -1989,6 +1993,14 @@ typedef struct level_locals_s {
 	short rp_model_frames[MAX_MODELS];
 	vec3_t rp_model_mins[MAX_MODELS];
 	vec3_t rp_model_maxs[MAX_MODELS];
+	// GalaxyRP: [Listings] the NPC and vehicle type names have been read for /list npcs and /list
+	// vehicles this map -- see RP_ListTypes() in g_rplist.c
+	qboolean rp_list_npcs_ready;
+	qboolean rp_list_vehicles_ready;
+	// GalaxyRP: [Listings] level.time before which no player's file listing runs -- a file listing walks
+	// every name in every pk3 several times, and the per-player cooldown alone lets every logged-in
+	// player start one each second (RP_ListCommand() in g_rplist.c)
+	int rp_list_fs_next_time;
 
 	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
 	// finished loading. Spawn selection falls back to it, instead of ending the server with
@@ -2344,6 +2356,13 @@ void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );
 void		Cmd_EntCancel_f( gentity_t *ent );
+// GalaxyRP: [Listings] /list models|effects|sounds|music|maps|npcs|vehicles, /maplist and the file
+// checks of /playsound and /playmusic -- g_rplist.c
+qboolean	RP_ListCommand( gentity_t *ent, const char *what );
+void		RP_ListVotableMaps( gentity_t *ent, int page );
+int			RP_ListParsePage( const char *s );
+qboolean	RP_SoundFileExists( const char *name );
+qboolean	RP_MusicFileExists( const char *music );
 // GalaxyRP fix: [Entity System] only entities with a spawn-key record may be edited or removed by
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
@@ -2717,8 +2736,8 @@ void RP_CVU_itemLifetime(void);
 void RP_CVU_addAmmoScale(void);
 int RP_CorpseSecondsToMs(int seconds);
 
-// GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in both
-// Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c) -- see RP_CVU_listCmdsResultsPerPage's comment in
+// GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in
+// Cmd_DuelBoard_f (g_cmds.c) -- see RP_CVU_listCmdsResultsPerPage's comment in
 // g_cvar.c for why it needs a minimum of 1 rather than the usual clamp-to-0 pattern.
 void RP_CVU_listCmdsResultsPerPage(void);
 

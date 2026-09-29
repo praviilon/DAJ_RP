@@ -226,11 +226,12 @@ void RP_CVU_addAmmoScale(void)
 	trap->Cvar_Update(&rp_add_ammo_scale);
 }
 
-// GalaxyRP fix: [validation] rp_list_cmds_results_per_page is read as results_per_page in both
-// Cmd_MapList_f and Cmd_DuelBoard_f (g_cmds.c), where it gates both pagination loop bounds:
+// GalaxyRP fix: [validation] rp_list_cmds_results_per_page is read as results_per_page in
+// Cmd_DuelBoard_f (g_cmds.c; /maplist used it too until it became a fixed-size listing in
+// g_rplist.c), where it gates both pagination loop bounds:
 // results_per_page*(page-1) and results_per_page*page. When results_per_page is 0 (or negative),
 // both bounds evaluate to <= 0, so neither the skip-loop nor the read-loop ever runs for any page
-// number -- the commands silently print a blank page instead of an error, for every page, until the
+// number -- the command silently prints a blank page instead of an error, for every page, until the
 // cvar is corrected. Unlike the timer cvars above, 0 is not a safe floor here since it reproduces
 // the exact same bug those loops have with a negative value -- clamp to a minimum of 1 instead.
 void RP_CVU_listCmdsResultsPerPage(void)
