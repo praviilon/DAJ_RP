@@ -12225,6 +12225,11 @@ void Cmd_LogoutAccount_f( gentity_t *ent ) {
 		return;
 	}
 
+	// GalaxyRP: [Entity System] let go of an entity held with /entcopy or /entcut -- a cut one goes back
+	// where it was. The frame check would do it a frame later, once the admin power is gone; now, so the
+	// admin is told while still the admin. See g_entgrab.c.
+	RP_EntGrabCancel(ent, qtrue);
+
 	// GalaxyRP fix: [Guardian] the guardian_mode>0 clean_guardians() call used to be here. guardian_mode
 	// is permanently 0 now (its sole setter, spawn_boss(), has zero callers and is being removed in
 	// g_main.c), so this was unreachable; clean_guardians() itself has also been deleted.
@@ -15080,7 +15085,12 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 	// GalaxyRP fix: [Entity System] the comment used to say "spawned by /entadd". Three commands
 	// write this slot -- /entadd, /spawnplatform and /spawndummy -- so this undoes whichever of them
 	// ran most recently. It is one step, not a stack: a second /entundo has nothing left to do.
-	if (level.last_spawned_entity)
+	// GalaxyRP: [Entity System] not while an admin holds it with /entcopy or /entcut (g_entgrab.c)
+	if (level.last_spawned_entity && level.last_spawned_entity->rpHeldBy)
+	{
+		trap->SendServerCommand(ent->s.number, va("print \"Entity %d is being held with /entcopy or /entcut: drop it or /entcancel first.\n\"", level.last_spawned_entity->s.number));
+	}
+	else if (level.last_spawned_entity)
 	{ // zyk: removes the last entity spawned by /entadd, /spawnplatform or /spawndummy
 		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", level.last_spawned_entity->s.number));
 
@@ -15132,10 +15142,18 @@ void Cmd_EntOrigin_f(gentity_t *ent) {
 
 /*
 ==================
-Cmd_EntAdd_f
+Cmd_EntAdd_f / Cmd_EntAddAim_f
+
+GalaxyRP: [Entity System] /entaddaim is /entadd placing the entity on the surface the admin aims at,
+the way /entcopy and /entcut put one down (RP_EntGrabAimPoint and RP_EntGrabPlace in g_entgrab.c):
+its box rests on the surface, a spawn point or NPC spawner stands on it by a player's box. An origin
+among the arguments, and the /entorigin position and angles, are not used. The box of most classes is
+only known once the entity has spawned, so it is spawned at the point first and, if it turns out to have
+a box, made again once, set against the surface by it -- unless that first spawn made other entities
+beyond a trigger of its own (a misc_bsp's sub-BSP, say), which a second spawn would make twice.
 ==================
 */
-void Cmd_EntAdd_f( gentity_t *ent ) {
+static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	gentity_t *new_ent = NULL;
 	int number_of_args = trap->Argc();
 	int i = 0;
@@ -15148,6 +15166,9 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 	char arg2[MAX_STRING_CHARS];
 	qboolean has_origin_set = qfalse; // zyk: if player do not pass an origin key, use the one set with /entorigin
 	qboolean has_angles_set = qfalse; // zyk: if player do not pass an angles key, use the one set with /entorigin
+	// GalaxyRP: [Entity System] /entaddaim: the surface aimed at, and whether an origin was left out
+	vec3_t aim_point, aim_normal;
+	qboolean aim_origin_ignored = qfalse;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15156,6 +15177,9 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 	if ( number_of_args < 2)
 	{
+		if (aim)
+			trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/entaddaim <classname> <key> <value> <key> <value>^7. Adds the entity on the surface you are aiming at.\n\"" );
+		else
 		trap->SendServerCommand( ent-g_entities, va("print \"Usage: ^3/entadd <classname> <key> <value> <key> <value>^7. You must specify at least the entity class.\n\
 			^7Example: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
 		return;
@@ -15178,6 +15202,21 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 	}
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	if (aim)
+	{
+		if ((ent->client->ps.pm_flags & PMF_FOLLOW) || ent->client->sess.spectatorState == SPECTATOR_FOLLOW)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are following another player. Stop following first.\n\"" );
+			return;
+		}
+
+		if (RP_EntGrabAimPoint(ent, aim_point, aim_normal) == qfalse)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at a surface within 2048 units.\n\"" );
+			return;
+		}
+	}
 
 	// GalaxyRP fix: [Entity System] /entadd is the other way an admin can walk the entity table off
 	// its end. G_Spawn() does not fail politely -- it calls trap->Error(ERR_DROP) and every player
@@ -15233,6 +15272,9 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 				if (Q_stricmp(key, "origin") == 0)
 				{ // zyk: if origin was passed
 					has_origin_set = qtrue;
+					// GalaxyRP: [Entity System] /entaddaim places it itself
+					if (aim)
+						aim_origin_ignored = qtrue;
 				}
 
 				if (Q_stricmp(key, "angles") == 0)
@@ -15246,11 +15288,24 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 				// GalaxyRP fix: [Entity System] see the classname above -- the helper makes its own
 				// copies, so these two allocations were pure waste, once per key/value pair typed.
+				if (aim && Q_stricmp(key, "origin") == 0)
+					continue;
 				zyk_main_set_entity_field(new_ent, key, arg2);
 			}
 		}
 
-		if (level.ent_origin_set == qtrue && (has_origin_set == qfalse || has_angles_set == qfalse))
+		if (aim)
+		{ // GalaxyRP: [Entity System] /entaddaim: on the surface aimed at, by the box its class is placed by
+			vec3_t mins, maxs, origin;
+
+			if (level.ent_origin_set == qtrue)
+				aim_origin_ignored = qtrue;
+
+			RP_EntGrabPlaceBox(arg1, NULL, mins, maxs);
+			RP_EntGrabPlace(aim_point, aim_normal, mins, maxs, origin);
+			zyk_main_set_entity_field(new_ent, "origin", va("%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]));
+		}
+		else if (level.ent_origin_set == qtrue && (has_origin_set == qfalse || has_angles_set == qfalse))
 		{ // zyk: if origin or angles were not passed, use the origin or angles set with /entorigin
 			if (has_origin_set == qfalse)
 			{
@@ -15287,6 +15342,83 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 			}
 		}
 
+		if (aim)
+		{
+			vec3_t mins, maxs;
+			int free_before = G_FreeEntityCount();
+			qboolean placed_by_player_box;
+
+			RP_EntGrabPlaceBox(arg1, NULL, mins, maxs);
+			placed_by_player_box = (VectorCompare(mins, vec3_origin) && VectorCompare(maxs, vec3_origin)) ? qfalse : qtrue;
+
+			zyk_main_spawn_entity(new_ent);
+
+			// GalaxyRP: [Entity System] now the box is known: set it against the surface and make it
+			// again where it rests -- if it has a box, was not placed by a player's box already, and its
+			// spawn made nothing but perhaps a trigger of its own (which goes with it). Freed and made
+			// anew in another slot rather than spawned again in place, so nothing its spawn function set
+			// up (a Ghoul2 model, ICARUS state) is set up twice on the same entity.
+			if (new_ent->inuse && !new_ent->isLogical && !placed_by_player_box &&
+				(!VectorCompare(new_ent->r.mins, vec3_origin) || !VectorCompare(new_ent->r.maxs, vec3_origin)))
+			{
+				gentity_t *other;
+				int triggers = 0;
+				vec3_t origin;
+
+				RP_FOR_EACH_ENTITY( other )
+				{
+					if (other != new_ent && other->inuse && other->parent == new_ent && (other->r.contents & CONTENTS_TRIGGER) &&
+						RP_EntityHasSpawnKeys(other) == qfalse)
+						triggers++;
+				}
+
+				RP_EntGrabPlace(aim_point, aim_normal, new_ent->r.mins, new_ent->r.maxs, origin);
+
+				if (free_before - G_FreeEntityCount() <= triggers && !VectorCompare(origin, new_ent->s.origin) &&
+					G_EntitySlotsAvailable(4))
+				{
+					static char *pairs[ZYK_MAX_SPAWN_STRING_SLOTS];
+					int count = level.zyk_spawn_strings_values_count[new_ent->s.number];
+					rpSpawnRoute_t route;
+					gentity_t *moved;
+					int k;
+
+					if (count > ZYK_MAX_SPAWN_STRING_SLOTS)
+						count = ZYK_MAX_SPAWN_STRING_SLOTS;
+					memcpy(pairs, level.zyk_spawn_strings[new_ent->s.number], sizeof(pairs[0]) * count);
+
+					RP_SpawnRouteInit(&route);
+					for (k = 0; k + 1 < count; k += 2)
+						RP_SpawnRouteNoteKey(&route, pairs[k], pairs[k + 1]);
+
+					if (new_ent->rpBSPInstance > 0)
+						RP_FreeSubBSPEntities(new_ent->rpBSPInstance);
+					RP_FreeEntityTriggers(new_ent);
+					G_FreeEntity(new_ent);
+
+					moved = RP_SpawnForRoute(&route);
+					if (!moved)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"The %s could not be placed: no free entity slot.\n\"", arg1) );
+						return;
+					}
+
+					for (k = 0; k < count; k++)
+						level.zyk_spawn_strings[moved->s.number][k] = pairs[k];
+					level.zyk_spawn_strings_values_count[moved->s.number] = count;
+					zyk_main_set_entity_field(moved, "origin", va("%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]));
+					zyk_main_spawn_entity(moved);
+					new_ent = moved;
+				}
+			}
+
+			if (!new_ent->inuse)
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"The %s did not survive being spawned there (a class that removes itself, or a spawn its spawn function refused).\n\"", arg1) );
+				return;
+			}
+		}
+		else
 		zyk_main_spawn_entity(new_ent);
 
 		if (new_ent->s.number != 0)
@@ -15296,6 +15428,12 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 
 		// GalaxyRP: [Logical Entities] say which region it went to; an id at or above
 		// MAX_GENTITIES is a logical entity and the admin will see those ids in /entlist too.
+		if (aim)
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned at (%i %i %i)%s%s\n\"", new_ent->s.number,
+				(int)new_ent->s.origin[0], (int)new_ent->s.origin[1], (int)new_ent->s.origin[2],
+				new_ent->isLogical ? " (logical, not networked)" : "",
+				aim_origin_ignored ? ". /entaddaim places it where you aim: the origin given or set with /entorigin was not used." : "") );
+		else
 		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned%s\n\"", new_ent->s.number,
 			new_ent->isLogical ? " (logical, not networked)" : "") );
 	}
@@ -15304,6 +15442,14 @@ void Cmd_EntAdd_f( gentity_t *ent ) {
 		trap->SendServerCommand( ent-g_entities, va("print \"Error in entity spawn\n\"") );
 		return;
 	}
+}
+
+void Cmd_EntAdd_f( gentity_t *ent ) {
+	zyk_entadd( ent, qfalse );
+}
+
+void Cmd_EntAddAim_f( gentity_t *ent ) {
+	zyk_entadd( ent, qtrue );
 }
 
 /*
@@ -15496,6 +15642,13 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
+		// GalaxyRP: [Entity System] an admin is holding it with /entcopy or /entcut (g_entgrab.c)
+		if (this_ent->rpHeldBy)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is being held with /entcopy or /entcut: drop it or /entcancel first.\n\"", entity_id) );
+			return;
+		}
+
 		if ( number_of_args % 2 != 0)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments, because they are key/value pairs.\n\"") );
@@ -15600,6 +15753,12 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			RP_FreeSubBSPEntities(this_ent->rpBSPInstance);
 			this_ent->rpBSPInstance = 0;
 		}
+
+		// GalaxyRP fix: [Entity System] and so does the trigger a door or platform made for itself: the
+		// spawn below makes it a new one (SpawnPlatTrigger at once, a door's Think_SpawnNewDoorTrigger a
+		// frame later), so the old one stayed behind -- a second trigger around the door's old place,
+		// still working the door, one more with every edit. See RP_EntRemoveFree().
+		RP_FreeEntityTriggers(this_ent);
 
 		zyk_main_spawn_entity(this_ent);
 
@@ -16301,9 +16460,13 @@ static void zyk_entnear_append(char *message, int message_size, gentity_t *this_
 
 	// GalaxyRP fix: [Entity System] the same L (logical) and G (created by the game, cannot be edited
 	// or removed -- see RP_EntityHasSpawnKeys in g_spawn.c) tags /entlist prints after the id
-	Com_sprintf(row, sizeof(row), "\n%d%s%s - %s", this_ent->s.number,
+	// GalaxyRP: [Entity System] and M (part of the map: /entcut and /entrotate leave it alone) and H
+	// (held with /entcopy or /entcut) -- see g_entgrab.c
+	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s", this_ent->s.number,
 		this_ent->isLogical ? "L" : "",
 		RP_EntityHasSpawnKeys(this_ent) ? "" : "G",
+		this_ent->rpMapEntity ? "M" : "",
+		this_ent->rpHeldBy ? "H" : "",
 		this_ent->classname ? this_ent->classname : "<none>");
 
 	Q_strcat(message, message_size, row);
@@ -16435,9 +16598,13 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 	// GalaxyRP fix: [Entity System] G after the id: created by the game, so /entedit and /entremove
 	// refuse it -- see RP_EntityHasSpawnKeys() in g_spawn.c. A free slot (the page listing shows
 	// those as "freed") is not tagged: there is nothing there to refuse.
-	Com_sprintf(row, sizeof(row), "\n%d%s%s - %s - %s - %s", id,
+	// GalaxyRP: [Entity System] M: part of the map, which /entcut and /entrotate leave alone; H: held
+	// with /entcopy or /entcut -- see g_entgrab.c
+	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s - %s - %s", id,
 		(target_ent && target_ent->isLogical) ? "L" : "",
 		(target_ent && target_ent->inuse && !RP_EntityHasSpawnKeys(target_ent)) ? "G" : "",
+		(target_ent && target_ent->inuse && target_ent->rpMapEntity) ? "M" : "",
+		(target_ent && target_ent->inuse && target_ent->rpHeldBy) ? "H" : "",
 		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
 		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
 		(target_ent && target_ent->target) ? target_ent->target : "<none>");
@@ -16674,6 +16841,13 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 
+				// GalaxyRP: [Entity System] an admin is holding it with /entcopy or /entcut (g_entgrab.c)
+				if (target_ent->rpHeldBy)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is being held with /entcopy or /entcut: drop it or /entcancel first.\n\"", i) );
+					return;
+				}
+
 				children = RP_EntRemoveFree( target_ent, &subEntities );
 				if (target_ent->inuse)
 				{ // zyk: G_FreeEntity() can still keep an entity alive (a Jedi Master saber, for one)
@@ -16768,6 +16942,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 			int permanent = 0;
 			int subEntities = 0;
 			int subKept = 0;
+			int held = 0;
 
 			// GalaxyRP: [Logical Entities] both regions.
 			RP_FOR_EACH_ENTITY( target_ent )
@@ -16777,7 +16952,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// a few hundred slots is mostly free slots, and each one was being freed again.
 				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
 					&& RP_EntityHasSpawnKeys(target_ent) && !RP_EntityIsSpawnPoint(target_ent)
-					&& !target_ent->neverFree
+					&& !target_ent->neverFree && !target_ent->rpHeldBy
 					&& !(target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))) ? qtrue : qfalse;
 			}
 
@@ -16798,7 +16973,9 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				i = target_ent - g_entities;
 				if (i >= entity_id && i <= entity_id2 && target_ent->inuse)
 				{
-					if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
+					if (target_ent->rpHeldBy && RP_EntityHasSpawnKeys(target_ent))
+						held++;
+					else if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
 						spawnPoints++;
 					else if (target_ent->neverFree && RP_EntityHasSpawnKeys(target_ent))
 						permanent++;
@@ -16814,7 +16991,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				char skipNote[128] = "";
 				char spawnNote[128] = "";
 				char permanentNote[96] = "";
-				char subNote[160] = "";
+				char subNote[224] = "";
 
 				if (children > 0)
 					Com_sprintf(childNote, sizeof(childNote), " (and %d trigger%s they made)", children, children == 1 ? "" : "s");
@@ -16828,6 +17005,8 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					Q_strcat(subNote, sizeof(subNote), va(" %d sub-BSP entit%s went with their misc_bsp.", subEntities, subEntities == 1 ? "y" : "ies"));
 				if (subKept > 0)
 					Q_strcat(subNote, sizeof(subNote), va(" Kept %d that belong to a misc_bsp outside the range.", subKept));
+				if (held > 0)
+					Q_strcat(subNote, sizeof(subNote), va(" Kept %d held with /entcopy or /entcut.", held));
 
 				trap->SendServerCommand( ent-g_entities, va("print \"Removed %d entit%s%s.%s%s%s%s\n\"",
 					removed, removed == 1 ? "y" : "ies", childNote, skipNote, spawnNote, permanentNote, subNote) );
@@ -18499,11 +18678,12 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 
 	// GalaxyRP: [Logical Entities] three messages rather than two: the /entlist and /entremove lines
 	// grew to explain the logical ids, and one server command carries at most 1022 characters.
+	// GalaxyRP: [Entity System] and a fourth for picking entities up (g_entgrab.c).
 	trap->SendServerCommand( ent-g_entities, va("print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
 ^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified. The classname cannot be changed.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and cannot be edited or removed.\n\
+^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and cannot be edited or removed, ^3M^7 are part of the map, ^3H^7 are being held.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
@@ -18520,7 +18700,12 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n\
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons).\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
-^3/spawndummy: ^7Spawns a dummy where the player is.\n\n\" " );
+^3/spawndummy: ^7Spawns a dummy where the player is.\n\" " );
+	trap->SendServerCommand( ent-g_entities, "print \"^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at.\n\
+^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
+^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
+^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not map or brush entities in place.\n\
+^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\n\"" );
 }
 
 /*
@@ -22569,6 +22754,10 @@ command_t commands[] = {
 	{ "emote",				Cmd_Emote_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "engage_fullforceduel",	Cmd_ForceDuel_f,		CMD_ALIVE | CMD_NOINTERMISSION },	// GalaxyRP: [Force Duel] the ordinary duel has no row here -- it arrives as GENCMD_ENGAGE_DUEL
 	{ "entadd",				Cmd_EntAdd_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entaddaim",			Cmd_EntAddAim_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entcancel",			Cmd_EntCancel_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entcopy",			Cmd_EntCopy_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entcut",				Cmd_EntCut_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entdeletefile",		Cmd_EntDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entedit",			Cmd_EntEdit_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entitysystem",		Cmd_EntitySystem_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
@@ -22577,6 +22766,7 @@ command_t commands[] = {
 	{ "entnear",			Cmd_EntNear_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entorigin",			Cmd_EntOrigin_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entremove",			Cmd_EntRemove_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entrotate",			Cmd_EntRotate_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entsave",			Cmd_EntSave_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entundo",			Cmd_EntUndo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ex",					Cmd_Examine_f,				CMD_LOGGEDIN },

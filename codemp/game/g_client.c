@@ -4695,6 +4695,10 @@ void ClientDisconnect( int clientNum ) {
 	// GalaxyRP: [SP Maps] security / goodie keys leave with the player
 	RP_ClearKeys( ent );
 
+	// GalaxyRP: [Entity System] and so does an entity held with /entcopy or /entcut: a copy is not made,
+	// a cut entity goes back where it was (g_entgrab.c)
+	RP_EntGrabCancel( ent, qfalse );
+
 	// GalaxyRP: [Account] this is the server-side handler for every kind of disconnect -- a
 	// voluntary /quit or /disconnect, a /reconnect (which drops and reconnects to the same server,
 	// running through this exact same path), a connection timeout, or a kick/ban -- and it never

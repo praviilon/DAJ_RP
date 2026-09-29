@@ -53,6 +53,7 @@ set(MPGameGameFiles
 	"${MPDir}/game/g_cmds.c"
 	"${MPDir}/game/g_combat.c"
 	"${MPDir}/game/g_entbounds.c"
+	"${MPDir}/game/g_entgrab.c"
 	"${MPDir}/game/g_cvar.c"
 	"${MPDir}/game/g_exphysics.c"
 	"${MPDir}/game/g_ICARUScb.c"

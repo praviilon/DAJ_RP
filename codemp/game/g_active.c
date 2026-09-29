@@ -5083,6 +5083,10 @@ void ClientEndFrame( gentity_t *ent ) {
 		// frame and a free-flying spectator (the early return below) still gets it. The function does
 		// its own gating and costs one comparison chain for anyone who has not turned it on.
 		RP_EntBoundsFrame( ent );
+
+		// GalaxyRP: [Entity System] an entity held with /entcopy or /entcut: the preview follows the aim,
+		// and the hold is let go of if the admin may no longer hold it (g_entgrab.c)
+		RP_EntGrabFrame( ent );
 	}
 
 	// GalaxyRP fix: [Shield] publish the shield ceiling so BG_CanItemBeGrabbed() -- which cgame runs

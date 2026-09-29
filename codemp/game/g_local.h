@@ -428,6 +428,18 @@ struct gentity_s {
 	int			rpBSPInstance;
 	int			rpSubBSPOf;
 
+	// GalaxyRP: [Entity System] true on an entity the map itself put there -- its own entity string or
+	// a per-map fix -- which /entcut and /entrotate leave alone (/entcopy may copy it; the copy is not
+	// one). Set once the map has loaded, and given back by the entity-file loader to a line identical
+	// to one of those records (level.rp_map_fingerprints), so a preset does not strip it. See
+	// RP_MarkMapEntities() in g_entgrab.c. Zeroed with the entity when it is freed; an in-place respawn
+	// (/entedit) keeps it.
+	qboolean	rpMapEntity;
+	// GalaxyRP: [Entity System] 1 + the client number of the admin holding this entity with /entcopy or
+	// /entcut, 0 otherwise. Zeroed with the entity, so a freed or reused slot can never pass for the
+	// held one. See g_entgrab.c.
+	int			rpHeldBy;
+
 	// GalaxyRP: [SP Maps] true on a misc_turret spawned on a single-player map as the turret that
 	// classname means there -- a misc_turretG2 (SP_misc_turret() in g_turret.c). It then behaves as
 	// single player's does towards rpSpTurretTeam, its "team" key: it does not target clients of
@@ -1203,6 +1215,16 @@ typedef struct clientPersistant_s {
 	char			rp_securityKey[MAX_QPATH];
 	int				rp_goodieKeys;
 
+	// GalaxyRP: [Entity System] what this admin holds with /entcopy or /entcut -- see g_entgrab.c. In
+	// pers so dying and respawning does not drop it; a map change clears it with the rest of pers (and
+	// frees every entity anyway). The held entity's own rpHeldBy is what is checked every frame.
+	int			entHoldNum;				// entity number held, 0 for none
+	int			entHoldMode;			// RP_HOLD_COPY or RP_HOLD_CUT
+	qboolean	entHoldRotated;			// entHoldAngles differs from what the record holds
+	vec3_t		entHoldAngles;			// the orientation it will be dropped with
+	vec3_t		entHoldOrigin;			// where it is now (moved live) or would land (preview only)
+	int			entHoldNextBox;			// level.time the preview is redrawn
+	int			entHoldGhost;			// entity number of the preview model, 0 for none
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -1938,12 +1960,18 @@ typedef struct level_locals_s {
 	// level needs no setup), and rp_subbsp_spawning_instance the instance number of the misc_bsp
 	// spawning them (0 none).
 	int rp_subbsp_max_inline[RP_MAX_SUBBSP_NAMES];
+
 	// true once a misc_bsp spawned that sub-BSP's entity list at map load: only then is the list known
 	// to parse, and only then does a misc_bsp rebuild it later (a "#name" the map used only as a
 	// brush model's model never had its entity list read)
 	qboolean rp_subbsp_entities_spawned[RP_MAX_SUBBSP_NAMES];
 	int rp_active_subbsp;
 	int rp_subbsp_spawning_instance;
+
+	// GalaxyRP: [Entity System] fingerprints of the key/value records of the map's own entities, taken
+	// when the map finished loading, sorted -- see gentity_t::rpMapEntity and g_entgrab.c
+	uint64_t rp_map_fingerprints[MAX_ENTITIESTOTAL];
+	int rp_num_map_fingerprints;
 
 	// GalaxyRP fix: [Spawning] where the map's first info_player_deathmatch stood when the map
 	// finished loading. Spawn selection falls back to it, instead of ending the server with
@@ -2274,6 +2302,25 @@ void	G_ResetGamestateEstimate( void );
 int		G_FreeEntityCount( void );
 qboolean G_EntitySlotsAvailable( int needed );
 void		RP_EntBoundsFrame( gentity_t *ent );
+// DAJ_RP: [Entity Bounds] the drawing and aiming helpers, shared with /entcopy and /entcut's preview
+void		RP_EntBoundsLine( vec3_t start, vec3_t end, int color, int msec, int clientNum );
+void		RP_EntBoundsDrawBoxAt( int clientNum, const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t angles, int color, int msec );
+gentity_t	*RP_EntBoundsAim( const gentity_t *viewer );
+// GalaxyRP: [Entity System] /entcopy, /entcut, /entrotate, /entcancel and /entaddaim -- g_entgrab.c
+#define RP_HOLD_COPY	1
+#define RP_HOLD_CUT		2
+void		RP_MarkMapEntities( void );
+qboolean	RP_RecordIsMapEntity( int num );
+void		RP_EntGrabFrame( gentity_t *ent );
+void		RP_EntGrabCancel( gentity_t *ent, qboolean tell );
+qboolean	RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
+void		RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs );
+void		RP_EntGrabPlace( const vec3_t point, const vec3_t normal, const vec3_t mins, const vec3_t maxs, vec3_t origin );
+void		RP_EntGrabRespawnInPlace( gentity_t *e );
+void		Cmd_EntCopy_f( gentity_t *ent );
+void		Cmd_EntCut_f( gentity_t *ent );
+void		Cmd_EntRotate_f( gentity_t *ent );
+void		Cmd_EntCancel_f( gentity_t *ent );
 // GalaxyRP fix: [Entity System] only entities with a spawn-key record may be edited or removed by
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );

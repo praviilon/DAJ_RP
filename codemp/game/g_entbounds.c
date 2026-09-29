@@ -87,7 +87,7 @@ line whose start is out of sight still arrives. The server tests SVF_SINGLECLIEN
 (SV_AddEntitiesVisibleFromPoint), so the two together mean exactly that.
 ==================
 */
-static void RP_EntBoundsLine( vec3_t start, vec3_t end, int color, int msec, int clientNum )
+void RP_EntBoundsLine( vec3_t start, vec3_t end, int color, int msec, int clientNum )
 {
 	gentity_t *te = G_TempEntity( start, EV_TESTLINE );
 
@@ -116,15 +116,17 @@ static int RP_EntBoundsColor( const gentity_t *e )
 
 /*
 ==================
-RP_EntBoundsDrawBox
+RP_EntBoundsDrawBoxAt / RP_EntBoundsDrawBox
 
-The 12 edges of target's collision box. A brush entity collides against its own model turned by its
-angles (the engine's transformed box trace), so its local bounds are turned by r.currentAngles about
-r.currentOrigin; everything else collides as an axis-aligned box and is drawn as one. A box with no size
-gets 8 units each way, so there is something to see.
+The 12 edges of a box with these local bounds about origin, turned by angles when angles is given and
+not zero. A box with no size along an axis gets 8 units each way along it, so there is something to
+see. RP_EntBoundsDrawBox() draws target's collision box: a brush entity collides against its own model
+turned by its angles (the engine's transformed box trace), so its bounds are turned by
+r.currentAngles about r.currentOrigin; everything else collides as an axis-aligned box and is drawn as
+one. /entcopy and /entcut draw where the held entity would land with RP_EntBoundsDrawBoxAt().
 ==================
 */
-static void RP_EntBoundsDrawBox( const gentity_t *viewer, const gentity_t *target, int color, int msec )
+void RP_EntBoundsDrawBoxAt( int clientNum, const vec3_t origin, const vec3_t boxMins, const vec3_t boxMaxs, const vec3_t angles, int color, int msec )
 {
 	vec3_t mins, maxs, corners[8];
 	matrix3_t axis;
@@ -136,8 +138,8 @@ static void RP_EntBoundsDrawBox( const gentity_t *viewer, const gentity_t *targe
 		{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }		// sides
 	};
 
-	VectorCopy( target->r.mins, mins );
-	VectorCopy( target->r.maxs, maxs );
+	VectorCopy( boxMins, mins );
+	VectorCopy( boxMaxs, maxs );
 
 	for ( k = 0; k < 3; k++ )
 	{
@@ -148,9 +150,9 @@ static void RP_EntBoundsDrawBox( const gentity_t *viewer, const gentity_t *targe
 		}
 	}
 
-	if ( target->r.bmodel && ( target->r.currentAngles[0] || target->r.currentAngles[1] || target->r.currentAngles[2] ) )
+	if ( angles && ( angles[0] || angles[1] || angles[2] ) )
 	{
-		AnglesToAxis( target->r.currentAngles, axis );
+		AnglesToAxis( angles, axis );
 		rotate = qtrue;
 	}
 
@@ -166,20 +168,26 @@ static void RP_EntBoundsDrawBox( const gentity_t *viewer, const gentity_t *targe
 		{
 			for ( k = 0; k < 3; k++ )
 			{
-				corners[i][k] = target->r.currentOrigin[k] +
+				corners[i][k] = origin[k] +
 					local[0] * axis[0][k] + local[1] * axis[1][k] + local[2] * axis[2][k];
 			}
 		}
 		else
 		{
-			VectorAdd( target->r.currentOrigin, local, corners[i] );
+			VectorAdd( origin, local, corners[i] );
 		}
 	}
 
 	for ( i = 0; i < 12; i++ )
 	{
-		RP_EntBoundsLine( corners[edges[i][0]], corners[edges[i][1]], color, msec, viewer->s.number );
+		RP_EntBoundsLine( corners[edges[i][0]], corners[edges[i][1]], color, msec, clientNum );
 	}
+}
+
+static void RP_EntBoundsDrawBox( const gentity_t *viewer, const gentity_t *target, int color, int msec )
+{
+	RP_EntBoundsDrawBoxAt( viewer->s.number, target->r.currentOrigin, target->r.mins, target->r.maxs,
+		target->r.bmodel ? target->r.currentAngles : NULL, color, msec );
 }
 
 /*
@@ -220,7 +228,7 @@ it) from the ones ahead; so they are tested separately, as their world boxes aga
 nearest one entered in front of the viewer, before the solid hit, wins.
 ==================
 */
-static gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
+gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
 {
 	vec3_t eye, dir, end;
 	trace_t tr;
@@ -346,6 +354,9 @@ static void RP_EntBoundsMarkers( const gentity_t *viewer, int aimed )
 		float dist;
 
 		if ( !e->inuse || num < MAX_CLIENTS + BODY_QUEUE_SIZE || num == ENTITYNUM_WORLD || num == ENTITYNUM_NONE || num == aimed )
+			continue;
+		// zyk: one an admin is holding with /entcopy or /entcut has a preview of its own (g_entgrab.c)
+		if ( e->rpHeldBy )
 			continue;
 		if ( e->s.eType >= ET_EVENTS || e->freeAfterEvent || e->s.eType == ET_MISSILE || e->s.eType == ET_NPC ||
 			e->s.eType == ET_ITEM || e->client || e->isSaberEntity )

@@ -2711,6 +2711,7 @@ void RP_PromoteShipboundaryTargets( void ) {
 		dst->spawnflags		= src->spawnflags;
 		dst->legacySlot		= src->legacySlot;
 		dst->rpSubBSPOf		= src->rpSubBSPOf;	// GalaxyRP: a sub-BSP marker stays its misc_bsp's
+		dst->rpMapEntity	= src->rpMapEntity;	// GalaxyRP: and a map marker the map's (g_entgrab.c)
 		dst->isLogical		= qfalse;
 
 		// exactly what SP_info_notnull/SP_target_position did for it in the logical region:

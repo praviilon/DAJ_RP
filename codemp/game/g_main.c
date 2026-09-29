@@ -3156,6 +3156,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// Outcast table does both), and before the default entity file below clears anything.
 	RP_RecordFallbackSpawnPoint();
 
+	// GalaxyRP: [Entity System] and, at the same point for the same reason, which entities are the map's
+	// own: /entcut and /entrotate leave those alone. See RP_MarkMapEntities() in g_entgrab.c.
+	RP_MarkMapEntities();
+
 	// zyk: loading entities set as default (Entity System)
 	zyk_entities_file = fopen(va("GalaxyRP/entities/%s/default.txt",zyk_mapname),"r");
 
@@ -8740,6 +8744,11 @@ void G_RunFrame( int levelTime ) {
 					}
 
 					level.zyk_spawn_strings_values_count[new_ent->s.number] = j;
+
+					// GalaxyRP: [Entity System] a line that is one of the map's own entities, as /entsave
+					// wrote it, is still the map's: /entcut and /entrotate leave it alone. See
+					// RP_MarkMapEntities() in g_entgrab.c.
+					new_ent->rpMapEntity = RP_RecordIsMapEntity(new_ent->s.number);
 
 					// zyk: spawns the entity
 					zyk_main_spawn_entity(new_ent);
