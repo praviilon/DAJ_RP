@@ -1873,7 +1873,14 @@ void zyk_set_brush_model( gentity_t *ent )
 	}
 
 	// zyk: md3 model
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// GalaxyRP: [Slot Reuse] reusable once the Entity System's props using it are gone (g_utils.c)
+	ent->s.modelindex = RP_EntityModelIndex( ent, ent->model );
+
+	// GalaxyRP fix: [Entity System] not a brush model. An entity spawned again in place (/entedit,
+	// /entrotate) keeps its struct, so one whose model was "*N" still had r.bmodel set from
+	// SetBrushModel: the server clipped against inline model N, and the slot scan (RP_SlotMarkUsed)
+	// read its md3 index as that inline number.
+	ent->r.bmodel = qfalse;
 
 	// zyk: is a solid model
 	if (ent->spawnflags & 1024)
@@ -1918,6 +1925,34 @@ qboolean RP_EntitySystemMade( const gentity_t *ent )
 		return qfalse;
 
 	return ( level.zyk_spawn_strings_values_count[num] > 0 ) ? qtrue : qfalse;
+}
+
+// GalaxyRP: [Slot Reuse] the func_ classes whose spawn function registers the "model" key (through
+// zyk_set_brush_model) and "model2" -- all of them but these two, which never look at either
+static qboolean RP_FuncRegistersModels( const char *classname )
+{
+	return ( Q_stricmpn( classname, "func_", 5 ) == 0 && Q_stricmp( classname, "func_group" ) != 0
+		&& Q_stricmp( classname, "func_timer" ) != 0 ) ? qtrue : qfalse;
+}
+
+// GalaxyRP: [Slot Reuse] the sound misc_model_breakable_init() registers for a breakable that can be
+// damaged, and whether it is registered already
+#define RP_BREAKABLE_SOUND "sound/weapons/explosions/cargoexplode.wav"
+
+static qboolean RP_SoundRegistered( const char *name )
+{
+	char s[MAX_STRING_CHARS];
+	int i;
+
+	for ( i = 1; i < MAX_SOUNDS; i++ )
+	{
+		trap->GetConfigstring( CS_SOUNDS + i, s, sizeof( s ) );
+		if ( !s[0] )
+			return qfalse;
+		if ( !strcmp( s, name ) )
+			return qtrue;
+	}
+	return qfalse;
 }
 
 static qboolean RP_SpawnRefuse( gentity_t *ent, const char *reason )
@@ -1973,6 +2008,58 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 
 		if ( breakable && ( strlen( ent->model ) < 5 || Q_stricmp( ent->model + strlen( ent->model ) - 4, ".md3" ) != 0 ) )
 			return RP_SpawnRefuse( ent, va( "model %s is not an .md3 model", ent->model ) );
+	}
+
+	// GalaxyRP: [Slot Reuse] every model name the spawn function is about to register has to get a
+	// slot -- already there, free, or one a removed prop no longer needs -- or the prop would be drawn
+	// as nothing. The names and their order are the spawn functions' own: a misc_model_breakable's
+	// model, then its damage model (it can be damaged, the flag 8 is off and the file exists -- see
+	// SP_misc_model_breakable), then its use model (flag 32 and the file); a func_'s md3 model
+	// (zyk_set_brush_model), then its model2 (InitMover skips a .glm one and InitBBrush does not, so it is
+	// always counted). A breakable that can be damaged also registers its explosion sound between its
+	// model and its damage model (misc_model_breakable_init), which spends gamestate bytes too. func_group
+	// and func_timer register neither key.
+	if ( breakable || ( RP_FuncRegistersModels( ent->classname ) && ( md3Mover || ( ent->model2 && ent->model2[0] ) ) ) )
+	{
+		const char *names[3];
+		char damageModel[MAX_QPATH], useModel[MAX_QPATH], reason[256];
+		int count = 0, otherBytes = 0;
+
+		if ( breakable || md3Mover )
+			names[count++] = ent->model;
+
+		if ( breakable )
+		{
+			int len = (int)strlen( ent->model ) - 4;
+
+			if ( ent->health && !RP_SoundRegistered( RP_BREAKABLE_SOUND ) )
+				otherBytes = (int)strlen( RP_BREAKABLE_SOUND ) + 1;
+
+			if ( len > 0 && len + 8 <= MAX_QPATH )
+			{
+				if ( ent->health && !( ent->spawnflags & 8 ) )
+				{
+					Q_strncpyz( damageModel, ent->model, len + 1 );
+					Q_strcat( damageModel, sizeof( damageModel ), "_d1.md3" );
+					if ( RP_FileExists( damageModel ) )
+						names[count++] = damageModel;
+				}
+				if ( ent->spawnflags & 32 )
+				{
+					Q_strncpyz( useModel, ent->model, len + 1 );
+					Q_strcat( useModel, sizeof( useModel ), "_u1.md3" );
+					if ( RP_FileExists( useModel ) )
+						names[count++] = useModel;
+				}
+			}
+		}
+		else if ( ent->model2 && ent->model2[0] )
+		{
+			names[count++] = ent->model2;
+		}
+
+		if ( !RP_SlotRoomFor( CS_MODELS, names, count, otherBytes, reason, sizeof( reason ) ) )
+			return RP_SpawnRefuse( ent, reason );
 
 		return qfalse;
 	}
@@ -2001,9 +2088,47 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 
 		if ( !RP_FileExists( path ) )
 			return RP_SpawnRefuse( ent, va( "effect %s is not on the server", fxFile ) );
+
+		// GalaxyRP: [Slot Reuse] and a slot for it (see above)
+		{
+			const char *names[1];
+			char reason[256];
+
+			names[0] = fxFile;
+			if ( !RP_SlotRoomFor( CS_EFFECTS, names, 1, 0, reason, sizeof( reason ) ) )
+				return RP_SpawnRefuse( ent, reason );
+		}
 	}
 
 	return qfalse;
+}
+
+/*
+=================
+RP_EntitySystemSpawnedEmpty
+
+GalaxyRP: [Slot Reuse] after the spawn function: the Entity System prop whose model or effect still got
+no slot -- something registered in between took the room RP_EntitySystemSpawnRefused() had found --
+names what it is missing, so it is refused rather than left in the world drawn as nothing.
+=================
+*/
+static const char *RP_EntitySystemSpawnedEmpty( gentity_t *ent )
+{
+	char *fxFile = NULL;
+
+	if ( !ent->inuse || !ent->classname || !RP_EntitySystemMade( ent ) || ent->s.modelindex != 0 )
+		return NULL;
+
+	if ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 )
+		return "model";
+
+	if ( RP_FuncRegistersModels( ent->classname ) && ent->model && ent->model[0] && ent->model[0] != '*' && ent->model[0] != '#' )
+		return "model";
+
+	if ( Q_stricmp( ent->classname, "fx_runner" ) == 0 && G_SpawnString( "fxFile", "", &fxFile ) && fxFile && fxFile[0] )
+		return "effect";
+
+	return NULL;
 }
 
 // zyk: function to spawn entities used by entity system
@@ -2094,6 +2219,22 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 		}
 	}
 
+	// GalaxyRP: [Slot Reuse] an Entity System entity spawned again in place (/entedit, /entrotate,
+	// a dropped /entcut) keeps its struct: without this, the indices of the model or effect it is
+	// about to replace still counted as in use, so an edit with the table full was refused -- and the
+	// entity lost -- although its own old slot was free for the new name. Its spawn function sets
+	// them again; a breakable's use-model toggle keeps its two in sound1to2 / sound2to1, and whether
+	// it can be damaged follows its health again rather than what it was before the edit.
+	if (RP_EntitySystemMade(ent)) {
+		ent->s.modelindex = 0;
+		ent->s.modelindex2 = 0;
+		if (ent->classname && Q_stricmp(ent->classname, "misc_model_breakable") == 0) {
+			ent->sound1to2 = 0;
+			ent->sound2to1 = 0;
+			ent->takedamage = qfalse;
+		}
+	}
+
 	// GalaxyRP: [Entity System] a model or effect file the server does not have is refused here,
 	// before anything registers its name -- see RP_EntitySystemSpawnRefused()
 	if (RP_EntitySystemSpawnRefused(ent)) {
@@ -2108,6 +2249,19 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	// if we didn't get a classname, don't bother spawning anything
 	if (!G_CallSpawn(ent)) {
 		G_FreeEntity(ent);
+	}
+	else
+	{
+		const char *missing = RP_EntitySystemSpawnedEmpty(ent);
+
+		if (missing)
+		{
+			Q_strncpyz(level.rp_spawn_refusal, va("the map has no room for another %s", missing), sizeof(level.rp_spawn_refusal));
+			G_LogPrintf("Entity %d (%s) refused: %s\n", ent->s.number, ent->classname, level.rp_spawn_refusal);
+			RP_FreeEntityTriggers(ent);
+			G_FreeEntity(ent);
+			return;
+		}
 	}
 
 	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in

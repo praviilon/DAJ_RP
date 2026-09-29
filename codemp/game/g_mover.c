@@ -1119,7 +1119,7 @@ void InitMover( gentity_t *ent )
 		}
 		else
 		{
-			ent->s.modelindex2 = G_ModelIndex( ent->model2 );
+			ent->s.modelindex2 = RP_EntityModelIndex( ent, ent->model2 );	// GalaxyRP: [Slot Reuse]
 		}
 	}
 
@@ -2821,7 +2821,7 @@ static void InitBBrush ( gentity_t *ent )
 	// for drawing, but clip against the brushes
 	if ( ent->model2 && ent->model2[0] )
 	{
-		ent->s.modelindex2 = G_ModelIndex( ent->model2 );
+		ent->s.modelindex2 = RP_EntityModelIndex( ent, ent->model2 );	// GalaxyRP: [Slot Reuse]
 	}
 
 	// if the "color" or "light" keys are set, setup constantLight
@@ -3367,7 +3367,7 @@ void SP_func_usable( gentity_t *self )
 		}
 		else
 		{
-			self->s.modelindex2 = G_ModelIndex( self->model2 );
+			self->s.modelindex2 = RP_EntityModelIndex( self, self->model2 );	// GalaxyRP: [Slot Reuse]
 		}
 	}
 

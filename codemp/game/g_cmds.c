@@ -18615,7 +18615,8 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
 ^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
-^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\"" );
+^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\
+^3/entslots: ^7Shows how full the map's model and effect slots are, and how many can be reused.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
 ^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
 ^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
@@ -18632,6 +18633,39 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not map or brush entities in place.\n\
 ^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\
 ^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n\n\"" );
+}
+
+/*
+==================
+Cmd_EntSlots_f
+
+GalaxyRP: [Slot Reuse] /entslots: how full the map's effect and model slots and its gamestate are,
+how many slots only Entity System props asked for, how many of those nothing uses now (the ones a new
+name can be given once the table or the gamestate is full), and how many of this map's reuses are
+spent -- see RP_SlotReclaim() in g_utils.c. For the admin whose prop was refused for lack of room.
+==================
+*/
+void Cmd_EntSlots_f( gentity_t *ent ) {
+	int used, slots, esOnly, reusable, reuses, limit;
+	char text[MAX_STRING_CHARS];
+
+	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
+		return;
+	}
+
+	RP_SlotStats( CS_EFFECTS, &used, &slots, &esOnly, &reusable, &reuses, &limit );
+	Com_sprintf( text, sizeof( text ), "\n^3Effects: ^7%d of %d slots in use. %d only by Entity System props, %d of them free to reuse now. Reused this map: %d of %d.\n",
+		used, slots, esOnly, reusable, reuses, limit );
+
+	RP_SlotStats( CS_MODELS, &used, &slots, &esOnly, &reusable, &reuses, &limit );
+	Q_strcat( text, sizeof( text ), va( "^3Models: ^7%d of %d slots in use. %d only by Entity System props, %d of them free to reuse now. Reused this map: %d of %d.\n",
+		used, slots, esOnly, reusable, reuses, limit ) );
+
+	Q_strcat( text, sizeof( text ), va( "^3Gamestate: ^7%d of %d bytes.\n", G_GamestateBytesUsed(), ZYK_GAMESTATE_BUDGET ) );
+	Q_strcat( text, sizeof( text ), "^7A slot is reused only when there is no free one, or no room in the gamestate, for a new name.\n\n" );
+
+	trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", text ) );
 }
 
 /*
@@ -22719,6 +22753,7 @@ command_t commands[] = {
 	{ "entremove",			Cmd_EntRemove_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entrotate",			Cmd_EntRotate_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entsave",			Cmd_EntSave_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entslots",			Cmd_EntSlots_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entundo",			Cmd_EntUndo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ex",					Cmd_Examine_f,				CMD_LOGGEDIN },
 	{ "examine",			Cmd_Examine_f,				CMD_LOGGEDIN },

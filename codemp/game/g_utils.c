@@ -523,6 +523,332 @@ qboolean G_ConfigstringBytesAvailable( int needed ) {
 }
 
 /*
+=================
+Slot reuse: RP_SlotTable / RP_SlotMarkUsed / RP_SlotReclaim / RP_SlotRoomFor
+
+GalaxyRP: [Slot Reuse] a model or effect name keeps its configstring slot until the map changes. The
+effect table has 64 slots -- shared by the map's effects, every NPC and vehicle type the first time
+one spawns, and /admweather's block -- and the models share the gamestate's ~15000 bytes with the
+players' info, so a map that stays up for days runs out, and what asked next was drawn with nothing.
+
+A slot whose name only Entity System props ever asked for (level.rp_slot_es_model / _fx is 1:
+RP_EntityModelIndex() and RP_EntityEffectIndex() at a prop's own model and effect) can be given to
+a new name once nothing points at it any more -- its props were removed -- but only when the new name
+cannot be added the ordinary way: the table is full, or the gamestate has no room for another name.
+Whatever takes it over decides what it is from then on: an Entity System prop keeps it reusable, any
+other caller (an NPC, a vehicle, the map) makes it permanent. Any other request for a name makes its
+slot permanent, since the caller may keep the index.
+
+The slot is overwritten in place, never emptied: a client joining later registers the table only up
+to the first empty slot (CG_RegisterSounds, CG_RegisterGraphics), so a gap would hide everything after
+it. Clients already connected register the new name when the configstring changes. Names starting
+with "*" (weather commands, player-model sounds) never take a reused slot: /admweather claims its
+block by appending and checks that it is contiguous.
+
+The number of reuses a map allows is capped (RP_SLOT_REUSE_FX, RP_SLOT_REUSE_MODELS in g_local.h):
+each client keeps everything it has registered until the map changes, and has limits of its own.
+=================
+*/
+#define RP_SLOT_REUSES_CVAR "rp_slot_reuses"
+
+/*
+=================
+RP_SlotRestore
+
+The reuses a map has spent are kept in the cvar RP_SLOT_REUSES_CVAR ("<effects> <models>") as well as
+in level: map_restart reloads the game module and clears level, while every client keeps what it
+registered, so a restart must not give the map a fresh budget. A new map starts from 0. The owner
+markers are not kept -- after a restart every slot is permanent, which is the safe side.
+=================
+*/
+void RP_SlotRestore( int restart ) {
+	char buf[64];
+	const char *space;
+
+	if ( !restart ) {
+		trap->Cvar_Set( RP_SLOT_REUSES_CVAR, "0 0" );
+		return;
+	}
+
+	trap->Cvar_VariableStringBuffer( RP_SLOT_REUSES_CVAR, buf, sizeof( buf ) );
+	level.rp_slot_reuses_fx = Com_Clampi( 0, RP_SLOT_REUSE_FX, atoi( buf ) );
+	space = strchr( buf, ' ' );
+	level.rp_slot_reuses_model = Com_Clampi( 0, RP_SLOT_REUSE_MODELS, space ? atoi( space + 1 ) : 0 );
+}
+
+typedef struct {
+	int		start;
+	int		max;
+	byte	*owners;
+	int		*reuses;
+	int		limit;
+	int		which;			// 0 models, 1 effects
+	const char *what;
+} rpSlotTable_t;
+
+static qboolean RP_SlotTable( int start, rpSlotTable_t *t ) {
+	if ( start == CS_MODELS ) {
+		t->start = CS_MODELS; t->max = MAX_MODELS; t->owners = level.rp_slot_es_model;
+		t->reuses = &level.rp_slot_reuses_model; t->limit = RP_SLOT_REUSE_MODELS; t->which = 0; t->what = "model";
+		return qtrue;
+	}
+	if ( start == CS_EFFECTS ) {
+		t->start = CS_EFFECTS; t->max = MAX_FX; t->owners = level.rp_slot_es_fx;
+		t->reuses = &level.rp_slot_reuses_fx; t->limit = RP_SLOT_REUSE_FX; t->which = 1; t->what = "effect";
+		return qtrue;
+	}
+	return qfalse;
+}
+
+// which slots of the table something in the game still points at. Deliberately generous -- a number
+// that only might be this table's index still keeps its slot -- except where a field is known to mean
+// something else: a brush entity's modelindex is its inline model, an fx_runner's modelindex2 its
+// state, and anything but an fx_runner's modelindex is not an effect.
+static void RP_SlotMarkUsed( const rpSlotTable_t *t, byte *used ) {
+	gentity_t *e;
+
+#define RP_SLOT_MARK(v) do { int v_ = (v); if ( v_ > 0 && v_ < t->max ) used[v_] = 1; } while ( 0 )
+
+	memset( used, 0, t->max );
+
+	RP_FOR_EACH_ENTITY( e ) {
+		if ( !e->inuse )
+			continue;
+
+		if ( t->which == 1 ) {
+			if ( e->s.eType == ET_FX )
+				RP_SLOT_MARK( e->s.modelindex );
+			// an effect event still on its way to the clients (G_PlayEffectID and the like)
+			if ( e->s.eType >= ET_EVENTS || e->s.event )
+				RP_SLOT_MARK( e->s.eventParm );
+			if ( e->client ) {
+				RP_SLOT_MARK( e->client->ps.eventParms[0] );
+				RP_SLOT_MARK( e->client->ps.eventParms[1] );
+				RP_SLOT_MARK( e->client->ps.externalEventParm );
+			}
+		} else {
+			if ( e->s.eType != ET_FX ) {
+				if ( !e->r.bmodel )
+					RP_SLOT_MARK( e->s.modelindex );
+				RP_SLOT_MARK( e->s.modelindex2 );
+			}
+			// a misc_model_breakable keeps its main and its use model here (misc_model_use)
+			if ( e->classname && !Q_stricmp( e->classname, "misc_model_breakable" ) ) {
+				RP_SLOT_MARK( e->sound1to2 );
+				RP_SLOT_MARK( e->sound2to1 );
+			}
+		}
+	}
+
+#undef RP_SLOT_MARK
+}
+
+// the reusable slots of the table, with the length (terminator included) of the name each holds; 0
+// for the others. Returns how many there are.
+static int RP_SlotCandidates( const rpSlotTable_t *t, int *candLen, int *firstFree ) {
+	static byte used[MAX_MODELS];
+	char s[MAX_STRING_CHARS];
+	int k, n = 0;
+
+	RP_SlotMarkUsed( t, used );
+
+	for ( k = 0; k < t->max; k++ )
+		candLen[k] = 0;
+
+	for ( k = 1; k < t->max; k++ ) {
+		trap->GetConfigstring( t->start + k, s, sizeof( s ) );
+		if ( !s[0] )
+			break;
+		if ( t->owners[k] != 1 || s[0] == '*' || used[k] )
+			continue;
+		candLen[k] = (int)strlen( s ) + 1;
+		n++;
+	}
+
+	if ( firstFree )
+		*firstFree = k;
+	return n;
+}
+
+// the candidate a new name of length len (terminator included) should take, with bytes in use now:
+// the one holding the longest name, which leaves the gamestate the most room. 0 if none will do.
+static int RP_SlotPick( const rpSlotTable_t *t, const int *candLen, int len, int bytes ) {
+	int k, best = 0;
+
+	for ( k = 1; k < t->max; k++ ) {
+		if ( !candLen[k] )
+			continue;
+		if ( bytes - candLen[k] + len > ZYK_GAMESTATE_BUDGET )
+			continue;
+		if ( !best || candLen[k] > candLen[best] )
+			best = k;
+	}
+	return best;
+}
+
+// give name (length len with its terminator; bytes in use now) a slot of a removed Entity System
+// prop, if there is one and the map's reuses are not spent. Returns the slot, or 0.
+static int RP_SlotReclaim( const rpSlotTable_t *t, const char *name, int len, int bytes ) {
+	static int candLen[MAX_MODELS];
+	char old[MAX_STRING_CHARS];
+	int best;
+
+	if ( !VALIDSTRING( name ) || name[0] == '*' )
+		return 0;
+
+	if ( *t->reuses >= t->limit ) {
+		if ( !level.rp_slot_reuse_spent_warned[t->which] ) {
+			level.rp_slot_reuse_spent_warned[t->which] = qtrue;
+			G_LogPrintf( "%s slots: this map's %d reuses are spent; \"%s\" gets no slot.\n", t->what, t->limit, name );
+		}
+		return 0;
+	}
+
+	// nothing to look for when no slot is the props' alone -- spares a full table the entity scan on
+	// every name it refuses
+	for ( best = 1; best < t->max && t->owners[best] != 1; best++ )
+		;
+	if ( best >= t->max )
+		return 0;
+
+	if ( !RP_SlotCandidates( t, candLen, NULL ) )
+		return 0;
+
+	best = RP_SlotPick( t, candLen, len, bytes );
+	if ( !best )
+		return 0;
+
+	trap->GetConfigstring( t->start + best, old, sizeof( old ) );
+	trap->SetConfigstring( t->start + best, name );
+	level.zyk_gamestate_bytes = bytes - candLen[best] + len;
+	t->owners[best] = level.rp_slot_es_context ? 1 : 0;
+	(*t->reuses)++;
+	trap->Cvar_Set( RP_SLOT_REUSES_CVAR, va( "%d %d", level.rp_slot_reuses_fx, level.rp_slot_reuses_model ) );
+	if ( t->start == CS_MODELS )
+		level.rp_model_info_state[best] = 0;	// RP_ModelInfo() reads the new file
+
+	G_LogPrintf( "%s slot %d reused: \"%s\" (no longer in use) -> \"%s\" (%d of %d reuses this map)\n",
+		t->what, best, old, name, *t->reuses, t->limit );
+	return best;
+}
+
+/*
+=================
+RP_SlotRoomFor
+
+Whether names[0..count) -- what one Entity System prop is about to register in the table at start,
+in the order its spawn function registers them -- will all get a slot: already there, a free slot the
+gamestate has room for, or a reusable one. otherBytes is what the spawn function registers elsewhere
+along the way (a sound), counted as spent from the start. Walks the same choices
+G_FindConfigstringIndex() and RP_SlotReclaim() will make, on copies. When not, reason says why.
+=================
+*/
+qboolean RP_SlotRoomFor( int start, const char **names, int count, int otherBytes, char *reason, int reasonSize ) {
+	static int candLen[MAX_MODELS];
+	static byte replaced[MAX_MODELS];	// slots this walk has given to an earlier name: theirs is gone
+	rpSlotTable_t t;
+	char s[MAX_STRING_CHARS];
+	int i, j, k, firstFree, bytes, reusesLeft;
+
+	if ( reason && reasonSize > 0 )
+		reason[0] = '\0';
+	if ( !RP_SlotTable( start, &t ) )
+		return qtrue;
+
+	RP_SlotCandidates( &t, candLen, &firstFree );
+	memset( replaced, 0, t.max );
+	bytes = zyk_gamestate_bytes_used() + ( otherBytes > 0 ? otherBytes : 0 );
+	reusesLeft = t.limit - *t.reuses;
+
+	for ( i = 0; i < count; i++ ) {
+		const char *name = names[i];
+		qboolean known = qfalse;
+		int len, pick;
+
+		if ( !VALIDSTRING( name ) )
+			continue;
+
+		for ( j = 0; j < i && !known; j++ ) {
+			if ( VALIDSTRING( names[j] ) && !strcmp( names[j], name ) )
+				known = qtrue;
+		}
+		for ( k = 1; k < firstFree && !known; k++ ) {
+			if ( replaced[k] )
+				continue;
+			trap->GetConfigstring( t.start + k, s, sizeof( s ) );
+			if ( !strcmp( s, name ) ) {
+				known = qtrue;
+				candLen[k] = 0;	// the prop will point at it: no later name of its own can take it
+			}
+		}
+		if ( known )
+			continue;
+
+		len = (int)strlen( name ) + 1;
+
+		if ( firstFree < t.max && bytes + len <= ZYK_GAMESTATE_BUDGET ) {
+			firstFree++;
+			bytes += len;
+			continue;
+		}
+
+		pick = ( name[0] != '*' && reusesLeft > 0 ) ? RP_SlotPick( &t, candLen, len, bytes ) : 0;
+		if ( pick ) {
+			bytes = bytes - candLen[pick] + len;
+			candLen[pick] = 0;
+			replaced[pick] = 1;
+			reusesLeft--;
+			continue;
+		}
+
+		if ( reason && reasonSize > 0 ) {
+			if ( firstFree >= t.max ) {
+				Com_sprintf( reason, reasonSize, "the map has no room for another %s: all %d %s slots are in use%s",
+					t.what, t.max - 1, t.what, reusesLeft > 0 ? " and none can be reused" : va( ", and its %d reuses are spent", t.limit ) );
+			} else {
+				Com_sprintf( reason, reasonSize, "the map's gamestate is full (%d of %d bytes) and no %s slot can be reused%s",
+					bytes, ZYK_GAMESTATE_BUDGET, t.what, reusesLeft > 0 ? "" : va( " (its %d reuses are spent)", t.limit ) );
+			}
+		}
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+/*
+=================
+RP_SlotStats / G_GamestateBytesUsed
+
+For /entslots: the slots in use (the table's first empty slot), how many only Entity System props
+asked for, how many of those nothing points at now, and the reuses spent.
+=================
+*/
+void RP_SlotStats( int start, int *used, int *slots, int *esOnly, int *reusableNow, int *reuses, int *reuseLimit ) {
+	static int candLen[MAX_MODELS];
+	rpSlotTable_t t;
+	int k, firstFree, n = 0;
+
+	if ( !RP_SlotTable( start, &t ) )
+		return;
+
+	*reusableNow = RP_SlotCandidates( &t, candLen, &firstFree );
+	for ( k = 1; k < firstFree; k++ ) {
+		if ( t.owners[k] == 1 )
+			n++;
+	}
+	*used = firstFree - 1;
+	*slots = t.max - 1;
+	*esOnly = n;
+	*reuses = *t.reuses;
+	*reuseLimit = t.limit;
+}
+
+int G_GamestateBytesUsed( void ) {
+	return zyk_gamestate_bytes_used();
+}
+
+/*
 ================
 G_FindConfigstringIndex
 
@@ -531,6 +857,8 @@ G_FindConfigstringIndex
 static int G_FindConfigstringIndex( const char *name, int start, int max, qboolean create ) {
 	int		i, len;
 	char	s[MAX_STRING_CHARS];
+	rpSlotTable_t slotTable;
+	qboolean tracked = RP_SlotTable( start, &slotTable );
 
 	if ( !VALIDSTRING( name ) ) {
 		return 0;
@@ -542,6 +870,11 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 			break;
 		}
 		if ( !strcmp( s, name ) ) {
+			// GalaxyRP: [Slot Reuse] anything but an Entity System prop asking for it may keep the
+			// index, so the slot can never be given away again
+			if ( tracked && !level.rp_slot_es_context ) {
+				slotTable.owners[i] = 0;
+			}
 			return i;
 		}
 	}
@@ -567,6 +900,15 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 	// since the /playsound fix, and index 0 is what an entity with no model carries anyway.
 	if ( i == max ) {
 		int slot = zyk_cs_table_slot( start );
+
+		// GalaxyRP: [Slot Reuse] a slot a removed Entity System prop no longer needs
+		if ( tracked ) {
+			int reused = RP_SlotReclaim( &slotTable, name, (int)strlen( name ) + 1, zyk_gamestate_bytes_used() );
+
+			if ( reused ) {
+				return reused;
+			}
+		}
 
 		if ( !level.zyk_configstring_table_full[slot] ) {
 			level.zyk_configstring_table_full[slot] = qtrue;
@@ -599,6 +941,16 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 	level.zyk_gamestate_bytes = zyk_gamestate_bytes_used();
 
 	if ( (level.zyk_gamestate_bytes + len) > ZYK_GAMESTATE_BUDGET ) {
+		// GalaxyRP: [Slot Reuse] a slot a removed Entity System prop no longer needs, whose name makes
+		// room for this one
+		if ( tracked ) {
+			int reused = RP_SlotReclaim( &slotTable, name, len, level.zyk_gamestate_bytes );
+
+			if ( reused ) {
+				return reused;
+			}
+		}
+
 		if ( !level.zyk_gamestate_full ) {
 			level.zyk_gamestate_full = qtrue;
 			G_LogPrintf( "gamestate is at %d of %d bytes; refusing \"%s\" and any further new "
@@ -610,6 +962,10 @@ static int G_FindConfigstringIndex( const char *name, int start, int max, qboole
 
 	trap->SetConfigstring( start + i, name );
 	level.zyk_gamestate_bytes += len;
+
+	if ( tracked ) {
+		slotTable.owners[i] = level.rp_slot_es_context ? 1 : 0;
+	}
 
 	return i;
 }
@@ -909,6 +1265,41 @@ int G_EffectIndex( const char *name )
 	}
 
 	return G_FindConfigstringIndex (name, CS_EFFECTS, MAX_FX, qtrue);
+}
+
+/*
+=================
+RP_EntityModelIndex / RP_EntityEffectIndex
+
+GalaxyRP: [Slot Reuse] G_ModelIndex() / G_EffectIndex() for a prop's own model or effect: for one the
+Entity System made (RP_EntitySystemMade()), a name it registers first stays reusable once the props
+using it are gone -- see RP_SlotReclaim() above. Any other entity is the plain call.
+=================
+*/
+int RP_EntityModelIndex( gentity_t *ent, const char *name ) {
+	int index;
+
+	if ( !RP_EntitySystemMade( ent ) ) {
+		return G_ModelIndex( name );
+	}
+
+	level.rp_slot_es_context = qtrue;
+	index = G_ModelIndex( name );
+	level.rp_slot_es_context = qfalse;
+	return index;
+}
+
+int RP_EntityEffectIndex( gentity_t *ent, const char *name ) {
+	int index;
+
+	if ( !RP_EntitySystemMade( ent ) ) {
+		return G_EffectIndex( name );
+	}
+
+	level.rp_slot_es_context = qtrue;
+	index = G_EffectIndex( name );
+	level.rp_slot_es_context = qfalse;
+	return index;
 }
 
 int G_BSPIndex( const char *name )

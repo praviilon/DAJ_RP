@@ -99,6 +99,14 @@ extern vec3_t gPainPoint;
 #define ZYK_GAMESTATE_HEADROOM		1024
 #define ZYK_GAMESTATE_BUDGET		(MAX_GAMESTATE_CHARS - ZYK_GAMESTATE_HEADROOM)
 
+// GalaxyRP: [Slot Reuse] how many names a map may put into model and effect slots taken back from
+// removed Entity System props (RP_SlotReclaim() in g_utils.c). Each client keeps every effect and
+// model it has registered until the map changes -- 256 effects, about 120 of them the game's own, and
+// 1024 models -- so reuse is bounded to keep a player who has been on the map since it loaded inside
+// those limits.
+#define RP_SLOT_REUSE_FX			32
+#define RP_SLOT_REUSE_MODELS		128
+
 // GalaxyRP fix: [Configstrings] how long G_RunFrame waits for the engine to finish writing the
 // gamestate before taking the map-load count anyway. SV_SpawnServer writes CS_SYSTEMINFO four
 // frames -- 400ms of level time -- after InitGame returns, so this only has to outlast that; it is
@@ -2059,6 +2067,16 @@ typedef struct level_locals_s {
 	qboolean zyk_entity_reserve_warned;				// G_Spawn warns once when the reserve is breached
 	qboolean zyk_entity_force_reuse_warned;			// ...and once more when it has to recycle a fresh slot
 	qboolean zyk_weather_late_effect_warned;		// a weather effect was refused for arriving after the block
+	// GalaxyRP: [Slot Reuse] 1 for a model or effect slot whose name only Entity System props have
+	// asked for -- the only slots that may be given to a new name once the table or the gamestate is
+	// full, and only while nothing points at them; 0 (permanent) is what every slot starts as each map,
+	// and what any other request for the name makes it. See RP_SlotReclaim() in g_utils.c.
+	byte rp_slot_es_model[MAX_MODELS];
+	byte rp_slot_es_fx[MAX_FX];
+	int rp_slot_reuses_model;						// names put into a reused slot this map
+	int rp_slot_reuses_fx;
+	qboolean rp_slot_reuse_spent_warned[2];			// the per-map budget ran out: logged once each
+	qboolean rp_slot_es_context;					// the name being registered is an Entity System prop's own
 	qboolean rp_shipboundary_logical_warned;	// shipboundary_touch reports a logical target once per map
 	qboolean rp_shipboundary_target_warned;		// ...and a missing one, likewise once per map
 	qboolean rp_hyperspace_target_warned;		// hyperspace_touch, same idea for its two targets
@@ -2356,6 +2374,15 @@ void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );
 void		Cmd_EntCancel_f( gentity_t *ent );
+// GalaxyRP: [Slot Reuse] model and effect slots of removed Entity System props given to new names --
+// g_utils.c
+int			RP_EntityModelIndex( gentity_t *ent, const char *name );
+int			RP_EntityEffectIndex( gentity_t *ent, const char *name );
+qboolean	RP_SlotRoomFor( int start, const char **names, int count, int otherBytes, char *reason, int reasonSize );
+void		RP_SlotStats( int start, int *used, int *slots, int *esOnly, int *reusableNow, int *reuses, int *reuseLimit );
+int			G_GamestateBytesUsed( void );
+void		RP_SlotRestore( int restart );
+void		Cmd_EntSlots_f( gentity_t *ent );
 // GalaxyRP: [Listings] /list models|effects|sounds|music|maps|npcs|vehicles, /maplist and the file
 // checks of /playsound and /playmusic -- g_rplist.c
 qboolean	RP_ListCommand( gentity_t *ent, const char *what );

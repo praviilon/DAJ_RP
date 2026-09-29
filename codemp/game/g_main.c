@@ -1875,6 +1875,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	level.time = levelTime;
 	level.startTime = levelTime;
 
+	// GalaxyRP: [Slot Reuse] the reuses already spent this map survive a map_restart, as the clients'
+	// registrations do (RP_SlotRestore() in g_utils.c)
+	RP_SlotRestore( restart );
+
 	level.follow1 = level.follow2 = -1;
 
 	level.snd_fry = G_SoundIndex("sound/player/fry.wav");	// FIXME standing in lava / slime

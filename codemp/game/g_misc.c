@@ -641,7 +641,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 		if( !(ent->spawnflags & 8) ) {	//no dmodel
 			Q_strcat( damageModel, sizeof(damageModel), "_d1.md3" );
 			if (!esMade || RP_FileExists(damageModel))
-				ent->s.modelindex2 = G_ModelIndex( damageModel );
+				ent->s.modelindex2 = RP_EntityModelIndex( ent, damageModel );
 		}
 
 		// GalaxyRP fix: [SP Maps] the singleplayer "_c1.md3" chunk model used to be registered here
@@ -658,7 +658,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 	if( ent->spawnflags & 32 ) {	//has umodel
 		Q_strcat( useModel, sizeof(useModel), "_u1.md3" );
 		if (!esMade || RP_FileExists(useModel))
-			ent->sound1to2 = G_ModelIndex( useModel );
+			ent->sound1to2 = RP_EntityModelIndex( ent, useModel );
 	}
 
 	// Scale up the tie-bomber bbox a little.
@@ -1106,7 +1106,9 @@ void misc_model_breakable_init( gentity_t *ent )
 	}
 
 	//Main model
-	ent->s.modelindex = ent->sound2to1 = G_ModelIndex( ent->model );
+	// GalaxyRP: [Slot Reuse] RP_EntityModelIndex(): an Entity System prop's model slot can be reused
+	// once the props using it are gone (g_utils.c); for any other entity it is G_ModelIndex()
+	ent->s.modelindex = ent->sound2to1 = RP_EntityModelIndex( ent, ent->model );
 
 	if ( ent->spawnflags & 1 )
 	{//Blocks movement
@@ -1121,6 +1123,8 @@ void misc_model_breakable_init( gentity_t *ent )
 
 	if ( ent->health ) 
 	{
+		// GalaxyRP: [Slot Reuse] RP_BREAKABLE_SOUND in g_spawn.c counts this name's gamestate bytes
+		// before an Entity System breakable spawns -- keep the two the same
 		G_SoundIndex("sound/weapons/explosions/cargoexplode.wav");
 		ent->maxHealth = ent->health;
 		ent->takedamage = qtrue;
@@ -3551,7 +3555,8 @@ void SP_fx_runner( gentity_t *ent )
 	//	until the cgame trys to register it...
 	if (fxFile && fxFile[0]) // zyk: added this condition
 	{
-		ent->s.modelindex = G_EffectIndex( fxFile );
+		// GalaxyRP: [Slot Reuse] reusable once the Entity System's fx_runners using it are gone
+		ent->s.modelindex = RP_EntityEffectIndex( ent, fxFile );
 		ent->message = G_NewString(fxFile); // zyk: used by Entity System to save the effect fxFile, so the effect is loaded properly by entload command
 	}
 
