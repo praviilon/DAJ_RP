@@ -4634,7 +4634,27 @@ static int zyk_team_from_string( const char *name )
 	return GetIDForString( TeamTable, name );
 }
 
-void NPC_Kill_f( void )
+// GalaxyRP: [NPC System] the team names a player types, for /npc kill team's messages
+static const char *RP_NpcTeamWord( int team )
+{
+	switch ( team )
+	{
+	case NPCTEAM_PLAYER:	return "player";
+	case NPCTEAM_ENEMY:		return "enemy";
+	case NPCTEAM_NEUTRAL:	return "neutral";
+	default:				return "free";
+	}
+}
+
+/*
+GalaxyRP fix: [NPC System] everything this said went through Com_Printf(), which in the game module is
+the server console: the admin who typed /npc kill saw nothing at all -- not the usage, not an unknown
+team, not whether anything died. The usage and the errors now go to the admin (ent), and so does one
+line at the end saying how many it killed. The per-NPC lines stay on the server console, where they
+were, as a record; sent to the admin they would be one server command per NPC, and /npc kill all on
+a busy map would overflow the admin's reliable commands.
+*/
+void NPC_Kill_f( gentity_t *ent )
 {
 	int			n;
 	gentity_t	*player;
@@ -4645,17 +4665,14 @@ void NPC_Kill_f( void )
 	// separately so every one of the four teams is selectable.
 	qboolean	killByTeam = qfalse;
 	qboolean	killNonSF = qfalse;
+	int			killed = 0, spawnersRemoved = 0, ridden = 0;
+	const int	clientNum = ent - g_entities;
 
 	trap->Argv(2, name, 1024);
 
 	if ( !name[0] )
 	{
-		Com_Printf( S_COLOR_RED"Error, Expected:\n");
-		Com_Printf( S_COLOR_RED"NPC kill '[NPC targetname]' - kills NPCs with certain targetname\n" );
-		Com_Printf( S_COLOR_RED"or\n" );
-		Com_Printf( S_COLOR_RED"NPC kill 'all' - kills all NPCs\n" );
-		Com_Printf( S_COLOR_RED"or\n" );
-		Com_Printf( S_COLOR_RED"NPC team '[teamname]' - kills all NPCs of a certain team ('nonally' is all but your allies)\n" );
+		trap->SendServerCommand( clientNum, "print \"^1Command Usage: ^3/npc kill <targetname or type>^7, ^3/npc kill all^7, or ^3/npc kill team <player/enemy/neutral/free or nonally>^7 ('nonally' is every npc but your allies). ^3/npc killaim ^7kills the one in your crosshair.\n\"" );
 		return;
 	}
 
@@ -4665,13 +4682,7 @@ void NPC_Kill_f( void )
 
 		if ( !name[0] )
 		{
-			Com_Printf( S_COLOR_RED"NPC_Kill Error: 'npc kill team' requires a team name!\n" );
-			Com_Printf( S_COLOR_RED"Valid team names are:\n");
-			for ( n = NPCTEAM_FREE; n < NPCTEAM_NUM_TEAMS; n++ )
-			{
-				Com_Printf( S_COLOR_RED"%s\n", TeamNames[n] );
-			}
-			Com_Printf( S_COLOR_RED"nonally - kills all but your teammates\n" );
+			trap->SendServerCommand( clientNum, "print \"^1Command Usage: ^3/npc kill team <player/enemy/neutral/free or nonally>^7 ('nonally' is every npc but your allies)\n\"" );
 			return;
 		}
 
@@ -4689,13 +4700,7 @@ void NPC_Kill_f( void )
 
 			if ( resolvedTeam == -1 )
 			{
-				Com_Printf( S_COLOR_RED"NPC_Kill Error: team '%s' not recognized\n", name );
-				Com_Printf( S_COLOR_RED"Valid team names are:\n");
-				for ( n = NPCTEAM_FREE; n < NPCTEAM_NUM_TEAMS; n++ )
-				{
-					Com_Printf( S_COLOR_RED"%s\n", TeamNames[n] );
-				}
-				Com_Printf( S_COLOR_RED"nonally - kills all but your teammates\n" );
+				trap->SendServerCommand( clientNum, "print \"^1That is not a team. ^7Teams: ^3player^7, ^3enemy^7, ^3neutral^7, ^3free^7, or ^3nonally ^7for every npc but your allies.\n\"" );
 				return;
 			}
 
@@ -4708,6 +4713,11 @@ void NPC_Kill_f( void )
 	{ // zyk: changed from ENTITYNUM_MAX_NORMAL to level.num_entities
 		player = &g_entities[n];
 		if (!player->inuse) {
+			continue;
+		}
+		// GalaxyRP: [NPC System] a corpse is not killed again: player_die() returns at once for one
+		// already PM_DEAD, so this changes nothing but the count the admin is told
+		if ( player->client && player->client->ps.pm_type == PM_DEAD ) {
 			continue;
 		}
 
@@ -4733,6 +4743,7 @@ void NPC_Kill_f( void )
 					{
 						Com_Printf( S_COLOR_GREEN"Killing NPC %s named %s\n", player->NPC_type, player->targetname );
 						player->health = 0;
+						killed++;
 
 						if (player->die && player->client)
 						{
@@ -4744,6 +4755,7 @@ void NPC_Kill_f( void )
 				{//A spawner, remove it
 					Com_Printf( S_COLOR_GREEN"Removing NPC spawner %s with NPC named %s\n", player->NPC_type, player->NPC_targetname );
 					G_FreeEntity( player );
+					spawnersRemoved++;
 					//FIXME: G_UseTargets2(player, player, player->NPC_target & player->target);?
 				}
 			}
@@ -4756,6 +4768,7 @@ void NPC_Kill_f( void )
 				{
 					Com_Printf( S_COLOR_GREEN"Killing NPC %s named %s\n", player->NPC_type, player->targetname );
 					player->health = 0;
+					killed++;
 					if (player->die)
 					{
 						player->die(player, player, player, player->client->pers.maxHealth, MOD_UNKNOWN);
@@ -4778,10 +4791,15 @@ void NPC_Kill_f( void )
 					Com_Printf( S_COLOR_GREEN"Killing NPC %s named %s\n", player->NPC_type, player->targetname );
 					player->health = 0;
 					player->client->ps.stats[STAT_HEALTH] = 0;
+					killed++;
 					if (player->die)
 					{
 						player->die(player, player, player, 100, MOD_UNKNOWN);
 					}
+				}
+				else
+				{
+					ridden++;
 				}
 			}
 		}
@@ -4793,6 +4811,42 @@ void NPC_Kill_f( void )
 		}
 		*/
 		//rwwFIXMEFIXME: should really do something here.
+	}
+
+	// what it did, to the admin
+	if ( killNonSF )
+	{
+		trap->SendServerCommand( clientNum, va( "print \"^7Killed %d npc%s that %s not your allies%s.\n\"",
+			killed, killed == 1 ? "" : "s", killed == 1 ? "is" : "are",
+			spawnersRemoved ? va( ", and removed %d npc spawner%s", spawnersRemoved, spawnersRemoved == 1 ? "" : "s" ) : "" ) );
+	}
+	else if ( killByTeam )
+	{
+		trap->SendServerCommand( clientNum, va( "print \"^7Killed %d npc%s of team ^3%s^7.\n\"",
+			killed, killed == 1 ? "" : "s", RP_NpcTeamWord( killTeam ) ) );
+	}
+	else
+	{
+		char shown[64];
+
+		// the name as typed, shown back: no quotes (they would end the print), short
+		Q_strncpyz( shown, name, sizeof( shown ) );
+		for ( n = 0; shown[n]; n++ )
+		{
+			if ( shown[n] == '"' || (unsigned char)shown[n] < 32 )
+				shown[n] = ' ';
+		}
+
+		if ( !killed && !ridden )
+		{
+			trap->SendServerCommand( clientNum, Q_stricmp( name, "all" ) ? va( "print \"^7No npc has the targetname or type ^3%s^7.\n\"", shown )
+				: "print \"^7There are no npcs to kill.\n\"" );
+		}
+		else
+		{
+			trap->SendServerCommand( clientNum, va( "print \"^7Killed %d npc%s%s.\n\"", killed, killed == 1 ? "" : "s",
+				ridden ? va( "; %d vehicle%s with someone riding %s left alone", ridden, ridden == 1 ? "" : "s", ridden == 1 ? "it was" : "them were" ) : "" ) );
+		}
 	}
 }
 
@@ -4808,7 +4862,9 @@ parse and dispatch bot commands
 ==================
 RP_NpcInCrosshair
 
-GalaxyRP: [NPC System] the live NPC under the admin's crosshair, for /npc team and /npc effect.
+GalaxyRP: [NPC System] the live NPC under the admin's crosshair, for /npc team, /npc effect and
+/npc killaim. Vehicles are NPCs too, and are found the same way -- but not the one the admin is
+riding, whose box the eye is inside of: it would be "hit" at once and hide everything ahead.
 
 /npc team used to take ps.hasLookTarget / ps.lookTarget, which is not the crosshair at all:
 WP_SaberStartMissileBlockCheck() sets it to whatever living body is within 256 units and in view,
@@ -4898,6 +4954,8 @@ static gentity_t *RP_NpcInCrosshair( gentity_t *ent )
 			continue;
 		if ( npc->health <= 0 || ( npc->s.eFlags & ( EF_DEAD | EF_NODRAW ) ) || ( npc->r.svFlags & SVF_NOCLIENT ) )
 			continue;
+		if ( ent->client->ps.m_iVehicleNum && npc->s.number == ent->client->ps.m_iVehicleNum )
+			continue;
 
 		VectorAdd( npc->r.currentOrigin, npc->r.mins, mins );
 		VectorAdd( npc->r.currentOrigin, npc->r.maxs, maxs );
@@ -4921,6 +4979,62 @@ static void RP_NpcLabel( const gentity_t *npc, char *buf, int size )
 		Com_sprintf( buf, size, "^3%s ^7(%s)", type, npc->targetname );
 	else
 		Com_sprintf( buf, size, "^3%s^7", type );
+}
+
+/*
+==================
+RP_NpcKillAim_f
+
+GalaxyRP: [NPC System] /npc killaim: kills the NPC or vehicle in the crosshair (RP_NpcInCrosshair()),
+the way /npc kill does -- it dies by its own hand, so nobody is credited with the kill. A vehicle
+with a player aboard, driving or riding, is left alone, as /npc kill leaves ridden vehicles; one
+with only NPCs aboard is killed like any other NPC.
+==================
+*/
+static qboolean RP_VehicleHasPlayerAboard( const gentity_t *veh )
+{
+	const Vehicle_t *pVeh = veh->m_pVehicle;
+	int i;
+
+	if ( !pVeh )
+		return qfalse;
+	if ( pVeh->m_pPilot && ( (gentity_t *)pVeh->m_pPilot )->s.number < MAX_CLIENTS )
+		return qtrue;
+	for ( i = 0; i < VEH_MAX_PASSENGERS; i++ )
+	{
+		if ( pVeh->m_ppPassengers[i] && ( (gentity_t *)pVeh->m_ppPassengers[i] )->s.number < MAX_CLIENTS )
+			return qtrue;
+	}
+	return qfalse;
+}
+
+static void RP_NpcKillAim_f( gentity_t *ent )
+{
+	char label[MAX_STRING_CHARS];
+	gentity_t *npc = RP_NpcInCrosshair( ent );
+
+	if ( !npc )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1No npc or vehicle in your crosshair.\n\"" );
+		return;
+	}
+
+	RP_NpcLabel( npc, label, sizeof( label ) );
+
+	if ( RP_VehicleHasPlayerAboard( npc ) )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7has a player aboard, so it is left alone.\n\"", label ) );
+		return;
+	}
+
+	Com_Printf( S_COLOR_GREEN"Killing NPC %s named %s\n", npc->NPC_type, npc->targetname );
+	npc->health = 0;
+	npc->client->ps.stats[STAT_HEALTH] = 0;
+	if ( npc->die )
+	{
+		npc->die( npc, npc, npc, 100, MOD_UNKNOWN );
+	}
+	trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7killed.\n\"", label ) );
 }
 
 /*
@@ -5079,7 +5193,11 @@ void Cmd_NPC_f( gentity_t *ent )
 	}
 	else if ( Q_stricmp( cmd, "kill" ) == 0 )
 	{
-		NPC_Kill_f();
+		NPC_Kill_f( ent );
+	}
+	else if ( Q_stricmp( cmd, "killaim" ) == 0 )
+	{
+		RP_NpcKillAim_f( ent );
 	}
 	// GalaxyRP fix: [NPC] "showbounds" used to be here. It toggled showBBoxes, and in multiplayer
 	// that flag could never draw anything:
@@ -5185,6 +5303,7 @@ void Cmd_NPC_f( gentity_t *ent )
 		trap->SendServerCommand( ent-g_entities, "print \"Valid NPC commands are:\n\
  spawn [NPC type (from NPCs.cfg)]\n\
  kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n\
+ killaim (kills the NPC or vehicle in your crosshair)\n\
  team [team (player or enemy or neutral or free)] (the NPC in your crosshair)\n\
  effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\"" );
 	}
