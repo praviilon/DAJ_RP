@@ -5628,6 +5628,17 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		&& targ->client->ps.electrifyTime > level.time)
 		check_shield = 0;
 
+	// GalaxyRP fix: [Shields] damage sent as DAMAGE_NO_ARMOR goes straight to health again, as in the
+	// base game, OpenJK and TaystJK. Zyk's 2014 "Added some RPG skills" replaced CheckArmor(), which is
+	// where the base game honours that flag, with the shield code below, for the Shield Strength
+	// skill; the flag was lost with it, so every such hit ate shields first: falls, being slammed into
+	// walls and bodies, drowning, lava, space, vehicle crashes, punches, melee kicks and the Rancor,
+	// Wampa and Galak Mech attacks. (The grip exception above was the one case noticed; this covers it
+	// too.) DAMAGE_HALF_ABSORB, which CheckArmor() also read, is still not honoured here: shields take
+	// all of a bowcaster, flechette or rocket hit and a stun baton blow, as they have in this mod.
+	if (dflags & DAMAGE_NO_ARMOR)
+		check_shield = 0;
+
 	// save some from armor
 	// zyk: now the shield check is made here
 	if (check_shield == 1 && targ && targ->client && take > 0)  
