@@ -19,7 +19,8 @@ Adapted from Lugormod's grab and clone tools, with the guards this mod's entity 
     picked up -- the same line /entedit and /entremove draw (RP_EntityRefusalReason, g_spawn.c);
   - the map's own entities -- from its entity string or its per-map fixes, marked M in /entlist -- can be
     copied but never cut or rotated in place, nor edited or removed (gentity_t::rpMapEntity, set by
-    RP_MarkMapEntities() below);
+    RP_MarkMapEntities() below) -- except its pickups, dispensers and decor that nothing in the map links
+    to, tagged E (RP_MapEntityExempt());
   - a brush entity can be copied but never cut or rotated: its angles are the direction it moves in,
     not a facing, and a brush entity of the map is protected anyway;
   - an entity from a misc_bsp's sub-BSP goes with its misc_bsp, and a permanent (neverFree) entity is
@@ -179,6 +180,120 @@ static const char *RP_GrabRecordValue( int num, const char *key )
 	}
 
 	return NULL;
+}
+
+/*
+==================
+RP_MapEntityExempt / RP_MapEntityProtected / RP_MapEntityLinkKey
+
+GalaxyRP: [Entity System] the map's own entities (rpMapEntity) are left as the map made them by every
+command that changes an entity -- /entedit, /entremove, /entcut, /entrotate -- except the map's pickups,
+dispensers and decor that nothing in the map is linked to: those are tagged E in /entlist instead of M,
+and the commands treat them as any other entity.
+
+The class decides first (rp_map_exempt_classes): the self-contained ones, that spawn no other entity and
+keep no state anywhere else. Then the record, as the map wrote it: an entity with a targetname or a
+script_targetname is one something in the map uses or a script drives (a pickup with one is hidden until
+it is triggered); one with a team belongs to a group (items: only one of the group is out at a time);
+and one with a target fires it -- a pickup when it is taken, a breakable when it breaks. Any of those,
+with a value, keeps it protected. RP_MapEntityLinkKey() names the first such key, for the messages.
+
+An E entity an admin changes -- an edit applied, a rotation, a cut dropped somewhere -- stops being the
+map's (rpMapEntity cleared), as a changed map entity in an entity file always has: it is an ordinary
+entity from then on, and the Entity System's spawn checks (RP_EntitySystemSpawnRefused) apply to it.
+==================
+*/
+static const char *rp_map_exempt_classes[] = {
+	// weapons
+	"weapon_stun_baton", "weapon_melee", "weapon_saber", "weapon_bryar_pistol", "weapon_blaster",
+	"weapon_disruptor", "weapon_bowcaster", "weapon_repeater", "weapon_demp2", "weapon_flechette",
+	"weapon_concussion_rifle", "weapon_rocket_launcher", "weapon_thermal", "weapon_trip_mine", "weapon_det_pack",
+	// ammo
+	"ammo_force", "ammo_blaster", "ammo_powercell", "ammo_metallic_bolts", "ammo_rockets", "ammo_thermal",
+	"ammo_tripmine", "ammo_detpack", "ammo_all",
+	// health and shields
+	"item_medpak_instant", "item_shield_sm_instant", "item_shield_lrg_instant",
+	// holdables
+	"item_seeker", "item_shield", "item_medpac", "item_medpac_big", "item_binoculars", "item_sentry_gun",
+	"item_jetpack", "item_healthdisp", "item_ammodisp", "item_eweb_holdable", "item_cloak",
+	// boons and powerups
+	"item_force_boon", "item_ysalimari", "item_force_enlighten_light", "item_force_enlighten_dark",
+	// dispensers and racks
+	"misc_ammo_floor_unit", "misc_shield_floor_unit", "misc_model_health_power_converter",
+	"misc_model_shield_power_converter", "misc_model_ammo_power_converter", "misc_model_gun_rack",
+	"misc_model_ammo_rack",
+	// decor
+	"misc_model_breakable", "fx_runner", "target_speaker", "misc_exploding_crate", "misc_gas_tank",
+	NULL
+};
+
+static const char *rp_map_link_keys[] = {
+	"targetname", "script_targetname", "team",
+	"target", "target2", "target3", "target4", "target5", "target6",
+	NULL
+};
+
+static qboolean RP_MapExemptClass( const char *classname )
+{
+	int i;
+
+	if ( !classname )
+		return qfalse;
+
+	for ( i = 0; rp_map_exempt_classes[i]; i++ )
+	{
+		if ( Q_stricmp( classname, rp_map_exempt_classes[i] ) == 0 )
+			return qtrue;
+	}
+
+	return qfalse;
+}
+
+const char *RP_MapEntityLinkKey( const gentity_t *ent )
+{
+	int num, i;
+
+	if ( !ent )
+		return NULL;
+
+	num = (int)( ent - g_entities );
+	if ( num < 0 || num >= MAX_ENTITIESTOTAL )
+		return NULL;
+
+	for ( i = 0; rp_map_link_keys[i]; i++ )
+	{
+		const char *value = RP_GrabRecordValue( num, rp_map_link_keys[i] );
+
+		if ( value && value[0] )
+			return rp_map_link_keys[i];
+	}
+
+	return NULL;
+}
+
+qboolean RP_MapEntityExempt( const gentity_t *ent )
+{
+	if ( !ent || !ent->inuse || !ent->rpMapEntity )
+		return qfalse;
+
+	return ( RP_MapExemptClass( ent->classname ) && !RP_MapEntityLinkKey( ent ) ) ? qtrue : qfalse;
+}
+
+qboolean RP_MapEntityProtected( const gentity_t *ent )
+{
+	return ( ent && ent->rpMapEntity && !RP_MapEntityExempt( ent ) ) ? qtrue : qfalse;
+}
+
+// GalaxyRP: [Entity System] the class is on the exempt list but the map links it to something: the
+// reason it is M, for a refusal message (", the map links it to other entities (<key>)"), or "".
+const char *RP_MapEntityRefusalNote( const gentity_t *ent )
+{
+	const char *key;
+
+	if ( !ent || !RP_MapExemptClass( ent->classname ) || !( key = RP_MapEntityLinkKey( ent ) ) )
+		return "";
+
+	return va( ": the map links it to other entities (%s)", key );
 }
 
 // zyk: sets a key of the record, and says so -- zyk_main_set_entity_field() silently drops a new key
@@ -353,6 +468,10 @@ static gentity_t *RP_GrabRebuild( char **pairs, int count )
 	for ( i = 0; i < count; i++ )
 		level.zyk_spawn_strings[e->s.number][i] = pairs[i];
 	level.zyk_spawn_strings_values_count[e->s.number] = count;
+
+	// GalaxyRP: [Entity System] the old record may be one of the map's (an E entity whose move or turn
+	// did not survive): put back, it is the map's again, as an entity file's line for it would be
+	e->rpMapEntity = RP_RecordIsMapEntity( e->s.number );
 
 	zyk_main_spawn_entity( e );
 
@@ -1009,8 +1128,10 @@ static const char *RP_GrabRefusal( const gentity_t *ent, const gentity_t *target
 	if ( target->neverFree )
 		return "is a permanent game entity";
 
-	if ( moving && target->rpMapEntity )
-		return "is part of the map (marked M in /entlist) and cannot be cut or rotated. Use ^3/entcopy^7 to place a copy of it instead";
+	// GalaxyRP: [Entity System] all but the map's pickups, dispensers and decor nothing links to (E)
+	if ( moving && RP_MapEntityProtected( target ) )
+		return va( "is part of the map (marked M in /entlist) and cannot be cut or rotated%s. Use ^3/entcopy^7 to place a copy of it instead",
+			RP_MapEntityRefusalNote( target ) );
 
 	if ( moving && target->r.bmodel )
 		return "is a brush entity and cannot be cut or rotated (a brush entity's angles are the direction it moves in). Use ^3/entcopy^7 to place another one instead";
@@ -1226,6 +1347,10 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 			trap->SendServerCommand( ent->s.number, "print \"Cannot drop it: its record has no room for its origin and angles.\n\"" );
 			return;
 		}
+
+		// GalaxyRP: [Entity System] moved, a map entity (one marked E) is not the map's any more -- see
+		// RP_MapEntityExempt()
+		held->rpMapEntity = qfalse;
 
 		RP_GrabClear( ent );
 		RP_EntGrabRespawnInPlace( held );
@@ -1508,6 +1633,10 @@ void Cmd_EntRotate_f( gentity_t *ent )
 			trap->SendServerCommand( ent->s.number, va( "print \"Entity %d has no room left in its record for its angles.\n\"", num ) );
 			return;
 		}
+
+		// GalaxyRP: [Entity System] turned, a map entity (one marked E) is not the map's any more -- see
+		// RP_MapEntityExempt()
+		target->rpMapEntity = qfalse;
 
 		RP_EntGrabRespawnInPlace( target );
 

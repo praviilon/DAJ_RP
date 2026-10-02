@@ -15588,10 +15588,12 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// GalaxyRP: [Entity System] nor one of the map's own entities (marked M in /entlist -- see
 		// gentity_t::rpMapEntity and RP_MarkMapEntities in g_entgrab.c), which /entcut and /entrotate
 		// have always refused: the map's entities are left as the map made them. Their info is still
-		// shown above, and /entcopy places a copy that can be edited.
-		if (this_ent->rpMapEntity)
+		// shown above, and /entcopy places a copy that can be edited. The map's pickups, dispensers and
+		// decor that nothing in the map links to (marked E) are the exception -- RP_MapEntityExempt().
+		if (RP_MapEntityProtected(this_ent))
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is part of the map (marked M in /entlist) and cannot be edited. Use ^3/entcopy^7 to place a copy of it and edit that instead.\n\"", entity_id) );
+			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is part of the map (marked M in /entlist) and cannot be edited%s. Use ^3/entcopy^7 to place a copy of it and edit that instead.\n\"",
+				entity_id, RP_MapEntityRefusalNote(this_ent)) );
 			return;
 		}
 
@@ -15709,6 +15711,11 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 				zyk_main_set_entity_field(this_ent, key, arg2);
 			}
 		}
+
+		// GalaxyRP: [Entity System] edited, a map entity (one marked E: the protected ones were refused
+		// above) is not the map's any more, and the Entity System's spawn checks apply to it -- see
+		// RP_MapEntityExempt() in g_entgrab.c
+		this_ent->rpMapEntity = qfalse;
 
 		// GalaxyRP: [Entity System] a misc_bsp rebuilds its sub-BSP's entities when it spawns again, so
 		// the ones it has now go first, or there would be two of each
@@ -16431,7 +16438,7 @@ static void zyk_entnear_append(char *message, int message_size, gentity_t *this_
 	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s", this_ent->s.number,
 		this_ent->isLogical ? "L" : "",
 		RP_EntityHasSpawnKeys(this_ent) ? "" : "G",
-		this_ent->rpMapEntity ? "M" : "",
+		RP_MapEntityProtected(this_ent) ? "M" : RP_MapEntityExempt(this_ent) ? "E" : "",
 		this_ent->rpHeldBy ? "H" : "",
 		this_ent->classname ? this_ent->classname : "<none>");
 
@@ -16569,7 +16576,8 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s - %s - %s", id,
 		(target_ent && target_ent->isLogical) ? "L" : "",
 		(target_ent && target_ent->inuse && !RP_EntityHasSpawnKeys(target_ent)) ? "G" : "",
-		(target_ent && target_ent->inuse && target_ent->rpMapEntity) ? "M" : "",
+		(target_ent && target_ent->inuse && RP_MapEntityProtected(target_ent)) ? "M" :
+		(target_ent && target_ent->inuse && RP_MapEntityExempt(target_ent)) ? "E" : "",
 		(target_ent && target_ent->inuse && target_ent->rpHeldBy) ? "H" : "",
 		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
 		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
@@ -16807,10 +16815,10 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// gentity_t::rpMapEntity, g_entgrab.c), map spawn points among them: tested before the
 				// spawn point below, whose "use /entedit to move it" is true only of the ones admins
 				// added. The map's pickups have a command of their own.
-				if (target_ent->rpMapEntity)
+				if (RP_MapEntityProtected(target_ent))
 				{
-					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d (%s) is part of the map (marked M in /entlist) and cannot be removed%s.\n\"", i,
-						target_ent->classname ? target_ent->classname : "noclass",
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d (%s) is part of the map (marked M in /entlist) and cannot be removed%s%s.\n\"", i,
+						target_ent->classname ? target_ent->classname : "noclass", RP_MapEntityRefusalNote(target_ent),
 						is_entity_a_pickup(target_ent) ? " (^3/removepickups^7 removes all pickups)" : "") );
 					return;
 				}
@@ -16956,7 +16964,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of
 				// a few hundred slots is mostly free slots, and each one was being freed again.
 				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
-					&& RP_EntityHasSpawnKeys(target_ent) && !target_ent->rpMapEntity && !RP_EntityIsSpawnPoint(target_ent)
+					&& RP_EntityHasSpawnKeys(target_ent) && !RP_MapEntityProtected(target_ent) && !RP_EntityIsSpawnPoint(target_ent)
 					&& !target_ent->neverFree && !target_ent->rpHeldBy
 					&& !(target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))) ? qtrue : qfalse;
 			}
@@ -16980,7 +16988,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				{
 					// GalaxyRP: [Entity System] the map's own entities (M) first: a map spawn point or a
 					// held map entity is counted once, as part of the map
-					if (target_ent->rpMapEntity && RP_EntityHasSpawnKeys(target_ent))
+					if (RP_MapEntityProtected(target_ent) && RP_EntityHasSpawnKeys(target_ent))
 						mapKept++;
 					else if (target_ent->rpHeldBy && RP_EntityHasSpawnKeys(target_ent))
 						held++;
@@ -18704,13 +18712,13 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
 ^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3H^7 are being held.\n\
+^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
 ^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
-^7/entedit and /entremove do not change the map's own entities (^3M^7) or those the game creates (^3G^7: saber entities, door triggers, missiles, NPCs, dropped items). View them with /entedit, copy them with /entcopy; use ^3/npc kill^7 for NPCs.\n\
+^7/entedit and /entremove do not change the map's own entities (^3M^7; those marked ^3E^7 can be changed) or those the game creates (^3G^7: saber entities, door triggers, missiles, NPCs, dropped items). View them with /entedit, copy them with /entcopy; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
 ^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\"" );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n\
@@ -18727,7 +18735,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at.\n\
 ^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
 ^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
-^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not map or brush entities in place.\n\
+^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n\
 ^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\
 ^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n\n\"" );
 }

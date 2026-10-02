@@ -2382,6 +2382,12 @@ qboolean	RP_EntAimFollowing( const gentity_t *ent );
 #define RP_HOLD_CUT		2
 void		RP_MarkMapEntities( void );
 qboolean	RP_RecordIsMapEntity( int num );
+// GalaxyRP: [Entity System] the map's pickups, dispensers and decor nothing in the map links to (tagged E):
+// changed like any other entity; every other map entity (M) is protected -- see g_entgrab.c
+qboolean	RP_MapEntityExempt( const gentity_t *ent );
+qboolean	RP_MapEntityProtected( const gentity_t *ent );
+const char	*RP_MapEntityLinkKey( const gentity_t *ent );
+const char	*RP_MapEntityRefusalNote( const gentity_t *ent );
 qboolean	RP_EntitySystemMade( const gentity_t *ent );
 qboolean	RP_EntitySystemSpawnRefused( gentity_t *ent );
 qboolean	RP_FileExists( const char *path );
