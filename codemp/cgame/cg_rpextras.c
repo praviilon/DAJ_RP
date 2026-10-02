@@ -547,6 +547,17 @@ static void RPX_Queue( const char *cmd ) {
 	Q_strncpyz( rpx_queue[rpx_queued++], cmd, sizeof( rpx_queue[0] ) );
 }
 
+// GalaxyRP: [Extras] the Props and Effects menus' Offset: /entaddaim's aimoffset, 0 to 512, sent only when
+// it is not 0 -- the command is then the one these menus always sent
+static void RPX_AddOffset( char *cmd, int size, const char *cvar ) {
+	int lift = RPX_CvarInt( cvar );
+
+	if ( lift > 512 ) lift = 512;
+	if ( lift > 0 ) {
+		Q_strcat( cmd, size, va( " aimoffset \"%d\"", lift ) );
+	}
+}
+
 static int RPX_FacingYaw( float extra ) {
 	float yaw = AngleNormalize360( cg.predictedPlayerState.viewangles[YAW] + 180.0f + extra );
 
@@ -608,6 +619,7 @@ static void RPX_SpawnProp( void ) {
 		Q_strcat( cmd, sizeof( cmd ), va( " light \"%d\" color \"%.2f %.2f %.2f\"", radius, r, g, b ) );
 	}
 
+	RPX_AddOffset( cmd, sizeof( cmd ), "ui_rpx_p_lift" );
 	RPX_Queue( cmd );
 }
 
@@ -648,6 +660,7 @@ static void RPX_SpawnEffect( void ) {
 		Q_strcat( cmd, sizeof( cmd ), va( " spawnflags \"%d\"", flags ) );
 	}
 
+	RPX_AddOffset( cmd, sizeof( cmd ), "ui_rpx_e_lift" );
 	RPX_Queue( cmd );
 }
 

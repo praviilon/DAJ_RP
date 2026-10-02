@@ -843,11 +843,43 @@
 		}
 		itemDef
 		{
+			name                rpx_help2
+			type                ITEM_TYPE_TEXT
+			style               WINDOW_STYLE_EMPTY
+			rect                432 80 180 14
+			text                "Its name switches it on and off"
+			textalign           ITEM_ALIGN_CENTER
+			textalignx          90
+			textaligny          0
+			font                2
+			textscale           0.6
+			forecolor           .8 .8 .8 1
+			visible             1
+			decoration
+		}
+		itemDef
+		{
+			name                rpx_help3
+			type                ITEM_TYPE_TEXT
+			style               WINDOW_STYLE_EMPTY
+			rect                432 94 180 14
+			text                "from a trigger or a button."
+			textalign           ITEM_ALIGN_CENTER
+			textalignx          90
+			textaligny          0
+			font                2
+			textscale           0.6
+			forecolor           .8 .8 .8 1
+			visible             1
+			decoration
+		}
+		itemDef
+		{
 			name                rpx_lift
 			type                ITEM_TYPE_INTSLIDER
-			text                "Height"
+			text                "Offset"
 			cvarint             "ui_rpx_l_lift" 32 0 512
-			rect                474 82 105 18
+			rect                474 308 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -870,7 +902,7 @@
 			cvar                "ui_rpx_l_lift"
 			maxchars            3
 			maxPaintChars       3
-			rect                574 82 40 18
+			rect                574 308 40 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -883,54 +915,6 @@
 			bordercolor         .5 .5 .5 .6
 			visible             1
 			descText            "How far out from the surface you aim at it goes"
-		}
-		itemDef
-		{
-			name                rpx_help1
-			type                ITEM_TYPE_TEXT
-			style               WINDOW_STYLE_EMPTY
-			rect                432 108 180 14
-			text                "Aim at a floor, wall or ceiling."
-			textalign           ITEM_ALIGN_LEFT
-			textalignx          0
-			textaligny          0
-			font                2
-			textscale           0.6
-			forecolor           .8 .8 .8 1
-			visible             1
-			decoration
-		}
-		itemDef
-		{
-			name                rpx_help2
-			type                ITEM_TYPE_TEXT
-			style               WINDOW_STYLE_EMPTY
-			rect                432 124 180 14
-			text                "Its name switches it on and off"
-			textalign           ITEM_ALIGN_LEFT
-			textalignx          0
-			textaligny          0
-			font                2
-			textscale           0.6
-			forecolor           .8 .8 .8 1
-			visible             1
-			decoration
-		}
-		itemDef
-		{
-			name                rpx_help3
-			type                ITEM_TYPE_TEXT
-			style               WINDOW_STYLE_EMPTY
-			rect                432 138 180 14
-			text                "from a trigger or a button."
-			textalign           ITEM_ALIGN_LEFT
-			textalignx          0
-			textaligny          0
-			font                2
-			textscale           0.6
-			forecolor           .8 .8 .8 1
-			visible             1
-			decoration
 		}
 		itemDef
 		{

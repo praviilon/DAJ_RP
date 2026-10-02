@@ -104,12 +104,14 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_p_lg",			"255" ) \
 	X( "ui_rpx_p_lb",			"255" ) \
 	X( "ui_rpx_p_faceme",		"1" ) \
+	X( "ui_rpx_p_lift",			"0" )		/* Props: units out from the surface aimed at (/entaddaim aimoffset) */ \
 	X( "ui_rpx_e_dir",			"0" )		/* 0 up, 1 facing me, 2 facing me, tilted by ui_rpx_e_pitch */ \
 	X( "ui_rpx_e_pitch",		"0" ) \
 	X( "ui_rpx_e_delay",		"200" ) \
 	X( "ui_rpx_e_random",		"0" ) \
 	X( "ui_rpx_e_off",			"0" ) \
 	X( "ui_rpx_e_once",			"0" ) \
+	X( "ui_rpx_e_lift",			"0" )		/* Effects: units out from the surface aimed at (/entaddaim aimoffset) */ \
 	X( "ui_rpx_e_cdist",		"160" ) \
 	X( "ui_rpx_e_cang",			"0" ) \
 	X( "ui_rpx_n_name",			"" ) \

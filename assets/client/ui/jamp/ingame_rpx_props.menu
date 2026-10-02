@@ -1114,10 +1114,53 @@
 		}
 		itemDef
 		{
+			name                rpx_lift
+			type                ITEM_TYPE_INTSLIDER
+			text                "Offset"
+			cvarint             "ui_rpx_p_lift" 0 0 512
+			rect                474 328 105 18
+			textalign           ITEM_ALIGN_RIGHT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			descText            "Spawned prop: how far out from the surface you aim at it goes"
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
+			name                rpx_lift_value
+			type                ITEM_TYPE_NUMERICFIELD
+			style               0
+			text                " "
+			cvar                "ui_rpx_p_lift"
+			maxchars            3
+			maxPaintChars       3
+			rect                574 328 40 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 .682 0 1
+			outlinecolor        1 .5 .5 .5
+			backcolor           0 0 0 .6
+			border              1
+			bordercolor         .5 .5 .5 .6
+			visible             1
+			descText            "Spawned prop: how far out from the surface you aim at it goes"
+		}
+		itemDef
+		{
 			name                rpx_spawn
 			type                ITEM_TYPE_BUTTON
 			style               WINDOW_STYLE_FILLED
-			rect                432 330 180 32
+			rect                432 350 180 32
 			text                "Spawn"
 			textalign           ITEM_ALIGN_CENTER
 			textalignx          90
