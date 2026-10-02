@@ -694,6 +694,63 @@ static qboolean RPX_LocalFileExists( const char *path ) {
 	return ( f && len > 0 ) ? qtrue : qfalse;
 }
 
+/*
+==================
+RPX_SpawnLight
+
+GalaxyRP: [Extras] the Lights menu's Spawn: an rp_light (g_misc.c) on the surface aimed at, lifted
+ui_rpx_l_lift units out from it (/entaddaim's aimoffset). Its radius and colour on; its radius and colour
+off, sent only when it gives light off (offlight 0 is dark, rp_light's own default); START_OFF; and a
+name to switch it with. No list, so nothing to check against a listing -- only the name, as the NPCs
+menu does.
+==================
+*/
+static void RPX_SpawnLight( void ) {
+	char cmd[MAX_STRING_CHARS], label[64];
+	const char *problem;
+	int radius, offRadius, lift;
+	float r, g, b;
+
+	RPX_CvarString( "ui_rpx_l_name", label, sizeof( label ) );
+	problem = RPX_LabelProblem( label );
+	if ( problem ) {
+		RPX_Refuse( problem );
+		return;
+	}
+
+	radius = RPX_CvarInt( "ui_rpx_l_rad" );
+	if ( radius < 1 ) radius = 1;
+	if ( radius > 1000 ) radius = 1000;
+	r = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_r" ) / 255.0f );
+	g = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_g" ) / 255.0f );
+	b = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_b" ) / 255.0f );
+	Com_sprintf( cmd, sizeof( cmd ), "entaddaim rp_light light \"%d\" color \"%.2f %.2f %.2f\"", radius, r, g, b );
+
+	offRadius = RPX_CvarInt( "ui_rpx_l_offrad" );
+	if ( offRadius < 0 ) offRadius = 0;
+	if ( offRadius > 1000 ) offRadius = 1000;
+	if ( offRadius > 0 ) {
+		r = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_offr" ) / 255.0f );
+		g = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_offg" ) / 255.0f );
+		b = Com_Clamp( 0.0f, 1.0f, RPX_CvarFloat( "ui_rpx_l_offb" ) / 255.0f );
+		Q_strcat( cmd, sizeof( cmd ), va( " offlight \"%d\" offcolor \"%.2f %.2f %.2f\"", offRadius, r, g, b ) );
+	}
+
+	if ( RPX_CvarInt( "ui_rpx_l_off" ) ) {
+		Q_strcat( cmd, sizeof( cmd ), " spawnflags \"1\"" );
+	}
+	if ( label[0] ) {
+		Q_strcat( cmd, sizeof( cmd ), va( " targetname \"%s\"", label ) );
+	}
+
+	lift = RPX_CvarInt( "ui_rpx_l_lift" );
+	if ( lift < 0 ) lift = 0;
+	if ( lift > 512 ) lift = 512;
+	Q_strcat( cmd, sizeof( cmd ), va( " aimoffset \"%d\"", lift ) );
+
+	RPX_Queue( cmd );
+}
+
 static void RPX_Music( qboolean everyone ) {
 	char folder[RPX_NAME_LEN], name[RPX_NAME_LEN], path[MAX_QPATH * 2];
 
@@ -811,6 +868,8 @@ void CG_Rpx_f( void ) {
 			RPX_SpawnEffect();
 		} else if ( !Q_stricmp( arg, "spawnnpc" ) ) {
 			RPX_SpawnNpc();
+		} else if ( !Q_stricmp( arg, "spawnlight" ) ) {
+			RPX_SpawnLight();
 		} else if ( !Q_stricmp( arg, "musicme" ) ) {
 			RPX_Music( qfalse );
 		} else if ( !Q_stricmp( arg, "musicall" ) ) {

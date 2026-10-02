@@ -113,6 +113,17 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_e_cdist",		"160" ) \
 	X( "ui_rpx_e_cang",			"0" ) \
 	X( "ui_rpx_n_name",			"" ) \
+	X( "ui_rpx_l_rad",			"300" )		/* Lights: the radius, on */ \
+	X( "ui_rpx_l_r",			"255" )		/* the colour on, 0 to 255 */ \
+	X( "ui_rpx_l_g",			"255" ) \
+	X( "ui_rpx_l_b",			"255" ) \
+	X( "ui_rpx_l_off",			"0" )		/* starts switched off */ \
+	X( "ui_rpx_l_offrad",		"0" )		/* the radius when off: 0 is dark */ \
+	X( "ui_rpx_l_offr",			"255" )		/* the colour when off */ \
+	X( "ui_rpx_l_offg",			"255" ) \
+	X( "ui_rpx_l_offb",			"255" ) \
+	X( "ui_rpx_l_name",			"" )		/* its targetname, to switch it with */ \
+	X( "ui_rpx_l_lift",			"32" )		/* units out from the surface aimed at (/entaddaim aimoffset) */ \
 	X( "ui_rpx_s_chan",			"0" ) \
 	X( "ui_rpx_status",			"" )		/* cgame: loading, or why a listing failed */ \
 	X( "ui_rpx_serial",			"0" )		/* cgame: raised each time it writes the list file */ \
@@ -182,6 +193,24 @@ static QINLINE void RPX_FxDirection( int dirMode, float pitch, const vec3_t orig
 	angles[PITCH] = ( dirMode == 2 ) ? pitch : 0;
 	angles[ROLL] = 0;
 	AngleVectors( angles, fwd, NULL, NULL );
+}
+
+// what is wrong with a name (targetname) typed in the NPCs or Lights menu, or NULL: letters, digits, _ and -,
+// at most 32 of them
+static QINLINE const char *RPX_LabelProblem( const char *label ) {
+	int i;
+
+	for ( i = 0; label[i]; i++ ) {
+		char c = label[i];
+
+		if ( !( ( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' ) || ( c >= '0' && c <= '9' ) || c == '_' || c == '-' ) ) {
+			return "The name may only have letters, digits, _ and -.";
+		}
+	}
+	if ( i > 32 ) {
+		return "The name may be at most 32 characters long.";
+	}
+	return NULL;
 }
 
 // a name from a listing that can be used safely: printable, none of " ; \ | and not "." or "..";

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 GalaxyRP: [Extras] the ui half of the Extras menus of the Galaxy RP menu: ingame_rpx_props,
-ingame_rpx_effects, ingame_rpx_npcs, ingame_rpx_music and ingame_rpx_sounds. cgame's half is
+ingame_rpx_effects, ingame_rpx_npcs, ingame_rpx_music, ingame_rpx_sounds and ingame_rpx_lights. cgame's half is
 cg_rpextras.c; ui/rp_extras.h says how the two work together. Here:
 
 - The list the open menu shows (FEEDER_RPX_LIST): read from the list file cgame writes, when
@@ -17,7 +17,8 @@ cg_rpextras.c; ui/rp_extras.h says how the two work together. Here:
   model at no cost.
 - The effect preview box (UI_RPX_FXBOX): renders the scene cgame left the effect in (without
   clearing it first, see CG_RpxFxPass()), and tells cgame it is on screen (ui_rpx_fxbox).
-- The light colour swatch of the Props menu (UI_RPX_SWATCH).
+- The light colour swatch of the Props menu (UI_RPX_SWATCH), and the Lights menu's two (UI_RPX_LSWATCH,
+  UI_RPX_LOFFSWATCH). The Lights menu has no list: rpxOpen lights opens it without one (RPX_OpenNoList).
 ===========================================================================
 */
 
@@ -495,6 +496,17 @@ static int RPX_KindForMenu( const char *word ) {
 	return -1;
 }
 
+// GalaxyRP: [Extras] a menu with no list (Lights): nothing to ask the server for; no list kind is open
+static void RPX_OpenNoList( const char *menu ) {
+	rpxKind = -1;
+	rpxViewNum = 0;
+	Q_strncpyz( rpxMenu, menu, sizeof( rpxMenu ) );
+	rpxSyncTime = -1;
+	RPX_CheckMap();
+	RPX_Msg( "" );
+	RPX_StopFxPreview();
+}
+
 static void RPX_Open( int kind, const char *menu ) {
 	char folder[RPX_NAME_LEN];
 
@@ -631,12 +643,13 @@ UI_RpxScript
 
 The Extras menus' uiScripts; qfalse when name is not one of them.
 
-	rpxOpen <props|effects|npcs|music|sounds> <menu>	in each menu's onOpen
+	rpxOpen <props|effects|npcs|music|sounds|lights> <menu>	in each menu's onOpen
 	rpxNpcMode <0|1>									the NPCs and Vehicles tabs
 	rpxEnter											the list's double click: open a folder
 	rpxPreview											Props and Effects
 	rpxDo <action>										a button: see CG_Rpx_f() in cg_rpextras.c
-	rpxReset <prop|cam>									the preview's sliders back
+	rpxReset <prop|angles|cam>							the preview's sliders back, or the prop's angles
+	rpxLightSame										Lights: the colour when off is the colour when on
 	rpxClose											in each menu's onClose
 	rpxBackTab											in the Galaxy RP menu's onOpen
 ==================
@@ -654,6 +667,8 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 
 			if ( kind >= 0 ) {
 				RPX_Open( kind, arg2 );
+			} else if ( !Q_stricmp( arg, "lights" ) ) {
+				RPX_OpenNoList( arg2 );
 			}
 		}
 	} else if ( !Q_stricmp( name, "rpxNpcMode" ) ) {
@@ -694,6 +709,19 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va( "rpx do %s\n", arg ) );
 				return qtrue;
 			}
+			// GalaxyRP: [Extras] the Lights menu's Spawn: nothing to select, only its name to check first,
+			// so a name it cannot use is said in the menu, which stays open
+			if ( !Q_stricmp( arg, "spawnlight" ) ) {
+				const char *problem = RPX_LabelProblem( RPX_CvarStr( "ui_rpx_l_name" ) );
+
+				if ( problem ) {
+					RPX_Msg( va( "^3%s", problem ) );
+					return qtrue;
+				}
+				trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do spawnlight\n" );
+				RPX_CloseMenus();
+				return qtrue;
+			}
 			for ( i = 0; i < (int)ARRAY_LEN( closing ); i++ ) {
 				if ( !Q_stricmp( arg, closing[i] ) ) {
 					if ( RPX_HaveSelection() ) {
@@ -720,6 +748,11 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 				trap->Cvar_Set( "ui_rpx_e_cang", "0" );
 			}
 		}
+	} else if ( !Q_stricmp( name, "rpxLightSame" ) ) {
+		// GalaxyRP: [Extras] the Lights menu's "Same as on": its colour when off is the colour when on
+		trap->Cvar_Set( "ui_rpx_l_offr", RPX_CvarStr( "ui_rpx_l_r" ) );
+		trap->Cvar_Set( "ui_rpx_l_offg", RPX_CvarStr( "ui_rpx_l_g" ) );
+		trap->Cvar_Set( "ui_rpx_l_offb", RPX_CvarStr( "ui_rpx_l_b" ) );
 	} else if ( !Q_stricmp( name, "rpxClose" ) ) {
 		RPX_StopFxPreview();
 		trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do stop\n" );
@@ -898,16 +931,21 @@ static void RPX_DrawFxBox( rectDef_t *rect, float scale, vec4_t color, int iMenu
 	RPX_CenterText( rect, scale, color, "Press Preview to play it", iMenuFont );
 }
 
-static void RPX_DrawSwatch( rectDef_t *rect ) {
+// a light's colour from three 0..255 cvars; dark (black) when "lit" says it gives no light
+static void RPX_DrawSwatchOf( rectDef_t *rect, const char *r, const char *g, const char *b, qboolean lit ) {
 	static vec4_t edge = { 1, 0.682f, 0, 1 };
 	vec4_t c;
 
-	c[0] = Com_Clamp( 0, 1, atof( RPX_CvarStr( "ui_rpx_p_lr" ) ) / 255.0f );
-	c[1] = Com_Clamp( 0, 1, atof( RPX_CvarStr( "ui_rpx_p_lg" ) ) / 255.0f );
-	c[2] = Com_Clamp( 0, 1, atof( RPX_CvarStr( "ui_rpx_p_lb" ) ) / 255.0f );
+	c[0] = lit ? Com_Clamp( 0, 1, atof( RPX_CvarStr( r ) ) / 255.0f ) : 0;
+	c[1] = lit ? Com_Clamp( 0, 1, atof( RPX_CvarStr( g ) ) / 255.0f ) : 0;
+	c[2] = lit ? Com_Clamp( 0, 1, atof( RPX_CvarStr( b ) ) / 255.0f ) : 0;
 	c[3] = 1;
 	UI_FillRect( rect->x, rect->y, rect->w, rect->h, c );
 	UI_DrawRect( rect->x, rect->y, rect->w, rect->h, edge );
+}
+
+static void RPX_DrawSwatch( rectDef_t *rect ) {
+	RPX_DrawSwatchOf( rect, "ui_rpx_p_lr", "ui_rpx_p_lg", "ui_rpx_p_lb", qtrue );
 }
 
 qboolean UI_RpxOwnerDraw( int ownerDraw, rectDef_t *rect, float scale, vec4_t color, int iMenuFont ) {
@@ -917,6 +955,12 @@ qboolean UI_RpxOwnerDraw( int ownerDraw, rectDef_t *rect, float scale, vec4_t co
 		return qtrue;
 	case UI_RPX_FXBOX:
 		RPX_DrawFxBox( rect, scale, color, iMenuFont );
+		return qtrue;
+	case UI_RPX_LSWATCH:
+		RPX_DrawSwatchOf( rect, "ui_rpx_l_r", "ui_rpx_l_g", "ui_rpx_l_b", qtrue );
+		return qtrue;
+	case UI_RPX_LOFFSWATCH:	// black while it is dark when off (Off radius 0)
+		RPX_DrawSwatchOf( rect, "ui_rpx_l_offr", "ui_rpx_l_offg", "ui_rpx_l_offb", atoi( RPX_CvarStr( "ui_rpx_l_offrad" ) ) > 0 ? qtrue : qfalse );
 		return qtrue;
 	case UI_RPX_SWATCH:
 		RPX_DrawSwatch( rect );

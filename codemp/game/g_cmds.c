@@ -15125,6 +15125,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	vec3_t aim_point, aim_normal;
 	qboolean aim_origin_ignored = qfalse;
 	qboolean typed_origin = qfalse;	// GalaxyRP: an origin key among the arguments, known before the spawn
+	float aim_offset = 0.0f;		// GalaxyRP: /entaddaim's "aimoffset": how far out from the surface
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15134,7 +15135,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	if ( number_of_args < 2)
 	{
 		if (aim)
-			trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/entaddaim <classname> <key> <value> <key> <value>^7. Adds the entity on the surface you are aiming at.\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/entaddaim <classname> <key> <value> <key> <value>^7. Adds the entity on the surface you are aiming at; ^3aimoffset <units>^7 (0 to 512) puts it that far out from the surface.\n\"" );
 		else
 		trap->SendServerCommand( ent-g_entities, va("print \"Usage: ^3/entadd <classname> <key> <value> <key> <value>^7. You must specify at least the entity class.\n\
 			^7Example: ^3/entadd info_player_deathmatch^7, which spawns a spawn point in the map\n\"") );
@@ -15159,6 +15160,36 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 
 	trap->Argv( 1, arg1, sizeof( arg1 ) );
 
+	// GalaxyRP: [Entity System] "aimoffset <units>": /entaddaim moves the point aimed at that far out from
+	// the surface, along its normal, before placing the entity there (a light above a floor, say). It is
+	// an instruction to the command, not a key of the entity: never written to its record, so no entity
+	// file ever holds it. /entadd places no entity by aim, so it has no use for it and refuses it rather
+	// than record it as a key nothing reads.
+	for (i = 2; i + 1 < number_of_args; i += 2)
+	{
+		trap->Argv( i, key, sizeof( key ) );
+		if (Q_stricmp(key, "aimoffset") == 0)
+		{
+			char *end = NULL;
+			double value;
+
+			if (!aim)
+			{
+				trap->SendServerCommand( ent-g_entities, "print \"aimoffset is for ^3/entaddaim^7: /entadd does not place the entity where you aim.\n\"" );
+				return;
+			}
+
+			trap->Argv( i + 1, arg2, sizeof( arg2 ) );
+			value = strtod( arg2, &end );
+			if (!arg2[0] || !end || *end != '\0' || !( value >= 0.0 ))
+			{
+				trap->SendServerCommand( ent-g_entities, va("print \"aimoffset must be a number of units from 0 to %d.\n\"", (int)RP_AIMOFFSET_MAX) );
+				return;
+			}
+			aim_offset = ( value > RP_AIMOFFSET_MAX ) ? RP_AIMOFFSET_MAX : (float)value;
+		}
+	}
+
 	if (aim)
 	{
 		if ((ent->client->ps.pm_flags & PMF_FOLLOW) || ent->client->sess.spectatorState == SPECTATOR_FOLLOW)
@@ -15174,6 +15205,11 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at a surface.\n\"" );
 			return;
 		}
+
+		// GalaxyRP: [Entity System] aimoffset: the point moves out from the surface, and everything after --
+		// the placement, and the second one once the entity's box is known -- works from there
+		if (aim_offset > 0.0f)
+			VectorMA(aim_point, aim_offset, aim_normal, aim_point);
 	}
 	else
 	{
@@ -15265,6 +15301,9 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 				// GalaxyRP fix: [Entity System] see the classname above -- the helper makes its own
 				// copies, so these two allocations were pure waste, once per key/value pair typed.
 				if (aim && Q_stricmp(key, "origin") == 0)
+					continue;
+				// GalaxyRP: [Entity System] an instruction to /entaddaim, not a key of the entity (see above)
+				if (Q_stricmp(key, "aimoffset") == 0)
 					continue;
 				zyk_main_set_entity_field(new_ent, key, arg2);
 			}
@@ -18717,6 +18756,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	// first message is split before /entlist.
 	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity where you stand, at the /entorigin position, or at an origin you give (origin 0 0 0 keeps a map brush in place).\n\
+^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n\
 ^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\"" );
 	trap->SendServerCommand( ent-g_entities, va("print \"^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
@@ -18739,8 +18779,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\" " );
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs).\n\
-^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
+	trap->SendServerCommand( ent-g_entities, "print \"^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
 ^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
 ^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n\
 ^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\

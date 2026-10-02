@@ -777,6 +777,53 @@
 			}
 		}
 
+		itemDef
+		{
+			name				extrasLightsButton_glow
+			style				WINDOW_STYLE_SHADER
+			rect				160 175 150 24
+			background			"gfx/menus/menu_blendbox2"
+			forecolor			1 1 1 1
+			visible				0
+			decoration
+		}
+
+		// GalaxyRP: [Extras] Lights: an rp_light where you aim (ingame_rpx_lights.menu)
+		itemDef
+		{
+			name				extrasLightsButton
+			group				extrasControls
+			text				"Lights"
+			type				ITEM_TYPE_BUTTON
+			style				WINDOW_STYLE_EMPTY
+			rect				160 175 150 24
+			font				3
+			textscale			0.6
+			textalignx			15
+			textaligny			5
+			textalign			ITEM_ALIGN_LEFT
+			textstyle			3
+			forecolor			1 .682 0 1
+			visible				0
+			descText			"Spawn a light where you aim, one you can switch on and off"
+
+			mouseEnter
+			{
+				show			extrasLightsButton_glow
+			}
+			mouseExit
+			{
+				hide			extrasLightsButton_glow
+			}
+			action
+			{
+				play			"sound/interface/button1.wav" ;
+				hide			extrasLightsButton_glow ;
+				close			ingame_galaxyrp ;
+				open			ingame_rpx_lights
+			}
+		}
+
 
 		itemDef
 		{
