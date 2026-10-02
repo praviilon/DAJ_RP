@@ -2397,6 +2397,8 @@ gentity_t	*RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t norm
 void		RP_EntGrabFrame( gentity_t *ent );
 void		RP_EntGrabCancel( gentity_t *ent, qboolean tell );
 qboolean	RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
+qboolean	RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
+qboolean	RP_EntitySolidAroundSomeone( const gentity_t *e );
 void		RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs );
 void		RP_EntGrabPlace( const vec3_t point, const vec3_t normal, const vec3_t mins, const vec3_t maxs, vec3_t origin );
 void		RP_EntGrabRespawnInPlace( gentity_t *e );

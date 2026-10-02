@@ -15097,8 +15097,10 @@ void Cmd_EntOrigin_f(gentity_t *ent) {
 ==================
 Cmd_EntAdd_f / Cmd_EntAddAim_f
 
-GalaxyRP: [Entity System] /entaddaim is /entadd placing the entity on the surface the admin aims at,
-the way /entcopy and /entcut put one down (RP_EntGrabAimPoint and RP_EntGrabPlace in g_entgrab.c):
+GalaxyRP: [Entity System] /entadd puts the entity at the origin given, else at the /entorigin position,
+else where the admin stands. /entaddaim puts it on the surface the admin aims at -- across any map, and
+through the players and NPCs in the way (RP_EntAddAimPoint) -- the way /entcopy and /entcut put one
+down (RP_EntGrabPlace in g_entgrab.c):
 its box rests on the surface, a spawn point or NPC spawner stands on it by a player's box. An origin
 among the arguments, and the /entorigin position and angles, are not used. The box of most classes is
 only known once the entity has spawned, so it is spawned at the point first and, if it turns out to have
@@ -15122,6 +15124,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	// GalaxyRP: [Entity System] /entaddaim: the surface aimed at, and whether an origin was left out
 	vec3_t aim_point, aim_normal;
 	qboolean aim_origin_ignored = qfalse;
+	qboolean typed_origin = qfalse;	// GalaxyRP: an origin key among the arguments, known before the spawn
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15164,9 +15167,29 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			return;
 		}
 
-		if (RP_EntGrabAimPoint(ent, aim_point, aim_normal) == qfalse)
+		// GalaxyRP: [Entity System] across any map, and through the players and NPCs in the way -- see
+		// RP_EntAddAimPoint() in g_entgrab.c
+		if (RP_EntAddAimPoint(ent, aim_point, aim_normal) == qfalse)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at a surface within 2048 units.\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at a surface.\n\"" );
+			return;
+		}
+	}
+	else
+	{
+		// GalaxyRP: [Entity System] /entadd with no origin and no /entorigin position puts it where the
+		// admin stands -- which, following another player, is that player's position: refused then
+		for (i = 2; i + 1 < number_of_args; i += 2)
+		{
+			trap->Argv( i, key, sizeof( key ) );
+			if (Q_stricmp(key, "origin") == 0)
+				typed_origin = qtrue;
+		}
+
+		if (typed_origin == qfalse && level.ent_origin_set == qfalse &&
+			((ent->client->ps.pm_flags & PMF_FOLLOW) || ent->client->sess.spectatorState == SPECTATOR_FOLLOW))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are following another player. Stop following first, or give an origin.\n\"" );
 			return;
 		}
 	}
@@ -15271,28 +15294,10 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			}
 		}
 		else if (has_origin_set == qfalse)
-		{ // zyk: origin field was not passed, so spawn entity where player is aiming at
-			trace_t		tr;
-			vec3_t		tfrom, tto, fwd;
-			vec3_t		shot_mins, shot_maxs;
-			int radius = 32768;
-
-			VectorSet(tfrom, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2] + 35);
-
-			AngleVectors(ent->client->ps.viewangles, fwd, NULL, NULL);
-			tto[0] = tfrom[0] + fwd[0] * radius;
-			tto[1] = tfrom[1] + fwd[1] * radius;
-			tto[2] = tfrom[2] + fwd[2] * radius;
-
-			VectorSet(shot_mins, -5, -5, -5);
-			VectorSet(shot_maxs, 5, 5, 5);
-
-			trap->Trace(&tr, tfrom, shot_mins, shot_maxs, tto, ent->s.number, CONTENTS_SOLID, qfalse, 0, 0);
-
-			if (tr.fraction != 1.0)
-			{ // zyk: hit something
-				zyk_main_set_entity_field(new_ent, "origin", G_NewString(va("%f %f %f", tr.endpos[0], tr.endpos[1], tr.endpos[2])));
-			}
+		{ // GalaxyRP: [Entity System] no origin given and no /entorigin position: where the admin stands --
+		  // the point /entorigin would take, the middle of their body. Its facing is the class's own, unless
+		  // angles were given. (This used to be the point aimed at, which is /entaddaim's now.)
+			zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2]));
 		}
 
 		level.rp_spawn_refusal[0] = '\0';
@@ -15344,14 +15349,14 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 
 		// GalaxyRP: [Logical Entities] say which region it went to; an id at or above
 		// MAX_GENTITIES is a logical entity and the admin will see those ids in /entlist too.
-		if (aim)
-			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned at (%i %i %i)%s%s\n\"", new_ent->s.number,
-				(int)new_ent->s.origin[0], (int)new_ent->s.origin[1], (int)new_ent->s.origin[2],
-				new_ent->isLogical ? " (logical, not networked)" : "",
-				aim_origin_ignored ? ". /entaddaim places it where you aim: the origin given or set with /entorigin was not used." : "") );
-		else
-		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned%s\n\"", new_ent->s.number,
-			new_ent->isLogical ? " (logical, not networked)" : "") );
+		// GalaxyRP: [Entity System] where it went, for both; and a solid one built around someone (the admin
+		// standing there for /entadd, a player or NPC aimed through for /entaddaim) says so
+		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned at (%i %i %i)%s%s\n\"", new_ent->s.number,
+			(int)new_ent->s.origin[0], (int)new_ent->s.origin[1], (int)new_ent->s.origin[2],
+			new_ent->isLogical ? " (logical, not networked)" : "",
+			aim_origin_ignored ? ". /entaddaim places it where you aim: the origin given or set with /entorigin was not used." : "") );
+		if (RP_EntitySolidAroundSomeone(new_ent))
+			trap->SendServerCommand( ent-g_entities, "print \"^3It is solid and someone is inside it: step away, or ^7/entundo^3.\n\"" );
 	}
 	else
 	{
@@ -18708,11 +18713,13 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	// GalaxyRP: [Logical Entities] three messages rather than two: the /entlist and /entremove lines
 	// grew to explain the logical ids, and one server command carries at most 1022 characters.
 	// GalaxyRP: [Entity System] and a fourth for picking entities up (g_entgrab.c).
-	trap->SendServerCommand( ent-g_entities, va("print \"\n^3--------Entity System--------\n\
-^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
+	// GalaxyRP: [Entity System] and a fifth: /entadd's line grew to say where it puts the entity, so the
+	// first message is split before /entlist.
+	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
+^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity where you stand, at the /entorigin position, or at an origin you give (origin 0 0 0 keeps a map brush in place).\n\
 ^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
-^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
+^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\"" );
+	trap->SendServerCommand( ent-g_entities, va("print \"^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
@@ -18732,7 +18739,7 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 ^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n\
 ^3/spawnplatform: ^7Spawns a platform where the player is.\n\
 ^3/spawndummy: ^7Spawns a dummy where the player is.\n\" " );
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at.\n\
+	trap->SendServerCommand( ent-g_entities, "print \"^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs).\n\
 ^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
 ^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
 ^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n\

@@ -11,7 +11,7 @@ GalaxyRP: [Entity System] picking entities up, turning them and putting them dow
                    exactly those angles.
   /entcancel       lets go: a copy is simply not made, a cut entity goes back where it was.
   /entaddaim       is /entadd placing the new entity on the surface aimed at (Cmd_EntAddAim_f, g_cmds.c,
-                   through RP_EntGrabAimPoint() and RP_EntGrabPlace() below).
+                   through RP_EntAddAimPoint() and RP_EntGrabPlace() below).
 
 Adapted from Lugormod's grab and clone tools, with the guards this mod's entity system needs:
 
@@ -48,7 +48,9 @@ extern void zyk_main_set_entity_field( gentity_t *ent, char *key, char *value );
 extern void zyk_main_spawn_entity( gentity_t *ent );
 extern qboolean zyk_spawn_strings_full( gentity_t *ent );
 
-#define RP_GRAB_RANGE			2048.0f	// how far the aim reaches
+#define RP_GRAB_RANGE			2048.0f	// how far the aim reaches (/entcopy, /entcut)
+#define RP_ADDAIM_RANGE			32768.0f	// how far /entaddaim's aim reaches: across any map
+#define RP_ADDAIM_MASK			( CONTENTS_SOLID | CONTENTS_TERRAIN )	// /entaddaim: through players, NPCs and corpses
 #define RP_GRAB_FLOAT			256.0f	// where a held entity floats with nothing within reach
 #define RP_GRAB_PREVIEW_MSEC	200		// the preview lines are redrawn this often...
 #define RP_GRAB_PREVIEW_LIFE	250		// ...and last a little longer, so they never blink
@@ -488,13 +490,16 @@ PLACEMENT
 
 /*
 ==================
-RP_EntGrabAimPoint
+RP_EntGrabAimPoint / RP_EntAddAimPoint
 
-Where the admin is aiming: the first solid thing within 2048 units of the eye along the view, and the
+Where the admin is aiming: the first thing the trace stops at along the view from the eye, and the
 normal of the surface there. qfalse, with the point 256 units ahead and no normal, when there is none.
+/entcopy and /entcut drop within 2048 units, on anything a shot would hit (RP_EntGrabAimPoint).
+GalaxyRP: [Entity System] /entaddaim reaches across any map and sees only solid world, solid entities
+and terrain, so a player or NPC in the way is aimed through rather than built on (RP_EntAddAimPoint).
 ==================
 */
-qboolean RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
+static qboolean RP_AimPoint( gentity_t *ent, float range, int mask, vec3_t point, vec3_t normal )
 {
 	vec3_t eye, dir, end;
 	trace_t tr;
@@ -502,9 +507,9 @@ qboolean RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
 	VectorCopy( ent->client->ps.origin, eye );
 	eye[2] += ent->client->ps.viewheight;
 	AngleVectors( ent->client->ps.viewangles, dir, NULL, NULL );
-	VectorMA( eye, RP_GRAB_RANGE, dir, end );
+	VectorMA( eye, range, dir, end );
 
-	trap->Trace( &tr, eye, vec3_origin, vec3_origin, end, ent->s.number, MASK_SHOT, qfalse, 0, 0 );
+	trap->Trace( &tr, eye, vec3_origin, vec3_origin, end, ent->s.number, mask, qfalse, 0, 0 );
 
 	if ( !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f )
 	{
@@ -521,6 +526,16 @@ qboolean RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
 	VectorMA( eye, RP_GRAB_FLOAT, dir, point );
 	VectorClear( normal );
 	return qfalse;
+}
+
+qboolean RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
+{
+	return RP_AimPoint( ent, RP_GRAB_RANGE, MASK_SHOT, point, normal );
+}
+
+qboolean RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
+{
+	return RP_AimPoint( ent, RP_ADDAIM_RANGE, RP_ADDAIM_MASK, point, normal );
 }
 
 /*
@@ -641,6 +656,22 @@ static qboolean RP_GrabOccupied( const vec3_t origin, const vec3_t mins, const v
 	}
 
 	return qfalse;
+}
+
+// GalaxyRP: [Entity System] whether this entity, just spawned, is solid and has a living player or NPC
+// inside it -- for the warning /entadd and /entaddaim give (its world box, less the unit the engine adds
+// to it each way)
+qboolean RP_EntitySolidAroundSomeone( const gentity_t *e )
+{
+	vec3_t mins, maxs;
+
+	if ( !e || !e->inuse || e->isLogical || !e->r.linked || !( e->r.contents & ( CONTENTS_SOLID | CONTENTS_BODY ) ) )
+		return qfalse;
+
+	mins[0] = e->r.absmin[0] + 1.0f; mins[1] = e->r.absmin[1] + 1.0f; mins[2] = e->r.absmin[2] + 1.0f;
+	maxs[0] = e->r.absmax[0] - 1.0f; maxs[1] = e->r.absmax[1] - 1.0f; maxs[2] = e->r.absmax[2] - 1.0f;
+
+	return RP_GrabOccupied( vec3_origin, mins, maxs );
 }
 
 /*
