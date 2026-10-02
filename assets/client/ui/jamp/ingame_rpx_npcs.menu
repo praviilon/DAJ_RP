@@ -249,11 +249,6 @@
 			backcolor           0 0 0 .6
 			outlinecolor        1 .682 0 .35
 			visible             1
-			descText            "Double-click a folder to open it; .. goes back up"
-			doubleclick
-			{
-				uiScript rpxEnter
-			}
 			mouseEnter
 			{
 				setitemcolor rpx_list bordercolor 1 1 1 1
