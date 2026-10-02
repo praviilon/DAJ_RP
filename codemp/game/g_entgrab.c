@@ -18,7 +18,8 @@ Adapted from Lugormod's grab and clone tools, with the guards this mod's entity 
   - only an entity with a key/value record (the map's, or one an entity command or file made) can be
     picked up -- the same line /entedit and /entremove draw (RP_EntityRefusalReason, g_spawn.c);
   - the map's own entities -- from its entity string or its per-map fixes, marked M in /entlist -- can be
-    copied but never cut or rotated in place (gentity_t::rpMapEntity, set by RP_MarkMapEntities() below);
+    copied but never cut or rotated in place, nor edited or removed (gentity_t::rpMapEntity, set by
+    RP_MarkMapEntities() below);
   - a brush entity can be copied but never cut or rotated: its angles are the direction it moves in,
     not a facing, and a brush entity of the map is protected anyway;
   - an entity from a misc_bsp's sub-BSP goes with its misc_bsp, and a permanent (neverFree) entity is
@@ -110,9 +111,10 @@ key/value record is one the map put there: marked rpMapEntity, and its record fi
 
 The default entity file and /entload free those and spawn the file's lines instead, and a line /entsave
 wrote for a map entity is that entity's record, key for key. The loader gives rpMapEntity back to a line
-whose fingerprint is one of these (RP_RecordIsMapEntity), so a preset does not strip the protection. A
-map entity edited with /entedit, saved and loaded again no longer matches, and is an ordinary entity
-from then on -- the admin changed it, and the file is its record now.
+whose fingerprint is one of these (RP_RecordIsMapEntity), so a preset does not strip the protection.
+/entedit and /entremove refuse map entities as well now (g_cmds.c); a map entity edited before they
+did, in a preset saved then, no longer matches, and loads as an ordinary entity -- the file is its
+record now.
 ==================
 */
 void RP_MarkMapEntities( void )
