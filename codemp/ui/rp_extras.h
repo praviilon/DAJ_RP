@@ -93,7 +93,6 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_p_pitch",		"0" ) \
 	X( "ui_rpx_p_roll",			"0" ) \
 	X( "ui_rpx_p_zoom",			"100" )		/* percent */ \
-	X( "ui_rpx_p_spin",			"0" )		/* the preview turns by itself */ \
 	X( "ui_rpx_p_scale",		"100" )		/* percent: 1 to 1023 (modelscale 0.01 to 10.23) */ \
 	X( "ui_rpx_p_solid",		"1" ) \
 	X( "ui_rpx_p_anim",			"0" ) \

@@ -282,7 +282,7 @@
 			border              1
 			bordercolor         1 .682 0 .6
 			visible             1
-			descText            "Preview only: zoom back to 100% and stop it turning"
+			descText            "Preview only: zoom back to 100%"
 			mouseEnter
 			{
 				setitemcolor rpx_reset bordercolor 1 1 1 1
@@ -342,29 +342,9 @@
 		}
 		itemDef
 		{
-			name                rpx_spin
-			type                ITEM_TYPE_YESNO
-			text                "Turn by itself:"
-			cvar                "ui_rpx_p_spin"
-			rect                232 250 190 18
-			textalign           ITEM_ALIGN_LEFT
-			textalignx          0
-			textaligny          -2
-			font                2
-			textscale           0.7
-			forecolor           1 1 1 1
-			visible             1
-			descText            "Preview only: keep the preview turning"
-			action
-			{
-				play "sound/interface/button1.wav"
-			}
-		}
-		itemDef
-		{
 			name                rpx_sep
 			style               WINDOW_STYLE_FILLED
-			rect                232 272 190 1
+			rect                232 252 190 1
 			backcolor           1 .682 0 .5
 			visible             1
 			decoration
@@ -374,7 +354,7 @@
 			name                rpx_head_angles
 			type                ITEM_TYPE_TEXT
 			style               WINDOW_STYLE_EMPTY
-			rect                232 276 100 14
+			rect                232 259 96 14
 			text                "Spawned prop"
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
@@ -390,13 +370,13 @@
 			name                rpx_reset_angles
 			type                ITEM_TYPE_BUTTON
 			style               WINDOW_STYLE_FILLED
-			rect                332 275 90 16
+			rect                330 256 92 20
 			text                "Reset angles"
 			textalign           ITEM_ALIGN_CENTER
-			textalignx          45
+			textalignx          46
 			textaligny          2
 			font                2
-			textscale           0.55
+			textscale           0.7
 			forecolor           1 .682 0 1
 			backcolor           0 0 0 .6
 			border              1
@@ -423,7 +403,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Yaw"
 			cvarint             "ui_rpx_p_yaw" 0 -180 180
-			rect                272 294 105 18
+			rect                272 282 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -446,7 +426,7 @@
 			cvar                "ui_rpx_p_yaw"
 			maxchars            4
 			maxPaintChars       4
-			rect                372 294 42 18
+			rect                372 282 42 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -466,7 +446,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Pitch"
 			cvarint             "ui_rpx_p_pitch" 0 -180 180
-			rect                272 314 105 18
+			rect                272 302 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -489,7 +469,7 @@
 			cvar                "ui_rpx_p_pitch"
 			maxchars            4
 			maxPaintChars       4
-			rect                372 314 42 18
+			rect                372 302 42 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -509,7 +489,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Roll"
 			cvarint             "ui_rpx_p_roll" 0 -180 180
-			rect                272 334 105 18
+			rect                272 322 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -532,7 +512,7 @@
 			cvar                "ui_rpx_p_roll"
 			maxchars            4
 			maxPaintChars       4
-			rect                372 334 42 18
+			rect                372 322 42 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2

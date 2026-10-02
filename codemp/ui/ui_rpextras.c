@@ -711,7 +711,6 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 			// uses. The prop's own angles, which it is spawned with, have their own button ("angles").
 			if ( !Q_stricmp( arg, "prop" ) ) {
 				trap->Cvar_Set( "ui_rpx_p_zoom", "100" );
-				trap->Cvar_Set( "ui_rpx_p_spin", "0" );
 			} else if ( !Q_stricmp( arg, "angles" ) ) {
 				trap->Cvar_Set( "ui_rpx_p_yaw", "0" );
 				trap->Cvar_Set( "ui_rpx_p_pitch", "0" );
@@ -811,9 +810,6 @@ static void RPX_DrawPropPreview( rectDef_t *rect, float scale, vec4_t color, int
 	angles[YAW] = RPX_PropPreviewYaw( atoi( RPX_CvarStr( "ui_rpx_p_faceme" ) ) ? qtrue : qfalse,
 		(int)atof( RPX_CvarStr( "ui_rpx_p_yaw" ) ), atoi( RPX_CvarStr( "ui_rpx_viewyaw" ) ) );
 	angles[ROLL] = (int)atof( RPX_CvarStr( "ui_rpx_p_roll" ) );
-	if ( atoi( RPX_CvarStr( "ui_rpx_p_spin" ) ) ) {
-		angles[YAW] += (float)( uiInfo.uiDC.realTime % 10000 ) * 0.036f;
-	}
 
 	memset( &ent, 0, sizeof( ent ) );
 	AnglesToAxis( angles, ent.axis );
