@@ -15377,6 +15377,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	gentity_t *this_ent = NULL;
 	int number_of_args = trap->Argc();
 	int entity_id = -1;
+	int first_pair = 2;
 	int i = 0;
 	// GalaxyRP fix: [Entity System] this was char key[64] and was filled with an unbounded
 	// strcpy() from an argument buffer eight times its size, so any key longer than 63 characters
@@ -15391,14 +15392,48 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		return;
 	}
 
-	if ( number_of_args < 2)
+	// GalaxyRP: [Entity System] the entity id is optional: a first argument that starts with a digit (or
+	// a minus sign, so a negative one is still "Invalid Entity ID") is the id, and the key/value pairs
+	// start after it; anything else -- no argument, or a key -- means the entity aimed at, the way
+	// /entcopy and /entcut pick theirs (RP_EntAimTarget in g_entgrab.c), and the pairs start at once.
+	// No key starts with a digit, and a word given where the id goes used to be read as id 0, a
+	// player slot this command refuses, so no form that worked before changes. first_pair is where
+	// the pairs start; with none (number_of_args == first_pair) the entity's info is shown.
+	if (number_of_args >= 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify at least the entity ID.\n\"") );
-		return;
+		trap->Argv( 1, arg1, sizeof( arg1 ) );
+	}
+	else
+	{
+		arg1[0] = '\0';
 	}
 
-	trap->Argv( 1, arg1, sizeof( arg1 ) );
-	entity_id = atoi(arg1);
+	if ((arg1[0] >= '0' && arg1[0] <= '9') || arg1[0] == '-')
+	{
+		first_pair = 2;
+		entity_id = atoi(arg1);
+	}
+	else
+	{
+		gentity_t *aimed;
+
+		first_pair = 1;
+
+		if (RP_EntAimFollowing(ent))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are following another player. Stop following first, or give the entity id.\n\"" );
+			return;
+		}
+
+		aimed = RP_EntAimTarget(ent);
+		if (!aimed)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at an entity. Aim at one, or give its id: ^3/entedit <entity id> [key value ...]^7.\n\"" );
+			return;
+		}
+
+		entity_id = aimed->s.number;
+	}
 
 	// GalaxyRP: [Logical Entities] an id is valid in either region: below level.num_entities, or
 	// from MAX_GENTITIES up to the logical high-water mark. The gap between them is never valid.
@@ -15411,11 +15446,11 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 
 	this_ent = &g_entities[entity_id];
 
-	if (number_of_args == 2)
+	if (number_of_args == first_pair)
 	{
 		// zyk: players have their origin and yaw set in ps struct
 		if (entity_id < (MAX_CLIENTS + BODY_QUEUE_SIZE))
-			trap->SendServerCommand( ent-g_entities, va("print \"\n^3classname: ^7%s\n^3origin: ^7%f %f %f\n\n\"", this_ent->classname, this_ent->r.currentOrigin[0], this_ent->r.currentOrigin[1], this_ent->r.currentOrigin[2]) );
+			trap->SendServerCommand( ent-g_entities, va("print \"\n^3entity: ^7%d\n^3classname: ^7%s\n^3origin: ^7%f %f %f\n\n\"", entity_id, this_ent->classname, this_ent->r.currentOrigin[0], this_ent->r.currentOrigin[1], this_ent->r.currentOrigin[2]) );
 		else
 		{
 			char content[1024];
@@ -15429,6 +15464,8 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			// not do to it.
 			if (this_ent->inuse)
 			{
+				// GalaxyRP: [Entity System] the id first: picked by aim, the admin has not typed it
+				Q_strcat(content, sizeof(content), va("^3entity: ^7%d\n", entity_id));
 				Q_strcat(content, sizeof(content), va("^3region: ^7%s\n",
 					this_ent->isLogical ? "logical (not networked)" : "networked"));
 			}
@@ -15565,9 +15602,10 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			return;
 		}
 
-		if ( number_of_args % 2 != 0)
+		// GalaxyRP: [Entity System] counted from where the pairs start, with or without an id
+		if ( (number_of_args - first_pair) % 2 != 0)
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"You must specify an even number of arguments, because they are key/value pairs.\n\"") );
+			trap->SendServerCommand( ent-g_entities, "print \"Each key needs a value: give key/value pairs.\n\"" );
 			return;
 		}
 
@@ -15577,7 +15615,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// which a class change would have removed all the same. Refuse the whole command, before any
 		// pair is applied, if any key is "classname" in any case -- that includes removing it with
 		// "zykremovekey". /entremove and /entadd make a different class instead.
-		for (i = 2; i + 1 < number_of_args; i += 2)
+		for (i = first_pair; i + 1 < number_of_args; i += 2)
 		{
 			trap->Argv(i, key, sizeof(key));
 			if (Q_stricmp(key, "classname") == 0)
@@ -15593,7 +15631,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// edited in place and take no extra room, so this only ever refuses early, never wrongly
 		// applies.
 		if (zyk_spawn_strings_full(this_ent) == qtrue ||
-			(level.zyk_spawn_strings_values_count[entity_id] + (number_of_args - 2)) > ZYK_MAX_SPAWN_STRING_SLOTS)
+			(level.zyk_spawn_strings_values_count[entity_id] + (number_of_args - first_pair)) > ZYK_MAX_SPAWN_STRING_SLOTS)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot hold that many key/value pairs (maximum %d).\n\"", entity_id, ZYK_MAX_SPAWN_STRING_SLOTS / 2) );
 			return;
@@ -15617,7 +15655,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 				RP_SpawnRouteNoteKey(&route, level.zyk_spawn_strings[entity_id][j], level.zyk_spawn_strings[entity_id][j + 1]);
 				j += 2;
 			}
-			for (i = 2; i + 1 < number_of_args; i += 2)
+			for (i = first_pair; i + 1 < number_of_args; i += 2)
 			{
 				trap->Argv(i, key, sizeof(key));
 				trap->Argv(i + 1, arg2, sizeof(arg2));
@@ -15645,9 +15683,9 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 
 		strcpy(key,"");
 
-		for(i = 2; i < number_of_args; i++)
+		for(i = first_pair; i < number_of_args; i++)
 		{
-			if (i % 2 == 0)
+			if ((i - first_pair) % 2 == 0)
 			{ // zyk: key
 				trap->Argv(i, arg2, sizeof(arg2));
 				Q_strncpyz(key, arg2, sizeof(key));
@@ -16668,22 +16706,43 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 	gentity_t *target_ent;
 	char   arg1[MAX_STRING_CHARS];
 	char   arg2[MAX_STRING_CHARS];
+	char   classname[MAX_QPATH];
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
 		return;
 	}
 
+	// GalaxyRP: [Entity System] with no id, the entity aimed at, the way /entcopy and /entcut pick
+	// theirs (RP_EntAimTarget in g_entgrab.c): it goes through the one-entity path below exactly as
+	// its id would. The range form always takes ids.
 	if ( trap->Argc() < 2)
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"You must specify an entity id.\n\"") );
-		return;
+		gentity_t *aimed;
+
+		if (RP_EntAimFollowing(ent))
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are following another player. Stop following first, or give the entity id.\n\"" );
+			return;
+		}
+
+		aimed = RP_EntAimTarget(ent);
+		if (!aimed)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at an entity. Aim at one, or give its id: ^3/entremove <entity id>^7.\n\"" );
+			return;
+		}
+
+		entity_id = aimed->s.number;
 	}
 
-	if (trap->Argc() == 2)
+	if (trap->Argc() <= 2)
 	{
-		trap->Argv( 1, arg1, sizeof( arg1 ) );
-		entity_id = atoi(arg1);
+		if (trap->Argc() == 2)
+		{
+			trap->Argv( 1, arg1, sizeof( arg1 ) );
+			entity_id = atoi(arg1);
+		}
 
 		// GalaxyRP fix: [Entity System] a negative id is refused before the reserved-range test
 		// below, which only fires for an id that is >= 0. Harmless in this branch -- no slot can
@@ -16766,13 +16825,16 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 
+				// GalaxyRP: [Entity System] its class, for the message: freeing it clears the entity
+				Q_strncpyz(classname, target_ent->classname ? target_ent->classname : "noclass", sizeof(classname));
+
 				children = RP_EntRemoveFree( target_ent, &subEntities );
 				if (target_ent->inuse)
 				{ // zyk: G_FreeEntity() can still keep an entity alive (a Jedi Master saber, for one)
 					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot be removed.\n\"", i) );
 					return;
 				}
-				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d removed%s%s.\n\"", i,
+				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d (%s) removed%s%s.\n\"", i, classname,
 					children == 1 ? " (and its trigger)" : children > 1 ? va(" (and %d triggers it made)", children) : "",
 					subEntities > 0 ? va(" (and the %d entities of its sub-BSP)", subEntities) : "") );
 				return;
@@ -18608,14 +18670,14 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	// GalaxyRP: [Entity System] and a fourth for picking entities up (g_entgrab.c).
 	trap->SendServerCommand( ent-g_entities, va("print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity to the map.\n\
-^3/entedit <entity id> <key> <value> <key> <value>...: ^7Edits entity fields or shows entity info if no key/value arguments were specified. The classname cannot be changed.\n\
+^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
 ^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
 ^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and cannot be edited or removed, ^3M^7 are part of the map, ^3H^7 are being held.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
 ^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id> <last entity id (optional)>: ^7Removes that entity, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
+^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
 ^7/entedit and /entremove only work on entities from the map or the entity system. Those the game creates (saber entities, door triggers, missiles, NPCs, dropped items) are refused; use ^3/npc kill^7 for NPCs.\n\
 ^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
 ^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\

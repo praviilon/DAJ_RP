@@ -1038,6 +1038,25 @@ static gentity_t *RP_GrabAim( gentity_t *ent )
 	return aimed;
 }
 
+/*
+==================
+RP_EntAimTarget / RP_EntAimFollowing
+
+GalaxyRP: [Entity System] the same pick for /entedit and /entremove with no id (g_cmds.c): the entity
+aimed at as RP_GrabAim() finds it, and whether the admin is following another player, when the view --
+and so the aim -- is that player's.
+==================
+*/
+gentity_t *RP_EntAimTarget( gentity_t *ent )
+{
+	return RP_GrabAim( ent );
+}
+
+qboolean RP_EntAimFollowing( const gentity_t *ent )
+{
+	return RP_GrabFollowing( ent );
+}
+
 // zyk: the entity an /entcopy or /entcut picks up: the id given, or the one aimed at
 static gentity_t *RP_GrabPickTarget( gentity_t *ent, const char *cmd )
 {

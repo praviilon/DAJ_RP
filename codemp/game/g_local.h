@@ -2375,6 +2375,8 @@ void		RP_EntBoundsFrame( gentity_t *ent );
 void		RP_EntBoundsLine( vec3_t start, vec3_t end, int color, int msec, int clientNum );
 void		RP_EntBoundsDrawBoxAt( int clientNum, const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t angles, int color, int msec );
 gentity_t	*RP_EntBoundsAim( const gentity_t *viewer );
+gentity_t	*RP_EntAimTarget( gentity_t *ent );				// g_entgrab.c: what /entcopy, /entcut, /entedit and /entremove aim at
+qboolean	RP_EntAimFollowing( const gentity_t *ent );
 // GalaxyRP: [Entity System] /entcopy, /entcut, /entrotate, /entcancel and /entaddaim -- g_entgrab.c
 #define RP_HOLD_COPY	1
 #define RP_HOLD_CUT		2
