@@ -90,6 +90,7 @@ static char			rpx_queue[RPX_QUEUE][MAX_STRING_CHARS];	// action commands waiting
 static int			rpx_queued;
 static int			rpx_serial;
 static qboolean		rpx_fxPass;
+static int			rpx_viewYaw = -1;	// the view yaw last told the ui (ui_rpx_viewyaw), -1 for none yet
 
 /*
 ===========================================================================
@@ -899,6 +900,18 @@ void CG_RpxFrame( void ) {
 	}
 
 	rpx_fxPass = RPX_FxPassWanted( now );
+
+	// GalaxyRP: [Extras] the player's view yaw for the Props preview, which shows a prop spawned with
+	// Face me off (Yaw a map direction) as it will stand in front of them -- while a menu is open, when
+	// it changes by a whole degree; the player cannot turn then, so in practice once a menu
+	if ( trap->Key_GetCatcher() & KEYCATCH_UI ) {
+		int yaw = (int)( AngleNormalize360( cg.predictedPlayerState.viewangles[YAW] ) + 0.5f ) % 360;
+
+		if ( yaw != rpx_viewYaw ) {
+			rpx_viewYaw = yaw;
+			trap->Cvar_Set( "ui_rpx_viewyaw", va( "%d", yaw ) );
+		}
+	}
 }
 
 qboolean CG_RpxFxPassActive( void ) {
@@ -968,6 +981,7 @@ void CG_RpxInit( void ) {
 	rpx_lastSend = 0;
 	rpx_queued = 0;
 	rpx_fxPass = qfalse;
+	rpx_viewYaw = -1;
 	rpx_reqCounter = ( now & 0xffff ) * 1000;
 	rpx_serial = ( now & 0xffff ) * 1000;
 	rpx_fileIndex = 0;

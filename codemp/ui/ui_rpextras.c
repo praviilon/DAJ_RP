@@ -64,6 +64,9 @@ static struct {
 
 static int			rpxFxWindowEnd;
 static int			rpxFxDir;
+static int			rpxFxPitch;			// the Tilt the effect showing was played with (for Direction Tilted)
+static int			rpxFxChangeAt;		// Direction or Tilt differ from the playing effect's since then; 0 if they do not
+static int			rpxFxSeenDir, rpxFxSeenPitch;
 static int			rpxFxBoxSet;
 
 /*
@@ -322,6 +325,7 @@ static void RPX_Request( void ) {
 }
 
 static void RPX_StopFxPreview( void ) {
+	rpxFxChangeAt = 0;
 	if ( rpxFxWindowEnd ) {
 		rpxFxWindowEnd = 0;
 		trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do fxstop\n" );
@@ -588,11 +592,18 @@ static void RPX_PreviewProp( void ) {
 	RPX_Msg( "" );
 }
 
+// the Tilt as cgame plays it (RPX_FxPreview: clamped to -90..90), in whole degrees
+static int RPX_FxTilt( void ) {
+	return (int)Com_Clamp( -90.0f, 90.0f, (float)(int)atof( RPX_CvarStr( "ui_rpx_e_pitch" ) ) );
+}
+
 static void RPX_PreviewEffect( void ) {
 	if ( rpxKind != RPX_EFFECTS || !RPX_HaveSelection() ) {
 		return;
 	}
 	rpxFxDir = atoi( RPX_CvarStr( "ui_rpx_e_dir" ) );
+	rpxFxPitch = RPX_FxTilt();
+	rpxFxChangeAt = 0;
 	rpxFxWindowEnd = trap->Milliseconds() + RPX_FX_WINDOW;
 	trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do fxpreview\n" );
 }
@@ -696,12 +707,15 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 		}
 	} else if ( !Q_stricmp( name, "rpxReset" ) ) {
 		if ( String_Parse( args, &arg ) ) {
+			// GalaxyRP: [Extras] "prop" is the Props preview's Reset view: only what the preview alone
+			// uses. The prop's own angles, which it is spawned with, have their own button ("angles").
 			if ( !Q_stricmp( arg, "prop" ) ) {
+				trap->Cvar_Set( "ui_rpx_p_zoom", "100" );
+				trap->Cvar_Set( "ui_rpx_p_spin", "0" );
+			} else if ( !Q_stricmp( arg, "angles" ) ) {
 				trap->Cvar_Set( "ui_rpx_p_yaw", "0" );
 				trap->Cvar_Set( "ui_rpx_p_pitch", "0" );
 				trap->Cvar_Set( "ui_rpx_p_roll", "0" );
-				trap->Cvar_Set( "ui_rpx_p_zoom", "100" );
-				trap->Cvar_Set( "ui_rpx_p_spin", "0" );
 			} else if ( !Q_stricmp( arg, "cam" ) ) {
 				trap->Cvar_Set( "ui_rpx_e_cdist", "160" );
 				trap->Cvar_Set( "ui_rpx_e_cang", "0" );
@@ -745,6 +759,15 @@ static void RPX_SceneRect( rectDef_t *rect, refdef_t *refdef, float fovX ) {
 	refdef->time = uiInfo.uiDC.realTime;
 }
 
+// the yaw the Props preview turns the model by, in the camera's frame (the camera looks along +x, as
+// the player looks at what they spawn): the spawned prop's yaw less the player's view yaw
+static float RPX_PropPreviewYaw( qboolean faceMe, int yaw, int viewYaw ) {
+	if ( faceMe ) {
+		return 180.0f + yaw;
+	}
+	return (float)( yaw - viewYaw );
+}
+
 static void RPX_DrawPropPreview( rectDef_t *rect, float scale, vec4_t color, int iMenuFont ) {
 	static vec4_t back = { 0.02f, 0.03f, 0.06f, 1.0f };
 	refdef_t refdef;
@@ -780,9 +803,14 @@ static void RPX_DrawPropPreview( rectDef_t *rect, float scale, vec4_t color, int
 	if ( zoom > 400.0f ) zoom = 400.0f;
 	dist = radius / sin( DEG2RAD( fov * 0.5f ) ) * ( 100.0f / zoom );
 
-	angles[PITCH] = atof( RPX_CvarStr( "ui_rpx_p_pitch" ) );
-	angles[YAW] = 180.0f + atof( RPX_CvarStr( "ui_rpx_p_yaw" ) );
-	angles[ROLL] = atof( RPX_CvarStr( "ui_rpx_p_roll" ) );
+	// GalaxyRP: [Extras] the prop as it will stand in front of the player, the camera standing for
+	// them: the spawn's yaw (cg_rpextras.c, RPX_SpawnProp) less their view yaw. With Face me that is
+	// 180 + Yaw whatever way they look (its front towards them, then Yaw); without it, Yaw is a map
+	// direction, so how it turns to them depends on which way they look (ui_rpx_viewyaw, from cgame).
+	angles[PITCH] = (int)atof( RPX_CvarStr( "ui_rpx_p_pitch" ) );
+	angles[YAW] = RPX_PropPreviewYaw( atoi( RPX_CvarStr( "ui_rpx_p_faceme" ) ) ? qtrue : qfalse,
+		(int)atof( RPX_CvarStr( "ui_rpx_p_yaw" ) ), atoi( RPX_CvarStr( "ui_rpx_viewyaw" ) ) );
+	angles[ROLL] = (int)atof( RPX_CvarStr( "ui_rpx_p_roll" ) );
 	if ( atoi( RPX_CvarStr( "ui_rpx_p_spin" ) ) ) {
 		angles[YAW] += (float)( uiInfo.uiDC.realTime % 10000 ) * 0.036f;
 	}
@@ -842,6 +870,22 @@ static void RPX_DrawFxBox( rectDef_t *rect, float scale, vec4_t color, int iMenu
 	if ( rpxFxWindowEnd && now - rpxFxWindowEnd < 0 ) {
 		refdef_t refdef;
 		vec3_t origin, camOrg, camAngles;
+		int dir = atoi( RPX_CvarStr( "ui_rpx_e_dir" ) ), tilt = RPX_FxTilt();
+
+		// GalaxyRP: [Extras] Direction or Tilt changed while the effect shows: it is played again the
+		// new way once they have rested RPX_FX_SETTLE (a dragged slider changes it every frame). Tilt
+		// only counts for Direction Tilted. A replay of the same effect takes no new preview slot.
+		if ( dir != rpxFxDir || ( dir == 2 && tilt != rpxFxPitch ) ) {
+			if ( !rpxFxChangeAt || dir != rpxFxSeenDir || tilt != rpxFxSeenPitch ) {
+				rpxFxChangeAt = now ? now : 1;
+				rpxFxSeenDir = dir;
+				rpxFxSeenPitch = tilt;
+			} else if ( now - rpxFxChangeAt >= RPX_FX_SETTLE ) {
+				RPX_PreviewEffect();
+			}
+		} else {
+			rpxFxChangeAt = 0;
+		}
 
 		RPX_SceneRect( rect, &refdef, RPX_FX_FOV );
 		refdef.time = atoi( RPX_CvarStr( "ui_rpx_fxtime" ) );	// the effects' shader times are on cgame's clock
@@ -854,6 +898,7 @@ static void RPX_DrawFxBox( rectDef_t *rect, float scale, vec4_t color, int iMenu
 		return;
 	}
 	rpxFxWindowEnd = 0;
+	rpxFxChangeAt = 0;
 	RPX_CenterText( rect, scale, color, "Press Preview to play it", iMenuFont );
 }
 

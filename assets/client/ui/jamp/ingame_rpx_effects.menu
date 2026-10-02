@@ -208,7 +208,7 @@
 			name                rpx_fxbox
 			type                ITEM_TYPE_OWNERDRAW
 			ownerdraw           UI_RPX_FXBOX
-			rect                232 40 190 180
+			rect                232 40 190 150
 			font                2
 			textscale           0.7
 			forecolor           .8 .8 .8 1
@@ -219,10 +219,26 @@
 		}
 		itemDef
 		{
+			name                rpx_head_prev
+			type                ITEM_TYPE_TEXT
+			style               WINDOW_STYLE_EMPTY
+			rect                232 192 190 14
+			text                "Preview only"
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          0
+			font                2
+			textscale           0.55
+			forecolor           1 .682 0 1
+			visible             1
+			decoration
+		}
+		itemDef
+		{
 			name                rpx_preview_btn
 			type                ITEM_TYPE_BUTTON
 			style               WINDOW_STYLE_FILLED
-			rect                232 224 92 22
+			rect                232 206 92 20
 			text                "Preview"
 			textalign           ITEM_ALIGN_CENTER
 			textalignx          46
@@ -234,7 +250,7 @@
 			border              1
 			bordercolor         1 .682 0 .6
 			visible             1
-			descText            "Play the selected effect once in the box (press again to replay)"
+			descText            "Preview only: play the selected effect in the box (press again to replay)"
 			mouseEnter
 			{
 				setitemcolor rpx_preview_btn bordercolor 1 1 1 1
@@ -254,7 +270,7 @@
 			name                rpx_reset
 			type                ITEM_TYPE_BUTTON
 			style               WINDOW_STYLE_FILLED
-			rect                330 224 92 22
+			rect                330 206 92 20
 			text                "Reset view"
 			textalign           ITEM_ALIGN_CENTER
 			textalignx          46
@@ -266,7 +282,7 @@
 			border              1
 			bordercolor         1 .682 0 .6
 			visible             1
-			descText            "Put the preview camera back"
+			descText            "Preview only: put the camera back"
 			mouseEnter
 			{
 				setitemcolor rpx_reset bordercolor 1 1 1 1
@@ -287,7 +303,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Distance"
 			cvarint             "ui_rpx_e_cdist" 160 32 1024
-			rect                272 252 105 18
+			rect                272 230 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -295,7 +311,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "How far the preview camera is"
+			descText            "Preview only: how far the camera is"
 			action
 			{
 				play "sound/interface/button1.wav"
@@ -310,7 +326,7 @@
 			cvar                "ui_rpx_e_cdist"
 			maxchars            4
 			maxPaintChars       4
-			rect                372 252 42 18
+			rect                372 230 42 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -322,7 +338,7 @@
 			border              1
 			bordercolor         .5 .5 .5 .6
 			visible             1
-			descText            "How far the preview camera is"
+			descText            "Preview only: how far the camera is"
 		}
 		itemDef
 		{
@@ -330,7 +346,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Angle"
 			cvarint             "ui_rpx_e_cang" 0 -180 180
-			rect                272 272 105 18
+			rect                272 250 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -338,7 +354,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "Walk the preview camera around it (degrees)"
+			descText            "Preview only: walk the camera around it (degrees)"
 			action
 			{
 				play "sound/interface/button1.wav"
@@ -353,7 +369,7 @@
 			cvar                "ui_rpx_e_cang"
 			maxchars            4
 			maxPaintChars       4
-			rect                372 272 42 18
+			rect                372 250 42 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -365,7 +381,7 @@
 			border              1
 			bordercolor         .5 .5 .5 .6
 			visible             1
-			descText            "Walk the preview camera around it (degrees)"
+			descText            "Preview only: walk the camera around it (degrees)"
 		}
 		itemDef
 		{
@@ -417,11 +433,27 @@
 		}
 		itemDef
 		{
+			name                rpx_head_spawn
+			type                ITEM_TYPE_TEXT
+			style               WINDOW_STYLE_EMPTY
+			rect                432 40 180 14
+			text                "Spawned effect"
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          0
+			font                2
+			textscale           0.55
+			forecolor           1 .682 0 1
+			visible             1
+			decoration
+		}
+		itemDef
+		{
 			name                rpx_dir
 			type                ITEM_TYPE_MULTI
 			text                "Direction:"
 			cvar                "ui_rpx_e_dir"
-			rect                432 40 180 18
+			rect                432 58 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -429,7 +461,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "Which way it plays: up, towards you, or towards you tilted by Tilt"
+			descText            "Spawned effect: up, at you, or at you tilted; the preview shows it"
 			cvarFloatList
 			{
 				"Up" 0
@@ -447,7 +479,7 @@
 			type                ITEM_TYPE_INTSLIDER
 			text                "Tilt"
 			cvarint             "ui_rpx_e_pitch" 0 -90 90
-			rect                474 62 105 18
+			rect                474 80 105 18
 			textalign           ITEM_ALIGN_RIGHT
 			textalignx          0
 			textaligny          -2
@@ -455,7 +487,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "For Tilted: -90 is straight up, 90 straight down"
+			descText            "Spawned effect: for Tilted, -90 is up, 90 is down; the preview shows it"
 			action
 			{
 				play "sound/interface/button1.wav"
@@ -470,7 +502,7 @@
 			cvar                "ui_rpx_e_pitch"
 			maxchars            3
 			maxPaintChars       3
-			rect                574 62 40 18
+			rect                574 80 40 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -482,7 +514,7 @@
 			border              1
 			bordercolor         .5 .5 .5 .6
 			visible             1
-			descText            "For Tilted: -90 is straight up, 90 straight down"
+			descText            "Spawned effect: for Tilted, -90 is up, 90 is down; the preview shows it"
 		}
 		itemDef
 		{
@@ -493,7 +525,7 @@
 			cvar                "ui_rpx_e_delay"
 			maxchars            5
 			maxPaintChars       5
-			rect                432 88 180 18
+			rect                432 106 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -505,7 +537,7 @@
 			border              1
 			bordercolor         .5 .5 .5 .6
 			visible             1
-			descText            "How often it plays again, in milliseconds (at least 50)"
+			descText            "Spawned effect: how often it plays again, in milliseconds (at least 50)"
 		}
 		itemDef
 		{
@@ -516,7 +548,7 @@
 			cvar                "ui_rpx_e_random"
 			maxchars            5
 			maxPaintChars       5
-			rect                432 108 180 18
+			rect                432 126 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -528,7 +560,7 @@
 			border              1
 			bordercolor         .5 .5 .5 .6
 			visible             1
-			descText            "A random extra wait each time, in milliseconds"
+			descText            "Spawned effect: a random extra wait each time, in milliseconds"
 		}
 		itemDef
 		{
@@ -536,7 +568,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "Starts off:"
 			cvar                "ui_rpx_e_off"
-			rect                432 132 180 18
+			rect                432 150 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -544,7 +576,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "It waits to be switched on (used by a trigger or a button)"
+			descText            "Spawned effect: it waits to be switched on by a trigger or button"
 			action
 			{
 				play "sound/interface/button1.wav"
@@ -556,7 +588,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "Plays once:"
 			cvar                "ui_rpx_e_once"
-			rect                432 152 180 18
+			rect                432 170 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -564,7 +596,7 @@
 			textscale           0.7
 			forecolor           1 1 1 1
 			visible             1
-			descText            "It only plays when used (by a trigger or a button)"
+			descText            "Spawned effect: it only plays when used by a trigger or button"
 			action
 			{
 				play "sound/interface/button1.wav"

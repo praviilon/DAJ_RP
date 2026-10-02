@@ -125,7 +125,8 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_back",			"0" )		/* ui: the Back button asks the Galaxy RP menu for its Extras tab */ \
 	X( "ui_rpx_sent",			"0" )		/* ui: when a menu last sent the server a command (Milliseconds) */ \
 	X( "ui_rpx_fxtime",			"0" )		/* cgame: its time, for the effect preview's render */ \
-	X( "ui_rpx_mapid",			"0" )		/* cgame: new at each cgame start; lists and prop previews from before are old */
+	X( "ui_rpx_mapid",			"0" )		/* cgame: new at each cgame start; lists and prop previews from before are old */ \
+	X( "ui_rpx_viewyaw",		"0" )		/* cgame: the player's view yaw (0-359) while a menu is open, for the prop preview */
 
 // the effect preview: where the effect plays (far outside any map, so no map geometry or sky effect
 // is near it), how long after a Preview click it is drawn, and the camera
@@ -136,6 +137,7 @@ static const char * const rpxSoundChannels[] = {
 #define RPX_FX_HEARTBEAT	300		// the box counts as on screen this long after the ui last drew it
 #define RPX_FX_FOV			60.0f
 #define RPX_FX_ELEVATION	20.0f
+#define RPX_FX_SETTLE		250		// Direction or Tilt changed while the preview shows: replayed once they rest this long
 
 // the most different models and effects one map's previews may load (each keeps a slot until then)
 #define RPX_PREVIEW_MODELS	150
