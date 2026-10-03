@@ -2775,6 +2775,161 @@ qboolean RP_CanFireHook( gentity_t *ent )
 	return qtrue;
 }
 
+/*
+==================
+RP_JumpKickLand
+
+GalaxyRP: [Jump Kick] the jump kick -- jump, then jump again with forward held next to a player or NPC
+to run up them and flip off. PM_CheckJump() (bg_pmove.c) finds the target and leaves its number in
+ps.forceKickFlip; this does the rest, once, in ClientThink_real(). It was written out inline there and
+is unchanged in who may kick whom: the team, private duel, duel tournament, melee arena and noclip
+rules (OnSameTeam, zyk_can_hit_target) all still apply, and an ally NPC counts as a teammate in FFA.
+
+What changed, and why:
+
+- Damage is rp_melee_jump_kick_damage (20 shipped), not 5% of the kicker's speed. That made a kick
+  anything from about 10 to 28 depending on how the jump happened to be going -- 20 is the middle of
+  it. G_Damage() goes on to scale it exactly as it did before, as for any melee hit: the Melee skill,
+  Force Rage, the kicker's maximum health and where it lands (g_locationBasedDamage). It still ignores
+  shields (DAMAGE_NO_ARMOR), as it always has.
+- The push follows the way the kicker faces: RP_JUMP_KICK_PUSH forward and RP_JUMP_KICK_LIFT up. It
+  used to be the reverse of the kicker's own velocity. At Jump 2 that is the same direction and, the
+  arithmetic cancelling, the same 300 units a second give or take rounding -- but at Jump 3 and above
+  the flip off the target leaves the kicker going straight up, so the "push" was straight down and
+  the target was only lifted. (Stock JKA never kicked at Jump 3; the Zyk mod turned it on.)
+- Kill credit is given whenever the kick lands. It used to be set only in the branch that pushed;
+  G_Damage() covered most of the rest, but not a hit without knockback, so a target attacking in red
+  stance that takes no knockback (FL_NO_KNOCKBACK) could be kicked off a ledge with nobody credited --
+  and with the change below, protected targets and large NPCs take no knockback from a kick at all.
+  The window is unchanged at five seconds.
+- No push or knockdown for a target the damage cannot touch either: spawn protection still running,
+  or /god (see RP_JumpKickProtected), as JA++ does. Such a target used to take no damage and still be
+  thrown and floored.
+- No push or knockdown for vehicles and large NPCs (RP_JumpKickImmovable). They still take the damage.
+  For both of these the damage's own knockback is off as well (DAMAGE_NO_KNOCKBACK). Every other
+  target still gets that small shove from the hit, as before -- it is all a target already on the
+  ground, or attacking in red stance, receives.
+- The target must have health above 0, not merely other than 0.
+
+Unchanged: the 30% knockdown chance; no push or knockdown on a target attacking in red stance, already
+knocked down -- which a downed or admin-paralysed player always is -- riding, or on an emplaced gun.
+==================
+*/
+#define RP_JUMP_KICK_PUSH	300.0f
+#define RP_JUMP_KICK_LIFT	200.0f
+
+// spawn protection still running, or /god -- the two G_Damage() checks that stop a kick's damage. Read
+// the same way here: godmode does not protect an NPC there, and protection whose time is up does not
+// count (G_Damage clears the flag itself the next time it is hit).
+static qboolean RP_JumpKickProtected( const gentity_t *target )
+{
+	if ( (target->flags & FL_GODMODE) && target->s.eType != ET_NPC )
+	{
+		return qtrue;
+	}
+
+	if ( (target->client->ps.eFlags & EF_INVULNERABLE) && target->client->invulnerableTimer > level.time )
+	{
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+// vehicles, and the NPCs Force Push already will not move (AT-ST, Galak's mech, the rancor) plus the
+// wampa: kicked, they take the damage and stay where they are.
+static qboolean RP_JumpKickImmovable( const gentity_t *target )
+{
+	if ( target->s.eType != ET_NPC )
+	{
+		return qfalse;
+	}
+
+	switch ( target->client->NPC_class )
+	{
+	case CLASS_VEHICLE:
+	case CLASS_ATST:
+	case CLASS_GALAKMECH:
+	case CLASS_RANCOR:
+	case CLASS_WAMPA:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+static void RP_JumpKickLand( gentity_t *ent )
+{
+	gclient_t *client = ent->client;
+	gentity_t *faceKicked = &g_entities[client->ps.forceKickFlip-1];
+	qboolean protectedTarget = qfalse;
+	qboolean immovable = qfalse;
+	vec3_t fwdAngles, pushDir;
+
+	// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(ent, faceKicked) conjunct
+	// here — the function was a stub always returning qtrue.
+	if (!faceKicked->client || (OnSameTeam(ent, faceKicked) && !g_friendlyFire.integer) ||
+		(faceKicked->client->ps.duelInProgress && faceKicked->client->ps.duelIndex != ent->s.number) ||
+		(ent->client->ps.duelInProgress && ent->client->ps.duelIndex != faceKicked->s.number) ||
+		!zyk_can_hit_target(ent, faceKicked))
+	{ // zyk: also validates if we can hit this target
+		return;
+	}
+
+	if ( faceKicked->health <= 0 || !faceKicked->takedamage )
+	{
+		return;
+	}
+
+	// judged before the damage, which may itself knock the target down
+	protectedTarget = RP_JumpKickProtected( faceKicked );
+	immovable = RP_JumpKickImmovable( faceKicked );
+
+	VectorSet( fwdAngles, 0, client->ps.viewangles[YAW], 0 );
+	AngleVectors( fwdAngles, pushDir, NULL, NULL );
+
+	// no knockback from the damage either for those two: G_Damage() adds it before it looks at spawn
+	// protection or godmode, so a protected target would still be nudged by a hit it takes nothing from
+	G_Damage( faceKicked, ent, ent, pushDir, client->ps.origin, rp_melee_jump_kick_damage.integer,
+		(protectedTarget || immovable) ? (DAMAGE_NO_ARMOR|DAMAGE_NO_KNOCKBACK) : DAMAGE_NO_ARMOR, MOD_MELEE );
+
+	// kill credit, whatever else happens below. G_Damage() gives it too whenever the hit has knockback
+	// (and 25 seconds for a vehicle), so this matters where it has none; it never shortens a longer
+	// credit the kicker already holds. Not on a target the kick has just killed: the credit is for a
+	// death that comes later, and there is none to come.
+	if ( faceKicked->health > 0 &&
+		( faceKicked->client->ps.otherKiller != ent->s.number || faceKicked->client->ps.otherKillerTime < level.time + 5000 ) )
+	{
+		faceKicked->client->ps.otherKiller = ent->s.number;
+		faceKicked->client->ps.otherKillerTime = level.time + 5000;
+		faceKicked->client->ps.otherKillerDebounceTime = level.time + 100;
+	}
+
+	if ( !protectedTarget && !immovable &&
+		( faceKicked->client->ps.weapon != WP_SABER ||
+		  faceKicked->client->ps.fd.saberAnimLevel != FORCE_LEVEL_3 ||
+		  (!BG_SaberInAttack(faceKicked->client->ps.saberMove) && !PM_SaberInStart(faceKicked->client->ps.saberMove) && !PM_SaberInReturn(faceKicked->client->ps.saberMove) && !PM_SaberInTransition(faceKicked->client->ps.saberMove)) ) )
+	{
+		if (faceKicked->health > 0 &&
+			faceKicked->client->ps.stats[STAT_HEALTH] > 0 &&
+			faceKicked->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN)
+		{
+			if (BG_KnockDownable(&faceKicked->client->ps) && Q_irand(1, 10) <= 3)
+			{ //only actually knock over sometimes, but always do velocity hit
+				faceKicked->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+				faceKicked->client->ps.forceHandExtendTime = level.time + 1100;
+				faceKicked->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
+			}
+
+			faceKicked->client->ps.velocity[0] = pushDir[0]*RP_JUMP_KICK_PUSH;
+			faceKicked->client->ps.velocity[1] = pushDir[1]*RP_JUMP_KICK_PUSH;
+			faceKicked->client->ps.velocity[2] = RP_JUMP_KICK_LIFT;
+		}
+	}
+
+	G_Sound( faceKicked, CHAN_AUTO, G_SoundIndex( va("sound/weapons/melee/punch%d", Q_irand(1, 4)) ) );
+}
+
 void ClientThink_real( gentity_t *ent ) {
 	gclient_t	*client;
 	pmove_t		pmove;
@@ -4659,56 +4814,10 @@ void ClientThink_real( gentity_t *ent ) {
 //	G_VehicleAttachDroidUnit( ent );
 
 	// Did we kick someone in our pmove sequence?
+	// GalaxyRP: [Jump Kick] what the kick does is RP_JumpKickLand() above.
 	if (client->ps.forceKickFlip)
 	{
-		gentity_t *faceKicked = &g_entities[client->ps.forceKickFlip-1];
-
-		// GalaxyRP fix: [Guardian] dropped the zyk_can_hit_boss_battle_target(ent, faceKicked) conjunct
-		// here — the function was a stub always returning qtrue.
-		if (faceKicked && faceKicked->client && (!OnSameTeam(ent, faceKicked) || g_friendlyFire.integer) &&
-			(!faceKicked->client->ps.duelInProgress || faceKicked->client->ps.duelIndex == ent->s.number) &&
-			(!ent->client->ps.duelInProgress || ent->client->ps.duelIndex == faceKicked->s.number) &&
-			zyk_can_hit_target(ent, faceKicked))
-		{ // zyk: also validates if we can hit this target
-			if ( faceKicked && faceKicked->client && faceKicked->health && faceKicked->takedamage )
-			{//push them away and do pain
-				vec3_t oppDir;
-				int strength = (int)VectorNormalize2( client->ps.velocity, oppDir );
-
-				strength *= 0.05;
-
-				VectorScale( oppDir, -1, oppDir );
-
-				G_Damage( faceKicked, ent, ent, oppDir, client->ps.origin, strength, DAMAGE_NO_ARMOR, MOD_MELEE );
-
-				if ( faceKicked->client->ps.weapon != WP_SABER ||
-					 faceKicked->client->ps.fd.saberAnimLevel != FORCE_LEVEL_3 ||
-					 (!BG_SaberInAttack(faceKicked->client->ps.saberMove) && !PM_SaberInStart(faceKicked->client->ps.saberMove) && !PM_SaberInReturn(faceKicked->client->ps.saberMove) && !PM_SaberInTransition(faceKicked->client->ps.saberMove)) )
-				{
-					if (faceKicked->health > 0 &&
-						faceKicked->client->ps.stats[STAT_HEALTH] > 0 &&
-						faceKicked->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN)
-					{
-						if (BG_KnockDownable(&faceKicked->client->ps) && Q_irand(1, 10) <= 3)
-						{ //only actually knock over sometimes, but always do velocity hit
-							faceKicked->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
-							faceKicked->client->ps.forceHandExtendTime = level.time + 1100;
-							faceKicked->client->ps.forceDodgeAnim = 0; //this toggles between 1 and 0, when it's 1 we should play the get up anim
-						}
-
-						faceKicked->client->ps.otherKiller = ent->s.number;
-						faceKicked->client->ps.otherKillerTime = level.time + 5000;
-						faceKicked->client->ps.otherKillerDebounceTime = level.time + 100;
-
-						faceKicked->client->ps.velocity[0] = oppDir[0]*(strength*40);
-						faceKicked->client->ps.velocity[1] = oppDir[1]*(strength*40);
-						faceKicked->client->ps.velocity[2] = 200;
-					}
-				}
-
-				G_Sound( faceKicked, CHAN_AUTO, G_SoundIndex( va("sound/weapons/melee/punch%d", Q_irand(1, 4)) ) );
-			}
-		}
+		RP_JumpKickLand( ent );
 
 		client->ps.forceKickFlip = 0;
 	}

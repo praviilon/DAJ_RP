@@ -329,6 +329,8 @@ XCVAR_DEF( rp_stun_baton_damage,	"20",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,	
 XCVAR_DEF( rp_melee_left_hand_damage,	"10",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_melee_right_hand_damage,	"12",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_melee_kick_damage,	"10",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
+// GalaxyRP: [Jump Kick] damage of the jump kick (jump, then jump again next to someone) -- see RP_JumpKickLand(), g_active.c
+XCVAR_DEF( rp_melee_jump_kick_damage,	"20",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_thermal_damage,	"70",					NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_thermal_splash_damage,	"90",			NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
 XCVAR_DEF( rp_thermal_velocity,	"900",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART,					qtrue )
