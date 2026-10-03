@@ -9148,6 +9148,10 @@ void G_RunFrame( int levelTime ) {
 
 			poison_dart_hits(ent);
 
+			// GalaxyRP: [Space] leaving a trigger_space, and suffocating in one, for NPCs -- the player
+			// half is in the i < MAX_CLIENTS branch above. See RP_NpcSpaceFrame() in g_trigger.c.
+			RP_NpcSpaceFrame(ent);
+
 			// GalaxyRP fix: [Quests] a per-frame top-up sat here that kept PW_FORCE_BOON alive on
 			// "artifact holder" npcs. It was gated on universe_quest_artifact_holder_id != -1, and the only
 			// value ever assigned to that field anywhere in the tree was -1, so the test never passed.

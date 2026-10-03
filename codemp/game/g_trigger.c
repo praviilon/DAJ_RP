@@ -1493,6 +1493,145 @@ void SP_trigger_hurt( gentity_t *self ) {
 }
 
 #define	INITIAL_SUFFOCATION_DELAY	500 //.5 seconds
+
+/*
+==================
+RP_SpaceRiderProtected
+
+GalaxyRP: [Space] whether this client rides inside a vehicle that hides its rider -- a fighter's
+cockpit -- which protects it from space. This was the player-only test in space_touch(); it now
+covers NPC pilots too, which until now could never suffocate and so never needed it.
+
+A vehicle is never a rider here, whatever its m_iVehicleNum holds: a vehicle keeps its PILOT'S
+number plus one in that field (g_vehicles.c), and with an NPC pilot that is MAX_CLIENTS or more --
+which would read as "riding a vehicle" and take the fighter itself out of space.
+==================
+*/
+static qboolean RP_SpaceRiderProtected( const gentity_t *ent )
+{
+	const gentity_t *veh;
+
+	if ( !ent->client || ent->client->NPC_class == CLASS_VEHICLE )
+	{
+		return qfalse;
+	}
+
+	if ( ent->client->ps.m_iVehicleNum < MAX_CLIENTS || ent->client->ps.m_iVehicleNum >= ENTITYNUM_WORLD )
+	{
+		return qfalse;
+	}
+
+	veh = &g_entities[ent->client->ps.m_iVehicleNum];
+
+	return ( veh->inuse && veh->client && veh->m_pVehicle && veh->m_pVehicle->m_pVehicleInfo &&
+		veh->m_pVehicle->m_pVehicleInfo->hideRider ) ? qtrue : qfalse;
+}
+
+/*
+==================
+RP_SpaceSafeClass
+
+GalaxyRP: [Space] the NPC classes that do not breathe, and so are not hurt by space: vehicles --
+which have to fly there -- and droids. Every other class suffocates, creatures included, and so
+does any class added later.
+==================
+*/
+static qboolean RP_SpaceSafeClass( int npcClass )
+{
+	switch ( npcClass )
+	{
+	case CLASS_VEHICLE:
+	case CLASS_ATST:
+	case CLASS_GALAKMECH:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_PROBE:
+	case CLASS_SEEKER:
+	case CLASS_REMOTE:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_GONK:
+	case CLASS_MOUSE:
+	case CLASS_PROTOCOL:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+/*
+==================
+RP_NpcSpaceFrame
+
+GalaxyRP: [Space] the NPC half of what G_RunFrame() does for a player in a trigger_space, called
+once a frame for every NPC, vehicles included, from its NPC branch.
+
+Stock JKA only ever did this for players. space_touch() flags NPCs as well (vehicles need it to fly
+in space), but nothing took the flag off again or hurt them, so:
+
+- an NPC or vehicle that touched space once stayed "in space" until it died: no gravity wherever it
+  went, a fighter kept its drifting-when-damaged behaviour indoors, and its eventual death -- anywhere
+  -- played the choke animation and left no corpse. The exit check below is the player one.
+- no NPC ever suffocated. Now every NPC whose class breathes (RP_SpaceSafeClass) does, on the
+  player timing and damage, unless it sits inside an enclosed vehicle (RP_SpaceRiderProtected).
+==================
+*/
+void RP_NpcSpaceFrame( gentity_t *ent )
+{
+	gentity_t *spacetrigger;
+
+	if ( !ent || !ent->client )
+	{
+		return;
+	}
+
+	if ( !ent->client->inSpaceIndex || ent->client->inSpaceIndex == ENTITYNUM_NONE )
+	{
+		return;
+	}
+
+	spacetrigger = &g_entities[ent->client->inSpaceIndex];
+
+	if ( !spacetrigger->inuse ||
+		!G_PointInBounds( ent->client->ps.origin, spacetrigger->r.absmin, spacetrigger->r.absmax ) )
+	{ // no longer in space
+		ent->client->inSpaceIndex = 0;
+		return;
+	}
+
+	if ( RP_SpaceSafeClass( ent->client->NPC_class ) )
+	{
+		return;
+	}
+
+	if ( RP_SpaceRiderProtected( ent ) )
+	{ // as space_touch() does for a rider: the cockpit keeps space out
+		ent->client->inSpaceSuffocation = 0;
+		ent->client->inSpaceIndex = ENTITYNUM_NONE;
+		return;
+	}
+
+	if ( ent->client->inSpaceSuffocation < level.time )
+	{ // suffocate -- the player code in G_RunFrame(), for an NPC
+		if ( ent->health > 0 && ent->takedamage )
+		{
+			G_Damage( ent, spacetrigger, spacetrigger, NULL, ent->client->ps.origin, Q_irand( 50, 70 ), DAMAGE_NO_ARMOR, MOD_SUICIDE );
+
+			if ( ent->health > 0 )
+			{ // still alive: choke
+				G_EntitySound( ent, CHAN_VOICE, G_SoundIndex( va( "*choke%d.wav", Q_irand( 1, 3 ) ) ) );
+
+				ent->client->ps.forceHandExtend = HANDEXTEND_CHOKE;
+				ent->client->ps.forceHandExtendTime = level.time + 2000;
+			}
+		}
+
+		ent->client->inSpaceSuffocation = level.time + Q_irand( 100, 200 );
+	}
+}
+
 void space_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 {
 	if (!other || !other->inuse || !other->client )
@@ -1502,19 +1641,13 @@ void space_touch( gentity_t *self, gentity_t *other, trace_t *trace )
 		return;
 	}
 
-	if ( other->s.number < MAX_CLIENTS//player
-		&& other->client->ps.m_iVehicleNum//in a vehicle
-		&& other->client->ps.m_iVehicleNum >= MAX_CLIENTS )
-	{//a player client inside a vehicle
-		gentity_t *veh = &g_entities[other->client->ps.m_iVehicleNum];
-
-		if (veh->inuse && veh->client && veh->m_pVehicle &&
-			veh->m_pVehicle->m_pVehicleInfo->hideRider)
-		{ //if they are "inside" a vehicle, then let that protect them from THE HORRORS OF SPACE.
-			other->client->inSpaceSuffocation = 0;
-			other->client->inSpaceIndex = ENTITYNUM_NONE;
-			return;
-		}
+	// GalaxyRP: [Space] any rider, not only a player one -- NPC pilots can suffocate now (see
+	// RP_NpcSpaceFrame) -- and never a vehicle itself; see RP_SpaceRiderProtected.
+	if ( RP_SpaceRiderProtected( other ) )
+	{ //if they are "inside" a vehicle, then let that protect them from THE HORRORS OF SPACE.
+		other->client->inSpaceSuffocation = 0;
+		other->client->inSpaceIndex = ENTITYNUM_NONE;
+		return;
 	}
 
 	if (!G_PointInBounds(other->client->ps.origin, self->r.absmin, self->r.absmax))
