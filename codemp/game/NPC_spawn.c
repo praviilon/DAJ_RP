@@ -1185,6 +1185,9 @@ void NPC_Begin (gentity_t *ent)
 
 	NPC_SetMiscDefaultData( ent );
 
+	// GalaxyRP: [Entity System] the team its type gave it, for /entsave (gentity_t::rpBaseTeam)
+	ent->rpBaseTeam = RP_TEAM_RECORD( ent->client->playerTeam, ent->client->enemyTeam );
+
 	// GalaxyRP: [Entity System] the spawner's "npcteam" (RP_NpcTeamFromName()), which NPC_Spawn_Do() copied
 	// here: applied after the defaults above, so the NPC or vehicle is left as /npc team would leave it.
 	if ( ent->rpSpawnerTeam > 0 )

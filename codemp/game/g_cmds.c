@@ -16244,16 +16244,22 @@ static qboolean zyk_entsave_is_vehicle(const gentity_t *npc)
 	return (npc->m_pVehicle || npc->s.NPC_class == CLASS_VEHICLE || (npc->client && npc->client->NPC_class == CLASS_VEHICLE)) ? qtrue : qfalse;
 }
 
+void NPC_Begin(gentity_t *ent);
+
 static zyk_entsave_npc_t zyk_entsave_npc_skip_reason(gentity_t *npc)
 {
+	const qboolean starting = (npc->think == NPC_Begin && !npc->rpBaseTeam && !(npc->s.eFlags & EF_DEAD)) ? qtrue : qfalse;
 	const gentity_t *spawner = npc->zyk_npc_spawner;
 	const qboolean is_vehicle = zyk_entsave_is_vehicle(npc);
 	const int veh_num = npc->s.m_iVehicleNum;
 
 	// zyk: dead, or a vehicle already counting down to its explosion (StartDeathDelay() sets
-	// m_iDieTime, and nothing but the vehicle's reset clears it)
-	if (npc->health <= 0 || (npc->s.eFlags & EF_DEAD) || (npc->client && npc->client->ps.pm_type == PM_DEAD) ||
-		(npc->m_pVehicle && npc->m_pVehicle->m_iDieTime != 0))
+	// m_iDieTime, and nothing but the vehicle's reset clears it).
+	// GalaxyRP: [Entity System] but not one that has yet to start up: NPC_Begin() gives it its health, and
+	// until then (the frame it was spawned in, or longer while its spot is blocked) it has none. Taken for a
+	// corpse, it was left out and lost.
+	if (!starting && (npc->health <= 0 || (npc->s.eFlags & EF_DEAD) || (npc->client && npc->client->ps.pm_type == PM_DEAD) ||
+		(npc->m_pVehicle && npc->m_pVehicle->m_iDieTime != 0)))
 	{
 		return ZYK_ENTSAVE_NPC_DEAD;
 	}
@@ -16303,11 +16309,213 @@ static zyk_entsave_npc_t zyk_entsave_npc_skip_reason(gentity_t *npc)
 	return is_vehicle ? ZYK_ENTSAVE_NPC_SAVE_VEHICLE : ZYK_ENTSAVE_NPC_SAVE;
 }
 
+// GalaxyRP: [Entity System] the one-time lines below carry what the NPC or vehicle IS when /entsave runs -- the
+// spawner it came from is gone, and an effect, a team or a docked fighter may have changed since. One line is
+// put together in zyk_entsave_line; zyk_entsave_add() appends one pair, escaped as every saved value is (see
+// zyk_entity_file_encode()), and says qfalse when it would not fit, so the caller can fall back.
+static char zyk_entsave_line[ZYK_ENTITY_FILE_ENCODED_LENGTH * 2];
+
+// the NPC_spawner / NPC_Vehicle spawnflags these lines carry by name (b_local.h has the first three, which this
+// file does not include)
+#define ZYK_ENTSAVE_CINEMATIC		32
+#define ZYK_ENTSAVE_NOTSOLID		64
+#define ZYK_ENTSAVE_STARTINSOLID	128
+#define ZYK_ENTSAVE_CREDITS			32768
+
+static qboolean zyk_entsave_add(const char *key, const char *value)
+{
+	static char escaped[ZYK_ENTITY_FILE_ENCODED_LENGTH];
+	const int used = (int)strlen(zyk_entsave_line);
+
+	if (zyk_entity_file_encode(value, escaped, sizeof(escaped)) == qfalse)
+	{
+		return qfalse;
+	}
+
+	if (used + (int)strlen(key) + (int)strlen(escaped) + 2 >= (int)sizeof(zyk_entsave_line))
+	{
+		return qfalse;
+	}
+
+	Q_strcat(zyk_entsave_line, sizeof(zyk_entsave_line), va("%s;%s;", key, escaped));
+	return qtrue;
+}
+
+// the word "npcteam" takes for a team, or NULL for none of the four
+static const char *zyk_entsave_team_word(int team)
+{
+	switch (team)
+	{
+	case NPCTEAM_PLAYER:	return "player";
+	case NPCTEAM_ENEMY:		return "enemy";
+	case NPCTEAM_NEUTRAL:	return "neutral";
+	case NPCTEAM_FREE:		return "free";
+	default:				return NULL;
+	}
+}
+
+// The "npcteam" a one-time line needs, or NULL. Only a team that differs from the one the NPC or vehicle started
+// with (gentity_t::rpBaseTeam) is written: one nobody changed comes back as its type makes it, enemyTeam and all.
+// A team /npc team or a spawner's key set is one of the four pairs RP_NpcSetTeam() makes, so it comes back
+// exactly; one a script changed some other way comes back as the nearest of them. Saved before NPC_Begin() has
+// run, it is the spawner's team still to be applied.
+static const char *zyk_entsave_team(const gentity_t *ent)
+{
+	if (!ent->rpBaseTeam)
+	{
+		return (ent->rpSpawnerTeam > 0) ? zyk_entsave_team_word(ent->rpSpawnerTeam - 1) : NULL;
+	}
+
+	if (RP_TEAM_RECORD(ent->client->playerTeam, ent->client->enemyTeam) == ent->rpBaseTeam)
+	{
+		return NULL;
+	}
+
+	return zyk_entsave_team_word(ent->client->playerTeam);
+}
+
+// The keys a one-time line shares between NPCs and vehicles. with_text qfalse leaves out the free-text ones
+// (name, on-death target, droid type) -- the fallback when they make the line too long to load back.
+static qboolean zyk_entsave_add_common(const gentity_t *ent, int spawnflags, qboolean with_text)
+{
+	const char *team = zyk_entsave_team(ent);
+
+	if (spawnflags && !zyk_entsave_add("spawnflags", va("%d", spawnflags)))
+		return qfalse;
+	if (team && !zyk_entsave_add("npcteam", team))
+		return qfalse;
+	if (with_text && ent->targetname && ent->targetname[0] && !zyk_entsave_add("NPC_targetname", ent->targetname))
+		return qfalse;
+	if (with_text && ent->target && ent->target[0] && !zyk_entsave_add("NPC_target", ent->target))
+		return qfalse;
+	if (ent->s.shouldtarget && !zyk_entsave_add("showhealth", "1"))
+		return qfalse;
+
+	return qtrue;
+}
+
+// the npceffect word for an /npc effect mode, or NULL for none
+static const char *zyk_entsave_effect_word(int mode)
+{
+	switch (mode)
+	{
+	case RP_PHASE_HOLO:		return "holo";
+	case RP_PHASE_GHOST:	return "ghost";
+	case RP_PHASE_NONSOLID:	return "nonsolid";
+	default:				return NULL;
+	}
+}
+
+// GalaxyRP: [Entity System] an NPC's one-time line, with_text as above. NULL if it does not fit.
+//  - spawnflags: the class bits 1, 2, 4 and 8 (a wampa's wander/search, a droid's ALWAYSDIE, a sniper's
+//    NO_HIDE -- every other type ignores them), CINEMATIC 32, STARTINSOLID 128 and zyk's custom-credits 32768
+//    as the NPC has them; NOTSOLID 64 only while it is still untouchable (r.contents 0), so one /npc effect
+//    clear made solid is saved solid -- or, not started up yet, as the flag says. Never DROPTOFLOOR / a Jedi's
+//    ambush 16, SHY 2048 or the internal 65536.
+//  - genericvalue7: the credits 32768 gives (client->pers.credits_modifier, copied from the spawner's).
+//  - npceffect: its /npc effect mode now; a release in progress is no mode.
+//  - npcteam, NPC_targetname, NPC_target, showhealth: see zyk_entsave_add_common().
+//  - noBasicSounds, noCombatSounds, noExtraSounds: the sounds it was told not to load. Any value means yes to
+//    SP_NPC_spawner(), so 1.
+// Not its health: it comes back with its type's.
+static const char *zyk_entsave_npc_line(gentity_t *ent, const char *escaped_type, qboolean with_text)
+{
+	int spawnflags = ent->spawnflags & (1 | 2 | 4 | 8 | ZYK_ENTSAVE_CINEMATIC | ZYK_ENTSAVE_STARTINSOLID | ZYK_ENTSAVE_CREDITS);
+	const char *effect = zyk_entsave_effect_word(ent->client->pers.phase_mode);
+
+	if ((ent->spawnflags & ZYK_ENTSAVE_NOTSOLID) && (!ent->rpBaseTeam || ent->r.contents == 0))
+	{
+		spawnflags |= ZYK_ENTSAVE_NOTSOLID;
+	}
+
+	zyk_entsave_line[0] = '\0';
+	Q_strcat(zyk_entsave_line, sizeof(zyk_entsave_line), va("classname;npc_spawner;npc_type;%s;origin;%f %f %f;angles;%f %f %f;", escaped_type,
+		ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2],
+		ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], ent->client->ps.viewangles[2]));
+
+	if (!zyk_entsave_add_common(ent, spawnflags, with_text))
+		return NULL;
+	if ((spawnflags & ZYK_ENTSAVE_CREDITS) && !zyk_entsave_add("genericvalue7", va("%d", ent->client->pers.credits_modifier)))
+		return NULL;
+	if (effect && !zyk_entsave_add("npceffect", effect))
+		return NULL;
+	if ((ent->r.svFlags & SVF_NO_BASIC_SOUNDS) && !zyk_entsave_add("noBasicSounds", "1"))
+		return NULL;
+	if ((ent->r.svFlags & SVF_NO_COMBAT_SOUNDS) && !zyk_entsave_add("noCombatSounds", "1"))
+		return NULL;
+	if ((ent->r.svFlags & SVF_NO_EXTRA_SOUNDS) && !zyk_entsave_add("noExtraSounds", "1"))
+		return NULL;
+
+	return zyk_entsave_line;
+}
+
+// GalaxyRP: [Entity System] a vehicle's one-time line, with_text as above. NULL if it does not fit.
+//  - spawnflags: NO_PILOT_DIE 1, SUSPENDED 2, CINEMATIC 32, NOTSOLID 64 and STARTINSOLID 128 as the vehicle has
+//    them. SUSPENDED is cleared by the game once someone boards it (g_vehicles.c), so a fighter already flown is
+//    not saved docked. Nothing makes a non-solid vehicle solid again, so 64 is the flag as it is.
+//  - dmg and speed with NO_PILOT_DIE: how long its rider may stay away and how far (G_VehicleSpawn() filled in
+//    its defaults, so they are always set).
+//  - dropTime with SUSPENDED: the seconds it drops when boarded. It is kept in milliseconds and read back as
+//    ceil( seconds * 1000 ), so it goes out half a millisecond short: a float a hair over the whole millisecond
+//    would otherwise come back one longer on every save.
+//  - model2: the droid it makes for its droid slot. The droid itself is not saved (the vehicle makes it again).
+//  - npcteam, NPC_targetname, NPC_target, showhealth: see zyk_entsave_add_common().
+static const char *zyk_entsave_vehicle_line(gentity_t *ent, const char *escaped_type, qboolean with_text)
+{
+	const int spawnflags = ent->spawnflags & (1 | 2 | ZYK_ENTSAVE_CINEMATIC | ZYK_ENTSAVE_NOTSOLID | ZYK_ENTSAVE_STARTINSOLID);
+
+	// zyk: SP_NPC_Vehicle() and G_VehicleSpawn() use only the yaw, so pitch and roll go out as 0
+	zyk_entsave_line[0] = '\0';
+	Q_strcat(zyk_entsave_line, sizeof(zyk_entsave_line), va("classname;NPC_Vehicle;NPC_type;%s;origin;%f %f %f;angles;0 %f 0;", escaped_type,
+		ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2],
+		ent->client->ps.vehOrientation[YAW]));
+
+	if (!zyk_entsave_add_common(ent, spawnflags, with_text))
+		return NULL;
+	if ((spawnflags & 1) && (!zyk_entsave_add("dmg", va("%d", ent->damage)) || !zyk_entsave_add("speed", va("%.9g", ent->speed))))
+		return NULL;
+	if ((spawnflags & 2) && ent->fly_sound_debounce_time > 0 &&
+		!zyk_entsave_add("dropTime", va("%.4f", (ent->fly_sound_debounce_time - 0.5) / 1000.0)))
+		return NULL;
+	if (with_text && ent->model2 && ent->model2[0] && !zyk_entsave_add("model2", ent->model2))
+		return NULL;
+
+	return zyk_entsave_line;
+}
+
+// GalaxyRP: [Entity System] the whole line, with its line break, or NULL when it cannot be written at all. One
+// the loader would refuse for its length (a line of ZYK_ENTITY_FILE_LINE_LENGTH - 1 characters or more, as
+// Cmd_EntSave_f() counts it for every other entity) is written again without the free-text keys, which only an
+// absurdly long name can make that long, and the log says so -- better the NPC back unnamed than not at all.
+static char *zyk_entsave_finish(gentity_t *ent, const char *escaped_type, qboolean vehicle)
+{
+	const char *line = vehicle ? zyk_entsave_vehicle_line(ent, escaped_type, qtrue) : zyk_entsave_npc_line(ent, escaped_type, qtrue);
+
+	if (!line || (int)strlen(line) >= ZYK_ENTITY_FILE_LINE_LENGTH - 1)
+	{
+		line = vehicle ? zyk_entsave_vehicle_line(ent, escaped_type, qfalse) : zyk_entsave_npc_line(ent, escaped_type, qfalse);
+
+		if (!line || (int)strlen(line) >= ZYK_ENTITY_FILE_LINE_LENGTH - 1)
+		{
+			G_LogPrintf("entsave: %s %d (%s) not saved: its line does not fit in %d characters\n",
+				vehicle ? "vehicle" : "NPC", ent->s.number, ent->NPC_type, ZYK_ENTITY_FILE_LINE_LENGTH - 2);
+			return NULL;
+		}
+
+		G_LogPrintf("entsave: %s %d (%s) saved without its name, on-death target and droid type: with them its line would be too long to load back\n",
+			vehicle ? "vehicle" : "NPC", ent->s.number, ent->NPC_type);
+	}
+
+	Q_strcat(zyk_entsave_line, sizeof(zyk_entsave_line), "\n");
+	return zyk_entsave_line;
+}
+
 // DAJ_RP: the vehicle's counterpart of create_npc_spawner_for_npc() below -- an NPC_Vehicle spawner
 // line at the vehicle's current position and heading. On load that spawner makes the vehicle and
 // frees itself (see the comment above), so the next /entsave writes the vehicle again from wherever
-// it then is: a vehicle driven somewhere else is saved there, and nothing piles up. Only the type,
-// position and heading survive; any other keys the original spawner had died with it.
+// it then is: a vehicle driven somewhere else is saved there, and nothing piles up. GalaxyRP: the
+// line also carries the settings the vehicle has now -- see zyk_entsave_vehicle_line(); its health
+// and anything else the original spawner had are not kept.
 char *create_vehicle_spawner_for_vehicle(gentity_t *ent) {
 	static char escaped_type[ZYK_ENTITY_FILE_ENCODED_LENGTH];
 
@@ -16319,13 +16527,11 @@ char *create_vehicle_spawner_for_vehicle(gentity_t *ent) {
 		return NULL;
 	}
 
-	// zyk: SP_NPC_Vehicle() and G_VehicleSpawn() use only the yaw, so pitch and roll go out as 0
-	return va("classname;NPC_Vehicle;NPC_type;%s;origin;%f %f %f;angles;0 %f 0;\n", escaped_type,
-		ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2],
-		ent->client->ps.vehOrientation[YAW]);
+	return zyk_entsave_finish(ent, escaped_type, qtrue);
 }
 
 // GalaxyRP (Alex): Builds an npc spawner string based on an npc entity.
+// GalaxyRP: with the settings the NPC has now -- see zyk_entsave_npc_line(). Not its health.
 char *create_npc_spawner_for_npc(gentity_t *ent) {
 	// GalaxyRP fix: [Entity System] this line is assembled by hand rather than through the loop in
 	// Cmd_EntSave_f, so it needs the same escaping -- an NPC type carrying a ';' would otherwise be
@@ -16344,7 +16550,7 @@ char *create_npc_spawner_for_npc(gentity_t *ent) {
 		return NULL;
 	}
 
-	return va("classname;npc_spawner;npc_type;%s;origin;%f %f %f;angles;%f %f %f;\n", escaped_type, ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2], ent->client->ps.viewangles[0], ent->client->ps.viewangles[1], ent->client->ps.viewangles[2]);
+	return zyk_entsave_finish(ent, escaped_type, qfalse);
 }
 
 /*
