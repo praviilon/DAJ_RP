@@ -19,6 +19,13 @@ foreach(RPVersionDefine ${RPVersionDefines})
 endforeach()
 set(RPVersion "${RPVersionMajor}.${RPVersionMinor}.${RPVersionBugfix}")
 message(STATUS "GalaxyRP version is ${RPVersion}")
+# GalaxyRP fix: [packaging] the version above is read only when CMake configures, and editing the
+# header did not make it configure again -- so an existing build folder kept naming the pk3 after
+# the old version until CMake was re-run by hand. Listing the header as a configure dependency makes
+# the next build (Ninja, or ZERO_CHECK in Visual Studio) re-run CMake by itself whenever it changes.
+# It does not delete the previous version's pk3 from the output folder.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+	"${CMAKE_SOURCE_DIR}/galaxyrp/game/rp_version.h")
 
 # GalaxyRP fix: [packaging] assets/server carries a play/host launcher set for every OS this mod
 # supports (galaxyrp_play/host/host_autorestart.bat for Windows, .sh for Linux, .command for
