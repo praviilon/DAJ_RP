@@ -705,7 +705,7 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 		}
 	} else if ( !Q_stricmp( name, "rpxDo" ) ) {
 		if ( String_Parse( args, &arg ) ) {
-			static const char *closing[] = { "spawnprop", "spawnfx", "spawnnpc", "musicme", "musicall", "soundall" };
+			static const char *closing[] = { "spawnprop", "spawnfx", "musicme", "musicall", "soundall" };
 			int i;
 
 			if ( !Q_stricmp( arg, "musicstop" ) || !Q_stricmp( arg, "musicmap" ) || !Q_stricmp( arg, "undo" ) ) {
@@ -722,6 +722,23 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 					return qtrue;
 				}
 				trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do spawnlight\n" );
+				RPX_CloseMenus();
+				return qtrue;
+			}
+			// GalaxyRP: [Extras] the NPCs & Vehicles menu's Spawn: a selection, and its optional name as the
+			// Lights menu checks one -- a problem is said in the menu, which stays open (cgame checks it again)
+			if ( !Q_stricmp( arg, "spawnnpc" ) ) {
+				const char *problem;
+
+				if ( !RPX_HaveSelection() ) {
+					return qtrue;
+				}
+				problem = RPX_LabelProblem( RPX_CvarStr( "ui_rpx_n_name" ) );
+				if ( problem ) {
+					RPX_Msg( va( "^3%s", problem ) );
+					return qtrue;
+				}
+				trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do spawnnpc\n" );
 				RPX_CloseMenus();
 				return qtrue;
 			}

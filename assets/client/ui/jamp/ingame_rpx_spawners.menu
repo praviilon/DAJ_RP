@@ -101,7 +101,7 @@
 			name                rpx_msg
 			type                ITEM_TYPE_TEXT
 			style               WINDOW_STYLE_EMPTY
-			rect                110 408 500 14
+			rect                110 415 500 14
 			cvar                "ui_rpx_msg"
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
@@ -593,20 +593,36 @@
 		}
 		itemDef
 		{
+			name                rpx_spnpcname_label
+			type                ITEM_TYPE_TEXT
+			style               WINDOW_STYLE_EMPTY
+			rect                432 80 180 14
+			text                "Its name (optional)"
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          0
+			font                2
+			textscale           0.6
+			forecolor           .8 .8 .8 1
+			visible             1
+			decoration
+		}
+		itemDef
+		{
 			name                rpx_spnpcname
 			type                ITEM_TYPE_EDITFIELD
 			style               0
-			text                "Its name: "
+			text                " "
 			cvar                "ui_rpx_sp_npcname"
 			maxchars            32
-			maxPaintChars       14
-			rect                432 80 180 18
+			maxPaintChars       20
+			rect                432 96 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
 			font                2
 			textscale           0.7
-			forecolor           1 1 1 1
+			forecolor           1 .682 0 1
 			outlinecolor        1 .5 .5 .5
 			backcolor           0 0 0 .6
 			border              1
@@ -623,7 +639,7 @@
 			cvar                "ui_rpx_sp_health"
 			maxchars            6
 			maxPaintChars       6
-			rect                432 106 180 18
+			rect                432 122 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -648,7 +664,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "Health bar:"
 			cvar                "ui_rpx_sp_hbar"
-			rect                432 126 180 18
+			rect                432 142 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -673,7 +689,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "No AI:"
 			cvar                "ui_rpx_sp_noai"
-			rect                432 146 180 18
+			rect                432 162 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -698,7 +714,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "Solid:"
 			cvar                "ui_rpx_sp_solid"
-			rect                432 166 180 18
+			rect                432 182 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -726,7 +742,7 @@
 			cvar                "ui_rpx_sp_ondeath"
 			maxchars            32
 			maxPaintChars       9
-			rect                432 190 180 18
+			rect                432 206 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -747,11 +763,36 @@
 		}
 		itemDef
 		{
+			name                rpx_spvhbar
+			type                ITEM_TYPE_YESNO
+			text                "Health bar:"
+			cvar                "ui_rpx_sp_hbar"
+			rect                432 122 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"1"
+			}
+			descText            "Its health bar shows when it is aimed at"
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
 			name                rpx_spvdie
 			type                ITEM_TYPE_YESNO
 			text                "Explodes if left:"
 			cvar                "ui_rpx_sp_vdie"
-			rect                432 106 180 18
+			rect                432 146 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -779,7 +820,7 @@
 			cvar                "ui_rpx_sp_vtime"
 			maxchars            4
 			maxPaintChars       4
-			rect                432 126 180 18
+			rect                432 166 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -807,7 +848,7 @@
 			cvar                "ui_rpx_sp_vdist"
 			maxchars            4
 			maxPaintChars       4
-			rect                432 146 180 18
+			rect                432 186 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -832,7 +873,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "Docked:"
 			cvar                "ui_rpx_sp_vdock"
-			rect                432 170 180 18
+			rect                432 210 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2

@@ -101,7 +101,7 @@
 			name                rpx_msg
 			type                ITEM_TYPE_TEXT
 			style               WINDOW_STYLE_EMPTY
-			rect                110 408 500 14
+			rect                110 415 500 14
 			cvar                "ui_rpx_msg"
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0

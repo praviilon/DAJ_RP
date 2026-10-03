@@ -776,7 +776,8 @@ GalaxyRP: [Extras] the Spawners menu's Spawn: an npc_spawner (NPCs tab) or NPC_V
 selected type, on the surface aimed at (/entaddaim), with the targetname the server requires and the
 menu's settings -- each sent only when it changes something. The type is checked against the listing the
 server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in case they changed since.
-Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen.
+Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen. The
+health bar (showhealth) is both kinds'.
 ==================
 */
 static void RPX_SpawnSpawner( void ) {
@@ -829,15 +830,15 @@ static void RPX_SpawnSpawner( void ) {
 	if ( npcname[0] ) {
 		Q_strcat( cmd, sizeof( cmd ), va( " NPC_targetname \"%s\"", npcname ) );
 	}
+	if ( RPX_CvarInt( "ui_rpx_sp_hbar" ) ) {
+		Q_strcat( cmd, sizeof( cmd ), " showhealth \"1\"" );	// both kinds: SP_NPC_spawner(), SP_NPC_Vehicle()
+	}
 
 	if ( kind == RPX_NPCS ) {
 		int health = RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_health" ), 0, 100000 );
 
 		if ( health > 0 ) {
 			Q_strcat( cmd, sizeof( cmd ), va( " health \"%d\"", health ) );
-		}
-		if ( RPX_CvarInt( "ui_rpx_sp_hbar" ) ) {
-			Q_strcat( cmd, sizeof( cmd ), " showhealth \"1\"" );
 		}
 		if ( ondeath[0] ) {
 			Q_strcat( cmd, sizeof( cmd ), va( " NPC_target \"%s\"", ondeath ) );
