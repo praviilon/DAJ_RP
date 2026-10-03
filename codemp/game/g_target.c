@@ -172,6 +172,8 @@ If "private", only the activator gets the message.  If no checks, all clients ge
 */
 void Use_Target_Print (gentity_t *ent, gentity_t *other, gentity_t *activator)
 {
+	const char *message = NULL;
+
 	if (!ent || !ent->inuse)
 	{
 		Com_Printf("ERROR: Bad ent in Use_Target_Print");
@@ -235,6 +237,14 @@ void Use_Target_Print (gentity_t *ent, gentity_t *other, gentity_t *activator)
 		return;
 	}
 
+	// GalaxyRP fix: [security] a message the Entity System set is player-written text, so it is shown
+	// with any "@@@" run broken up (RP_ShownText, g_utils.c) -- the client expands three '@' as a
+	// reference to one of the server's own phrases and the stock client can overflow a buffer doing
+	// it, which a trigger anyone walks into would have done to everyone at once. Only the copy that is
+	// sent: the stored key, the entity file and /entsave keep what the admin typed. A map's own
+	// target_print is left exactly as the map wrote it.
+	message = RP_EntitySystemMade( ent ) ? RP_ShownText( ent->message ) : ent->message;
+
 	if ( ( ent->spawnflags & 4 ) )
 	{//private, to one client only
 		if (!activator || !activator->inuse)
@@ -243,13 +253,13 @@ void Use_Target_Print (gentity_t *ent, gentity_t *other, gentity_t *activator)
 		}
 		if ( activator && activator->client )
 		{//make sure there's a valid client ent to send it to
-			if (ent->message[0] == '@' && ent->message[1] != '@')
+			if (message[0] == '@' && message[1] != '@')
 			{
-				trap->SendServerCommand( activator-g_entities, va("cps \"%s\"", ent->message ));
+				trap->SendServerCommand( activator-g_entities, va("cps \"%s\"", message ));
 			}
 			else
 			{
-				trap->SendServerCommand( activator-g_entities, va("cp \"%s\"", ent->message ));
+				trap->SendServerCommand( activator-g_entities, va("cp \"%s\"", message ));
 			}
 		}
 		//NOTE: change in functionality - if there *is* no valid client ent, it won't send it to anyone at all
@@ -258,35 +268,35 @@ void Use_Target_Print (gentity_t *ent, gentity_t *other, gentity_t *activator)
 
 	if ( ent->spawnflags & 3 ) {
 		if ( ent->spawnflags & 1 ) {
-			if (ent->message[0] == '@' && ent->message[1] != '@')
+			if (message[0] == '@' && message[1] != '@')
 			{
-				G_TeamCommand( TEAM_RED, va("cps \"%s\"", ent->message) );
+				G_TeamCommand( TEAM_RED, va("cps \"%s\"", message) );
 			}
 			else
 			{
-				G_TeamCommand( TEAM_RED, va("cp \"%s\"", ent->message) );
+				G_TeamCommand( TEAM_RED, va("cp \"%s\"", message) );
 			}
 		}
 		if ( ent->spawnflags & 2 ) {
-			if (ent->message[0] == '@' && ent->message[1] != '@')
+			if (message[0] == '@' && message[1] != '@')
 			{
-				G_TeamCommand( TEAM_BLUE, va("cps \"%s\"", ent->message) );
+				G_TeamCommand( TEAM_BLUE, va("cps \"%s\"", message) );
 			}
 			else
 			{
-				G_TeamCommand( TEAM_BLUE, va("cp \"%s\"", ent->message) );
+				G_TeamCommand( TEAM_BLUE, va("cp \"%s\"", message) );
 			}
 		}
 		return;
 	}
 
-	if (ent->message[0] == '@' && ent->message[1] != '@')
+	if (message[0] == '@' && message[1] != '@')
 	{
-		trap->SendServerCommand( -1, va("cps \"%s\"", ent->message ));
+		trap->SendServerCommand( -1, va("cps \"%s\"", message ));
 	}
 	else
 	{
-		trap->SendServerCommand( -1, va("cp \"%s\"", ent->message ));
+		trap->SendServerCommand( -1, va("cp \"%s\"", message ));
 	}
 }
 

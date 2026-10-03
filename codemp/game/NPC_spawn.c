@@ -5308,6 +5308,10 @@ static gentity_t *RP_NpcInCrosshair( gentity_t *ent )
 }
 
 // "^3stormtrooper ^7(johnny)" -- the NPC type, and its targetname when it has one.
+// GalaxyRP fix: [security] with any "@@@" run broken up (RP_BreakStringEdRefs, g_utils.c): the
+// targetname is whatever the admin who spawned it typed, and the client expands a run of three '@' in
+// a printed line as a server phrase, which the stock client can overflow a buffer doing. Only the
+// label changes; the NPC keeps its name.
 static void RP_NpcLabel( const gentity_t *npc, char *buf, int size )
 {
 	const char *type = ( npc->NPC_type && npc->NPC_type[0] ) ? npc->NPC_type : "npc";
@@ -5316,6 +5320,8 @@ static void RP_NpcLabel( const gentity_t *npc, char *buf, int size )
 		Com_sprintf( buf, size, "^3%s ^7(%s)", type, npc->targetname );
 	else
 		Com_sprintf( buf, size, "^3%s^7", type );
+
+	RP_BreakStringEdRefs( buf );
 }
 
 /*

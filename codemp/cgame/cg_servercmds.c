@@ -1227,7 +1227,12 @@ void CG_CheckSVStringEdRef(char *buf, const char *str)
 			}
 		}
 
-		if (!gotStrip)
+		// GalaxyRP fix: [security] bounded. After an expansion b is wherever Q_strcat stopped, which can
+		// be the last byte of buf, and the rest of the line was then copied on with no check at all --
+		// a server line full of "@@@KEY " (a player's /examine description, a poll, a /clientprint)
+		// wrote past buf, a 1024-byte array on the caller's stack, and crashed the client. Whatever
+		// does not fit is dropped; the line is cut at the end of the buffer.
+		if (!gotStrip && b < MAX_STRINGED_SV_STRING - 1)
 		{
 			buf[b] = str[i];
 			b++;

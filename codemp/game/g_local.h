@@ -2299,6 +2299,11 @@ extern qboolean g_bookkeepingDeath;
 // became one.
 qboolean zyk_valid_shader_name( const char *name );
 qboolean zyk_load_remap_file( const char *file_path );
+// GalaxyRP fix: [security] player-written text never reaches a client as a StringEd reference
+// ("@@@KEY") -- see RP_BreakStringEdRefs() in g_utils.c for why.
+int			RP_BreakStringEdRefs( char *text );
+qboolean	RP_HasStringEdRef( const char *text );
+const char	*RP_ShownText( const char *text );
 // GalaxyRP fix: [Shader Remap] /remapreset's worker -- returns how many remaps it cleared. See the
 // definition in g_utils.c for why it sends the configstring twice and in that order.
 int zyk_clear_all_remaps( void );

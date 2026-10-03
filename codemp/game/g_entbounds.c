@@ -347,6 +347,12 @@ static void RP_EntBoundsPrint( const gentity_t *viewer, const gentity_t *target 
 			*p = '\'';
 	}
 
+	// GalaxyRP fix: [security] and no "@@@" either -- see RP_BreakStringEdRefs() (g_utils.c). The
+	// names come from whoever placed the entity, and the client would expand a run of three '@' as a
+	// reference to a server phrase, which on the stock client can overflow a buffer and crash the
+	// admin who merely looked at it. Only this line is changed, never the entity.
+	RP_BreakStringEdRefs( text );
+
 	trap->SendServerCommand( viewer->s.number, va( "cp \"%s\n\"", text ) );
 }
 

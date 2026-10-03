@@ -4179,6 +4179,10 @@ hand or by an older build is cleaned on the way out too), by /createitem on a ne
 by /giveitem on the name it prints. Works in place and returns the resulting length. It was
 zyk_clean_description() until the item commands needed it as well; it moved up here, ahead of the
 inventory code, unchanged.
+
+It also breaks up "@@@" (RP_BreakStringEdRefs, g_utils.c): the client expands three '@' in a printed
+line as a reference to one of the server's own phrases, and the stock client can overflow a buffer
+doing it, so a description or item name holding a run of them could crash whoever read it.
 */
 static int zyk_clean_text(char *text)
 {
@@ -4194,6 +4198,8 @@ static int zyk_clean_text(char *text)
 		if ((unsigned char)*p < ' ' || (unsigned char)*p == 0x7f)
 			*p = ' ';
 	}
+
+	RP_BreakStringEdRefs(text);
 
 	start = text;
 	while (*start == ' ')
@@ -4267,6 +4273,11 @@ static void zyk_print_long_line(gentity_t *ent, const char *prefix, const char *
 
 		memcpy(chunk, text + pos, take);
 		chunk[take] = '\0';
+
+		// GalaxyRP fix: [security] no "@@@" reaches the client -- see RP_BreakStringEdRefs()
+		// (g_utils.c). Per chunk, on the copy: the text may be a row written by hand or by an older
+		// build, and each chunk is its own message, so a run split across two is already harmless.
+		RP_BreakStringEdRefs(chunk);
 
 		trap->SendServerCommand(ent - g_entities, va("print \"%s%s\n\"", prefix, chunk));
 
@@ -6895,6 +6906,10 @@ void inventory_display_items(gentity_t *ent, sqlite3 *db, char *zErrMsg, int rc,
 		// table. The copy was unbounded too, fitting only because /createitem's name comes through
 		// trap->Argv() into a buffer of the same size -- a property of the caller, not of the copy.
 		zyk_db_column_string(item, sizeof(item), stmt, 1);
+		// GalaxyRP fix: [security] cleaned on the way out, as inventory_item_name() does: the
+		// item may have been named by another player and given to this one, and a row made by
+		// an older build was never cleaned at all -- see zyk_clean_text().
+		zyk_clean_text(item);
 
 		trap->SendServerCommand(ent - g_entities, va("print \"^3%i. ^2%s\n\"", itemID, item));
 		rc = sqlite3_step(stmt);
@@ -9238,7 +9253,10 @@ qboolean G_VoteClientkick( gentity_t *ent, int numArgs, const char *arg1, const 
 		return qfalse;
 	}
 
-	Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %s", arg1, arg2 );
+	// GalaxyRP fix: [Vote] built from the number atoi() read, not from the text typed after it. "5 hello"
+	// read as client 5, but the whole line went into the vote, was printed to everyone and was what
+	// ran if the vote passed. Now the vote says exactly which client it kicks and nothing else.
+	Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %d", arg1, n );
 	Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %s", arg1, g_entities[n].client->pers.netname );
 	Q_strncpyz( level.voteStringClean, level.voteString, sizeof( level.voteStringClean ) );
 	return qtrue;
@@ -9562,7 +9580,13 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		Q_strncpyz( arg2, ConcatArgs( 2 ), sizeof( arg2 ) );
 
 	// filter ; \n \r
-	if ( Q_strchrs( arg1, ";\r\n" ) || Q_strchrs( arg2, ";\r\n" ) ) {
+	// GalaxyRP fix: [security] and "@@@". The vote text is printed to every player when the vote is
+	// called and again when it passes or fails, and the client expands three '@' in a printed line as
+	// a reference to one of the server's own phrases -- the stock client can overflow a buffer doing
+	// it, so a poll full of them crashed everyone on the server (see RP_BreakStringEdRefs, g_utils.c).
+	// Refused rather than cleaned: for a command vote the same text is what runs if it passes, and a
+	// vote should run what people saw. No vote needs three '@' in a row.
+	if ( Q_strchrs( arg1, ";\r\n" ) || Q_strchrs( arg2, ";\r\n" ) || RP_HasStringEdRef( arg1 ) || RP_HasStringEdRef( arg2 ) ) {
 		trap->SendServerCommand( ent-g_entities, "print \"Invalid vote string.\n\"" );
 		return;
 	}
@@ -12515,6 +12539,11 @@ void list_rpg_info(gentity_t *ent, gentity_t *target_ent)
 	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, rp_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
 }
 
+// GalaxyRP: [Admin] /clientprint's limit and its one help line -- the usage message, /list commands and
+// /adminlist all print this same text. The number in the text is the limit; change both together.
+#define RP_CLIENTPRINT_MAX 200
+#define RP_CLIENTPRINT_HELP "^3/clientprint <player name or ID, or -1 for everyone> <message>: ^7Shows the message in the middle of their screen. The message is the rest of the line (at most 200 characters)."
+
 /*
 ==================
 Cmd_ListAccount_f
@@ -12595,8 +12624,10 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/unparalyze <player name>: ^7Releases a player paralyzed by an admin.\n\
 ^3/admkick <player name>: ^7Kicks player from the server.\n\
 ^3/killother <player name>: ^7Kills a player.\n\
-^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\
-^3/clientprint <player name> <text>: ^7Prints text on the player's screen. Use ^3-1 ^7argument to print for all players.\n\
+^3/give <player name> <guns/force>: ^7Gives guns or Force powers to a player who is not logged in.\n\" ");
+				// GalaxyRP: [Admin] split here -- the longer /clientprint line took the block to 1026
+				// characters, past the 1022 SV_SendServerCommand sends; it would have vanished whole.
+				trap->SendServerCommand(ent - g_entities, "print \"" RP_CLIENTPRINT_HELP "\n\
 ^3/shakescreen <distance (0-1500)> <intensity (1-10)> <seconds (1-5)>: ^7Shakes the screen of everyone within that distance of you.\n\
 ^3/duelarena: ^7Sets or unsets the Duel Tournament arena in current map.\n\
 ^3/meleearena: ^7Sets or unsets the Melee Battle arena in current map.\n\
@@ -15799,7 +15830,10 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 				{
 					char entry[RP_LIST_FLUSH_AT];
 
-					Com_sprintf(entry, sizeof(entry), "^3%s: ^7%s\n", level.zyk_spawn_strings[this_ent->s.number][i], level.zyk_spawn_strings[this_ent->s.number][i + 1]);
+					// GalaxyRP fix: [security] shown with any "@@@" run broken up -- see RP_ShownText()
+					// (g_utils.c): an admin who opened an entity another admin had given such a key
+					// would have crashed on reading it. The stored pair is untouched.
+					Com_sprintf(entry, sizeof(entry), "^3%s: ^7%s\n", RP_ShownText(level.zyk_spawn_strings[this_ent->s.number][i]), RP_ShownText(level.zyk_spawn_strings[this_ent->s.number][i + 1]));
 
 					if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
 					{
@@ -16763,7 +16797,7 @@ static void zyk_entnear_append(char *message, int message_size, gentity_t *this_
 		RP_EntityHasSpawnKeys(this_ent) ? "" : "G",
 		RP_MapEntityProtected(this_ent) ? "M" : RP_MapEntityExempt(this_ent) ? "E" : "",
 		this_ent->rpHeldBy ? "H" : "",
-		this_ent->classname ? this_ent->classname : "<none>");
+		this_ent->classname ? RP_ShownText(this_ent->classname) : "<none>");
 
 	Q_strcat(message, message_size, row);
 }
@@ -16902,9 +16936,9 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 		(target_ent && target_ent->inuse && RP_MapEntityProtected(target_ent)) ? "M" :
 		(target_ent && target_ent->inuse && RP_MapEntityExempt(target_ent)) ? "E" : "",
 		(target_ent && target_ent->inuse && target_ent->rpHeldBy) ? "H" : "",
-		(target_ent && target_ent->classname) ? target_ent->classname : "<none>",
-		(target_ent && target_ent->targetname) ? target_ent->targetname : "<none>",
-		(target_ent && target_ent->target) ? target_ent->target : "<none>");
+		(target_ent && target_ent->classname) ? RP_ShownText(target_ent->classname) : "<none>",
+		(target_ent && target_ent->targetname) ? RP_ShownText(target_ent->targetname) : "<none>",
+		(target_ent && target_ent->target) ? RP_ShownText(target_ent->target) : "<none>");
 
 	if ((*len + (int)strlen(row)) > RP_LIST_FLUSH_AT)
 	{
@@ -17529,36 +17563,83 @@ Cmd_ClientPrint_f
 */
 void Cmd_ClientPrint_f( gentity_t *ent ) {
 	int client_id = -1;
-	char   arg1[MAX_STRING_CHARS];
-	char   arg2[MAX_STRING_CHARS];
+	int len = 0;
+	char arg1[MAX_STRING_CHARS];
+	char message[MAX_STRING_CHARS];
 
 	if (!check_admin_command(ent, ADM_CLIENTPRINT, qtrue))
 	{
 		return;
 	}
 
-	if ( trap->Argc() < 3)
+	trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+	// GalaxyRP fix: [Admin] the message is the rest of the line. It used to be the second argument
+	// alone, so "/clientprint -1 Server restart in five minutes" showed everyone the word "Server".
+	message[0] = '\0';
+	if ( trap->Argc() > 2 )
 	{
-		trap->SendServerCommand( ent-g_entities, va("print \"Usage: /clientprint <player name or ID, or -1 to show to all players> <message>\n\"") );
+		Q_strncpyz( message, ConcatArgs( 2 ), sizeof( message ) );
+	}
+
+	// GalaxyRP fix: [security] cleaned the way /examine and item names are (zyk_clean_text): control
+	// characters become spaces, the ends are trimmed, and no "@@@" survives. The client expands three
+	// '@' in a centre print or console line as one of the server's own phrases, and the stock client
+	// can overflow a buffer doing it -- one /clientprint -1 full of them crashed every player at once.
+	len = zyk_clean_text( message );
+
+	if ( len == 0 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: " RP_CLIENTPRINT_HELP "\n\"" );
 		return;
 	}
 
-	trap->Argv( 1, arg1, sizeof( arg1 ) );
+	// GalaxyRP: [Admin] a centre print is a line or two across the middle of the screen; past this it
+	// covers the view and runs off the edges. Refused, not cut, so nothing is shown half-said.
+	if ( len > RP_CLIENTPRINT_MAX )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"Your message is %d characters long; at most %d can be shown.\n\"", len, RP_CLIENTPRINT_MAX ) );
+		return;
+	}
 
-	if (atoi(arg1) != -1)
-	{ // zyk: -1 means all players will get the message
+	// GalaxyRP fix: [Admin] only exactly "-1" means everyone. This used to be atoi(), so "-1abc",
+	// "-1.5" or " -1" went to everyone as well. An empty target is refused: a name search matches
+	// any name containing the text typed, and every name contains "", so /clientprint "" went to
+	// whoever happened to be in the first slot.
+	if ( !arg1[0] )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Give a player name or ID, or -1 for everyone.\n\"" );
+		return;
+	}
+
+	if ( strcmp( arg1, "-1" ) != 0 )
+	{
 		client_id = ClientNumberFromString( ent, arg1, qfalse );
 
-		if (client_id == -1)
+		if ( client_id == -1 )
 		{
 			return;
 		}
 	}
 
-	trap->Argv( 2, arg2, sizeof( arg2 ) );
+	// Players see only the message, as before -- who sent it goes to the server log.
+	trap->SendServerCommand( client_id, va( "cp \"%s\"", message ) );
+	trap->SendServerCommand( client_id, va( "print \"^3* %s ^3*\n\"", message ) );
 
-	trap->SendServerCommand( client_id, va("cp \"%s\"", arg2) );
-	trap->SendServerCommand( client_id, va("print \"^3* %s ^3*\n\"", arg2) );
+	if ( client_id == -1 )
+	{
+		G_LogPrintf( "ClientPrint: %s^7 -> all players: %s\n", ent->client->pers.netname, message );
+	}
+	else
+	{
+		G_LogPrintf( "ClientPrint: %s^7 -> %s^7: %s\n", ent->client->pers.netname, g_entities[client_id].client->pers.netname, message );
+
+		// the sender sees nothing of a message to one other player, so say it went
+		if ( client_id != ent->s.number )
+		{
+			trap->SendServerCommand( ent-g_entities, va( "print \"Shown to %s^7.\n\"", g_entities[client_id].client->pers.netname ) );
+		}
+	}
 }
 
 /*
@@ -17745,7 +17826,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_CLIENTPRINT)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/clientprint <player name or ID, or -1 for all players> <message> ^7to print a message in the screen\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\n" RP_CLIENTPRINT_HELP "\n\n\"" );
 		}
 		else if (command_number == ADM_SHAKESCREEN)
 		{

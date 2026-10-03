@@ -90,6 +90,100 @@ qboolean zyk_valid_shader_name( const char *name )
 	return qtrue;
 }
 
+/*
+GalaxyRP fix: [security] keep player-written text from reaching a client as a StringEd reference.
+
+Every "print" and "cp" a client receives goes through CG_CheckSVStringEdRef() (cg_servercmds.c),
+which treats three '@' in a row as "insert the server string named by the next word here". That
+expansion is how the server's own phrases arrive (G_GetStringEdString() returns "@@@KEY"), but it
+also applies to anything a player typed, and the stock client copies the rest of the message after
+an expansion with no bound: a line full of "@@@NOCHEATS " overflows its 1024-byte stack buffer and
+takes down every client that receives it. Our own cgame is bounded now, but players on the stock
+client are not, so the text has to be made harmless before it is sent.
+
+The rule is the one ClientCleanName() (g_client.c) already applies to player names: never three '@'
+in a row. The third and every later '@' of a run are dropped; one or two stay as they are, so an
+e-mail address or "@@" in a description still reads the same. Only literal runs count -- the client
+compares the characters themselves, so "@^1@@" is not a reference and is left alone.
+
+This is for text people write -- descriptions, item names, news, messages, entity keys shown in a
+listing. Never run it on a whole line the server built from its own phrases: those are references
+on purpose. Works in place; returns the resulting length.
+*/
+int RP_BreakStringEdRefs( char *text )
+{
+	char *in = NULL;
+	char *out = NULL;
+	int ats = 0;
+
+	if ( !text )
+	{
+		return 0;
+	}
+
+	for ( in = out = text; *in; in++ )
+	{
+		if ( *in == '@' )
+		{
+			if ( ++ats > 2 )
+			{
+				continue;
+			}
+		}
+		else
+		{
+			ats = 0;
+		}
+
+		*out++ = *in;
+	}
+
+	*out = '\0';
+
+	return (int)( out - text );
+}
+
+/*
+GalaxyRP fix: [security] whether text holds what a client would expand as a StringEd reference --
+see RP_BreakStringEdRefs() above. Used where the text cannot simply be cleaned because it is also
+executed (a vote string) and so is refused instead.
+*/
+qboolean RP_HasStringEdRef( const char *text )
+{
+	return ( text && strstr( text, "@@@" ) ) ? qtrue : qfalse;
+}
+
+/*
+GalaxyRP fix: [security] RP_BreakStringEdRefs() on a copy, for the places that show text they must
+not change: an admin listing shows an entity's keys, but the stored value is what the entity, its
+file and /entsave keep. Text without a reference comes back as the same pointer. A cleaned copy
+lives in one of eight rotating buffers of its own -- not va()'s, which has only four and would be
+overwritten when several shown values go into one va() line -- and is cut at MAX_STRING_CHARS,
+past which no single print could carry it anyway.
+*/
+const char *RP_ShownText( const char *text )
+{
+	static char copies[8][MAX_STRING_CHARS];
+	static int next = 0;
+	char *copy = NULL;
+
+	if ( !text )
+	{
+		return "";
+	}
+
+	if ( !RP_HasStringEdRef( text ) )
+	{
+		return text;
+	}
+
+	copy = copies[next++ & 7];
+	Q_strncpyz( copy, text, MAX_STRING_CHARS );
+	RP_BreakStringEdRefs( copy );
+
+	return copy;
+}
+
 void AddRemap(const char *oldShader, const char *newShader, float timeOffset) {
 	int i;
 
