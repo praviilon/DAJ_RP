@@ -7720,13 +7720,19 @@ static gentity_t *G_KickTrace( gentity_t *ent, vec3_t kickDir, float kickDist, v
 					hitEnt->client->ps.otherKillerTime = level.time + 10000;
 				}
 
+				// GalaxyRP fix: [Shields] DAMAGE_NO_ARMOR, as a punch has (g_weapon.c) and the flip-kick off
+				// someone's face has (g_active.c): a kick goes straight to health instead of being soaked
+				// by shields first. This is the one place every kick does its damage -- melee kicks, saber
+				// kicks, the hilt bash and the get-up roll kicks, all through G_KickSomeMofos() below --
+				// and it had carried only DAMAGE_NO_KNOCKBACK since the original source, so kicks were the
+				// one melee attack shields still took. A vehicle kicked takes it on the hull, as a punch.
 				if (d_saberKickTweak.integer)
 				{
-					G_Damage( hitEnt, ent, ent, kickDir, trace.endpos, kickDamage*0.2f, DAMAGE_NO_KNOCKBACK, MOD_MELEE );
+					G_Damage( hitEnt, ent, ent, kickDir, trace.endpos, kickDamage*0.2f, DAMAGE_NO_ARMOR|DAMAGE_NO_KNOCKBACK, MOD_MELEE );
 				}
 				else
 				{
-					G_Damage( hitEnt, ent, ent, kickDir, trace.endpos, kickDamage, DAMAGE_NO_KNOCKBACK, MOD_MELEE );
+					G_Damage( hitEnt, ent, ent, kickDir, trace.endpos, kickDamage, DAMAGE_NO_ARMOR|DAMAGE_NO_KNOCKBACK, MOD_MELEE );
 				}
 			}
 			if ( hitEnt->client
