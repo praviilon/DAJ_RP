@@ -353,6 +353,16 @@ qboolean Board( Vehicle_t *pVeh, bgEntity_t *pEnt )
 		if (ent->client)
 		{
 			ent->client->ps.m_iVehicleNum = ent->s.m_iVehicleNum;
+
+			// GalaxyRP fix: [Jetpack] in with the jetpack on -- landing on an empty speeder or animal, or on a
+			// docked fighter, boards with nothing switching it off, and a rider cannot switch it off himself.
+			// Off now, and its flags with it: this runs in the middle of his move, after ClientThink_real()
+			// has set them for the frame. ClientThink_real() makes sure of it for any other way in.
+			if ( ent->client->jetPackOn )
+			{
+				Jetpack_Off( ent );
+				ent->client->ps.eFlags &= ~( EF_JETPACK_ACTIVE | EF_JETPACK_FLAMING );
+			}
 		}
 		if ( pVeh->m_pPilot == (bgEntity_t *)ent )
 		{

@@ -3270,6 +3270,15 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.forceHandExtendTime = level.time + 500;
 	}
 
+	// GalaxyRP fix: [Jetpack] a rider never has the jetpack on. Board() (g_vehicles.c) switches it off when a
+	// player gets in; this catches any other way into a vehicle. Left on, the rider kept its flames, sound and fuel
+	// drain until the fuel ran out -- and could not switch it off, since the use key, which toggles the jetpack,
+	// gets out of the vehicle instead (TryUse()). killJetFlags below then clears the flags this frame.
+	if ( client->jetPackOn && client->ps.m_iVehicleNum )
+	{
+		Jetpack_Off( ent );
+	}
+
 	if ( client->noclip ) {
 		client->ps.pm_type = PM_NOCLIP;
 	} else if ( client->ps.eFlags & EF_DISINTEGRATION ) {
