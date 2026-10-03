@@ -891,13 +891,16 @@ typedef struct admin_command_description_s {
 //
 // GalaxyRP: [NPC System] "NPC Spawn" -> "NPC management": the power has long covered more than
 // spawning (kill, team, and now /npc effect). Changed in the calculator too.
+//
+// GalaxyRP: [Entity System] "Entity System" -> "Entities and Remaps": the power gates the shader remap
+// commands as well as the entity ones (/entitiesandremaps lists both). Changed in the calculator too.
 const admin_command_description_t admin_commands[ADM_NUM_CMDS] = {
 	{ "NPC management",			ADM_NPC					},
 	{ "No Clip",				ADM_NOCLIP				},
 	{ "Give Admin",				ADM_GIVEADM				},
 	{ "Teleport",				ADM_TELE				},
 	{ "Admin Protect",			ADM_ADMPROTECT			},
-	{ "Entity System",			ADM_ENTITYSYSTEM		},
+	{ "Entities and Remaps",	ADM_ENTITYSYSTEM		},
 	{ "Silence",				ADM_SILENCE				},
 	{ "Client Print",			ADM_CLIENTPRINT			},
 	{ "Shake Screen",			ADM_SHAKESCREEN			},
@@ -12574,7 +12577,7 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/adminlist show <player id or name>: ^7Shows admin commands of another player. ^1(only for Admins with Give Admin)\n\
 ^3/adminup <player name> <command number>: ^7Gives the player an admin command.\n\
 ^3/admindown <player name> <command number>: ^7Removes an admin command from the player.\n\
-^3/entitysystem: ^7Shows commands to manipulate entities and remap shaders. ^1(only for Admins with Entity System)\n\
+^3/entitiesandremaps: ^7Shows the commands to add, edit, move and save entities, and to remap shaders. ^1(only for Admins with Entities and Remaps)\n\
 ^3/playmusic <file path>: ^7Replaces the current map music for all players with the song given.\n\
 ^3/levelup <player name> <number of levels (optional)>: ^7Levels the player up by one.\n\
 ^3/leveldown <player name> <number of levels (optional)>: ^7Brings the player's level down by one.\n\"");
@@ -14126,11 +14129,11 @@ void Cmd_Settings_f( gentity_t *ent ) {
 		// RP_EntBoundsFrame() in g_entbounds.c.
 		if (ent->client->pers.player_settings & (1 << 20))
 		{
-			len += sprintf(message + len, "\n^3 6 - Entity Bounds (Requires Entity System admin power) - ^1OFF");
+			len += sprintf(message + len, "\n^3 6 - Entity Bounds (Requires Entities and Remaps admin power) - ^1OFF");
 		}
 		else
 		{
-			len += sprintf(message + len, "\n^3 6 - Entity Bounds (Requires Entity System admin power) - ^2ON");
+			len += sprintf(message + len, "\n^3 6 - Entity Bounds (Requires Entities and Remaps admin power) - ^2ON");
 		}
 
 		// GalaxyRP fix: [Challenge Mode] the status lines for settings 14 (Boss Battle Music) and 15
@@ -17734,7 +17737,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_ENTITYSYSTEM)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitysystem ^7to see the Entity System commands enabled by this flag. It also lets a player turn on Entity Bounds (^3/settings 6^7)\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitiesandremaps ^7to see the entity and shader remap commands this flag enables. It also lets a player turn on Entity Bounds (^3/settings 6^7)\n\n\"" );
 		}
 		else if (command_number == ADM_SILENCE)
 		{
@@ -19016,54 +19019,97 @@ void Cmd_RemoveXp_f(gentity_t* ent) {
 
 /*
 ==================
-Cmd_EntitySystem_f
+Cmd_EntitiesAndRemaps_f
+
+GalaxyRP: [Entity System] /entitiesandremaps (it was /entitysystem): the commands of the Entities and
+Remaps admin power, in two parts -- the entity commands, in groups, and the shader remap commands. The
+lines are sent packed into as few prints as fit: one server command carries at most 1022 characters
+(the whole print, its wrapper included), and a print that does not fit is dropped whole. A group may run
+on into the next print; on the console it reads the same.
 ==================
 */
-void Cmd_EntitySystem_f( gentity_t *ent ) {
+#define ZYK_HELP_PRINT_MAX	1000	// the text of one print: with "print \"" and the closing quote, 1008
+
+static void zyk_print_lines( gentity_t *ent, const char * const *lines, int count )
+{
+	char text[ZYK_HELP_PRINT_MAX + 1];
+	int i;
+
+	text[0] = '\0';
+	for (i = 0; i < count; i++)
+	{
+		if (text[0] && (int)(strlen(text) + strlen(lines[i])) > ZYK_HELP_PRINT_MAX)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"%s\"", text) );
+			text[0] = '\0';
+		}
+		Q_strcat( text, sizeof( text ), lines[i] );
+	}
+	if (text[0])
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s\"", text) );
+	}
+}
+
+void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
+	static char entlist_line[512];
+	const char *lines[64];	// 39 now
+	int n = 0;
+
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
 		return;
 	}
 
-	// GalaxyRP: [Logical Entities] three messages rather than two: the /entlist and /entremove lines
-	// grew to explain the logical ids, and one server command carries at most 1022 characters.
-	// GalaxyRP: [Entity System] and a fourth for picking entities up (g_entgrab.c).
-	// GalaxyRP: [Entity System] and a fifth: /entadd's line grew to say where it puts the entity, so the
-	// first message is split before /entlist.
-	// GalaxyRP: [Entity System] the NPC spawner keys went in the first and /entuse in the second, the two
-	// with room left.
-	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
-^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity where you stand, at the /entorigin position, or at an origin you give (origin 0 0 0 keeps a map brush in place).\n\
-^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n\
-^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
-^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
-^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit.\n\"" );
-	trap->SendServerCommand( ent-g_entities, va("print \"^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
-^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
-^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n\
-^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n\"", MAX_GENTITIES) );
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
-^3/entload <filename>: ^7Loads entities from a preset file.\n\
-^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
-^7/entedit and /entremove do not change the map's own entities (^3M^7; those marked ^3E^7 can be changed) or those the game creates (^3G^7: saber entities, door triggers, missiles, NPCs, dropped items). View them with /entedit, copy them with /entcopy; use ^3/npc kill^7 for NPCs.\n\
-^3/entdeletefile <filename>: ^7Deletes entity preset file.\n\
-^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n\"" );
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n\
-^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n\
-^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n\
-^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n\
-^3/remapload <file name>: ^7Loads remaps from preset file.\n\
-^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n\
-^3/remapreset: ^7Clears all shader remaps in the map. Does not undo remaps built into the map itself.\n\
-^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n\
-^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n\
-^3/spawnplatform: ^7Spawns a platform where the player is.\n\
-^3/spawndummy: ^7Spawns a dummy where the player is.\n\" " );
-	trap->SendServerCommand( ent-g_entities, "print \"^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n\
-^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n\
-^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n\
-^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n\
-^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n\n\"" );
+	Com_sprintf( entlist_line, sizeof( entlist_line ), "^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n", MAX_GENTITIES );
+
+	lines[n++] = "\n^2Entities and Remaps\n\n";
+	lines[n++] = "^3--------Entity System--------\n";
+
+	lines[n++] = "^5Placing\n";
+	lines[n++] = "^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity where you stand, at the /entorigin position, or at an origin you give (origin 0 0 0 keeps a map brush in place).\n";
+	lines[n++] = "^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n";
+	lines[n++] = "^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n";
+	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
+	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
+	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit.\n";
+
+	lines[n++] = "^5Finding and changing\n";
+	lines[n++] = entlist_line;
+	lines[n++] = "^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n";
+	lines[n++] = "^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n";
+	lines[n++] = "^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n";
+	lines[n++] = "^7/entedit and /entremove do not change the map's own entities (^3M^7; those marked ^3E^7 can be changed) or those the game creates (^3G^7: saber entities, door triggers, missiles, NPCs, dropped items). View them with /entedit, copy them with /entcopy; use ^3/npc kill^7 for NPCs.\n";
+
+	lines[n++] = "^5Moving\n";
+	lines[n++] = "^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n";
+	lines[n++] = "^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n";
+	lines[n++] = "^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n";
+	lines[n++] = "^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n";
+
+	lines[n++] = "^5Saving\n";
+	lines[n++] = "^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n";
+	lines[n++] = "^3/entload <filename>: ^7Loads entities from a preset file.\n";
+	lines[n++] = "^3/entdeletefile <filename>: ^7Deletes entity preset file.\n";
+
+	lines[n++] = "^5Other\n";
+	lines[n++] = "^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n";
+	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
+	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";
+	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
+	lines[n++] = "^3/spawnplatform: ^7Spawns a platform where the player is.\n";
+	lines[n++] = "^3/spawndummy: ^7Spawns a dummy where the player is.\n";
+	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n";
+
+	lines[n++] = "\n^3--------Shader Remaps--------\n";
+	lines[n++] = "^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n";
+	lines[n++] = "^3/remaplist <page number>: ^7Lists already remapped shaders in the map, eight per page.\n";
+	lines[n++] = "^3/remapsave <file name>: ^7Saves current remaps in a preset file. Use ^3default ^7name to make it load with the map.\n";
+	lines[n++] = "^3/remapload <file name>: ^7Loads remaps from preset file.\n";
+	lines[n++] = "^3/remapdeletefile <file name>: ^7Deletes remap preset file.\n";
+	lines[n++] = "^3/remapreset: ^7Clears all shader remaps in the map. Does not undo remaps built into the map itself.\n\n";
+
+	zyk_print_lines( ent, lines, n );
 }
 
 /*
@@ -23202,7 +23248,7 @@ command_t commands[] = {
 	{ "entcut",				Cmd_EntCut_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entdeletefile",		Cmd_EntDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entedit",			Cmd_EntEdit_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
-	{ "entitysystem",		Cmd_EntitySystem_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entitiesandremaps",	Cmd_EntitiesAndRemaps_f,	CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entlist",			Cmd_EntList_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entload",			Cmd_EntLoad_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entnear",			Cmd_EntNear_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
