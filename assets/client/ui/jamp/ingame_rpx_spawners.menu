@@ -727,7 +727,39 @@
 			{
 				"0"
 			}
-			descText            "Players cannot walk through it"
+			descText            "No: nothing collides with it, shots and sabers pass through too"
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
+			name                rpx_speffect
+			type                ITEM_TYPE_MULTI
+			text                "Effect:"
+			cvar                "ui_rpx_sp_effect"
+			rect                432 202 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"0"
+			}
+			descText            "Others walk through it, it can still be hit; holo and ghost add their look"
+			cvarFloatList
+			{
+				"none" 0
+				"holo" 1
+				"ghost" 2
+				"walk-through" 3
+			}
 			action
 			{
 				play "sound/interface/button1.wav"
@@ -742,7 +774,7 @@
 			cvar                "ui_rpx_sp_ondeath"
 			maxchars            32
 			maxPaintChars       9
-			rect                432 206 180 18
+			rect                432 226 180 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2

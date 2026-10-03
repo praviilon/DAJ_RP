@@ -777,7 +777,8 @@ selected type, on the surface aimed at (/entaddaim), with the targetname the ser
 menu's settings -- each sent only when it changes something. The type is checked against the listing the
 server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in case they changed since.
 Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen. The
-health bar (showhealth) is both kinds'.
+health bar (showhealth) is both kinds'. The effect (npceffect) is an NPC spawner's only: vehicles cannot
+have one.
 ==================
 */
 static void RPX_SpawnSpawner( void ) {
@@ -851,6 +852,21 @@ static void RPX_SpawnSpawner( void ) {
 		}
 		if ( !RPX_CvarInt( "ui_rpx_sp_solid" ) ) {
 			flags |= 64;	// NOTSOLID
+		}
+		// the /npc effect it starts with (SP_NPC_spawner()'s npceffect). Any of them goes with NOTSOLID
+		// above: that one wins, the NPC staying untouchable with holo or ghost still showing their look.
+		switch ( RPX_CvarInt( "ui_rpx_sp_effect" ) ) {
+		case 1:
+			Q_strcat( cmd, sizeof( cmd ), " npceffect \"holo\"" );
+			break;
+		case 2:
+			Q_strcat( cmd, sizeof( cmd ), " npceffect \"ghost\"" );
+			break;
+		case 3:
+			Q_strcat( cmd, sizeof( cmd ), " npceffect \"nonsolid\"" );
+			break;
+		default:
+			break;
 		}
 	} else {
 		if ( RPX_CvarInt( "ui_rpx_sp_vdie" ) ) {

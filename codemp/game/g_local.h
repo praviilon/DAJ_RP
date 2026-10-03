@@ -632,6 +632,10 @@ struct gentity_s {
 	// the one it is already counting down to (a spawner has one think: a second fire would replace it)
 	qboolean	rpSpawnerRespawn;
 	int			rpSpawnerQueued;
+
+	// GalaxyRP: [Entity System] on an npc_spawner: its "npceffect" key, the /npc effect mode every NPC it
+	// makes starts with (an RP_PHASE_* value, RP_PHASE_NONE for none) -- see RP_NpcEffectFromName()
+	int			rpSpawnerEffect;
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -2900,6 +2904,9 @@ qboolean RP_PhasePassesThrough( const gentity_t *ent );
 void RP_ClearPhaseMode( gentity_t *ent );
 const char *RP_PhaseModeName( int mode );
 void RP_PhaseTrackNpc( gentity_t *npc );
+// GalaxyRP: [Entity System] an npc_spawner's "npceffect" value: RP_PHASE_* for holo/ghost/nonsolid,
+// RP_PHASE_NONE for an empty one, -1 for anything else -- see NPC_spawn.c
+int RP_NpcEffectFromName( const char *name );
 void RP_StartOverlapRelease( gentity_t *ent );
 void RP_PhaseNpcEndFrame( void );
 

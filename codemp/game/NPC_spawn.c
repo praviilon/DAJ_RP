@@ -1761,6 +1761,19 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	}
 	newent->client->ps.persistant[PERS_TEAM] = newent->client->sess.sessionTeam;
 
+	// GalaxyRP: [Entity System] an npc_spawner's "npceffect": the NPC starts with that /npc effect mode,
+	// set here rather than in NPC_Begin() because the spawner may be gone by then (its last use frees it).
+	// Nothing after this resets client->pers. With the NOTSOLID spawnflag as well, NPC_Begin() still gives
+	// the NPC contents 0, and that wins: the phase code only ever changes a CONTENTS_BODY's contents
+	// (RP_PhaseHideBody, g_active.c), so it stays untouchable, holo and ghost still showing their look.
+	// /npc effect clear takes both off, as it does for any NPC. A vehicle spawner never has one.
+	if ( ent->rpSpawnerEffect > RP_PHASE_NONE && newent->client->NPC_class != CLASS_VEHICLE )
+	{
+		newent->client->pers.phase_mode = ent->rpSpawnerEffect;
+		newent->client->pers.phase_releasing = qfalse;
+		RP_PhaseTrackNpc( newent );
+	}
+
 	// zyk: this spawnflag allows setting a custom amount of credits this npc should give
 	if (ent->spawnflags & 32768)
 	{
@@ -2218,6 +2231,31 @@ int RP_SpawnerRemoveChildren( gentity_t *spawner, int *ridden )
 	return removed;
 }
 
+/*
+==================
+RP_NpcEffectFromName
+
+GalaxyRP: [Entity System] an npc_spawner's "npceffect" key: "holo", "ghost" or "nonsolid" -- the words
+/npc effect takes -- gives every NPC it makes that mode from the start (NPC_Spawn_Do()). This is the
+walk-through kind of non-solid: the NPC stays a body that is hit and damaged, only movement passes
+through it. The NOTSOLID spawnflag (64) is the other kind -- nothing touches it at all -- and the two
+can be combined, NOTSOLID winning. Returns the RP_PHASE_* mode, RP_PHASE_NONE for an empty value, and -1
+for anything else, which /entadd and /entedit refuse (g_cmds.c) and a map's spawner just ignores.
+==================
+*/
+int RP_NpcEffectFromName( const char *name )
+{
+	if ( !name || !name[0] )
+		return RP_PHASE_NONE;
+	if ( !Q_stricmp( name, "holo" ) )
+		return RP_PHASE_HOLO;
+	if ( !Q_stricmp( name, "ghost" ) )
+		return RP_PHASE_GHOST;
+	if ( !Q_stricmp( name, "nonsolid" ) )
+		return RP_PHASE_NONSOLID;
+	return -1;
+}
+
 /*QUAKED NPC_spawner (1 0 0) (-16 -16 -24) (16 16 40) x x x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
 
 DROPTOFLOOR - NPC can be in air, but will spawn on the closest floor surface below it
@@ -2415,6 +2453,17 @@ void SP_NPC_spawner( gentity_t *self)
 	if (t)
 	{
 		self->s.shouldtarget = qtrue;
+	}
+
+	// GalaxyRP: [Entity System] "npceffect" -- see RP_NpcEffectFromName(). Read every time, so a spawner
+	// spawned again in place (/entedit) without the key loses the effect rather than keeping the old one.
+	{
+		char *effectName = NULL;
+		int effect;
+
+		G_SpawnString( "npceffect", "", &effectName );
+		effect = RP_NpcEffectFromName( effectName );
+		self->rpSpawnerEffect = ( effect > RP_PHASE_NONE ) ? effect : RP_PHASE_NONE;
 	}
 	/*
 	if ( self->delay > 0 )

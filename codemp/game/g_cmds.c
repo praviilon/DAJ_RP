@@ -15263,6 +15263,32 @@ void Cmd_EntOrigin_f(gentity_t *ent) {
 	}
 }
 
+// GalaxyRP: [Entity System] what is wrong with an "npceffect" value on an NPC or vehicle spawner, or NULL:
+// a vehicle spawner takes none (/npc effect refuses vehicles too), an npc_spawner one of the three words
+// /npc effect takes. An empty value is none and always fine. Used by /entadd and /entedit.
+static const char *zyk_spawner_effect_problem( qboolean vehicle, const char *value )
+{
+	static char problem[256];
+
+	if ( !value || !value[0] )
+	{
+		return NULL;
+	}
+
+	if ( vehicle )
+	{
+		return "Vehicles cannot be given an effect: ^3npceffect^7 is for an ^3npc_spawner^7.";
+	}
+
+	if ( RP_NpcEffectFromName( value ) < 0 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "^3%s^7 is not an NPC effect: ^3npceffect^7 takes ^3holo^7, ^3ghost^7 or ^3nonsolid^7.", zyk_shown_name( value ) );
+		return problem;
+	}
+
+	return NULL;
+}
+
 /*
 ==================
 zyk_entadd_spawner_problem
@@ -15279,12 +15305,12 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 {
 	static char problem[256];
 	char key[MAX_STRING_CHARS], value[MAX_STRING_CHARS];
-	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS];
+	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS], effect[MAX_STRING_CHARS];
 	qboolean has_type = qfalse;
 	qboolean vehicle = !Q_stricmp( classname, "npc_vehicle" ) ? qtrue : qfalse;
 	int i;
 
-	targetname[0] = npc_type[0] = '\0';
+	targetname[0] = npc_type[0] = effect[0] = '\0';
 	for ( i = 2; i + 1 < number_of_args; i += 2 )
 	{
 		trap->Argv( i, key, sizeof( key ) );
@@ -15297,6 +15323,21 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		{
 			Q_strncpyz( npc_type, value, sizeof( npc_type ) );
 			has_type = qtrue;
+		}
+		else if ( !Q_stricmp( key, "npceffect" ) )
+		{
+			Q_strncpyz( effect, value, sizeof( effect ) );
+		}
+	}
+
+	// GalaxyRP: [Entity System] "npceffect" -- see RP_NpcEffectFromName() (NPC_spawn.c)
+	if ( effect[0] )
+	{
+		const char *problem_effect = zyk_spawner_effect_problem( vehicle, effect );
+
+		if ( problem_effect )
+		{
+			return problem_effect;
 		}
 	}
 
@@ -15990,6 +16031,17 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 				{
 					trap->SendServerCommand( ent-g_entities, va("print \"^3%s^7 is not a vehicle type this server can spawn (see ^3/list vehicles^7).\n\"", zyk_shown_name(arg2)) );
 					return;
+				}
+				// GalaxyRP: [Entity System] "npceffect" -- removing it is always fine
+				if (Q_stricmp(key, "npceffect") == 0 && Q_stricmp(arg2, "zykremovekey") != 0)
+				{
+					const char *problem_effect = zyk_spawner_effect_problem(!Q_stricmp(this_ent->classname, "npc_vehicle") ? qtrue : qfalse, arg2);
+
+					if (problem_effect)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem_effect) );
+						return;
+					}
 				}
 			}
 		}
@@ -19153,7 +19205,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n";
 	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
 	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
-	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit.\n";
+	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7.\n";
 
 	lines[n++] = "^5Finding and changing\n";
 	lines[n++] = entlist_line;
