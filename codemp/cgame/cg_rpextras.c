@@ -778,7 +778,7 @@ menu's settings -- each sent only when it changes something. The type is checked
 server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in case they changed since.
 Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen. The
 health bar (showhealth) is both kinds'. The effect (npceffect) is an NPC spawner's only: vehicles cannot
-have one.
+have one. The team (npcteam) is both kinds', as /npc team is.
 ==================
 */
 static void RPX_SpawnSpawner( void ) {
@@ -833,6 +833,23 @@ static void RPX_SpawnSpawner( void ) {
 	}
 	if ( RPX_CvarInt( "ui_rpx_sp_hbar" ) ) {
 		Q_strcat( cmd, sizeof( cmd ), " showhealth \"1\"" );	// both kinds: SP_NPC_spawner(), SP_NPC_Vehicle()
+	}
+	// the /npc team it is given (npcteam), both kinds: /npc team takes vehicles too. 0 is its type's own.
+	switch ( RPX_CvarInt( "ui_rpx_sp_team" ) ) {
+	case 1:
+		Q_strcat( cmd, sizeof( cmd ), " npcteam \"player\"" );
+		break;
+	case 2:
+		Q_strcat( cmd, sizeof( cmd ), " npcteam \"enemy\"" );
+		break;
+	case 3:
+		Q_strcat( cmd, sizeof( cmd ), " npcteam \"neutral\"" );
+		break;
+	case 4:
+		Q_strcat( cmd, sizeof( cmd ), " npcteam \"free\"" );
+		break;
+	default:
+		break;
 	}
 
 	if ( kind == RPX_NPCS ) {

@@ -795,6 +795,39 @@
 		}
 		itemDef
 		{
+			name                rpx_spteam
+			type                ITEM_TYPE_MULTI
+			text                "Team:"
+			cvar                "ui_rpx_sp_team"
+			rect                432 246 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"0"
+			}
+			descText            "Which side it is on and fights; default: its type's own"
+			cvarFloatList
+			{
+				"default" 0
+				"player" 1
+				"enemy" 2
+				"neutral" 3
+				"free" 4
+			}
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
 			name                rpx_spvhbar
 			type                ITEM_TYPE_YESNO
 			text                "Health bar:"
@@ -919,6 +952,39 @@
 				"1"
 			}
 			descText            "Fighters: it hangs in the air until someone boards it"
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
+			name                rpx_spvteam
+			type                ITEM_TYPE_MULTI
+			text                "Team:"
+			cvar                "ui_rpx_sp_team"
+			rect                432 230 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"1"
+			}
+			descText            "Which side it is on: NPCs attack it as they would that side"
+			cvarFloatList
+			{
+				"default" 0
+				"player" 1
+				"enemy" 2
+				"neutral" 3
+				"free" 4
+			}
 			action
 			{
 				play "sound/interface/button1.wav"

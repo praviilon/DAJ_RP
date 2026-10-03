@@ -870,6 +870,39 @@ qboolean NPC_SpotWouldTelefrag( gentity_t *npc )
 	return qfalse;
 }
 
+/*
+==================
+RP_NpcSetTeam
+
+GalaxyRP: [NPC System] what /npc team does to the NPC or vehicle it is aimed at: the side it is on and the
+side it attacks. Nothing else -- whatever its type set up for its team from its .npc file at spawn (a
+shadowtrooper's cloak, an ambush) is kept. Also how an npc_spawner's or NPC_Vehicle's "npcteam" key is
+applied (NPC_Begin()), so a spawned NPC ends up exactly as /npc team would have left it.
+==================
+*/
+static void RP_NpcSetTeam( gentity_t *npc, int team )
+{
+	switch ( team )
+	{
+	case NPCTEAM_PLAYER:
+		npc->client->playerTeam = NPCTEAM_PLAYER;
+		npc->client->enemyTeam = NPCTEAM_ENEMY;
+		break;
+	case NPCTEAM_ENEMY:
+		npc->client->playerTeam = NPCTEAM_ENEMY;
+		npc->client->enemyTeam = NPCTEAM_PLAYER;
+		break;
+	case NPCTEAM_NEUTRAL:
+		npc->client->playerTeam = NPCTEAM_NEUTRAL;
+		npc->client->enemyTeam = NPCTEAM_NEUTRAL;
+		break;
+	default:
+		npc->client->playerTeam = NPCTEAM_FREE;
+		npc->client->enemyTeam = NPCTEAM_FREE;
+		break;
+	}
+}
+
 //--------------------------------------------------------------
 void NPC_Begin (gentity_t *ent)
 {
@@ -1151,6 +1184,14 @@ void NPC_Begin (gentity_t *ent)
 	ent->nextthink = level.time + FRAMETIME + Q_irand(0, 100);
 
 	NPC_SetMiscDefaultData( ent );
+
+	// GalaxyRP: [Entity System] the spawner's "npcteam" (RP_NpcTeamFromName()), which NPC_Spawn_Do() copied
+	// here: applied after the defaults above, so the NPC or vehicle is left as /npc team would leave it.
+	if ( ent->rpSpawnerTeam > 0 )
+	{
+		RP_NpcSetTeam( ent, ent->rpSpawnerTeam - 1 );
+		ent->rpSpawnerTeam = 0;
+	}
 	if ( ent->health <= 0 )
 	{
 		//ORIGINAL ID: health will count down towards max_health
@@ -1774,6 +1815,10 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		RP_PhaseTrackNpc( newent );
 	}
 
+	// GalaxyRP: [Entity System] an npc_spawner's or NPC_Vehicle's "npcteam": carried on the new NPC or
+	// vehicle, since the spawner may be gone by the time NPC_Begin() applies it after its type's defaults.
+	newent->rpSpawnerTeam = ent->rpSpawnerTeam;
+
 	// zyk: this spawnflag allows setting a custom amount of credits this npc should give
 	if (ent->spawnflags & 32768)
 	{
@@ -2256,6 +2301,46 @@ int RP_NpcEffectFromName( const char *name )
 	return -1;
 }
 
+static int zyk_team_from_string( const char *name );
+
+/*
+==================
+RP_NpcTeamFromName
+
+GalaxyRP: [Entity System] an npc_spawner's or NPC_Vehicle's "npcteam" key: player, enemy, neutral or free --
+or NPCTEAM_PLAYER and the other full names, as /npc team takes them -- gives every NPC or vehicle it makes
+that team, applied as /npc team would apply it (NPC_Begin()). Returns the npcteam_t, -1 for an empty value
+(no key) and -2 for anything else, which /entadd and /entedit refuse (g_cmds.c) and a map's spawner ignores.
+NPCTEAM_FREE is 0, so neither failure can be 0.
+==================
+*/
+int RP_NpcTeamFromName( const char *name )
+{
+	int team;
+
+	if ( !name || !name[0] )
+		return -1;
+
+	team = zyk_team_from_string( name );
+
+	if ( team != NPCTEAM_PLAYER && team != NPCTEAM_ENEMY && team != NPCTEAM_NEUTRAL && team != NPCTEAM_FREE )
+		return -2;
+
+	return team;
+}
+
+// GalaxyRP: [Entity System] reads "npcteam" into the spawner, for SP_NPC_spawner() and SP_NPC_Vehicle(): read
+// every time, so a spawner spawned again in place (/entedit) without the key loses the team.
+static void RP_SpawnerTeamKey( gentity_t *self )
+{
+	char *teamName = NULL;
+	int team;
+
+	G_SpawnString( "npcteam", "", &teamName );
+	team = RP_NpcTeamFromName( teamName );
+	self->rpSpawnerTeam = ( team >= 0 ) ? team + 1 : 0;
+}
+
 /*QUAKED NPC_spawner (1 0 0) (-16 -16 -24) (16 16 40) x x x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
 
 DROPTOFLOOR - NPC can be in air, but will spawn on the closest floor surface below it
@@ -2465,6 +2550,9 @@ void SP_NPC_spawner( gentity_t *self)
 		effect = RP_NpcEffectFromName( effectName );
 		self->rpSpawnerEffect = ( effect > RP_PHASE_NONE ) ? effect : RP_PHASE_NONE;
 	}
+
+	// GalaxyRP: [Entity System] "npcteam" -- see RP_NpcTeamFromName(). Read every time, like npceffect.
+	RP_SpawnerTeamKey( self );
 	/*
 	if ( self->delay > 0 )
 	{
@@ -2686,6 +2774,9 @@ void SP_NPC_Vehicle( gentity_t *self)
 	{
 		self->s.shouldtarget = qtrue;
 	}
+
+	// GalaxyRP: [Entity System] "npcteam" -- /npc team takes vehicles too; see RP_NpcTeamFromName()
+	RP_SpawnerTeamKey( self );
 	//FIXME: PRECACHE!!!
 
 	if ( self->targetname )
@@ -5660,26 +5751,8 @@ void Cmd_NPC_f( gentity_t *ent )
 			return;
 		}
 
-		if (newTeam == NPCTEAM_PLAYER)
-		{
-			thisent->client->playerTeam = NPCTEAM_PLAYER;
-			thisent->client->enemyTeam = NPCTEAM_ENEMY;
-		}
-		else if (newTeam == NPCTEAM_ENEMY)
-		{
-			thisent->client->playerTeam = NPCTEAM_ENEMY;
-			thisent->client->enemyTeam = NPCTEAM_PLAYER;
-		}
-		else if (newTeam == NPCTEAM_NEUTRAL)
-		{
-			thisent->client->playerTeam = NPCTEAM_NEUTRAL;
-			thisent->client->enemyTeam = NPCTEAM_NEUTRAL;
-		}
-		else
-		{
-			thisent->client->playerTeam = NPCTEAM_FREE;
-			thisent->client->enemyTeam = NPCTEAM_FREE;
-		}
+		// GalaxyRP: [Entity System] shared with the spawner key "npcteam" -- see RP_NpcSetTeam()
+		RP_NpcSetTeam( thisent, newTeam );
 
 		RP_NpcLabel( thisent, label, sizeof( label ) );
 		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is now on team %s.\n\"", label, cmd2 ) );

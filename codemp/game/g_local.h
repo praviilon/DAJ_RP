@@ -636,6 +636,11 @@ struct gentity_s {
 	// GalaxyRP: [Entity System] on an npc_spawner: its "npceffect" key, the /npc effect mode every NPC it
 	// makes starts with (an RP_PHASE_* value, RP_PHASE_NONE for none) -- see RP_NpcEffectFromName()
 	int			rpSpawnerEffect;
+
+	// GalaxyRP: [Entity System] on an npc_spawner or NPC_Vehicle: its "npcteam" key, the /npc team every NPC or
+	// vehicle it makes is given (an npcteam_t plus one, 0 for none) -- see RP_NpcTeamFromName(). Copied onto the
+	// new NPC by NPC_Spawn_Do(), where NPC_Begin() applies it and sets it back to 0.
+	int			rpSpawnerTeam;
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -2907,6 +2912,9 @@ void RP_PhaseTrackNpc( gentity_t *npc );
 // GalaxyRP: [Entity System] an npc_spawner's "npceffect" value: RP_PHASE_* for holo/ghost/nonsolid,
 // RP_PHASE_NONE for an empty one, -1 for anything else -- see NPC_spawn.c
 int RP_NpcEffectFromName( const char *name );
+// GalaxyRP: [Entity System] an npc_spawner's or NPC_Vehicle's "npcteam" value, the words /npc team takes:
+// the npcteam_t, -1 for an empty one, -2 for anything else -- see NPC_spawn.c
+int RP_NpcTeamFromName( const char *name );
 void RP_StartOverlapRelease( gentity_t *ent );
 void RP_PhaseNpcEndFrame( void );
 

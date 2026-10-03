@@ -15289,6 +15289,27 @@ static const char *zyk_spawner_effect_problem( qboolean vehicle, const char *val
 	return NULL;
 }
 
+// GalaxyRP: [Entity System] what is wrong with an "npcteam" value on an NPC or vehicle spawner, or NULL: one of
+// the teams /npc team takes (which takes vehicles too). An empty value is none and always fine. Used by /entadd
+// and /entedit.
+static const char *zyk_spawner_team_problem( const char *value )
+{
+	static char problem[256];
+
+	if ( !value || !value[0] )
+	{
+		return NULL;
+	}
+
+	if ( RP_NpcTeamFromName( value ) < 0 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "^3%s^7 is not an NPC team: ^3npcteam^7 takes ^3player^7, ^3enemy^7, ^3neutral^7 or ^3free^7.", zyk_shown_name( value ) );
+		return problem;
+	}
+
+	return NULL;
+}
+
 /*
 ==================
 zyk_entadd_spawner_problem
@@ -15305,12 +15326,12 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 {
 	static char problem[256];
 	char key[MAX_STRING_CHARS], value[MAX_STRING_CHARS];
-	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS], effect[MAX_STRING_CHARS];
+	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS], effect[MAX_STRING_CHARS], team[MAX_STRING_CHARS];
 	qboolean has_type = qfalse;
 	qboolean vehicle = !Q_stricmp( classname, "npc_vehicle" ) ? qtrue : qfalse;
 	int i;
 
-	targetname[0] = npc_type[0] = effect[0] = '\0';
+	targetname[0] = npc_type[0] = effect[0] = team[0] = '\0';
 	for ( i = 2; i + 1 < number_of_args; i += 2 )
 	{
 		trap->Argv( i, key, sizeof( key ) );
@@ -15328,6 +15349,10 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		{
 			Q_strncpyz( effect, value, sizeof( effect ) );
 		}
+		else if ( !Q_stricmp( key, "npcteam" ) )
+		{
+			Q_strncpyz( team, value, sizeof( team ) );
+		}
 	}
 
 	// GalaxyRP: [Entity System] "npceffect" -- see RP_NpcEffectFromName() (NPC_spawn.c)
@@ -15338,6 +15363,17 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		if ( problem_effect )
 		{
 			return problem_effect;
+		}
+	}
+
+	// GalaxyRP: [Entity System] "npcteam" -- see RP_NpcTeamFromName() (NPC_spawn.c)
+	if ( team[0] )
+	{
+		const char *problem_team = zyk_spawner_team_problem( team );
+
+		if ( problem_team )
+		{
+			return problem_team;
 		}
 	}
 
@@ -16040,6 +16076,17 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 					if (problem_effect)
 					{
 						trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem_effect) );
+						return;
+					}
+				}
+				// GalaxyRP: [Entity System] "npcteam" -- removing it is always fine
+				if (Q_stricmp(key, "npcteam") == 0 && Q_stricmp(arg2, "zykremovekey") != 0)
+				{
+					const char *problem_team = zyk_spawner_team_problem(arg2);
+
+					if (problem_team)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem_team) );
 						return;
 					}
 				}
@@ -19205,7 +19252,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n";
 	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
 	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
-	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7.\n";
+	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7; ^3npcteam player^7, ^3enemy^7, ^3neutral^7 or ^3free^7 sets their side, as ^3/npc team^7 does.\n";
 
 	lines[n++] = "^5Finding and changing\n";
 	lines[n++] = entlist_line;
