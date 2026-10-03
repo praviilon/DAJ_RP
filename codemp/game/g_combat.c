@@ -2665,6 +2665,9 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	//Use any target we had
 	G_UseTargets( self, self );
 
+	// GalaxyRP: [Entity System] an NPC or vehicle whose spawner has "respawn": the spawner fires again
+	RP_SpawnerRespawn( self );
+
 	if (g_slowmoDuelEnd.integer && (level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL) && attacker && attacker->inuse && attacker->client)
 	{
 		if (!gDoSlowMoDuel)

@@ -42,5 +42,6 @@
 	loadMenu { "ui/jamp/ingame_rpx_music.menu" 		}
 	loadMenu { "ui/jamp/ingame_rpx_sounds.menu" 		}
 	loadMenu { "ui/jamp/ingame_rpx_lights.menu" 		}
+	loadMenu { "ui/jamp/ingame_rpx_spawners.menu" 		}
 }
 

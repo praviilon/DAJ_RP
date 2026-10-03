@@ -15045,13 +15045,41 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 	}
 	else if (level.last_spawned_entity)
 	{ // zyk: removes the last entity spawned by /entadd, /spawnplatform or /spawndummy
-		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", level.last_spawned_entity->s.number));
+		gentity_t *undone = level.last_spawned_entity;
+		int undone_number = undone->s.number;
+
+		// GalaxyRP: [Entity System] an NPC or vehicle spawner takes the NPCs and vehicles it made with it
+		// (not one someone rides), quietly -- no death, nothing fired, none coming back: see
+		// RP_SpawnerRemoveChildren() in NPC_spawn.c. The spawner is only freed below if it is still the one
+		// to undo (G_FreeEntity() clears level.last_spawned_entity when it frees it some other way).
+		if (RP_IsNpcSpawnerClass(undone->classname))
+		{
+			int ridden = 0;
+			int removed = RP_SpawnerRemoveChildren(undone, &ridden);
+
+			if (removed > 0 || ridden > 0)
+			{
+				trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned, with the %d NPC(s) or vehicle(s) it made%s\n\"",
+					undone_number, removed, ridden > 0 ? va("; %d vehicle(s) with someone riding left alone", ridden) : ""));
+			}
+			else
+			{
+				trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", undone_number));
+			}
+
+			if (level.last_spawned_entity != undone)
+			{
+				return;
+			}
+		}
+		else
+		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", undone_number));
 
 		// GalaxyRP: [Entity System] a misc_bsp takes its sub-BSP's entities with it -- see RP_EntRemoveFree()
-		if (level.last_spawned_entity->rpBSPInstance > 0)
-			RP_FreeSubBSPEntities(level.last_spawned_entity->rpBSPInstance);
+		if (undone->rpBSPInstance > 0)
+			RP_FreeSubBSPEntities(undone->rpBSPInstance);
 
-		G_FreeEntity(level.last_spawned_entity);
+		G_FreeEntity(undone);
 
 		// G_FreeEntity() clears this itself now, for entities freed by any other route as well --
 		// see the comment there. Cleared here too so the one path that always went through this
@@ -15064,6 +15092,114 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 		// which is indistinguishable from a command that is broken or that the admin lacks rights
 		// for -- and since the undo is a single step, the second press of it is the common case.
 		trap->SendServerCommand(ent->s.number, "print \"Nothing to undo. Only the most recent /entadd, /spawnplatform or /spawndummy can be undone, and only once.\n\"");
+	}
+}
+
+// GalaxyRP: [Entity System] a name or type shown back in a message: no quote to end the print, nothing
+// unprintable, short
+static const char *zyk_shown_name( const char *name )
+{
+	static char shown[48];
+	int i;
+
+	Q_strncpyz( shown, name, sizeof( shown ) );
+	for ( i = 0; shown[i]; i++ )
+	{
+		if ( shown[i] == '"' || (unsigned char)shown[i] < 32 )
+			shown[i] = ' ';
+	}
+	return shown;
+}
+
+/*
+==================
+Cmd_EntUse_f
+
+GalaxyRP: [Entity System] /entuse <name>: uses every entity with that targetname, as a trigger or a button
+targeting it would, with the admin as the one who used it -- an NPC or vehicle spawner, a light, an
+effect, a door, a relay. Not an NPC or a vehicle (anything with a client): using a vehicle makes whoever
+used it board it, from anywhere on the map (NPC_Use()). Nor an entity held with /entcopy or /entcut. The
+ones to use are found first and used after, so an entity that using one makes, or a freed slot taken
+again, is not used as well; each is used only if it still has that name.
+==================
+*/
+void Cmd_EntUse_f( gentity_t *ent ) {
+	static int found[MAX_ENTITIESTOTAL];
+	char name[MAX_STRING_CHARS];
+	gentity_t *e = NULL;
+	int num_found = 0, used = 0, npcs = 0, held = 0, inert = 0, i;
+
+	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
+		return;
+	}
+
+	if (trap->Argc() < 2)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/entuse <name>^7. Uses every entity with that targetname, as a trigger or a button would: NPC and vehicle spawners, lights, effects, doors, relays. NPCs and vehicles are left alone.\n\"" );
+		return;
+	}
+
+	trap->Argv( 1, name, sizeof( name ) );
+	if (!name[0])
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Give the name to use: ^3/entuse <name>^7.\n\"" );
+		return;
+	}
+
+	while ((e = G_Find(e, FOFS(targetname), name)) != NULL && num_found < MAX_ENTITIESTOTAL)
+	{
+		found[num_found++] = e - g_entities;
+	}
+
+	for (i = 0; i < num_found; i++)
+	{
+		e = &g_entities[found[i]];
+
+		if (!e->inuse || !e->targetname || Q_stricmp(e->targetname, name) != 0)
+		{
+			continue;	// gone, or another entity now, since the search
+		}
+		if (e->client)
+		{
+			npcs++;
+			continue;
+		}
+		if (e->rpHeldBy)
+		{
+			held++;
+			continue;
+		}
+		if (!e->use)
+		{
+			inert++;
+			continue;
+		}
+		e->use(e, ent, ent);
+		used++;
+	}
+
+	G_LogPrintf("/entuse '%s' by %s: %d used\n", name, ent->client->pers.netname, used);
+
+	if (num_found == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Nothing is named ^3%s^7.\n\"", zyk_shown_name(name)) );
+		return;
+	}
+
+	{
+		char skipped[256];
+
+		skipped[0] = '\0';
+		if (npcs > 0)
+			Q_strcat(skipped, sizeof(skipped), va("; left alone: %d NPC(s) or vehicle(s)", npcs));
+		if (held > 0)
+			Q_strcat(skipped, sizeof(skipped), va("; %d held with /entcopy or /entcut", held));
+		if (inert > 0)
+			Q_strcat(skipped, sizeof(skipped), va("; %d that do nothing when used", inert));
+
+		trap->SendServerCommand( ent-g_entities, va("print \"Used %d entit%s named ^3%s^7%s.\n\"", used, used == 1 ? "y" : "ies",
+			zyk_shown_name(name), skipped) );
 	}
 }
 
@@ -15095,6 +15231,97 @@ void Cmd_EntOrigin_f(gentity_t *ent) {
 
 /*
 ==================
+zyk_entadd_spawner_problem
+
+GalaxyRP: [Entity System] what is wrong with the NPC or vehicle spawner /entadd or /entaddaim was asked
+for (RP_IsNpcSpawnerClass()), or NULL. A spawner with no targetname spawns once and is gone -- what /npc
+spawn does already -- so one must have the name a trigger, a button or /entuse fires it by. And a type the
+server does not have would make it fail later, with nothing said to anyone but the server console. The
+map classes (NPC_Stormtrooper, ...) choose their type themselves. Entity files are not read through here:
+the NPCs /entsave writes as unnamed npc_spawner lines still load.
+==================
+*/
+static const char *zyk_entadd_spawner_problem( const char *classname, int number_of_args )
+{
+	static char problem[256];
+	char key[MAX_STRING_CHARS], value[MAX_STRING_CHARS];
+	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS];
+	qboolean has_type = qfalse;
+	qboolean vehicle = !Q_stricmp( classname, "npc_vehicle" ) ? qtrue : qfalse;
+	int i;
+
+	targetname[0] = npc_type[0] = '\0';
+	for ( i = 2; i + 1 < number_of_args; i += 2 )
+	{
+		trap->Argv( i, key, sizeof( key ) );
+		trap->Argv( i + 1, value, sizeof( value ) );
+		if ( !Q_stricmp( key, "targetname" ) )
+		{
+			Q_strncpyz( targetname, value, sizeof( targetname ) );
+		}
+		else if ( !Q_stricmp( key, "npc_type" ) )
+		{
+			Q_strncpyz( npc_type, value, sizeof( npc_type ) );
+			has_type = qtrue;
+		}
+	}
+
+	// zyk: SP_NPC_spawner() removes itself at once then; SP_NPC_Vehicle() does not ask
+	if ( !vehicle && !g_allowNPC.integer )
+	{
+		return "NPCs are switched off on this server (^3g_allowNPC 0^7): an NPC spawner would remove itself.";
+	}
+
+	if ( !targetname[0] )
+	{
+		return "An NPC or vehicle spawner needs a ^3targetname^7: the name a trigger, a button or ^3/entuse^7 fires it by. To spawn one NPC or vehicle now, use ^3/npc spawn^7.";
+	}
+
+	if ( !Q_stricmp( classname, "npc_spawner" ) )
+	{
+		if ( !npc_type[0] )
+		{
+			return "An npc_spawner needs an ^3npc_type^7 (see ^3/list npcs^7).";
+		}
+		if ( RP_NpcTypeIsVehicle( npc_type ) )
+		{
+			Com_sprintf( problem, sizeof( problem ), "^3%s^7 is a vehicle's npc entry: use ^3NPC_Vehicle^7 with a vehicle type (see ^3/list vehicles^7).", zyk_shown_name( npc_type ) );
+			return problem;
+		}
+		if ( !RP_NpcTypeKnown( npc_type ) )
+		{
+			Com_sprintf( problem, sizeof( problem ), "^3%s^7 is not an NPC type on this server (see ^3/list npcs^7).", zyk_shown_name( npc_type ) );
+			return problem;
+		}
+	}
+	else if ( vehicle )
+	{
+		// zyk: SP_NPC_Vehicle() spawns a swoop when no type is given
+		const char *type = has_type ? npc_type : "swoop";
+
+		if ( !type[0] )
+		{
+			return "An NPC_Vehicle's ^3npc_type^7 cannot be empty (see ^3/list vehicles^7).";
+		}
+		if ( !RP_VehicleTypeKnown( type ) )
+		{
+			Com_sprintf( problem, sizeof( problem ), "^3%s^7 is not a vehicle type on this server (see ^3/list vehicles^7).", zyk_shown_name( type ) );
+			return problem;
+		}
+		// zyk: NPC_Spawn_Do() reads the vehicle's NPC entry of the same name too, and frees the spawner without
+		// one -- every vehicle of the game has one, a custom vehicle may not
+		if ( !RP_NpcTypeKnown( type ) )
+		{
+			Com_sprintf( problem, sizeof( problem ), "The vehicle ^3%s^7 has no NPC entry of its name on this server, so it cannot be spawned.", zyk_shown_name( type ) );
+			return problem;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+==================
 Cmd_EntAdd_f / Cmd_EntAddAim_f
 
 GalaxyRP: [Entity System] /entadd puts the entity at the origin given, else at the /entorigin position,
@@ -15106,6 +15333,7 @@ among the arguments, and the /entorigin position and angles, are not used. The b
 only known once the entity has spawned, so it is spawned at the point first and, if it turns out to have
 a box, made again once, set against the surface by it -- unless that first spawn made other entities
 beyond a trigger of its own (a misc_bsp's sub-BSP, say), which a second spawn would make twice.
+An NPC or vehicle spawner needs a targetname and a type the server has (zyk_entadd_spawner_problem()).
 ==================
 */
 static void zyk_entadd( gentity_t *ent, qboolean aim ) {
@@ -15187,6 +15415,18 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 				return;
 			}
 			aim_offset = ( value > RP_AIMOFFSET_MAX ) ? RP_AIMOFFSET_MAX : (float)value;
+		}
+	}
+
+	// GalaxyRP: [Entity System] an NPC or vehicle spawner: a targetname and a type the server has
+	if (RP_IsNpcSpawnerClass(arg1))
+	{
+		const char *problem = zyk_entadd_spawner_problem(arg1, number_of_args);
+
+		if (problem)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem) );
+			return;
 		}
 	}
 
@@ -15678,6 +15918,42 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			{
 				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d: the classname cannot be changed with /entedit. Use ^3/entremove^7 and ^3/entadd^7 the new class instead.\n\"", entity_id) );
 				return;
+			}
+		}
+
+		// GalaxyRP: [Entity System] an NPC or vehicle spawner keeps its targetname -- with none it spawns
+		// once and is gone -- and a new type must be one the server has, as /entadd asks
+		// (zyk_entadd_spawner_problem()). Only what the edit changes is looked at.
+		if (RP_IsNpcSpawnerClass(this_ent->classname))
+		{
+			for (i = first_pair; i + 1 < number_of_args; i += 2)
+			{
+				trap->Argv(i, key, sizeof(key));
+				trap->Argv(i + 1, arg2, sizeof(arg2));
+				if (Q_stricmp(key, "targetname") == 0 && (!arg2[0] || Q_stricmp(arg2, "zykremovekey") == 0))
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is an NPC or vehicle spawner: it needs a ^3targetname^7. Give it another name instead.\n\"", entity_id) );
+					return;
+				}
+				if (Q_stricmp(key, "npc_type") == 0 && !Q_stricmp(this_ent->classname, "npc_spawner"))
+				{
+					if (!arg2[0] || Q_stricmp(arg2, "zykremovekey") == 0)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is an npc_spawner: it needs an ^3npc_type^7 (see ^3/list npcs^7).\n\"", entity_id) );
+						return;
+					}
+					if (RP_NpcTypeIsVehicle(arg2) || !RP_NpcTypeKnown(arg2))
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"^3%s^7 is not an NPC type on this server (see ^3/list npcs^7; a vehicle goes in an ^3NPC_Vehicle^7).\n\"", zyk_shown_name(arg2)) );
+						return;
+					}
+				}
+				if (Q_stricmp(key, "npc_type") == 0 && !Q_stricmp(this_ent->classname, "npc_vehicle") &&
+					Q_stricmp(arg2, "zykremovekey") != 0 && (!RP_VehicleTypeKnown(arg2) || !RP_NpcTypeKnown(arg2)))
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"^3%s^7 is not a vehicle type this server can spawn (see ^3/list vehicles^7).\n\"", zyk_shown_name(arg2)) );
+					return;
+				}
 			}
 		}
 
@@ -18754,14 +19030,18 @@ void Cmd_EntitySystem_f( gentity_t *ent ) {
 	// GalaxyRP: [Entity System] and a fourth for picking entities up (g_entgrab.c).
 	// GalaxyRP: [Entity System] and a fifth: /entadd's line grew to say where it puts the entity, so the
 	// first message is split before /entlist.
+	// GalaxyRP: [Entity System] the NPC spawner keys went in the first and /entuse in the second, the two
+	// with room left.
 	trap->SendServerCommand( ent-g_entities, "print \"\n^3--------Entity System--------\n\
 ^3/entadd <classname> <key> <value> <key> <value>...: ^7Adds a new entity where you stand, at the /entorigin position, or at an origin you give (origin 0 0 0 keeps a map brush in place).\n\
 ^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n\
 ^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n\
-^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\"" );
+^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n\
+^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit.\n\"" );
 	trap->SendServerCommand( ent-g_entities, va("print \"^3/entlist <page number>: ^7Lists all entities present on the map. Ids from %d up (marked ^3L^7) are logical entities: spawn points, targets, NPC spawners and other never-networked classes. Ids marked ^3G^7 were created by the game and ^3M^7 are part of the map: neither can be edited or removed. ^3E^7 are the map's pickups, dispensers and decor that nothing in the map links to, which can. ^3H^7 are being held.\n\
 ^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n\
-^3/entundo: ^7Removes last added entity. Only works once.\n\"", MAX_GENTITIES) );
+^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n\
+^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n\"", MAX_GENTITIES) );
 	trap->SendServerCommand( ent-g_entities, "print \"^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n\
 ^3/entload <filename>: ^7Loads entities from a preset file.\n\
 ^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n\
@@ -22932,6 +23212,7 @@ command_t commands[] = {
 	{ "entsave",			Cmd_EntSave_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entslots",			Cmd_EntSlots_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entundo",			Cmd_EntUndo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entuse",				Cmd_EntUse_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ex",					Cmd_Examine_f,				CMD_LOGGEDIN },
 	{ "examine",			Cmd_Examine_f,				CMD_LOGGEDIN },
 	{ "flipcoin",			Cmd_FlipCoin_f,			CMD_NOINTERMISSION|CMD_ALIVE },

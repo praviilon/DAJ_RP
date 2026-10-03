@@ -1,8 +1,8 @@
 /*
 ===========================================================================
 GalaxyRP: [Extras] the ui half of the Extras menus of the Galaxy RP menu: ingame_rpx_props,
-ingame_rpx_effects, ingame_rpx_npcs, ingame_rpx_music, ingame_rpx_sounds and ingame_rpx_lights. cgame's half is
-cg_rpextras.c; ui/rp_extras.h says how the two work together. Here:
+ingame_rpx_effects, ingame_rpx_npcs, ingame_rpx_music, ingame_rpx_sounds, ingame_rpx_lights and
+ingame_rpx_spawners. cgame's half is cg_rpextras.c; ui/rp_extras.h says how the two work together. Here:
 
 - The list the open menu shows (FEEDER_RPX_LIST): read from the list file cgame writes, when
   ui_rpx_serial changes; filtered by the menu's filter field; folders open with a double click.
@@ -19,6 +19,8 @@ cg_rpextras.c; ui/rp_extras.h says how the two work together. Here:
   clearing it first, see CG_RpxFxPass()), and tells cgame it is on screen (ui_rpx_fxbox).
 - The light colour swatch of the Props menu (UI_RPX_SWATCH), and the Lights menu's two (UI_RPX_LSWATCH,
   UI_RPX_LOFFSWATCH). The Lights menu has no list: rpxOpen lights opens it without one (RPX_OpenNoList).
+- The Spawners menu shows the NPCs & Vehicles menu's lists, with its tabs, filter and selection: rpxOpen
+  spawners is rpxOpen npcs.
 ===========================================================================
 */
 
@@ -490,7 +492,8 @@ Scripts
 static int RPX_KindForMenu( const char *word ) {
 	if ( !Q_stricmp( word, "props" ) ) return RPX_MODELS;
 	if ( !Q_stricmp( word, "effects" ) ) return RPX_EFFECTS;
-	if ( !Q_stricmp( word, "npcs" ) ) return atoi( RPX_CvarStr( "ui_rpx_npcmode" ) ) ? RPX_VEHICLES : RPX_NPCS;
+	// GalaxyRP: [Extras] the Spawners menu shows the same lists, with the same tab and selection
+	if ( !Q_stricmp( word, "npcs" ) || !Q_stricmp( word, "spawners" ) ) return atoi( RPX_CvarStr( "ui_rpx_npcmode" ) ) ? RPX_VEHICLES : RPX_NPCS;
 	if ( !Q_stricmp( word, "music" ) ) return RPX_MUSIC;
 	if ( !Q_stricmp( word, "sounds" ) ) return RPX_SOUNDS;
 	return -1;
@@ -643,8 +646,8 @@ UI_RpxScript
 
 The Extras menus' uiScripts; qfalse when name is not one of them.
 
-	rpxOpen <props|effects|npcs|music|sounds|lights> <menu>	in each menu's onOpen
-	rpxNpcMode <0|1>									the NPCs and Vehicles tabs
+	rpxOpen <props|effects|npcs|music|sounds|lights|spawners> <menu>	in each menu's onOpen
+	rpxNpcMode <0|1>									the NPCs and Vehicles tabs (NPCs & Vehicles, Spawners)
 	rpxEnter											the list's double click: open a folder
 	rpxPreview											Props and Effects
 	rpxDo <action>										a button: see CG_Rpx_f() in cg_rpextras.c
@@ -719,6 +722,24 @@ qboolean UI_RpxScript( const char *name, char **args ) {
 					return qtrue;
 				}
 				trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do spawnlight\n" );
+				RPX_CloseMenus();
+				return qtrue;
+			}
+			// GalaxyRP: [Extras] the Spawners menu's Spawn: a selection, and the names it needs and may have
+			// (RPX_SpawnerNamesProblem()) -- a problem is said in the menu, which stays open
+			if ( !Q_stricmp( arg, "spawnspawner" ) ) {
+				const char *problem;
+
+				if ( !RPX_HaveSelection() ) {
+					return qtrue;
+				}
+				problem = RPX_SpawnerNamesProblem( RPX_CvarStr( "ui_rpx_sp_name" ), RPX_CvarStr( "ui_rpx_sp_npcname" ),
+					RPX_CvarStr( "ui_rpx_sp_ondeath" ), rpxKind != RPX_VEHICLES );
+				if ( problem ) {
+					RPX_Msg( va( "^3%s", problem ) );
+					return qtrue;
+				}
+				trap->Cmd_ExecuteText( EXEC_APPEND, "rpx do spawnspawner\n" );
 				RPX_CloseMenus();
 				return qtrue;
 			}

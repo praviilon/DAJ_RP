@@ -126,6 +126,25 @@ static const char * const rpxSoundChannels[] = {
 	X( "ui_rpx_l_offb",			"255" ) \
 	X( "ui_rpx_l_name",			"" )		/* its targetname, to switch it with */ \
 	X( "ui_rpx_l_lift",			"32" )		/* units out from the surface aimed at (/entaddaim aimoffset) */ \
+	X( "ui_rpx_sp_name",		"" )		/* Spawners: the spawner's targetname, required */ \
+	X( "ui_rpx_sp_now",			"1" )		/* spawnnow: one at once as well, not counted */ \
+	X( "ui_rpx_sp_count",		"1" )		/* how many times it can be fired, 1 to 999 */ \
+	X( "ui_rpx_sp_unlim",		"0" )		/* no limit: count -1 */ \
+	X( "ui_rpx_sp_delay",		"0" )		/* seconds after being fired, 0 to 3600 */ \
+	X( "ui_rpx_sp_shy",			"0" )		/* spawnflags 2048 */ \
+	X( "ui_rpx_sp_respawn",		"0" )		/* respawn: fired again when one it made dies */ \
+	X( "ui_rpx_sp_face",		"0" )		/* 0 towards me, 1 the way I look */ \
+	X( "ui_rpx_sp_npcname",		"" )		/* NPC_targetname: the NPC's or vehicle's own name */ \
+	X( "ui_rpx_sp_health",		"0" )		/* NPCs: 0 is the type's own */ \
+	X( "ui_rpx_sp_hbar",		"0" )		/* NPCs: showhealth */ \
+	X( "ui_rpx_sp_noai",		"0" )		/* NPCs: spawnflags 32 (cinematic) */ \
+	X( "ui_rpx_sp_solid",		"1" )		/* NPCs: 0 is spawnflags 64 (not solid) */ \
+	X( "ui_rpx_sp_ondeath",		"" )		/* NPCs: NPC_target, fired when it dies */ \
+	X( "ui_rpx_sp_vdie",		"0" )		/* vehicles: spawnflags 1, explodes once left by its rider */ \
+	X( "ui_rpx_sp_vtime",		"10" )		/* vehicles: seconds the rider may stay away (dmg, in ms) */ \
+	X( "ui_rpx_sp_vdist",		"512" )		/* vehicles: how far the rider may go first (speed) */ \
+	X( "ui_rpx_sp_vdock",		"0" )		/* vehicles: spawnflags 2, fighters hang until boarded */ \
+	X( "ui_rpx_sp_lift",		"0" )		/* units out from the surface aimed at (/entaddaim aimoffset) */ \
 	X( "ui_rpx_s_chan",			"0" ) \
 	X( "ui_rpx_status",			"" )		/* cgame: loading, or why a listing failed */ \
 	X( "ui_rpx_serial",			"0" )		/* cgame: raised each time it writes the list file */ \
@@ -211,6 +230,43 @@ static QINLINE const char *RPX_LabelProblem( const char *label ) {
 	}
 	if ( i > 32 ) {
 		return "The name may be at most 32 characters long.";
+	}
+	return NULL;
+}
+
+// GalaxyRP: [Extras] what is wrong with the names typed in the Spawners menu, or NULL. The spawner's name is
+// required -- triggers, buttons and /entuse fire it by it; the server refuses a spawner without one -- and
+// all three are names as RPX_LabelProblem() takes them. The NPC's own name may not be the spawner's (firing
+// the spawner would use its NPCs too: a vehicle used makes whoever used it board it), and an NPC's
+// "On death fires" (npcs only) may not be the spawner's either: Respawn when killed is that, done once.
+static QINLINE const char *RPX_SpawnerNamesProblem( const char *spawner, const char *npc, const char *ondeath, qboolean npcs ) {
+	static char problem[128];
+	const char *names[3], *labels[3];
+	int i, n = npcs ? 3 : 2;
+
+	if ( !spawner[0] ) {
+		return "Give the spawner a name: triggers, buttons and /entuse fire it by it.";
+	}
+	names[0] = spawner;	labels[0] = "The spawner's name";
+	names[1] = npc;		labels[1] = "Its name";
+	names[2] = ondeath;	labels[2] = "On death fires";
+	for ( i = 0; i < n; i++ ) {
+		const char *p = RPX_LabelProblem( names[i] );
+
+		if ( p ) {
+			// "The name may ..." with the field's own label
+			if ( strncmp( p, "The name", 8 ) ) {
+				return p;
+			}
+			Com_sprintf( problem, sizeof( problem ), "%s%s", labels[i], p + 8 );
+			return problem;
+		}
+	}
+	if ( npc[0] && !Q_stricmp( npc, spawner ) ) {
+		return "The spawner and what it spawns need different names.";
+	}
+	if ( npcs && ondeath[0] && !Q_stricmp( ondeath, spawner ) ) {
+		return "On death fires cannot be the spawner's own name: use Respawn when killed.";
 	}
 	return NULL;
 }

@@ -1029,6 +1029,48 @@ qboolean RP_NpcTypeIsVehicle( const char *type ) {
 	return qfalse;
 }
 
+/*
+==================
+RP_NpcTypeKnown / RP_VehicleTypeKnown
+
+GalaxyRP: [Entity System] whether the NPC types (NPCParms) or the vehicle types (VehicleParms) have a
+block of this name, looked up the way NPC_ParseParms() and VEH_LoadVehicle() look one up: a top-level
+name followed by "{". Only the text is read -- nothing is loaded -- so /entadd can refuse a spawner
+whose type would make it fail later, when nobody is told why.
+==================
+*/
+static qboolean RP_TypeBlockKnown( const char *text, const char *type ) {
+	const char *p = text;
+
+	if ( !VALIDSTRING( type ) ) {
+		return qfalse;
+	}
+	COM_BeginParseSession( "RP_TypeBlockKnown" );
+	while ( p ) {
+		const char *token = COM_ParseExt( &p, qtrue );
+
+		if ( !token[0] ) {
+			break;
+		}
+		if ( !Q_stricmp( token, type ) ) {
+			const char *peek = p;
+
+			token = COM_ParseExt( &peek, qtrue );
+			return !strcmp( token, "{" ) ? qtrue : qfalse;
+		}
+		SkipBracedSection( &p, 0 );
+	}
+	return qfalse;
+}
+
+qboolean RP_NpcTypeKnown( const char *type ) {
+	return RP_TypeBlockKnown( NPCParms, type );
+}
+
+qboolean RP_VehicleTypeKnown( const char *type ) {
+	return RP_TypeBlockKnown( VehicleParms, type );
+}
+
 
 // the NPC or vehicle types, read the first time they are asked for on this map
 static rpListSet_t *RP_ListTypeSet( qboolean vehicles ) {

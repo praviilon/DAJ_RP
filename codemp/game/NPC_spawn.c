@@ -72,6 +72,10 @@ extern void Wampa_SetBolts( gentity_t *self );
 
 #define	NSF_DROP_TO_FLOOR	16
 
+// GalaxyRP: [Entity System] NPC and vehicle spawners -- see RP_SpawnerRespawn()
+static void RP_SpawnerQueuedFire( gentity_t *ent );
+static qboolean RP_SpawnerCountingDown( const gentity_t *spawner );
+
 // PAIN functions...
 //
 extern void funcBBrushPain				(gentity_t *self, gentity_t *attacker, int damage);
@@ -1823,6 +1827,17 @@ finish:
 			Jedi_Cloak(newent);
 	}
 
+	// GalaxyRP: [Entity System] a respawn that came while this spawn was being counted down to waited for
+	// it (RP_SpawnerRespawn()): its turn now -- next frame, through the spawner's think, so that a shy
+	// spawner with no delay does not spawn the rest from inside this spawn, one inside the other. Only after
+	// a spawn that worked, of a spawner still here and not counting down to another already.
+	if ( newent && newent->inuse && newent->client && newent->NPC && ent->inuse && ent->use && ent->rpSpawnerQueued > 0 &&
+		ent->nextthink <= 0 )
+	{
+		ent->think = RP_SpawnerQueuedFire;
+		ent->nextthink = level.time + FRAMETIME;
+	}
+
 	return newent;
 }
 
@@ -1933,6 +1948,274 @@ void NPC_Spawn ( gentity_t *ent, gentity_t *other, gentity_t *activator )
 			NPC_Spawn_Do( ent );
 		}
 	}
+}
+
+/*
+===========================================================================
+GalaxyRP: [Entity System] NPC and vehicle spawners
+
+Every class whose name starts with "npc_" is one: npc_spawner, NPC_Vehicle, and the map classes
+(NPC_Stormtrooper, ...) whose spawn functions end in SP_NPC_spawner(). /entadd and /entaddaim refuse one
+without a targetname (zyk_entadd() in g_cmds.c), and two keys of their own apply to a spawner that has one:
+
+- "spawnnow 1": it also spawns one at once -- when it is placed, and again whenever it is spawned
+  anew (an entity file loaded, the map restarted) -- not counted against its "count", and without its
+  delay or shyness. Spawned again in place (/entedit, /entcut, /entrotate), it does so only when no NPC
+  it made is alive, or each edit would add one.
+- "respawn 1": when an NPC or vehicle it made dies, it is fired again, as a trigger would fire it --
+  its delay, its shyness and one of its count. A fire that comes while it is already counting down to a
+  spawn would replace that countdown (an entity has one think), so it waits its turn instead
+  (rpSpawnerQueued) and is fired once that spawn has happened.
+
+Which spawner made an NPC is NPC_Spawn_Do()'s link (gentity_t::zyk_npc_spawner and its id).
+===========================================================================
+*/
+extern void G_VehicleSpawn( gentity_t *self );
+
+qboolean RP_IsNpcSpawnerClass( const char *classname )
+{
+	return ( classname && !Q_stricmpn( classname, "npc_", 4 ) ) ? qtrue : qfalse;
+}
+
+// the spawner made this NPC or vehicle, and it is still that spawner (a freed and reused slot is
+// zeroed, so its id cannot match)
+qboolean RP_SpawnerMadeIt( const gentity_t *spawner, const gentity_t *npc )
+{
+	return ( spawner && npc && spawner != npc && spawner->inuse && npc->zyk_npc_spawner == spawner &&
+		npc->zyk_npc_spawner_id != 0 && spawner->zyk_spawner_id == npc->zyk_npc_spawner_id ) ? qtrue : qfalse;
+}
+
+// alive: not dead, and not a vehicle already counting down to its explosion -- as /entsave tells them. One
+// just spawned has no health until NPC_Begin() runs, the next frame: it is alive.
+static qboolean RP_SpawnedAlive( const gentity_t *npc )
+{
+	if ( !npc->inuse || !npc->client || !npc->NPC || ( npc->s.eFlags & EF_DEAD ) || npc->client->ps.pm_type == PM_DEAD ||
+		( npc->m_pVehicle && npc->m_pVehicle->m_iDieTime != 0 ) )
+	{
+		return qfalse;
+	}
+	if ( npc->health <= 0 && npc->think != NPC_Begin )
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// an NPC or vehicle this spawner made that is still alive, or NULL
+gentity_t *RP_SpawnerLiveChild( const gentity_t *spawner )
+{
+	int i;
+
+	if ( !spawner || !spawner->inuse || !spawner->zyk_spawner_id )
+	{
+		return NULL;
+	}
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		gentity_t *e = &g_entities[i];
+
+		if ( RP_SpawnedAlive( e ) && RP_SpawnerMadeIt( spawner, e ) )
+		{
+			return e;
+		}
+	}
+	return NULL;
+}
+
+// "spawnnow": one at once, not counted, without the delay or the shyness
+static void RP_SpawnerSpawnNow( gentity_t *ent )
+{
+	ent->think = NULL;
+	ent->nextthink = 0;
+
+	if ( !ent->use || RP_SpawnerLiveChild( ent ) )
+	{
+		return;
+	}
+	if ( ent->count != -1 )
+	{
+		ent->count++;	// NPC_Spawn_Do() takes one off: this one is not one of its uses
+	}
+	if ( !Q_stricmp( ent->classname, "NPC_Vehicle" ) )
+	{
+		G_VehicleSpawn( ent );
+	}
+	else
+	{
+		NPC_Spawn_Do( ent );
+	}
+}
+
+// the keys of a spawner with a targetname, read while it spawns (SP_NPC_spawner(), SP_NPC_Vehicle())
+static void RP_SpawnerKeys( gentity_t *self )
+{
+	int now = 0, again = 0;
+
+	G_SpawnInt( "respawn", "0", &again );
+	self->rpSpawnerRespawn = again ? qtrue : qfalse;
+	if ( !self->rpSpawnerRespawn )
+	{
+		self->rpSpawnerQueued = 0;	// respawns waiting their turn go with the key
+	}
+
+	// spawned again in place (/entedit, /entcut, /entrotate), it may be counting down to a spawn already;
+	// that is left to come. A spawn one now that has not come yet is decided again, as it is now.
+	if ( self->think == RP_SpawnerSpawnNow )
+	{
+		self->think = NULL;
+		self->nextthink = 0;
+	}
+	G_SpawnInt( "spawnnow", "0", &now );
+	if ( !RP_SpawnerCountingDown( self ) )
+	{
+		if ( now && !RP_SpawnerLiveChild( self ) )
+		{
+			self->think = RP_SpawnerSpawnNow;
+			self->nextthink = level.time + START_TIME_REMOVE_ENTS + 50;
+		}
+		else if ( self->rpSpawnerQueued > 0 )
+		{
+			self->think = RP_SpawnerQueuedFire;	// respawns that waited, while it was held say
+			self->nextthink = level.time + FRAMETIME;
+		}
+	}
+}
+
+// the spawner is counting down to a spawn -- its delay, waiting to be unseen, its spawn one now, or a
+// waiting respawn's turn -- which a fire now would replace (an entity has one think). Due this very frame
+// but not run yet counts: nextthink is 0 once it has run.
+static qboolean RP_SpawnerCountingDown( const gentity_t *spawner )
+{
+	return ( spawner->nextthink > 0 && ( spawner->think == NPC_Spawn_Go || spawner->think == NPC_ShySpawn ||
+		spawner->think == G_VehicleSpawn || spawner->think == RP_SpawnerSpawnNow || spawner->think == RP_SpawnerQueuedFire ) ) ? qtrue : qfalse;
+}
+
+// a respawn that waited its turn: fired now, unless it is still not its turn
+static void RP_SpawnerQueuedFire( gentity_t *ent )
+{
+	ent->think = NULL;
+	ent->nextthink = 0;
+
+	if ( ent->rpSpawnerQueued <= 0 || !ent->use )
+	{
+		ent->rpSpawnerQueued = 0;
+		return;
+	}
+	if ( ent->rpHeldBy )
+	{
+		// held with /entcut: when it is let go, it is spawned again in place and takes its turn then
+		return;
+	}
+	ent->rpSpawnerQueued--;
+	ent->use( ent, ent, ent );
+}
+
+// player_die(): an NPC or vehicle has died -- its spawner fires again if it has "respawn"
+void RP_SpawnerRespawn( gentity_t *npc )
+{
+	gentity_t *spawner;
+
+	if ( !npc || !npc->NPC || !npc->client )
+	{
+		return;
+	}
+	spawner = npc->zyk_npc_spawner;
+	if ( !RP_SpawnerMadeIt( spawner, npc ) || !spawner->rpSpawnerRespawn || !spawner->use )
+	{
+		return;
+	}
+
+	// already counting down to a spawn, or held with /entcut (hidden, to be put down elsewhere): this one
+	// waits its turn
+	if ( RP_SpawnerCountingDown( spawner ) || spawner->rpHeldBy )
+	{
+		spawner->rpSpawnerQueued++;
+		return;
+	}
+	spawner->use( spawner, npc, npc );
+}
+
+extern void Rancor_DropVictim( gentity_t *self );
+
+// an NPC or vehicle taken away as BS_REMOVE takes one (NPC_RemoveIfOutOfPlayersPVS()), but at once and firing
+// nothing: not drawn, not solid, gone next frame -- with the saber it carries, as the removal of a body frees
+// it (NPC.c), and with the droid a vehicle carries
+static void RP_SpawnedRemove( gentity_t *e )
+{
+	int saberNum = e->client->ps.saberEntityNum;
+
+	if ( saberNum > 0 && saberNum < ENTITYNUM_WORLD && g_entities[saberNum].inuse && g_entities[saberNum].r.ownerNum == e->s.number )
+	{
+		G_FreeEntity( &g_entities[saberNum] );
+		e->client->ps.saberEntityNum = 0;
+	}
+	if ( e->m_pVehicle && e->m_pVehicle->m_pDroidUnit )
+	{
+		gentity_t *droid = (gentity_t *)e->m_pVehicle->m_pDroidUnit;
+
+		if ( droid != e && droid->inuse && droid->client && droid->NPC && droid->think != G_FreeEntity )
+		{
+			RP_SpawnedRemove( droid );
+		}
+	}
+
+	if ( e->s.NPC_class == CLASS_RANCOR )
+	{
+		Rancor_DropVictim( e );	// as player_die() does: the player it holds goes free
+	}
+
+	e->takedamage = qfalse;		// nothing can kill it now, and fire its death targets
+	e->s.eFlags |= EF_NODRAW;
+	e->s.eType = ET_INVISIBLE;
+	e->r.contents = 0;
+	e->health = 0;
+	e->targetname = NULL;
+	e->think = G_FreeEntity;
+	e->nextthink = level.time + FRAMETIME;
+}
+
+// /entundo of a spawner: the NPCs and vehicles it made that are alive are taken away (RP_SpawnedRemove()) --
+// not a vehicle someone rides. Nothing fires: no death, no respawn; its use goes first all the same. Returns
+// how many went; *ridden is how many vehicles stayed.
+int RP_SpawnerRemoveChildren( gentity_t *spawner, int *ridden )
+{
+	int i, removed = 0;
+
+	if ( ridden )
+	{
+		*ridden = 0;
+	}
+	if ( !spawner || !spawner->inuse )
+	{
+		return 0;
+	}
+
+	spawner->rpSpawnerRespawn = qfalse;
+	spawner->rpSpawnerQueued = 0;
+	spawner->use = NULL;
+	spawner->think = NULL;
+	spawner->nextthink = 0;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		gentity_t *e = &g_entities[i];
+
+		if ( !RP_SpawnedAlive( e ) || !RP_SpawnerMadeIt( spawner, e ) )
+		{
+			continue;
+		}
+		if ( e->m_pVehicle && ( e->m_pVehicle->m_pPilot || e->m_pVehicle->m_iNumPassengers > 0 ) )
+		{
+			if ( ridden )
+			{
+				( *ridden )++;
+			}
+			continue;
+		}
+		RP_SpawnedRemove( e );
+		removed++;
+	}
+	return removed;
 }
 
 /*QUAKED NPC_spawner (1 0 0) (-16 -16 -24) (16 16 40) x x x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
@@ -2097,18 +2380,34 @@ void SP_NPC_spawner( gentity_t *self)
 		}
 	}
 
-	if ( !self->wait )
+	// GalaxyRP fix: [Entity System] wait and delay are given in seconds and kept in milliseconds, and only
+	// a value just read from the entity's keys is multiplied. Spawned again in place (/entedit, /entcut,
+	// /entrotate) a spawner keeps the fields its keys do not set -- already in milliseconds -- while its
+	// spawnflags are its keys' again, without the 65536 set below. zyk's flag alone decided, so a kept wait
+	// was multiplied again when a "spawnflags" key was given (500 ms became 500 s), and a delay read again
+	// in seconds was taken as milliseconds when none was (10 s became 10 ms). 65536 given among the
+	// spawnflags keys still means the values are milliseconds already, as zyk made it.
 	{
-		self->wait = 500;
-	}
-	else
-	{
-		if (!(self->spawnflags & 65536)) // zyk: dont multiply if has this flag
-			self->wait *= 1000;//1 = 1 msec, 1000 = 1 sec
-	}
+		int storedFlags = 0, delayGiven = 0;
+		float waitGiven = 0.0f;
+		const qboolean typedMs = ( G_SpawnInt( "spawnflags", "0", &storedFlags ) && ( storedFlags & 65536 ) ) ? qtrue : qfalse;
+		const qboolean waitKey = G_SpawnFloat( "wait", "0", &waitGiven );
+		const qboolean delayKey = G_SpawnInt( "delay", "0", &delayGiven );
 
-	if (!(self->spawnflags & 65536)) // zyk: dont multiply if has this flag
-		self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
+		if ( !self->wait )
+		{
+			self->wait = 500;
+		}
+		else if ( waitKey && !typedMs )
+		{
+			self->wait *= 1000;//1 = 1 msec, 1000 = 1 sec
+		}
+
+		if ( delayKey && !typedMs )
+		{
+			self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
+		}
+	}
 
 	self->spawnflags |= 65536;
 
@@ -2137,9 +2436,13 @@ void SP_NPC_spawner( gentity_t *self)
 	//	self->r.svFlags |= SVF_NPC_PRECACHE;//FIXME: precache my weapons somehow?
 
 		//NPC_PrecacheModels( self->NPC_type );
+
+		// GalaxyRP: [Entity System] "spawnnow" and "respawn" -- see RP_SpawnerKeys()
+		RP_SpawnerKeys( self );
 	}
 	else
 	{
+		self->rpSpawnerRespawn = qfalse;	// GalaxyRP: it spawns once and is gone
 		//NOTE: auto-spawners never check for shy spawning
 		//if ( spawning )
 		if (1) //just gonna always do this I suppose.
@@ -2289,15 +2592,37 @@ void SP_NPC_Vehicle( gentity_t *self)
 		self->classname = "NPC_Vehicle";
 	}
 
-	if ( !self->wait )
+	// GalaxyRP fix: [Entity System] only a wait or delay just read from the entity's keys is in seconds:
+	// spawned again in place (/entedit, /entcut, /entrotate), the vehicle spawner keeps the ones its keys
+	// do not set, in milliseconds already, and multiplying them again made a 500 ms wait 500 s. See
+	// SP_NPC_spawner().
 	{
-		self->wait = 500;
+		int delayGiven = 0;
+		float waitGiven = 0.0f;
+		const qboolean waitKey = G_SpawnFloat( "wait", "0", &waitGiven );
+		const qboolean delayKey = G_SpawnInt( "delay", "0", &delayGiven );
+
+		if ( !self->wait )
+		{
+			self->wait = 500;
+		}
+		else if ( waitKey )
+		{
+			self->wait *= 1000;//1 = 1 msec, 1000 = 1 sec
+		}
+		if ( delayKey )
+		{
+			self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
+		}
 	}
-	else
+
+	// GalaxyRP: [Entity System] no count is one use, as G_VehicleSpawn() has always taken it -- said here,
+	// so that a "spawnnow" spawn (RP_SpawnerSpawnNow()), which adds one to the count before it, does not
+	// take a count of 0 for its last use
+	if ( !self->count )
 	{
-		self->wait *= 1000;//1 = 1 msec, 1000 = 1 sec
+		self->count = 1;
 	}
-	self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
 
 	G_SetOrigin( self, self->s.origin );
 	G_SetAngles( self, self->s.angles );
@@ -2322,9 +2647,13 @@ void SP_NPC_Vehicle( gentity_t *self)
 			return;
 		}
 		self->use = NPC_VehicleSpawnUse;
+
+		// GalaxyRP: [Entity System] "spawnnow" and "respawn" -- see RP_SpawnerKeys()
+		RP_SpawnerKeys( self );
 	}
 	else
 	{
+		self->rpSpawnerRespawn = qfalse;	// GalaxyRP: it spawns once and is gone
 		if ( self->delay )
 		{
 			if ( !NPC_VehiclePrecache( self ) )

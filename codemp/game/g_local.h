@@ -626,6 +626,12 @@ struct gentity_s {
 	int			zyk_spawner_id;			// on a spawner: its id, 0 until it has spawned
 	gentity_t	*zyk_npc_spawner;		// on an NPC: the spawner that made it
 	int			zyk_npc_spawner_id;		// on an NPC: that spawner's zyk_spawner_id at the time
+
+	// GalaxyRP: [Entity System] on an NPC or vehicle spawner: its "respawn" key -- fired again when an
+	// NPC or vehicle it made dies (RP_SpawnerRespawn() in NPC_spawn.c) -- and the respawns waiting for
+	// the one it is already counting down to (a spawner has one think: a second fire would replace it)
+	qboolean	rpSpawnerRespawn;
+	int			rpSpawnerQueued;
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -2407,6 +2413,13 @@ void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );
 void		Cmd_EntCancel_f( gentity_t *ent );
+// GalaxyRP: [Entity System] NPC and vehicle spawners: spawnnow, respawn, and the NPCs a spawner made --
+// NPC_spawn.c
+qboolean	RP_IsNpcSpawnerClass( const char *classname );
+qboolean	RP_SpawnerMadeIt( const gentity_t *spawner, const gentity_t *npc );
+gentity_t	*RP_SpawnerLiveChild( const gentity_t *spawner );
+void		RP_SpawnerRespawn( gentity_t *npc );
+int			RP_SpawnerRemoveChildren( gentity_t *spawner, int *ridden );
 // GalaxyRP: [Slot Reuse] model and effect slots of removed Entity System props given to new names --
 // g_utils.c
 int			RP_EntityModelIndex( gentity_t *ent, const char *name );
@@ -2423,6 +2436,8 @@ qboolean	RP_ListCommand( gentity_t *ent, const char *what );
 void		RP_ListVotableMaps( gentity_t *ent, int page );
 void		RP_ListDataCommand( gentity_t *ent );
 qboolean	RP_NpcTypeIsVehicle( const char *type );
+qboolean	RP_NpcTypeKnown( const char *type );
+qboolean	RP_VehicleTypeKnown( const char *type );
 int			RP_ListParsePage( const char *s );
 qboolean	RP_SoundFileExists( const char *name );
 qboolean	RP_MusicFileExists( const char *music );

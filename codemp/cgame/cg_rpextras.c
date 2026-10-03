@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 GalaxyRP: [Extras] the cgame half of the Extras menus of the Galaxy RP menu (Props, Effects, NPCs &
-Vehicles, Music, Sounds). The menus themselves are the ui's (ui_main.c); ui/rp_extras.h says how the
+Vehicles, Music, Sounds, Lights, Spawners). The menus themselves are the ui's (ui_main.c); ui/rp_extras.h says how the
 two work together. Here:
 
 - "rpx list <kind>": gets the listing of the kind's current folder (ui_rpx_dir_<kind>) from the server
@@ -547,8 +547,8 @@ static void RPX_Queue( const char *cmd ) {
 	Q_strncpyz( rpx_queue[rpx_queued++], cmd, sizeof( rpx_queue[0] ) );
 }
 
-// GalaxyRP: [Extras] the Props and Effects menus' Offset: /entaddaim's aimoffset, 0 to 512, sent only when
-// it is not 0 -- the command is then the one these menus always sent
+// GalaxyRP: [Extras] the Props, Effects and Spawners menus' Offset: /entaddaim's aimoffset, 0 to 512, sent
+// only when it is not 0 -- the command is then the one these menus always sent
 static void RPX_AddOffset( char *cmd, int size, const char *cvar ) {
 	int lift = RPX_CvarInt( cvar );
 
@@ -764,6 +764,111 @@ static void RPX_SpawnLight( void ) {
 	RPX_Queue( cmd );
 }
 
+static int RPX_ClampInt( int v, int lo, int hi ) {
+	return v < lo ? lo : ( v > hi ? hi : v );
+}
+
+/*
+==================
+RPX_SpawnSpawner
+
+GalaxyRP: [Extras] the Spawners menu's Spawn: an npc_spawner (NPCs tab) or NPC_Vehicle (Vehicles tab) of the
+selected type, on the surface aimed at (/entaddaim), with the targetname the server requires and the
+menu's settings -- each sent only when it changes something. The type is checked against the listing the
+server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in case they changed since.
+Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen.
+==================
+*/
+static void RPX_SpawnSpawner( void ) {
+	int kind = RPX_CvarInt( "ui_rpx_npcmode" ) ? RPX_VEHICLES : RPX_NPCS;
+	char folder[RPX_NAME_LEN], type[RPX_NAME_LEN], cmd[MAX_STRING_CHARS];
+	char spname[64], npcname[64], ondeath[64];
+	const char *problem;
+	int yaw, count, delay, flags = 0;
+
+	if ( !RPX_Selected( kind, folder, sizeof( folder ), type, sizeof( type ) ) ) {
+		return;
+	}
+	if ( strchr( type, ' ' ) ) {
+		RPX_Refuse( "That type's name has a space in it, so it cannot be spawned." );
+		return;
+	}
+
+	RPX_CvarString( "ui_rpx_sp_name", spname, sizeof( spname ) );
+	RPX_CvarString( "ui_rpx_sp_npcname", npcname, sizeof( npcname ) );
+	RPX_CvarString( "ui_rpx_sp_ondeath", ondeath, sizeof( ondeath ) );
+	problem = RPX_SpawnerNamesProblem( spname, npcname, ondeath, kind == RPX_NPCS );
+	if ( problem ) {
+		RPX_Refuse( problem );
+		return;
+	}
+
+	// towards me, or the way I look
+	if ( RPX_CvarInt( "ui_rpx_sp_face" ) ) {
+		yaw = (int)( AngleNormalize360( cg.predictedPlayerState.viewangles[YAW] ) + 0.5f ) % 360;
+	} else {
+		yaw = RPX_FacingYaw( 0 );
+	}
+	Com_sprintf( cmd, sizeof( cmd ), "entaddaim %s npc_type \"%s\" angles \"0 %d 0\" targetname \"%s\"",
+		kind == RPX_VEHICLES ? "NPC_Vehicle" : "npc_spawner", type, yaw, spname );
+
+	if ( RPX_CvarInt( "ui_rpx_sp_now" ) ) {
+		Q_strcat( cmd, sizeof( cmd ), " spawnnow \"1\"" );
+	}
+	count = RPX_CvarInt( "ui_rpx_sp_unlim" ) ? -1 : RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_count" ), 1, 999 );
+	if ( count != 1 ) {	// 1 is what a spawner takes no count for
+		Q_strcat( cmd, sizeof( cmd ), va( " count \"%d\"", count ) );
+	}
+	delay = RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_delay" ), 0, 3600 );
+	if ( delay > 0 ) {
+		Q_strcat( cmd, sizeof( cmd ), va( " delay \"%d\"", delay ) );
+	}
+	if ( RPX_CvarInt( "ui_rpx_sp_respawn" ) ) {
+		Q_strcat( cmd, sizeof( cmd ), " respawn \"1\"" );
+	}
+	if ( npcname[0] ) {
+		Q_strcat( cmd, sizeof( cmd ), va( " NPC_targetname \"%s\"", npcname ) );
+	}
+
+	if ( kind == RPX_NPCS ) {
+		int health = RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_health" ), 0, 100000 );
+
+		if ( health > 0 ) {
+			Q_strcat( cmd, sizeof( cmd ), va( " health \"%d\"", health ) );
+		}
+		if ( RPX_CvarInt( "ui_rpx_sp_hbar" ) ) {
+			Q_strcat( cmd, sizeof( cmd ), " showhealth \"1\"" );
+		}
+		if ( ondeath[0] ) {
+			Q_strcat( cmd, sizeof( cmd ), va( " NPC_target \"%s\"", ondeath ) );
+		}
+		if ( RPX_CvarInt( "ui_rpx_sp_shy" ) ) {
+			flags |= 2048;	// SHY
+		}
+		if ( RPX_CvarInt( "ui_rpx_sp_noai" ) ) {
+			flags |= 32;	// CINEMATIC
+		}
+		if ( !RPX_CvarInt( "ui_rpx_sp_solid" ) ) {
+			flags |= 64;	// NOTSOLID
+		}
+	} else {
+		if ( RPX_CvarInt( "ui_rpx_sp_vdie" ) ) {
+			flags |= 1;		// NO_PILOT_DIE: dmg is in milliseconds, speed the distance
+			Q_strcat( cmd, sizeof( cmd ), va( " dmg \"%d\" speed \"%d\"",
+				RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_vtime" ), 1, 3600 ) * 1000, RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_vdist" ), 16, 8192 ) ) );
+		}
+		if ( RPX_CvarInt( "ui_rpx_sp_vdock" ) ) {
+			flags |= 2;		// SUSPENDED
+		}
+	}
+	if ( flags ) {
+		Q_strcat( cmd, sizeof( cmd ), va( " spawnflags \"%d\"", flags ) );
+	}
+
+	RPX_AddOffset( cmd, sizeof( cmd ), "ui_rpx_sp_lift" );
+	RPX_Queue( cmd );
+}
+
 static void RPX_Music( qboolean everyone ) {
 	char folder[RPX_NAME_LEN], name[RPX_NAME_LEN], path[MAX_QPATH * 2];
 
@@ -883,6 +988,8 @@ void CG_Rpx_f( void ) {
 			RPX_SpawnNpc();
 		} else if ( !Q_stricmp( arg, "spawnlight" ) ) {
 			RPX_SpawnLight();
+		} else if ( !Q_stricmp( arg, "spawnspawner" ) ) {
+			RPX_SpawnSpawner();
 		} else if ( !Q_stricmp( arg, "musicme" ) ) {
 			RPX_Music( qfalse );
 		} else if ( !Q_stricmp( arg, "musicall" ) ) {
