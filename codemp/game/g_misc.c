@@ -4913,6 +4913,7 @@ void faller_think(gentity_t *ent)
 // alive at once (its fallers carry it as parent), which bounds the ragdoll cost even at a legal rate.
 #define RP_FALLER_MIN_INTERVAL	500
 #define RP_FALLER_MAX_LIVE		32
+#define RP_FALLER_MAX_FUDGE		60000	// GalaxyRP: a minute at most on top of the interval: the sum is a think time
 
 static int RP_FallersAlive( const gentity_t *ent )
 {
@@ -5005,14 +5006,16 @@ void SP_misc_faller(gentity_t *ent)
 	G_SpawnInt("fudgefactor", "0", &ent->genericValue2);
 
 	// GalaxyRP fix: [Entity System] both come straight off spawn keys; see misc_faller_create()
-	if ( ent->genericValue1 < RP_FALLER_MIN_INTERVAL || ent->genericValue2 < 0 )
+	if ( ent->genericValue1 < RP_FALLER_MIN_INTERVAL || ent->genericValue2 < 0 || ent->genericValue2 > RP_FALLER_MAX_FUDGE )
 	{
-		G_LogPrintf( "misc_faller at %s: interval %d / fudgefactor %d clamped to at least %d / 0\n",
-			vtos( ent->s.origin ), ent->genericValue1, ent->genericValue2, RP_FALLER_MIN_INTERVAL );
+		G_LogPrintf( "misc_faller at %s: interval %d / fudgefactor %d clamped to at least %d / 0..%d\n",
+			vtos( ent->s.origin ), ent->genericValue1, ent->genericValue2, RP_FALLER_MIN_INTERVAL, RP_FALLER_MAX_FUDGE );
 		if ( ent->genericValue1 < RP_FALLER_MIN_INTERVAL )
 			ent->genericValue1 = RP_FALLER_MIN_INTERVAL;
 		if ( ent->genericValue2 < 0 )
 			ent->genericValue2 = 0;
+		if ( ent->genericValue2 > RP_FALLER_MAX_FUDGE )
+			ent->genericValue2 = RP_FALLER_MAX_FUDGE;
 	}
 
 	if (!ent->targetname || !ent->targetname[0])

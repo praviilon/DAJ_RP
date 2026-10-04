@@ -2219,16 +2219,17 @@ void asteroid_field_think(gentity_t *self)
 
 		if ( !copyAsteroid )
 		{
-			if ( !self->alt_fire )
+			// GalaxyRP fix: [Entity System] genericValue3, not alt_fire, which is the "linear" spawn key
+			if ( !self->genericValue3 )
 			{
-				self->alt_fire = qtrue;	// logged once per field
+				self->genericValue3 = 1;	// logged once per field
 				G_LogPrintf( "trigger_asteroid_field at %s: nothing has the targetname %s to copy, no asteroids spawned\n",
 					vtos( self->s.origin ), self->target ? self->target : "" );
 			}
 			self->nextthink = level.time + 10000;	// a template may still be added; look again later
 			return;
 		}
-		self->alt_fire = qfalse;
+		self->genericValue3 = 0;
 
 		//need to spawn a new asteroid
 		newAsteroid = G_Spawn();

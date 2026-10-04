@@ -2967,9 +2967,10 @@ qboolean G_SetMusic( const char *music, const char **reason )
 	if ( !G_MusicStringValid( music, normalized, sizeof( normalized ), reason ) )
 		return qfalse;
 
-	// the gamestate counts what replaces what is there now
+	// the gamestate counts what replaces what is there now: each string that is there at all costs
+	// its length plus one (zyk_gamestate_bytes_used), an empty slot nothing
 	trap->GetConfigstring( CS_MUSIC, current, sizeof( current ) );
-	delta = (int)strlen( normalized ) - (int)strlen( current );
+	delta = ( (int)strlen( normalized ) + 1 ) - ( current[0] ? (int)strlen( current ) + 1 : 0 );
 	if ( delta > 0 && !G_ConfigstringBytesAvailable( delta ) )
 	{
 		if ( reason ) *reason = "the gamestate is full";
@@ -3010,7 +3011,10 @@ void RP_TeamDetach( gentity_t *ed )
 	}
 
 	if ( ed->teammaster == ed )
-	{ // the master: the team goes on as single entities
+	{ // the master: the team goes on as single entities -- each a master of one, which is what
+	  // G_FindTeams() and RP_TeamLinkEntity() both take a lone teamed entity for, so a member added
+	  // to that team later joins one of them rather than standing beside them, whichever of the two
+	  // links it (the misc_bsp rebuild runs G_FindTeams() again)
 		int members = 0;
 
 		for ( m = ed->teamchain; m && steps < MAX_GENTITIES; m = next, steps++ )
@@ -3018,7 +3022,7 @@ void RP_TeamDetach( gentity_t *ed )
 			next = m->teamchain;
 			if ( m->teammaster == ed )
 			{
-				m->teammaster = NULL;
+				m->teammaster = m;
 				m->teamchain = NULL;
 				m->flags &= ~FL_TEAMSLAVE;
 				members++;

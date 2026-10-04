@@ -140,8 +140,18 @@ onto the master, as there), or as a master on its own when there is none. For en
 load (/entadd, /entedit, a copy, a preset) -- G_FindTeams() was never run again for them, so a door added
 to a team stood alone, and one spawned again in place after RP_TeamDetach() has to be put back. Triggers
 never link, as there. An entity linked already is left as it is.
+
+A trigger is told by its contents, as G_FindTeams() tells it -- but G_FindTeams() runs before any item
+has its contents (FinishSpawningItem sets CONTENTS_TRIGGER two frames later), while here a live item has
+them, so an item is not a trigger for this: "team" on items is the one-of-a-team respawn (RespawnItem),
+and an item added to such a team joins it.
 =================
 */
+static qboolean RP_TeamIsTrigger( const gentity_t *e )
+{
+	return ( e->r.contents == CONTENTS_TRIGGER && e->s.eType != ET_ITEM ) ? qtrue : qfalse;
+}
+
 void RP_TeamLinkEntity( gentity_t *e )
 {
 	gentity_t *master = NULL;
@@ -149,7 +159,7 @@ void RP_TeamLinkEntity( gentity_t *e )
 
 	if ( !e || !e->inuse || !e->team || !e->team[0] || e->isLogical )
 		return;
-	if ( e->r.contents == CONTENTS_TRIGGER )
+	if ( RP_TeamIsTrigger( e ) )
 		return;
 	if ( e->teammaster && e->teammaster->inuse )
 		return;
@@ -160,7 +170,7 @@ void RP_TeamLinkEntity( gentity_t *e )
 
 		if ( m == e || !m->inuse || !m->team || ( m->flags & FL_TEAMSLAVE ) || m->teammaster != m )
 			continue;
-		if ( m->r.contents == CONTENTS_TRIGGER )
+		if ( RP_TeamIsTrigger( m ) )
 			continue;
 		if ( !strcmp( m->team, e->team ) )
 		{
