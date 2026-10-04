@@ -415,7 +415,7 @@ setting the entity up happens again, as it does for /entedit: a spawn script run
 NPC spawner that spawns at once spawns again.
 ==================
 */
-void RP_EntGrabRespawnInPlace( gentity_t *e )
+void RP_EntRespawnPrepare( gentity_t *e )
 {
 	if ( !e || !e->inuse )
 		return;
@@ -426,13 +426,23 @@ void RP_EntGrabRespawnInPlace( gentity_t *e )
 		e->rpBSPInstance = 0;
 	}
 
-	RP_FreeEntityTriggers( e );
+	// zyk: the trigger a door or platform made for itself, a turret's top, a trip mine's laser trap: the
+	// spawn function makes them anew -- see RP_FreeEntityChildren() in g_spawn.c
+	RP_FreeEntityChildren( e );
 
 	// zyk: a class with a Ghoul2 model (misc_turretG2) builds it again in its spawn function, onto the
 	// instance it already has -- a second model on it, and the first never freed. G_FreeEntity() frees
-	// it the same way.
+	// it the same way. (/entedit used to skip this and leaked one model per edit.)
 	if ( e->ghoul2 )
 		trap->G2API_CleanGhoul2Models( &e->ghoul2 );
+}
+
+void RP_EntGrabRespawnInPlace( gentity_t *e )
+{
+	if ( !e || !e->inuse )
+		return;
+
+	RP_EntRespawnPrepare( e );
 
 	zyk_main_spawn_entity( e );
 }
@@ -770,7 +780,7 @@ gentity_t *RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t norm
 
 	if ( e->rpBSPInstance > 0 )
 		RP_FreeSubBSPEntities( e->rpBSPInstance );
-	RP_FreeEntityTriggers( e );
+	RP_FreeEntityChildren( e );
 	G_FreeEntity( e );
 
 	moved = RP_SpawnForRoute( &route );
@@ -937,7 +947,9 @@ was, and spawning it again from the record -- the drop, or /entcancel -- brings 
 */
 static void RP_GrabHide( gentity_t *e )
 {
-	RP_FreeEntityTriggers( e );
+	// zyk: and a turret's top or a trip mine's laser trap, which would stay in the world working a hidden
+	// base; the drop or /entcancel spawns the entity again and it makes them anew
+	RP_FreeEntityChildren( e );
 
 	if ( !e->isLogical )
 		trap->UnlinkEntity( (sharedEntity_t *)e );

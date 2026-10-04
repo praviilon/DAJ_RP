@@ -967,6 +967,9 @@ qboolean turret_base_spawn_top( gentity_t *base )
 	//link them to each other
 	base->target_ent = top;
 	top->target_ent = base;
+	// GalaxyRP: [Entity System] and the top as the base's child, so /entremove, /entundo and /entedit of
+	// the base take it along (it has no record of its own) -- see RP_FreeEntityChildren() in g_spawn.c
+	RP_MarkChild( base, top );
 
 	//top->s.owner = MAX_CLIENTS; //not owned by any client
 

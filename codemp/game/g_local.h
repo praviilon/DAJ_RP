@@ -454,6 +454,15 @@ struct gentity_s {
 	int			rpBSPInstance;
 	int			rpSubBSPOf;
 
+	// GalaxyRP: [Entity System] an entity another entity made for itself and that has no record of its
+	// own -- a misc_turret's top, a misc_trip_mine's laser trap -- goes with its maker when the entity
+	// commands remove it or spawn it again in place (RP_FreeEntityChildren), as a door's trigger does.
+	// The link is the maker's slot plus a stamp the maker took when it first made one (RP_MarkChild);
+	// a slot freed and reused is zeroed, so a stale link never matches. Same idea as zyk_spawner_id.
+	int			rpMakerStamp;		// on a maker: its stamp, 0 until it has made a child
+	gentity_t	*rpMadeBy;			// on a child: the maker's slot
+	int			rpMadeByStamp;		// on a child: the maker's stamp at the time
+
 	// GalaxyRP: [Entity System] true on an entity the map itself put there -- its own entity string or
 	// a per-map fix -- which /entcut and /entrotate leave alone (/entcopy may copy it; the copy is not
 	// one). Set once the map has loaded, and given back by the entity-file loader to a line identical
@@ -2094,6 +2103,8 @@ typedef struct level_locals_s {
 	// GalaxyRP fix: [Entity System] the last id handed out as gentity_t::zyk_spawner_id. Starts at
 	// 0 with the rest of level, so ids are never 0 and never repeat within a map.
 	int zyk_next_spawner_id;
+	// GalaxyRP: [Entity System] the last stamp handed out as gentity_t::rpMakerStamp (never 0, never repeats)
+	int rp_next_maker_stamp;
 
 	// GalaxyRP: [Weather] /admweather state. The block is claimed lazily, on the first use of the
 	// command in a map, and that timing is deliberate: claiming it in G_InitGame would put it below
@@ -2256,6 +2267,11 @@ qboolean	zyk_subbsp_name_known( const char *name );
 int			zyk_subbsp_name_slot( const char *name );
 int			RP_FreeSubBSPEntities( int instance );
 int			RP_FreeEntityTriggers( gentity_t *target );
+// GalaxyRP: [Entity System] the child link (gentity_t::rpMadeBy) and the one call that frees everything
+// an entity made for itself -- its triggers and its stamped children. g_spawn.c.
+void		RP_MarkChild( gentity_t *maker, gentity_t *child );
+qboolean	RP_IsChildOf( const gentity_t *maker, const gentity_t *child );
+int			RP_FreeEntityChildren( gentity_t *maker );
 int			G_AllocRemaining( void );
 gentity_t	*RP_MiscBspForInstance( int instance );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
@@ -2437,6 +2453,10 @@ qboolean	RP_EntitySolidAroundSomeone( const gentity_t *e );
 void		RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs );
 void		RP_EntGrabPlace( const vec3_t point, const vec3_t normal, const vec3_t mins, const vec3_t maxs, vec3_t origin );
 void		RP_EntGrabRespawnInPlace( gentity_t *e );
+// GalaxyRP: [Entity System] everything that must go before a live entity's spawn function runs again
+// in its slot (/entedit, /entrotate, a dropped /entcut): its sub-BSP entities, its triggers and
+// children, its Ghoul2 model. g_entgrab.c.
+void		RP_EntRespawnPrepare( gentity_t *e );
 void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );

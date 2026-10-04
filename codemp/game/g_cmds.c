@@ -15058,6 +15058,8 @@ void Cmd_RemapLoad_f( gentity_t *ent ) {
 	}
 }
 
+static int RP_EntRemoveFree( gentity_t *target, int *subEntities );	// GalaxyRP: [Entity System] below, with /entremove
+
 /*
 ==================
 Cmd_EntUndo_f
@@ -15109,11 +15111,11 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 		else
 		trap->SendServerCommand(ent->s.number, va("print \"Entity %d cleaned\n\"", undone_number));
 
-		// GalaxyRP: [Entity System] a misc_bsp takes its sub-BSP's entities with it -- see RP_EntRemoveFree()
-		if (undone->rpBSPInstance > 0)
-			RP_FreeSubBSPEntities(undone->rpBSPInstance);
-
-		G_FreeEntity(undone);
+		// GalaxyRP fix: [Entity System] freed the way /entremove frees -- a misc_bsp takes its sub-BSP's
+		// entities with it, a door or platform its trigger, a turret its top, a trip mine its laser trap.
+		// This freed the entity alone and left a door's trigger behind, still working the freed slot
+		// through its parent -- the exact hazard /entremove had been fixed for. See RP_EntRemoveFree().
+		RP_EntRemoveFree(undone, NULL);
 
 		// G_FreeEntity() clears this itself now, for entities freed by any other route as well --
 		// see the comment there. Cleared here too so the one path that always went through this
@@ -16183,18 +16185,12 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		this_ent->rpMapEntity = qfalse;
 
 		// GalaxyRP: [Entity System] a misc_bsp rebuilds its sub-BSP's entities when it spawns again, so
-		// the ones it has now go first, or there would be two of each
-		if (this_ent->rpBSPInstance > 0)
-		{
-			RP_FreeSubBSPEntities(this_ent->rpBSPInstance);
-			this_ent->rpBSPInstance = 0;
-		}
-
-		// GalaxyRP fix: [Entity System] and so does the trigger a door or platform made for itself: the
-		// spawn below makes it a new one (SpawnPlatTrigger at once, a door's Think_SpawnNewDoorTrigger a
-		// frame later), so the old one stayed behind -- a second trigger around the door's old place,
-		// still working the door, one more with every edit. See RP_EntRemoveFree().
-		RP_FreeEntityTriggers(this_ent);
+		// the ones it has now go first, or there would be two of each -- and so do the trigger a door or
+		// platform made for itself (the spawn below makes it a new one: SpawnPlatTrigger at once, a
+		// door's Think_SpawnNewDoorTrigger a frame later; the old one used to stay behind, one more with
+		// every edit), a turret's top, a trip mine's laser trap, and a Ghoul2 model. One helper does all of
+		// it, the same for /entrotate and a dropped /entcut: RP_EntRespawnPrepare() in g_entgrab.c.
+		RP_EntRespawnPrepare(this_ent);
 
 		zyk_main_spawn_entity(this_ent);
 
@@ -17379,7 +17375,9 @@ static int RP_EntRemoveFree( gentity_t *target, int *subEntities )
 			*subEntities += freed;
 	}
 
-	children = RP_FreeEntityTriggers( target );
+	// GalaxyRP: [Entity System] its triggers, and the entities stamped as its children (a turret's top, a
+	// trip mine's laser trap) -- see RP_FreeEntityChildren() in g_spawn.c
+	children = RP_FreeEntityChildren( target );
 
 	G_FreeEntity( target );
 	return children;
@@ -17538,7 +17536,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 				trap->SendServerCommand( ent-g_entities, va("print \"Entity %d (%s) removed%s%s.\n\"", i, classname,
-					children == 1 ? " (and its trigger)" : children > 1 ? va(" (and %d triggers it made)", children) : "",
+					children == 1 ? " (and the entity it made for itself)" : children > 1 ? va(" (and %d entities it made for itself)", children) : "",
 					subEntities > 0 ? va(" (and the %d entities of its sub-BSP)", subEntities) : "") );
 				return;
 			}
@@ -17683,7 +17681,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				char mapNote[96] = "";
 
 				if (children > 0)
-					Com_sprintf(childNote, sizeof(childNote), " (and %d trigger%s they made)", children, children == 1 ? "" : "s");
+					Com_sprintf(childNote, sizeof(childNote), " (and %d entit%s they made for themselves)", children, children == 1 ? "y" : "ies");
 				if (skipped > 0)
 					Com_sprintf(skipNote, sizeof(skipNote), " Skipped %d that cannot be removed (created by the game: marked G in /entlist).", skipped);
 				if (spawnPoints > 0)

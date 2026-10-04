@@ -5956,12 +5956,27 @@ extern void laserTrapStick( gentity_t *ent, vec3_t endpos, vec3_t normal );
 
 void SP_misc_trip_mine( gentity_t *ent )
 {
-	gentity_t	*laserTrap = G_Spawn();
+	gentity_t	*laserTrap;
 	vec3_t		fwd;
+
+	// GalaxyRP fix: [Entity System] the mine is a second entity; with the table at the reserve the
+	// placeholder stays (inert, saved by /entsave) and the mine is not made
+	if ( G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		G_LogPrintf( "misc_trip_mine at %s: no entity slot for its mine, %d free\n", vtos( ent->s.origin ), G_FreeEntityCount() );
+		return;
+	}
+
+	laserTrap = G_Spawn();
 
 	RegisterItem( BG_FindItemForWeapon( WP_TRIP_MINE ) );
 
 	CreateLaserTrap( laserTrap, ent->s.origin, &g_entities[ENTITYNUM_WORLD] );
+	// GalaxyRP: [Entity System] the mine as the placeholder's child: /entremove, /entundo and /entedit
+	// of the placeholder take it along, and an edit makes one mine, not one more -- see
+	// RP_FreeEntityChildren() in g_spawn.c. The mine going off on its own needs nothing: G_FreeEntity()
+	// zeroes the link.
+	RP_MarkChild( ent, laserTrap );
 	laserTrap->count = 1;	//a tripwire, not a proximity mine
 	trap->LinkEntity( (sharedEntity_t *)laserTrap );
 

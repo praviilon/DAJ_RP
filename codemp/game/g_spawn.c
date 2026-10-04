@@ -1750,6 +1750,63 @@ int RP_FreeEntityTriggers( gentity_t *target )
 	return children;
 }
 
+/*
+=================
+RP_MarkChild / RP_IsChildOf / RP_FreeEntityChildren
+
+GalaxyRP: [Entity System] see gentity_t::rpMadeBy. RP_FreeEntityChildren() frees what an entity made for
+itself and that has no record of its own: the trigger a door or platform made (RP_FreeEntityTriggers) and
+every entity stamped as its child -- a misc_turret's top (turret_base_spawn_top), a misc_trip_mine's laser
+trap (SP_misc_trip_mine). Called wherever the maker is removed by command (/entremove, /entundo, a cut
+entity hidden) or about to spawn again in place (/entedit, /entrotate, a dropped /entcut -- its spawn
+function makes them anew). Returns how many were freed. A child's own death or removal needs nothing
+here: G_FreeEntity() zeroes the link.
+=================
+*/
+void RP_MarkChild( gentity_t *maker, gentity_t *child )
+{
+	if ( !maker || !child || maker == child )
+		return;
+
+	if ( !maker->rpMakerStamp )
+		maker->rpMakerStamp = ++level.rp_next_maker_stamp;
+
+	child->rpMadeBy = maker;
+	child->rpMadeByStamp = maker->rpMakerStamp;
+}
+
+qboolean RP_IsChildOf( const gentity_t *maker, const gentity_t *child )
+{
+	return ( maker && child && child != maker && child->inuse && child->rpMadeBy == maker
+		&& maker->rpMakerStamp && child->rpMadeByStamp == maker->rpMakerStamp ) ? qtrue : qfalse;
+}
+
+int RP_FreeEntityChildren( gentity_t *maker )
+{
+	gentity_t *other;
+	int children;
+
+	if ( !maker )
+		return 0;
+
+	children = RP_FreeEntityTriggers( maker );
+
+	if ( !maker->rpMakerStamp )
+		return children;
+
+	RP_FOR_EACH_ENTITY( other )
+	{
+		if ( !RP_IsChildOf( maker, other ) )
+			continue;
+
+		G_FreeEntity( other );
+		if ( !other->inuse )
+			children++;
+	}
+
+	return children;
+}
+
 int RP_FreeSubBSPEntities( int instance )
 {
 	gentity_t *e;
