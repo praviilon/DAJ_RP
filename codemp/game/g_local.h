@@ -2066,6 +2066,9 @@ typedef struct level_locals_s {
 	// GalaxyRP: [Entity System] why the last Entity System spawn was refused ("" if it was not),
 	// for the command that asked for it to say -- see RP_EntitySystemSpawnRefused() in g_spawn.c
 	char rp_spawn_refusal[256];
+	// GalaxyRP: [Entity System] the ambient sound set names this server knows, read from sound/sound.txt once
+	// per map: 0 not read yet, 1 read, -1 the file could not be read -- see RP_SoundSetKnown() in g_spawn.c
+	int rp_soundsets_state;
 	// GalaxyRP: [Entity System] a note about the last spawn that went through, for the command to print
 	// (an item the map had not precached -- see G_SpawnItem). Cleared with rp_spawn_refusal.
 	char rp_spawn_note[256];
@@ -2374,6 +2377,7 @@ qboolean zyk_load_remap_file( const char *file_path );
 int			RP_BreakStringEdRefs( char *text );
 qboolean	RP_HasStringEdRef( const char *text );
 const char	*RP_ShownText( const char *text );
+qboolean	RP_SoundSetKnown( const char *name );
 // GalaxyRP fix: [Shader Remap] /remapreset's worker -- returns how many remaps it cleared. See the
 // definition in g_utils.c for why it sends the configstring twice and in that order.
 int zyk_clear_all_remaps( void );

@@ -936,6 +936,26 @@ static void CG_ConfigStringModified( void ) {
 			cgs.gameEffects[ num-CS_EFFECTS] = trap->FX_RegisterEffect( str );
 		}
 	}
+	// GalaxyRP fix: [Ambient Sets] a sound set first used after this client connected -- an ambient speaker
+	// or a mover the entity commands added -- was never loaded: CG_AS_Register() reads the slots once, at
+	// connect, and the engine plays nothing for a set it has not loaded, so it stayed silent until the
+	// player reconnected. Loaded now, the way CG_AS_Register() loads them: added to the engine's precache
+	// list and the set file parsed again. That re-parse adds the sets already loaded once more (the engine
+	// has no call to add a single one; it frees them all at map change) -- the price of leaving the
+	// precache list alone, since clearing it resets the area ambience the player is hearing. The server
+	// only lets a name through that sound/sound.txt defines (RP_SoundSetKnown(), g_spawn.c): the engine
+	// drops a client whose list holds a name the file has not.
+	else if ( num > CS_AMBIENT_SET && num < CS_AMBIENT_SET + MAX_AMBIENT_SETS )
+	{
+		const int slot = num - CS_AMBIENT_SET;
+
+		if ( str[0] && !cgs.ambientSetLoaded[slot] )
+		{
+			cgs.ambientSetLoaded[slot] = qtrue;
+			trap->AS_AddPrecacheEntry( str );
+			trap->AS_ParseSets();
+		}
+	}
 	else if ( num >= CS_SIEGE_STATE && num < CS_SIEGE_STATE+1 )
 	{
 		if (str[0])

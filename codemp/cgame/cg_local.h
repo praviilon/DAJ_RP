@@ -1759,6 +1759,10 @@ typedef struct cgs_s {
 	// Tr!Force: [ModCheck] Server mod check
 	qboolean	modCheck;
 
+	// GalaxyRP: [Ambient Sets] the CS_AMBIENT_SET slots whose sound set this client has loaded -- at connect
+	// (CG_AS_Register()) or when the slot arrived later (CG_ConfigStringModified())
+	qboolean	ambientSetLoaded[MAX_AMBIENT_SETS];
+
 } cgs_t;
 
 typedef struct siegeExtended_s

@@ -2107,6 +2107,142 @@ static qboolean RP_SpawnRefuse( gentity_t *ent, const char *reason )
 	return qtrue;
 }
 
+/*
+==================
+RP_SoundSetKnown
+
+GalaxyRP fix: [Entity System] whether an ambient sound set ("soundSet" on a target_speaker, a mover, a
+misc_model_breakable...) is one this server's clients can load. A client loads every name in the
+CS_AMBIENT_SET configstrings from sound/sound.txt (AS_ParseSets(), snd_ambient.cpp) and DROPS itself
+("missing sound sets") on one that file does not define -- so a misspelled soundSet the Entity System
+let through locked every player who connected afterwards out of the server for the rest of the map, and
+now that cgame loads a set that arrives mid-game (CG_ConfigStringModified()), it would drop everyone
+already connected too. The map's own names are the map's business; this is asked of the entities the
+Entity System makes (RP_EntitySystemSpawnRefused()).
+
+The names are read from the same file the client reads, once per map, the way the client finds them: a
+line that starts with generalSet, localSet or bmodelSet (case-sensitive, as the client compares them),
+then -- past one character -- the first word. Names are compared ignoring case, as the client's name map
+does (sstring_t). If the server cannot read the file, only a name the map itself has already registered
+is accepted: every client has loaded those.
+==================
+*/
+#define RP_MAX_KNOWN_SOUNDSETS	2048
+#define RP_SOUNDSET_NAME_LEN	128
+static char rp_soundSetNames[RP_MAX_KNOWN_SOUNDSETS][RP_SOUNDSET_NAME_LEN];
+static int rp_numSoundSetNames = 0;
+
+static void RP_LoadSoundSetNames( void )
+{
+	static const char *keywords[] = { "generalSet", "localSet", "bmodelSet" };
+	fileHandle_t f = 0;
+	char *buf = NULL;
+	const char *p;
+	int len, k, overflow = 0;
+
+	level.rp_soundsets_state = -1;
+	rp_numSoundSetNames = 0;
+
+	len = trap->FS_Open( "sound/sound.txt", &f, FS_READ );
+	if ( !f || len <= 0 )
+	{
+		if ( f )
+			trap->FS_Close( f );
+		G_LogPrintf( "sound/sound.txt could not be read: only sound sets the map uses are accepted from the entity commands\n" );
+		return;
+	}
+
+	trap->TrueMalloc( (void **)&buf, len + 1 );
+	if ( !buf )
+	{
+		trap->FS_Close( f );
+		return;
+	}
+	trap->FS_Read( buf, len, f );
+	trap->FS_Close( f );
+	buf[len] = '\0';
+
+	for ( p = buf; *p; )
+	{
+		for ( k = 0; k < (int)ARRAY_LEN( keywords ); k++ )
+		{
+			const int kwLen = (int)strlen( keywords[k] );
+			const char *q;
+			int n = 0;
+
+			if ( strncmp( p, keywords[k], kwLen ) != 0 )
+				continue;
+
+			// the client steps past the keyword and one more character, then reads a word with sscanf
+			q = p + kwLen;
+			if ( *q )
+				q++;
+			while ( *q && isspace( (unsigned char)*q ) )
+				q++;
+
+			if ( rp_numSoundSetNames >= RP_MAX_KNOWN_SOUNDSETS )
+			{
+				overflow++;
+				break;
+			}
+			while ( q[n] && !isspace( (unsigned char)q[n] ) && n < RP_SOUNDSET_NAME_LEN - 1 )
+			{
+				rp_soundSetNames[rp_numSoundSetNames][n] = q[n];
+				n++;
+			}
+			rp_soundSetNames[rp_numSoundSetNames][n] = '\0';
+			if ( n > 0 && ( !q[n] || isspace( (unsigned char)q[n] ) ) )
+				rp_numSoundSetNames++;	// a name too long to keep whole is left out: it can never match
+			break;
+		}
+
+		// on to the next line: the client ends a line at either '\r' or '\n'
+		while ( *p && *p != '\n' && *p != '\r' )
+			p++;
+		if ( *p )
+			p++;
+	}
+
+	trap->TrueFree( (void **)&buf );
+	level.rp_soundsets_state = 1;
+
+	if ( overflow )
+		G_LogPrintf( "sound/sound.txt: more than %d sound sets; the rest are not accepted from the entity commands\n", RP_MAX_KNOWN_SOUNDSETS );
+}
+
+qboolean RP_SoundSetKnown( const char *name )
+{
+	int i;
+
+	if ( !name || !name[0] )
+		return qfalse;
+
+	if ( level.rp_soundsets_state == 0 )
+		RP_LoadSoundSetNames();
+
+	if ( level.rp_soundsets_state > 0 )
+	{
+		for ( i = 0; i < rp_numSoundSetNames; i++ )
+		{
+			if ( !Q_stricmp( rp_soundSetNames[i], name ) )
+				return qtrue;
+		}
+		return qfalse;
+	}
+
+	for ( i = 1; i < MAX_AMBIENT_SETS; i++ )
+	{
+		char registered[MAX_QPATH];
+
+		trap->GetConfigstring( CS_AMBIENT_SET + i, registered, sizeof( registered ) );
+		if ( !registered[0] )
+			break;
+		if ( !Q_stricmp( registered, name ) )
+			return qtrue;
+	}
+	return qfalse;
+}
+
 void RP_SpawnSaysWhy( gentity_t *ent, const char *reason )
 {
 	if ( !ent || !reason || !RP_EntitySystemMade( ent ) )
@@ -2132,6 +2268,23 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 
 	if ( !RP_EntitySystemMade( ent ) || !ent->classname )
 		return qfalse;
+
+	// GalaxyRP fix: [Entity System] an ambient sound set its clients can load -- see RP_SoundSetKnown()
+	if ( ent->soundSet && ent->soundSet[0] && !RP_SoundSetKnown( ent->soundSet ) )
+	{
+		char shown[64];
+		int i;
+
+		Q_strncpyz( shown, RP_ShownText( ent->soundSet ), sizeof( shown ) );
+		for ( i = 0; shown[i]; i++ )
+		{
+			if ( shown[i] == '"' || shown[i] == '\n' || shown[i] == '\r' || shown[i] == ';' )
+				shown[i] = '?';
+		}
+		return RP_SpawnRefuse( ent, ( level.rp_soundsets_state > 0 ) ?
+			va( "soundSet %s is not one of the server's ambient sound sets (sound/sound.txt)", shown ) :
+			va( "soundSet %s is not one the map already uses (the server cannot read sound/sound.txt to check it)", shown ) );
+	}
 
 	breakable = ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 ) ? qtrue : qfalse;
 	md3Mover = ( Q_stricmpn( ent->classname, "func_", 5 ) == 0 && ent->model && ent->model[0] &&

@@ -527,6 +527,7 @@ static void CG_AS_Register(void)
 		}
 
 		trap->AS_AddPrecacheEntry(soundName);
+		cgs.ambientSetLoaded[i] = qtrue;	// GalaxyRP: see CG_ConfigStringModified()
 	}
 	soundName = CG_ConfigString( CS_GLOBAL_AMBIENT_SET );
 	if (soundName && soundName[0] && Q_stricmp(soundName, "default"))
