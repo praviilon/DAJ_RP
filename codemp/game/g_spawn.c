@@ -2362,6 +2362,13 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 		}
 	}
 
+	// GalaxyRP: [Entity System] into the team its "team" key names, as G_FindTeams() would have linked it
+	// at map load -- see RP_TeamLinkEntity() in g_main.c
+	if ( ent->inuse )
+	{
+		RP_TeamLinkEntity( ent );
+	}
+
 	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in
 	// the engine, indexed by entity number, and the engine does not know this number exists.
 	//Tag on the ICARUS scripting information only to valid recipients

@@ -2474,6 +2474,12 @@ void		RP_EntGrabRespawnInPlace( gentity_t *e );
 void		RP_EntRespawnPrepare( gentity_t *e );
 // GalaxyRP: [Entity System] room in the pool to spawn this entity again from its record (g_entgrab.c)
 qboolean	RP_EntRespawnHasRoom( const gentity_t *e );
+// GalaxyRP: [Entity System] team links (teammaster / teamchain, built by G_FindTeams() at map load) kept
+// right as entities come and go at runtime: RP_TeamDetach() takes an entity out of its team (G_FreeEntity,
+// and before a spawn in place), RP_TeamLinkEntity() puts a newly spawned one into the team its "team"
+// key names (zyk_main_spawn_entity). g_utils.c / g_main.c.
+void		RP_TeamDetach( gentity_t *ed );
+void		RP_TeamLinkEntity( gentity_t *e );
 void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );

@@ -130,6 +130,66 @@ void G_FindTeams( void ) {
 //	trap->Print ("%i teams with %i entities\n", c, c2);
 }
 
+/*
+=================
+RP_TeamLinkEntity
+
+GalaxyRP: [Entity System] one entity into its team, the way G_FindTeams() would have linked it had it been
+there at map load: as a slave of the live master of the team its "team" key names (its targetname moves
+onto the master, as there), or as a master on its own when there is none. For entities spawned after map
+load (/entadd, /entedit, a copy, a preset) -- G_FindTeams() was never run again for them, so a door added
+to a team stood alone, and one spawned again in place after RP_TeamDetach() has to be put back. Triggers
+never link, as there. An entity linked already is left as it is.
+=================
+*/
+void RP_TeamLinkEntity( gentity_t *e )
+{
+	gentity_t *master = NULL;
+	int i;
+
+	if ( !e || !e->inuse || !e->team || !e->team[0] || e->isLogical )
+		return;
+	if ( e->r.contents == CONTENTS_TRIGGER )
+		return;
+	if ( e->teammaster && e->teammaster->inuse )
+		return;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		gentity_t *m = &g_entities[i];
+
+		if ( m == e || !m->inuse || !m->team || ( m->flags & FL_TEAMSLAVE ) || m->teammaster != m )
+			continue;
+		if ( m->r.contents == CONTENTS_TRIGGER )
+			continue;
+		if ( !strcmp( m->team, e->team ) )
+		{
+			master = m;
+			break;
+		}
+	}
+
+	if ( !master )
+	{
+		e->teammaster = e;
+		e->teamchain = NULL;
+		e->flags &= ~FL_TEAMSLAVE;
+		return;
+	}
+
+	e->teamchain = master->teamchain;
+	master->teamchain = e;
+	e->teammaster = master;
+	e->flags |= FL_TEAMSLAVE;
+
+	// make sure that targets only point at the master
+	if ( e->targetname )
+	{
+		master->targetname = e->targetname;
+		e->targetname = NULL;
+	}
+}
+
 sharedBuffer_t gSharedBuffer;
 
 void WP_SaberLoadParms( void );

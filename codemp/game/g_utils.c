@@ -2850,6 +2850,11 @@ void G_FreeEntity( gentity_t *ed ) {
 	// at any other time. Before the memset, which clears the field.
 	RP_LegacySlotRelease( ed );
 
+	// GalaxyRP fix: [Entity System] out of its team. The links G_FindTeams() builds are raw pointers,
+	// and a member freed by /entremove (or any other way) stayed in its master's chain: G_MoverTeam
+	// moved whatever G_Spawn() next put in the slot as if it were a door. See RP_TeamDetach().
+	RP_TeamDetach( ed );
+
 	// GalaxyRP fix: [Entity System] a misc_weapon_shooter gives its pool client back (g_misc.c);
 	// nothing did, so with the pool marked in use a removed shooter kept its slot for the map
 	if ( G_IsShooterClient( ed->client ) )
@@ -2884,6 +2889,77 @@ void G_FreeEntity( gentity_t *ed ) {
 			level.num_logicalents = i + 1 - MAX_GENTITIES;
 		}
 	}
+}
+
+/*
+=================
+RP_TeamDetach
+
+GalaxyRP: [Entity System] take an entity out of the team G_FindTeams() (or RP_TeamLinkEntity()) linked it
+into, leaving the rest of the team consistent. A slave is unhooked from its master's chain. A master's
+team is dissolved: every member goes on alone (no master, no chain, no FL_TEAMSLAVE) -- promoting one
+would change which door a targetname reaches, since G_FindTeams() moved the slaves' targetnames onto
+the master, and a map with that door deleted is a map of single doors. Every walk is bounded. Called
+from G_FreeEntity() before the memset, and before an entity is spawned again in place.
+=================
+*/
+void RP_TeamDetach( gentity_t *ed )
+{
+	gentity_t *m, *next;
+	int steps = 0;
+
+	if ( !ed )
+	{
+		return;
+	}
+	if ( !ed->teammaster )
+	{
+		ed->teamchain = NULL;
+		ed->flags &= ~FL_TEAMSLAVE;
+		return;
+	}
+
+	if ( ed->teammaster == ed )
+	{ // the master: the team goes on as single entities
+		int members = 0;
+
+		for ( m = ed->teamchain; m && steps < MAX_GENTITIES; m = next, steps++ )
+		{
+			next = m->teamchain;
+			if ( m->teammaster == ed )
+			{
+				m->teammaster = NULL;
+				m->teamchain = NULL;
+				m->flags &= ~FL_TEAMSLAVE;
+				members++;
+			}
+		}
+		if ( members > 0 )
+		{
+			G_LogPrintf( "entity %d (%s), master of team %s, removed: its %d member(s) go on alone\n",
+				ed->s.number, ed->classname ? ed->classname : "noclass", ed->team ? ed->team : "", members );
+		}
+	}
+	else
+	{ // a slave: out of its master's chain
+		gentity_t *master = ed->teammaster;
+
+		if ( master->inuse && master->teammaster == master )
+		{
+			for ( m = master; m && m->teamchain && steps < MAX_GENTITIES; m = m->teamchain, steps++ )
+			{
+				if ( m->teamchain == ed )
+				{
+					m->teamchain = ed->teamchain;
+					break;
+				}
+			}
+		}
+	}
+
+	ed->teammaster = NULL;
+	ed->teamchain = NULL;
+	ed->flags &= ~FL_TEAMSLAVE;
 }
 
 /*

@@ -450,6 +450,24 @@ void G_MoverTeam( gentity_t *ent ) {
 
 	obstacle = NULL;
 
+	// GalaxyRP: [Entity System] backstop: a member no longer in use is cut off the chain before anything
+	// is moved. G_FreeEntity() unhooks a member itself now (RP_TeamDetach), so this should never find one;
+	// if it does, the chain ends there rather than moving whatever has the slot now.
+	{
+		int steps = 0;
+
+		for ( part = ent; part->teamchain && steps < MAX_GENTITIES; part = part->teamchain, steps++ )
+		{
+			if ( !part->teamchain->inuse )
+			{
+				G_LogPrintf( "G_MoverTeam: entity %d (%s) had a freed entity in its team chain; cut off\n",
+					ent->s.number, ent->classname ? ent->classname : "noclass" );
+				part->teamchain = NULL;
+				break;
+			}
+		}
+	}
+
 	// make sure all team slaves can move before commiting
 	// any moves or calling any think functions
 	// if the move is blocked, all moved objects will be backed out

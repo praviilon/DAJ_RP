@@ -430,6 +430,12 @@ void RP_EntRespawnPrepare( gentity_t *e )
 	// spawn function makes them anew -- see RP_FreeEntityChildren() in g_spawn.c
 	RP_FreeEntityChildren( e );
 
+	// zyk: a slave out of its team: the spawn links it again, into the team its keys name now (an edit
+	// may have changed them) -- see RP_TeamDetach() in g_utils.c. A master keeps its team through the
+	// spawn (the entity keeps its struct): detaching it would dissolve the team for an edit of its angles.
+	if ( e->teammaster && e->teammaster != e )
+		RP_TeamDetach( e );
+
 	// zyk: a class with a Ghoul2 model (misc_turretG2) builds it again in its spawn function, onto the
 	// instance it already has -- a second model on it, and the first never freed. G_FreeEntity() frees
 	// it the same way. (/entedit used to skip this and leaked one model per edit.)
