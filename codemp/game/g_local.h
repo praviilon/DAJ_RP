@@ -2056,6 +2056,9 @@ typedef struct level_locals_s {
 	// GalaxyRP: [Entity System] why the last Entity System spawn was refused ("" if it was not),
 	// for the command that asked for it to say -- see RP_EntitySystemSpawnRefused() in g_spawn.c
 	char rp_spawn_refusal[256];
+	// GalaxyRP: [Entity System] a note about the last spawn that went through, for the command to print
+	// (an item the map had not precached -- see G_SpawnItem). Cleared with rp_spawn_refusal.
+	char rp_spawn_note[256];
 	// GalaxyRP: [Entity System] what the md3 file behind each model index holds, read once per map
 	// the first time it is asked for (RP_ModelInfo() in g_utils.c): 0 not read yet, 1 read, -1 not
 	// readable (no such file, or not an md3 this can trust)
@@ -2479,6 +2482,11 @@ qboolean	RP_EntRespawnHasRoom( const gentity_t *e );
 // and before a spawn in place), RP_TeamLinkEntity() puts a newly spawned one into the team its "team"
 // key names (zyk_main_spawn_entity). g_utils.c / g_main.c.
 void		RP_TeamDetach( gentity_t *ed );
+// GalaxyRP: [Music] CS_MUSIC through one door: at most two file names (intro, loop), each short of MAX_QPATH,
+// and only while the gamestate has room for the change -- g_utils.c. G_MusicStringValid() is the check
+// alone, for a spawn function; G_SetMusic() checks and sets. A refusal gives its reason.
+qboolean	G_MusicStringValid( const char *music, char *normalized, int size, const char **reason );
+qboolean	G_SetMusic( const char *music, const char **reason );
 void		RP_TeamLinkEntity( gentity_t *e );
 void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );

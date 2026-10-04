@@ -1057,8 +1057,14 @@ void SP_target_level_change( gentity_t *self )
 
 void target_play_music_use(gentity_t *self, gentity_t *other, gentity_t *activator)
 {
+	const char *reason = "";
+
 	G_ActivateBehavior(self,BSET_USE);
-	trap->SetConfigstring( CS_MUSIC, self->message );
+	// GalaxyRP fix: [Music] through G_SetMusic(): two file names at most, within the gamestate budget
+	if ( !G_SetMusic( self->message, &reason ) )
+	{
+		G_LogPrintf( "target_play_music at %s: music not set (%s)\n", vtos( self->s.origin ), reason );
+	}
 }
 
 /*QUAKED target_play_music (1 0 0) (-4 -4 -4) (4 4 4)
@@ -1087,7 +1093,21 @@ void SP_target_play_music( gentity_t *self )
 		return;
 	}
 
-	self->message = G_NewString(s);
+	// GalaxyRP fix: [Music] the string is checked once here (two file names at most, each short of
+	// MAX_QPATH) and stored in that shape, so a key that would never play is refused at spawn
+	{
+		char normalized[MAX_QPATH * 2];
+		const char *reason = "";
+
+		if ( !G_MusicStringValid( s, normalized, sizeof( normalized ), &reason ) )
+		{
+			Q_strncpyz( level.rp_spawn_refusal, va( "music: %s", reason ), sizeof( level.rp_spawn_refusal ) );
+			G_LogPrintf( "target_play_music at %s: %s; not spawned.\n", vtos( self->s.origin ), reason );
+			G_FreeEntity( self );
+			return;
+		}
+		self->message = G_NewString( normalized );
+	}
 
 	self->use = target_play_music_use;
 }

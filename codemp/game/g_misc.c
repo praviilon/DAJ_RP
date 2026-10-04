@@ -202,6 +202,24 @@ void SP_light( gentity_t *self ) {
 		G_FreeEntity( self );
 		return;
 	}
+
+	// GalaxyRP fix: [Entity System] a light the Entity System made (/entadd, /entedit, a preset) must
+	// use the switchable styles, 32 to 63. style defaults to 0 -- the style every ordinary surface's
+	// lightmap is drawn with -- and styles 1 to 31 are the shared flicker patterns: a light added
+	// with no style set style 0 to full bright for every client the moment it spawned, and to black
+	// when it was used, and nothing brought it back. A map's own light is left to the map.
+	if ( RP_EntitySystemMade( self ) &&
+		( self->count < LS_SWITCH_START ||
+		  ( self->bounceCount && self->bounceCount < LS_SWITCH_START ) ||
+		  ( self->fly_sound_debounce_time && self->fly_sound_debounce_time < LS_SWITCH_START ) ) )
+	{
+		Q_strncpyz( level.rp_spawn_refusal, va( "a light added to the map needs a style from %d to %d (its switch_style and style_off too, when given); it shares the map's switchable light styles. For a plain light use rp_light",
+			LS_SWITCH_START, MAX_LIGHT_STYLES - 1 ), sizeof( level.rp_spawn_refusal ) );
+		G_LogPrintf( "light at %s: style %d, switch_style %d, style_off %d -- %s; not spawned.\n",
+			vtos( self->s.origin ), self->count, self->bounceCount, self->fly_sound_debounce_time, level.rp_spawn_refusal );
+		G_FreeEntity( self );
+		return;
+	}
 	G_SetOrigin( self, self->s.origin );
 	trap->LinkEntity( (sharedEntity_t *)self );
 

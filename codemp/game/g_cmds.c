@@ -15787,6 +15787,8 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 			aim_origin_ignored ? ". /entaddaim places it where you aim: the origin given or set with /entorigin was not used." : "") );
 		if (RP_EntitySolidAroundSomeone(new_ent))
 			trap->SendServerCommand( ent-g_entities, "print \"^3It is solid and someone is inside it: step away, or ^7/entundo^3.\n\"" );
+		if (level.rp_spawn_note[0])
+			trap->SendServerCommand( ent-g_entities, va("print \"^3%s\n\"", level.rp_spawn_note) );
 	}
 	else
 	{
@@ -16240,7 +16242,11 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 		// that removes itself on the server such as misc_model -- G_FreeEntity() had just zeroed it,
 		// so the admin read "Entity 0 edited" about something that no longer existed.
 		if (this_ent->inuse)
+		{
 			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d edited\n\"", entity_id) );
+			if (level.rp_spawn_note[0])
+				trap->SendServerCommand( ent-g_entities, va("print \"^3%s\n\"", level.rp_spawn_note) );
+		}
 		else if (level.rp_spawn_refusal[0])
 			trap->SendServerCommand(ent-g_entities, va("print \"Entity %d was edited, but it was refused when spawned again (%s), so it is gone.\n\"", entity_id, level.rp_spawn_refusal) );
 		else
@@ -23130,8 +23136,18 @@ void Cmd_Music_f(gentity_t* ent) {
 		return;
 	}
 
-	trap->SendServerCommand(ent - g_entities, va("print \"^2You started playing the music file: ^7%s\n\"", audioPath));
-	trap->SetConfigstring(CS_MUSIC, audioPath);
+	// GalaxyRP fix: [Music] through G_SetMusic(): two file names at most, each short of MAX_QPATH, and
+	// only while the gamestate has room -- this wrote the whole argument into CS_MUSIC
+	{
+		const char *reason = "";
+
+		if (!G_SetMusic(audioPath, &reason))
+		{
+			trap->SendServerCommand(ent->s.number, va("print \"Music not started: %s.\n\"", reason));
+			return;
+		}
+	}
+	trap->SendServerCommand(ent - g_entities, va("print \"^2You started playing the music file: ^7%.128s\n\"", audioPath));
 
 	return;
 }

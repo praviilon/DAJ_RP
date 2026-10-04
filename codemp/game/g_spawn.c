@@ -2248,6 +2248,7 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 
 	// GalaxyRP: [Entity System] no reason left over from an earlier spawn -- see RP_EntitySystemSpawnRefused()
 	level.rp_spawn_refusal[0] = '\0';
+	level.rp_spawn_note[0] = '\0';
 
 	// GalaxyRP fix: [Entity System] i was bounded only by the key count, which nothing bounded, so a
 	// row that had been overrun carried straight on into level.spawnVars[MAX_SPAWN_VARS]. The row can

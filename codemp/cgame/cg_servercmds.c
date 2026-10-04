@@ -881,6 +881,18 @@ static void CG_ConfigStringModified( void ) {
 		Q_strncpyz( cgs.teamVoteString[num-CS_TEAMVOTE_STRING], str, sizeof( cgs.teamVoteString ) );
 	} else if ( num == CS_INTERMISSION ) {
 		cg.intermissionStarted = atoi( str );
+	} else if ( num == CS_ITEMS ) {
+		// GalaxyRP fix: [Entity System] the server writes CS_ITEMS again when an item class the map had
+		// not precached is spawned after map load (G_SpawnItem). Item visuals were registered from it
+		// once, at load (CG_RegisterItems), so such an item drew as nothing but its hologram cone until
+		// the map restarted. Register what is new; CG_RegisterItemVisuals skips what it has already.
+		int i;
+
+		for ( i = 1; i < bg_numItems && str[i - 1]; i++ ) {
+			if ( str[i] == '1' && !cg_items[i].registered ) {
+				CG_RegisterItemVisuals( i );
+			}
+		}
 	} else if ( num >= CS_MODELS && num < CS_MODELS+MAX_MODELS ) {
 		char modelName[MAX_QPATH];
 		strcpy(modelName, str);

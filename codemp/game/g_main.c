@@ -3224,6 +3224,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// own: /entcut and /entrotate leave those alone. See RP_MarkMapEntities() in g_entgrab.c.
 	RP_MarkMapEntities();
 
+	// GalaxyRP fix: [Entity System] CS_ITEMS once more, now that the per-map fixes above have spawned
+	// their items: it was written before them (SaveRegisteredItems() with the map's own entities), so an
+	// item class only a fix placed was never precached by the client -- a hologram cone until a restart.
+	// The same string when nothing changed; the same bytes in the gamestate either way.
+	SaveRegisteredItems();
+
 	// zyk: loading entities set as default (Entity System)
 	zyk_entities_file = fopen(va("GalaxyRP/entities/%s/default.txt",zyk_mapname),"r");
 

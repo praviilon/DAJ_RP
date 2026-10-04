@@ -3935,6 +3935,8 @@ Items can't be immediately dropped to floor, because they might
 be on an entity that hasn't spawned yet.
 ============
 */
+extern qboolean itemRegistered[MAX_ITEMS];	// GalaxyRP: [Entity System] below, with RegisterItem()
+
 void G_SpawnItem (gentity_t *ent, gitem_t *item) {
 	int wDisable = 0;
 
@@ -3978,6 +3980,21 @@ void G_SpawnItem (gentity_t *ent, gitem_t *item) {
 			G_FreeEntity( ent );
 			return;
 		}
+	}
+
+	// GalaxyRP fix: [Entity System] an item class the map had not precached, spawned after map load
+	// (/entadd, /entedit, a preset): the client registers item visuals from CS_ITEMS, which was written
+	// once at G_InitGame (SaveRegisteredItems), so the item was invisible -- a hologram cone only --
+	// until the map restarted. Written again now, for every later joiner, and for connected clients
+	// whose cgame registers a late CS_ITEMS change (CG_ConfigStringModified); older cgames keep the
+	// cone, which the note tells the admin.
+	if ( level.rp_map_loaded && !itemRegistered[ item - bg_itemlist ] )
+	{
+		RegisterItem( item );
+		SaveRegisteredItems();
+		Q_strncpyz( level.rp_spawn_note, va( "%s was not precached by this map: players with an older client see a placeholder for it until the map restarts.", item->classname ),
+			sizeof( level.rp_spawn_note ) );
+		G_LogPrintf( "item %s precached after map load (CS_ITEMS rewritten)\n", item->classname );
 	}
 
 	RegisterItem( item );

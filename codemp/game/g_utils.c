@@ -2893,6 +2893,92 @@ void G_FreeEntity( gentity_t *ed ) {
 
 /*
 =================
+G_MusicStringValid / G_SetMusic
+
+GalaxyRP fix: [Music] target_play_music and /playmusic wrote their string straight into CS_MUSIC: up to a
+whole argument's worth of bytes into the gamestate every client downloads, outside the budget every other
+registration keeps (G_FindConfigstringIndex), so later props were refused for room this had spent -- or
+a map near the budget dropped its next joiner. The client reads two tokens (an intro and a loop, each a
+MAX_QPATH path); that is all this lets through, and only while the gamestate has room for the change.
+=================
+*/
+qboolean G_MusicStringValid( const char *music, char *normalized, int size, const char **reason )
+{
+	char copy[MAX_STRING_CHARS];
+	char tokens[2][MAX_QPATH];
+	const char *p = copy;
+	const char *token;
+	int count = 0;
+
+	if ( reason )
+		*reason = "";
+	if ( !VALIDSTRING( music ) )
+	{
+		if ( reason ) *reason = "no music file given";
+		return qfalse;
+	}
+
+	Q_strncpyz( copy, music, sizeof( copy ) );
+	COM_BeginParseSession( "G_MusicStringValid" );
+	while ( 1 )
+	{
+		token = COM_Parse( &p );
+		if ( !token[0] )
+			break;
+		if ( count >= 2 )
+		{
+			if ( reason ) *reason = "more than two file names (an intro and a loop are all the client plays)";
+			return qfalse;
+		}
+		if ( strlen( token ) >= MAX_QPATH )
+		{
+			if ( reason ) *reason = va( "a file name longer than %d characters", MAX_QPATH - 1 );
+			return qfalse;
+		}
+		Q_strncpyz( tokens[count], token, sizeof( tokens[count] ) );
+		count++;
+	}
+
+	if ( count == 0 )
+	{
+		if ( reason ) *reason = "no music file given";
+		return qfalse;
+	}
+	if ( normalized && size > 0 )
+	{
+		if ( count == 2 )
+			Com_sprintf( normalized, size, "%s %s", tokens[0], tokens[1] );
+		else
+			Q_strncpyz( normalized, tokens[0], size );
+	}
+	return qtrue;
+}
+
+qboolean G_SetMusic( const char *music, const char **reason )
+{
+	char normalized[MAX_QPATH * 2];
+	char current[MAX_STRING_CHARS];
+	int delta;
+
+	if ( !G_MusicStringValid( music, normalized, sizeof( normalized ), reason ) )
+		return qfalse;
+
+	// the gamestate counts what replaces what is there now
+	trap->GetConfigstring( CS_MUSIC, current, sizeof( current ) );
+	delta = (int)strlen( normalized ) - (int)strlen( current );
+	if ( delta > 0 && !G_ConfigstringBytesAvailable( delta ) )
+	{
+		if ( reason ) *reason = "the gamestate is full";
+		G_LogPrintf( "music \"%s\" refused: the gamestate is at %d of %d bytes\n", normalized, G_GamestateBytesUsed(), ZYK_GAMESTATE_BUDGET );
+		return qfalse;
+	}
+
+	trap->SetConfigstring( CS_MUSIC, normalized );
+	return qtrue;
+}
+
+/*
+=================
 RP_TeamDetach
 
 GalaxyRP: [Entity System] take an entity out of the team G_FindTeams() (or RP_TeamLinkEntity()) linked it
