@@ -65,6 +65,9 @@ void SP_info_null( gentity_t *self ) {
 	if ( !self->targetname || !self->targetname[0]
 		|| ( self->isLogical ? level.num_logicalents >= MAX_LOGICENTITIES - 256 : level.num_entities >= MAX_GENTITIES - 256 ) )
 	{
+		RP_SpawnSaysWhy( self, ( !self->targetname || !self->targetname[0] )
+			? ( self->classname && !Q_stricmp( self->classname, "func_group" ) ? "func_group is a map-editor grouping, nothing in the game" : "an info_null needs a targetname: it is only an aim target for other entities" )
+			: "no room left in the entity table for an info_null" );
 		G_FreeEntity( self );
 		return;
 	}
@@ -179,6 +182,7 @@ void misc_dlight_use ( gentity_t *ent, gentity_t *other, gentity_t *activator )
 void SP_light( gentity_t *self ) {
 	if (!self->targetname )
 	{//if i don't have a light style switch, the i go away
+		RP_SpawnSaysWhy( self, "a light needs a targetname (it is a switchable light); for a plain light use rp_light" );
 		G_FreeEntity( self );
 		return;
 	}
@@ -330,6 +334,7 @@ void SP_misc_teleporter_dest( gentity_t *ent ) {
 turns into map triangles - not solid
 */
 void SP_misc_model( gentity_t *ent ) {
+	RP_SpawnSaysWhy( ent, "misc_model is a map-compile hint, baked into the map: use misc_model_breakable for a model" );
 
 #if 0
 	ent->s.modelindex = G_ModelIndex( ent->model );
@@ -359,6 +364,7 @@ bsp space!
 */
 void SP_misc_model_static(gentity_t *ent)
 {
+	RP_SpawnSaysWhy( ent, "misc_model_static is a map-compile hint, baked into the map: use misc_model_breakable for a model" );
 	G_FreeEntity( ent );
 }
 
@@ -1294,6 +1300,7 @@ void SP_misc_gas_tank( gentity_t *ent )
 "model"		arbitrary .glm file to display
 */
 void SP_misc_G2model( gentity_t *ent ) {
+	RP_SpawnSaysWhy( ent, "misc_G2model does nothing in multiplayer: use misc_model_breakable for a model" );
 
 #if 0
 	char name1[200] = "models/players/kyle/modelmp.glm";
@@ -1629,6 +1636,7 @@ void AddSpawnField(char *field, char *value);
 #define MAX_INSTANCE_TYPES		16
 void SP_terrain(gentity_t *ent)
 {
+	RP_SpawnSaysWhy( ent, "terrain is map-compile only" );
 	G_FreeEntity (ent);
 }
 
@@ -1664,6 +1672,14 @@ void G_PortalifyEntities(gentity_t *ent)
 		i++;
 	}
 
+	// GalaxyRP: [Entity System] one the Entity System made stays, inert -- see SP_misc_skyportal()
+	if ( RP_EntitySystemMade( ent ) )
+	{
+		ent->think = NULL;
+		ent->nextthink = 0;
+		return;
+	}
+
 	ent->think = G_FreeEntity; //the portal entity is no longer needed because its information is stored in a config string.
 	ent->nextthink = level.time;
 }
@@ -1676,6 +1692,7 @@ to the regular view position.
 */
 void SP_misc_skyportal_orient (gentity_t *ent)
 {
+	RP_SpawnSaysWhy( ent, "misc_skyportal_orient does nothing in multiplayer" );
 	G_FreeEntity(ent);
 }
 
@@ -1702,6 +1719,26 @@ void SP_misc_skyportal (gentity_t *ent)
 	int		isfog = 0;	// (SA)
 
 	float	fov_x;
+
+	// GalaxyRP fix: [Entity System] added after map load, a sky portal replaces the map's for every
+	// client (CS_SKYBOXORG below) and flags every entity in its PVS as a portal entity, which nothing
+	// undoes: refused when the map has one already. One added where the map has none is allowed, and
+	// kept as an inert entity (G_PortalifyEntities used to free it) so it is listed, saved by /entsave
+	// and can be removed -- removing it leaves the sky as it is, which the note says.
+	if ( RP_EntitySystemMade( ent ) )
+	{
+		char current[MAX_STRING_CHARS];
+
+		// zyk: genericValue15 marks the one that set the sky, so that spawning it again in place (/entedit)
+		// is not refused as a second one
+		trap->GetConfigstring( CS_SKYBOXORG, current, sizeof( current ) );
+		if ( current[0] && !ent->genericValue15 && RP_RefuseAtRuntime( ent, "the map has a sky portal already; a second one would replace it for everyone" ) )
+		{
+			return;
+		}
+		ent->genericValue15 = 1;
+		Q_strncpyz( level.rp_spawn_note, "The sky portal is set for every client for the rest of the map: removing the entity does not undo it.", sizeof( level.rp_spawn_note ) );
+	}
 
 	G_SpawnString ("fov", "80", &fov);
 	fov_x = atof (fov);
@@ -1999,6 +2036,7 @@ void SP_misc_holocron(gentity_t *ent)
 
 	if (level.gametype != GT_HOLOCRON)
 	{
+		RP_SpawnSaysWhy( ent, "misc_holocron only exists in the Holocron gametype" );
 		G_FreeEntity(ent);
 		return;
 	}
@@ -3624,9 +3662,24 @@ SWIRLING  causes random swirls of wind
 "angles" the direction for constant wind
 "speed"  the speed for constant wind
 */
+// GalaxyRP fix: [Entity System] a weather entity added after map load registers a global *weather
+// command, which G_EffectIndex() refuses (and logs once) while /admweather holds the map's weather
+// slots -- the admin read "Entity N spawned" for an entity that did nothing. Say so, and free it.
+static qboolean RP_WeatherRefusedAtRuntime( gentity_t *ent )
+{
+	if ( level.zyk_weather_slot == 0 )
+		return qfalse;
+	return RP_RefuseAtRuntime( ent, "weather is managed with /admweather on this map (/admweather add); a weather entity added now would show a different sky to players who join later" );
+}
+
 void SP_CreateWind( gentity_t *ent )
 {
 	char	temp[256];
+
+	if ( RP_WeatherRefusedAtRuntime( ent ) )
+	{
+		return;
+	}
 
 	// Normal Wind
 	//-------------
@@ -3686,6 +3739,11 @@ This world effect will spawn space dust globally into the level.
 //----------------------------------------------------------
 void SP_CreateSpaceDust( gentity_t *ent )
 {
+	if ( RP_WeatherRefusedAtRuntime( ent ) )
+	{
+		return;
+	}
+
 	G_EffectIndex(va("*spacedust %i", ent->count));
 	//G_EffectIndex("*constantwind ( 10 -10 0 )");
 }
@@ -3699,6 +3757,11 @@ This world effect will spawn snow globally into the level.
 //----------------------------------------------------------
 void SP_CreateSnow( gentity_t *ent )
 {
+	if ( RP_WeatherRefusedAtRuntime( ent ) )
+	{
+		return;
+	}
+
 	G_EffectIndex("*snow");
 	G_EffectIndex("*fog");
 	G_EffectIndex("*constantwind ( 100 100 -100 )");
@@ -3717,6 +3780,11 @@ MISTY_FOG      causes clouds of misty fog to float through the level
 //----------------------------------------------------------
 void SP_CreateRain( gentity_t *ent )
 {
+	if ( RP_WeatherRefusedAtRuntime( ent ) )
+	{
+		return;
+	}
+
 	if ( ent->spawnflags == 0 )
 	{
 		G_EffectIndex( "*rain" );
@@ -3765,6 +3833,11 @@ This world effect will spawn weather globally into the level.
 //----------------------------------------------------------
 void SP_CreateWeather( gentity_t *ent )
 {
+	if ( RP_WeatherRefusedAtRuntime( ent ) )
+	{
+		return;
+	}
+
 	// GalaxyRP fix: [Entity System] "message" is what names the weather effect, and nothing required
 	// it. Q_stricmp() tolerates NULL, so the two tests below were safe, but the fallback formatted
 	// ent->message through va("*%s") -- passing NULL to a %s conversion, undefined even where a
@@ -5351,6 +5424,7 @@ void ref_link ( gentity_t *ent )
 
 void SP_reference_tag ( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "ref_tags are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	if ( ent->target )
 	{
 		//Init cannot occur until all entities have been spawned
@@ -5617,11 +5691,13 @@ Determines a region to check for weather contents - will significantly reduce lo
 */
 void SP_misc_weather_zone( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "misc_weather_zone is map-compile only: weather is managed with /admweather" );
 	G_FreeEntity(ent);
 }
 
 void SP_misc_cubemap( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "misc_cubemap is map-compile only" );
 	G_FreeEntity( ent );
 }
 

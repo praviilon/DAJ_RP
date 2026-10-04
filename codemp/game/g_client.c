@@ -502,6 +502,14 @@ gentity_t *gJMSaberEnt = NULL;
 */
 void SP_info_jedimaster_start(gentity_t *ent)
 {
+	// GalaxyRP fix: [Entity System] not after map load: the saber it makes is marked isSaberEntity,
+	// which G_FreeEntity() refuses to free (so it could never be removed and the pool it took was gone
+	// for the map), and every one re-points the single gJMSaberEnt. The map's own is the only one.
+	if ( RP_RefuseAtRuntime( ent, "the Jedi Master saber cannot be added after map load: it could never be removed, and the map's own is the only one" ) )
+	{
+		return;
+	}
+
 	if (level.gametype != GT_JEDIMASTER)
 	{
 		gJMSaberEnt = NULL;

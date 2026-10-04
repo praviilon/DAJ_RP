@@ -637,6 +637,7 @@ void SP_target_location( gentity_t *self ) {
 		static qboolean didwarn = qfalse;
 		if ( !self->message ) {
 			trap->Print( "target_location with no message at %s\n", vtos( self->s.origin ) );
+			RP_SpawnSaysWhy( self, "a target_location needs a message (the location's name), or a targetname to be a position" );
 			G_FreeEntity( self );
 			return;
 		}
@@ -1158,5 +1159,6 @@ is accepted so single-player maps stop reporting it as unknown, and does nothing
 */
 void SP_target_autosave( gentity_t *self )
 {
+	RP_SpawnSaysWhy( self, "target_autosave is single player only: multiplayer has nothing to save" );
 	G_FreeEntity( self );
 }

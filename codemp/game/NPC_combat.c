@@ -2489,6 +2489,14 @@ SNIPE - Snipers look for these first, NOT IMPLEMENTED
 
 void SP_point_combat( gentity_t *self )
 {
+	// GalaxyRP fix: [Entity System] not after map load: combat points are matched to their waypoints
+	// once, at map start (CP_FindCombatPointWaypoints), so a later one is never used -- and it stays in
+	// level.combatPoints for the map, since the entity frees itself below.
+	if ( RP_RefuseAtRuntime( self, "combat points cannot be added after map load: they are indexed at map start, a later one is never used and cannot be removed" ) )
+	{
+		return;
+	}
+
 	if(level.numCombatPoints >= MAX_COMBAT_POINTS)
 	{
 #ifndef FINAL_BUILD

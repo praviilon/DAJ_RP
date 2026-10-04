@@ -2095,6 +2095,7 @@ Target: next path corner and other targets to fire
 void SP_path_corner( gentity_t *self ) {
 	if ( !self->targetname ) {
 		trap->Print ("path_corner with no targetname at %s\n", vtos(self->s.origin));
+		RP_SpawnSaysWhy( self, "a path_corner needs a targetname: a train reaches it by name" );
 		G_FreeEntity( self );
 		return;
 	}
@@ -2133,6 +2134,7 @@ void SP_func_train (gentity_t *self) {
 
 	if ( !self->target ) {
 		trap->Print ("func_train without a target at %s\n", vtos(self->r.absmin));
+		RP_SpawnSaysWhy( self, "a func_train needs a target: the path_corner it starts from" );
 		G_FreeEntity( self );
 		return;
 	}

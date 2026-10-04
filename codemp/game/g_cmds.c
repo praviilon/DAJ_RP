@@ -15548,6 +15548,14 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		}
 	}
 
+	// GalaxyRP: [Entity System] worldspawn is the map itself, not an entity class (SP_worldspawn runs once,
+	// from the map's own spawn pass): say so rather than "did not survive being spawned"
+	if (Q_stricmp(arg1, "worldspawn") == 0)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"worldspawn is the map itself, not an entity class.\n\"" );
+		return;
+	}
+
 	// GalaxyRP: [Entity System] an NPC or vehicle spawner: a targetname and a type the server has
 	if (RP_IsNpcSpawnerClass(arg1))
 	{

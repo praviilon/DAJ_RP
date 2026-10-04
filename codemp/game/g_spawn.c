@@ -2060,6 +2060,23 @@ static qboolean RP_SpawnRefuse( gentity_t *ent, const char *reason )
 	return qtrue;
 }
 
+void RP_SpawnSaysWhy( gentity_t *ent, const char *reason )
+{
+	if ( !ent || !reason || !RP_EntitySystemMade( ent ) )
+		return;
+	Q_strncpyz( level.rp_spawn_refusal, reason, sizeof( level.rp_spawn_refusal ) );
+}
+
+qboolean RP_RefuseAtRuntime( gentity_t *ent, const char *reason )
+{
+	if ( !ent || !RP_EntitySystemMade( ent ) )
+		return qfalse;
+
+	RP_SpawnRefuse( ent, reason ? reason : "not for the entity commands" );
+	G_FreeEntity( ent );
+	return qtrue;
+}
+
 qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 {
 	qboolean breakable, md3Mover;

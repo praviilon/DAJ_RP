@@ -1297,6 +1297,15 @@ radius is automatically calculated in-world.
 */
 void SP_waypoint ( gentity_t *ent )
 {
+	// GalaxyRP fix: [Entity System] not after map load: the navigator computed its paths at map start
+	// (NAV_CheckCalcPaths, g_main.c) and a node added later has no rank table -- the engine dereferences
+	// NULL the first time an NPC paths to it. The node could not be removed either; the entity frees
+	// itself below, so nothing is left to remove.
+	if ( RP_RefuseAtRuntime( ent, "waypoints cannot be added after map load: the navigation paths were computed at map start, and an NPC pathing to a later node would crash the server" ) )
+	{
+		return;
+	}
+
 	if ( navCalculatePaths )
 	{
 		unsigned int radius;
@@ -1348,6 +1357,12 @@ SOLID_OK - only use if placing inside solid is unavoidable in map, but may be cl
 */
 void SP_waypoint_small (gentity_t *ent)
 {
+	// GalaxyRP fix: [Entity System] see SP_waypoint()
+	if ( RP_RefuseAtRuntime( ent, "waypoints cannot be added after map load: the navigation paths were computed at map start, and an NPC pathing to a later node would crash the server" ) )
+	{
+		return;
+	}
+
 	if ( navCalculatePaths )
 	{
 		VectorSet(ent->r.mins, -2, -2, DEFAULT_MINS_2);
@@ -1408,6 +1423,7 @@ radius - how far from the navgoal an ent can be before it thinks it reached it -
 
 void SP_waypoint_navgoal( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "navgoal waypoints are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	int radius = ( ent->radius ) ? (((int)ent->radius)|NAVGOAL_USE_RADIUS) : 12;
 
 	VectorSet( ent->r.mins, -16, -16, -24 );
@@ -1440,6 +1456,7 @@ You CANNOT set a radius on these navgoals, they are touch-reach ONLY
 */
 void SP_waypoint_navgoal_8( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "navgoal waypoints are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	VectorSet( ent->r.mins, -8, -8, -24 );
 	VectorSet( ent->r.maxs, 8, 8, 32 );
 	ent->s.origin[2] += 0.125;
@@ -1471,6 +1488,7 @@ You CANNOT set a radius on these navgoals, they are touch-reach ONLY
 */
 void SP_waypoint_navgoal_4( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "navgoal waypoints are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	VectorSet( ent->r.mins, -4, -4, -24 );
 	VectorSet( ent->r.maxs, 4, 4, 32 );
 	ent->s.origin[2] += 0.125;
@@ -1502,6 +1520,7 @@ You CANNOT set a radius on these navgoals, they are touch-reach ONLY
 */
 void SP_waypoint_navgoal_2( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "navgoal waypoints are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	VectorSet( ent->r.mins, -2, -2, -24 );
 	VectorSet( ent->r.maxs, 2, 2, 32 );
 	ent->s.origin[2] += 0.125;
@@ -1533,6 +1552,7 @@ You CANNOT set a radius on these navgoals, they are touch-reach ONLY
 */
 void SP_waypoint_navgoal_1( gentity_t *ent )
 {
+	RP_SpawnSaysWhy( ent, "navgoal waypoints are only read by ICARUS scripts and cannot be placed by the entity commands" );
 	VectorSet( ent->r.mins, -1, -1, -24 );
 	VectorSet( ent->r.maxs, 1, 1, 32 );
 	ent->s.origin[2] += 0.125;

@@ -2458,6 +2458,15 @@ const char	*RP_MapEntityLinkKey( const gentity_t *ent );
 const char	*RP_MapEntityRefusalNote( const gentity_t *ent );
 qboolean	RP_EntitySystemMade( const gentity_t *ent );
 qboolean	RP_EntitySystemSpawnRefused( gentity_t *ent );
+// GalaxyRP: [Entity System] for a spawn function: the entity, when the Entity System made it (/entadd,
+// /entedit, a copy, a preset line that is not one of the map's own), is refused with this reason -- the
+// reason reaches the admin through level.rp_spawn_refusal -- and freed; returns qtrue then, and the
+// spawn function must return. For the map's own entities it does nothing and returns qfalse.
+// RP_SpawnSaysWhy(): the reason alone, for a spawn function that frees the entity itself anyway (a
+// class with nothing to do in multiplayer, a key it cannot do without), so the admin reads why instead
+// of "did not survive being spawned". g_spawn.c.
+qboolean	RP_RefuseAtRuntime( gentity_t *ent, const char *reason );
+void		RP_SpawnSaysWhy( gentity_t *ent, const char *reason );
 qboolean	RP_FileExists( const char *path );
 qboolean	RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs );
 int			RP_PackConstantLight( float light, const vec3_t color );
