@@ -2231,8 +2231,12 @@ void SP_func_static( gentity_t *ent )
 	trap->LinkEntity( (sharedEntity_t *)ent );
 
 	if (level.mBSPInstanceDepth)
-	{	// this means that this guy will never be updated, moved, changed, etc.
-		ent->s.eFlags = EF_PERMANENT;
+	{	// GalaxyRP fix: [Entity System] part of a misc_bsp's sub-BSP: sent to every client like its misc_bsp
+		// (see SP_misc_bsp(), g_misc.c) rather than made EF_PERMANENT, which the engine never sends after the
+		// baseline -- a misc_bsp rebuilding its sub-BSP after map load brought its brushes back invisible.
+		// Only the permanent bit goes: this used to overwrite every flag, SWITCH_SHADER's EF_SHADER_ANIM too.
+		ent->s.eFlags &= ~EF_PERMANENT;
+		ent->r.svFlags |= SVF_BROADCAST;
 	}
 }
 

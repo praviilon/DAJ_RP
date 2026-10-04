@@ -357,7 +357,11 @@ void SP_target_speaker( gentity_t *ent ) {
 	if ( G_SpawnString ( "soundSet", "", &s ) )
 	{	// this is a sound set
 		ent->s.soundSetIndex = G_SoundSetIndex(s);
-		ent->s.eFlags = EF_PERMANENT;
+		// GalaxyRP fix: [Entity System] sent to every client rather than made EF_PERMANENT, which the engine
+		// never sends after the baseline taken at map start: one added later, or respawned by /entload or
+		// the default.txt preset (which frees and respawns the map's own), was silent -- see SP_misc_bsp().
+		ent->s.eFlags = 0;
+		ent->r.svFlags |= SVF_BROADCAST;
 		VectorCopy( ent->s.origin, ent->s.pos.trBase );
 		trap->LinkEntity ((sharedEntity_t *)ent);
 		return;

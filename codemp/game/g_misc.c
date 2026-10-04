@@ -1426,7 +1426,16 @@ void SP_misc_bsp(gentity_t *ent)
 
 	G_SpawnString("bspmodel", "", &out);
 
-	ent->s.eFlags = EF_PERMANENT;
+	// GalaxyRP fix: [Entity System] no longer EF_PERMANENT. The engine never sends a permanent entity in a
+	// snapshot (sv_snapshot.cpp): clients only ever see it in the baseline, which is taken once, a few
+	// frames after the map spawns, and is never rebuilt -- so a misc_bsp spawned later (/entadd, /entedit,
+	// /entload, the default.txt preset, which also frees and respawns the map's own) was invisible to
+	// everyone, reconnecting or not, and the clients' copies of the ones it replaced lingered as ghosts.
+	// Sent like any entity instead, and to every client (SVF_BROADCAST): a sub-BSP placed outside the
+	// main map's sealed volume touches none of its visibility clusters, and permanents were drawn
+	// regardless of visibility -- this keeps that. Static, so after the first snapshot it costs nothing.
+	ent->s.eFlags = 0;
+	ent->r.svFlags |= SVF_BROADCAST;
 
 	// Mainly for debugging
 	G_SpawnInt( "spacing", "0", &tempint);
