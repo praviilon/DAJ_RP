@@ -1627,11 +1627,14 @@ const char *RP_EntityRefusalReason( const gentity_t *ent )
 
 /*
 =================
-RP_EntityIsSpawnPoint / RP_EntityIsCodeMadeSpawnPoint
+RP_EntityIsSpawnPoint / RP_EntityIsCodeMadeSpawnPoint / RP_SpawnPointProtected
 
 GalaxyRP fix: [Entity System] every info_player_* class counts as a spawn point: deathmatch (which
 info_player_start becomes when it spawns), start_red/blue, duel, duel1/2, intermission and its red/blue
-variants, and siegeteam1/2. /entremove never removes one.
+variants, and siegeteam1/2. /entremove never removes the map's own (rpMapEntity) or a code-made one;
+one an admin added, or a map's that was edited, it removes, since a bad one is better gone than moved --
+RP_SpawnPointProtected() is that test. (A sub-BSP's spawn point goes with its misc_bsp, as its other
+entities do: that rule is /entremove's own.)
 
 The code-made ones are those the per-map fixes create for the SP and Jedi Outcast maps
 (zyk_create_info_player_deathmatch, RP_CreateSpawnPoint -- through zyk_spawn_entity(), which leaves no
@@ -1660,6 +1663,11 @@ qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent )
 		return qfalse;
 
 	return ( level.zyk_spawn_strings_values_count[num] <= 0 ) ? qtrue : qfalse;
+}
+
+qboolean RP_SpawnPointProtected( const gentity_t *ent )
+{
+	return ( RP_EntityIsSpawnPoint( ent ) && ( ent->rpMapEntity || RP_EntityIsCodeMadeSpawnPoint( ent ) ) ) ? qtrue : qfalse;
 }
 
 // GalaxyRP fix: [Entity System] one shared brush-model setter for the eleven mover classes that

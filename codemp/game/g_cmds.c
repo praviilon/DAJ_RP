@@ -16071,7 +16071,7 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 
 		// GalaxyRP fix: [Entity System] the classname is not editable. /entedit respawns the entity in
 		// place, in the slot it already has, through a different class's spawn function over state
-		// the old one set up -- and some classes are ones /entremove will not remove (spawn points),
+		// the old one set up -- and some classes are ones /entremove will not remove (the map's spawn points),
 		// which a class change would have removed all the same. Refuse the whole command, before any
 		// pair is applied, if any key is "classname" in any case -- that includes removing it with
 		// "zykremovekey". /entremove and /entadd make a different class instead.
@@ -17547,9 +17547,12 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 					return;
 				}
 
-				if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
+				// GalaxyRP fix: [Entity System] only the map's own and the code-made ones (both refused above
+				// already: this is the backstop): a spawn point an admin added can be removed -- see
+				// RP_SpawnPointProtected() in g_spawn.c
+				if (RP_SpawnPointProtected(target_ent))
 				{
-					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is a spawn point (%s) and cannot be removed. Use ^3/entedit^7 to move it.\n\"", i, target_ent->classname) );
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d is a spawn point (%s) of the map or its fixes and cannot be removed.\n\"", i, target_ent->classname) );
 					return;
 				}
 
@@ -17688,7 +17691,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				// GalaxyRP fix: [Entity System] same guard as the single-id branch above. A range of
 				// a few hundred slots is mostly free slots, and each one was being freed again.
 				rp_entremove_pick[i] = (i >= entity_id && i <= entity_id2 && target_ent->inuse
-					&& RP_EntityHasSpawnKeys(target_ent) && !RP_MapEntityProtected(target_ent) && !RP_EntityIsSpawnPoint(target_ent)
+					&& RP_EntityHasSpawnKeys(target_ent) && !RP_MapEntityProtected(target_ent) && !RP_SpawnPointProtected(target_ent)
 					&& !target_ent->neverFree && !target_ent->rpHeldBy
 					&& !(target_ent->rpSubBSPOf > 0 && RP_MiscBspForInstance(target_ent->rpSubBSPOf))) ? qtrue : qfalse;
 			}
@@ -17716,7 +17719,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 						mapKept++;
 					else if (target_ent->rpHeldBy && RP_EntityHasSpawnKeys(target_ent))
 						held++;
-					else if (RP_EntityIsSpawnPoint(target_ent) == qtrue)
+					else if (RP_SpawnPointProtected(target_ent))
 						spawnPoints++;
 					else if (target_ent->neverFree && RP_EntityHasSpawnKeys(target_ent))
 						permanent++;
@@ -17740,7 +17743,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 				if (skipped > 0)
 					Com_sprintf(skipNote, sizeof(skipNote), " Skipped %d that cannot be removed (created by the game: marked G in /entlist).", skipped);
 				if (spawnPoints > 0)
-					Com_sprintf(spawnNote, sizeof(spawnNote), " Kept %d spawn point%s (spawn points cannot be removed).", spawnPoints, spawnPoints == 1 ? "" : "s");
+					Com_sprintf(spawnNote, sizeof(spawnNote), " Kept %d spawn point%s (the map's and its fixes' spawn points cannot be removed).", spawnPoints, spawnPoints == 1 ? "" : "s");
 				if (permanent > 0)
 					Com_sprintf(permanentNote, sizeof(permanentNote), " Kept %d permanent entit%s.", permanent, permanent == 1 ? "y" : "ies");
 				if (subEntities > 0)

@@ -32,6 +32,56 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 static vec3_t	playerMins = {-15, -15, DEFAULT_MINS_2};
 static vec3_t	playerMaxs = {15, 15, DEFAULT_MAXS_2};
 
+/*
+================
+RP_SpawnPointInSolid / RP_SpawnPointRefusedAtRuntime
+
+GalaxyRP fix: [Entity System] whether a player put on this point -- 9 units up, where ClientSpawn()
+puts one -- would be inside the world's solid, a brush entity (a door, a func_static), player clip or
+terrain, or outside the map, whose outer leaves are solid. Not inside a body: a player standing on
+the point is SpotWouldTelefrag()'s own question, and the admin stands on the point /entadd makes.
+Without the box (an intermission point: a camera) it is the point itself that is tested.
+
+RP_SpawnPointRefusedAtRuntime(): a spawn point the Entity System made is refused when a player
+spawning on it would be stuck -- an origin typed into a wall or out of the map, or a map's own point
+/entedit'ed there. The map's own points are never tested: a map spawns what it spawns.
+================
+*/
+#define RP_SPAWN_POINT_MASK		( MASK_PLAYERSOLID & ~CONTENTS_BODY )
+
+qboolean RP_SpawnPointInSolid( const vec3_t origin, qboolean playerBox )
+{
+	trace_t	tr;
+	vec3_t	start;
+
+	VectorCopy( origin, start );
+	start[2] += 9;
+
+	if ( !playerBox )
+		return ( trap->PointContents( start, ENTITYNUM_NONE ) & RP_SPAWN_POINT_MASK ) ? qtrue : qfalse;
+
+	trap->Trace( &tr, start, playerMins, playerMaxs, start, ENTITYNUM_NONE, RP_SPAWN_POINT_MASK, qfalse, 0, 0 );
+	return ( tr.startsolid || tr.allsolid ) ? qtrue : qfalse;
+}
+
+qboolean RP_SpawnPointRefusedAtRuntime( gentity_t *ent, qboolean playerBox )
+{
+	if ( !ent || !RP_EntitySystemMade( ent ) )
+		return qfalse;
+
+	if ( !RP_FINITE( ent->s.origin[0] ) || !RP_FINITE( ent->s.origin[1] ) || !RP_FINITE( ent->s.origin[2] ) )
+		return RP_RefuseAtRuntime( ent, "its origin is not a number" );
+
+	if ( RP_SpawnPointInSolid( ent->s.origin, playerBox ) )
+	{
+		return RP_RefuseAtRuntime( ent, playerBox
+			? "a player spawning there would be inside a wall, a door or outside the map. A spawn point stands where the player will, 24 units above the floor: /entaddaim sets it so on the surface aimed at, /entadd takes where you stand"
+			: "the point is inside a wall or outside the map" );
+	}
+
+	return qfalse;
+}
+
 extern int g_siegeRespawnCheck;
 
 void WP_SaberAddG2Model( gentity_t *saberent, const char *saberModel, qhandle_t saberSkin );
@@ -54,6 +104,9 @@ void SP_info_player_duel( gentity_t *ent )
 {
 	int		i;
 
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
+
 	G_SpawnInt( "nobots", "0", &i);
 	if ( i ) {
 		ent->flags |= FL_NO_BOTS;
@@ -73,6 +126,9 @@ Targets will be fired when someone spawns in on them.
 void SP_info_player_duel1( gentity_t *ent )
 {
 	int		i;
+
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
 
 	G_SpawnInt( "nobots", "0", &i);
 	if ( i ) {
@@ -94,6 +150,9 @@ void SP_info_player_duel2( gentity_t *ent )
 {
 	int		i;
 
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
+
 	G_SpawnInt( "nobots", "0", &i);
 	if ( i ) {
 		ent->flags |= FL_NO_BOTS;
@@ -113,6 +172,9 @@ Targets will be fired when someone spawns in on them.
 */
 void SP_info_player_deathmatch( gentity_t *ent ) {
 	int		i;
+
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
 
 	G_SpawnInt( "nobots", "0", &i);
 	if ( i ) {
@@ -198,6 +260,9 @@ void SP_info_player_siegeteam1(gentity_t *ent) {
 		return;
 	}
 
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
+
 	G_SpawnInt("startoff", "0", &soff);
 
 	if (soff)
@@ -234,6 +299,9 @@ void SP_info_player_siegeteam2(gentity_t *ent) {
 		return;
 	}
 
+	if ( RP_SpawnPointRefusedAtRuntime( ent, qtrue ) )
+		return;
+
 	G_SpawnInt("startoff", "0", &soff);
 
 	if (soff)
@@ -254,7 +322,7 @@ RED - In a Siege game, the intermission will happen here if the Red (attacking) 
 BLUE - In a Siege game, the intermission will happen here if the Blue (defending) team wins
 */
 void SP_info_player_intermission( gentity_t *ent ) {
-
+	RP_SpawnPointRefusedAtRuntime( ent, qfalse );
 }
 
 /*QUAKED info_player_intermission_red (1 0 1) (-16 -16 -24) (16 16 32)
@@ -265,7 +333,7 @@ target - ent to look at
 target2 - ents to use when this intermission point is chosen
 */
 void SP_info_player_intermission_red( gentity_t *ent ) {
-
+	RP_SpawnPointRefusedAtRuntime( ent, qfalse );
 }
 
 /*QUAKED info_player_intermission_blue (1 0 1) (-16 -16 -24) (16 16 32)
@@ -276,7 +344,7 @@ target - ent to look at
 target2 - ents to use when this intermission point is chosen
 */
 void SP_info_player_intermission_blue( gentity_t *ent ) {
-
+	RP_SpawnPointRefusedAtRuntime( ent, qfalse );
 }
 
 #define JMSABER_RESPAWN_TIME 20000 //in case it gets stuck somewhere no one can reach
@@ -570,6 +638,14 @@ qboolean SpotWouldTelefrag( gentity_t *spot ) {
 	gentity_t	*hit;
 	vec3_t		mins, maxs;
 
+	// GalaxyRP fix: [Entity System] a point whose player box is inside a wall or a door (a map's, or
+	// one the map's own fixes made) counts as taken, so it is never chosen over a free one -- see
+	// RP_SpawnPointInSolid(). Every selector falls back to the map's first point when none is free,
+	// as it did.
+	if ( RP_SpawnPointInSolid( spot->s.origin, qtrue ) ) {
+		return qtrue;
+	}
+
 	VectorAdd( spot->s.origin, playerMins, mins );
 	VectorAdd( spot->s.origin, playerMaxs, maxs );
 	num = trap->EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
@@ -743,7 +819,7 @@ RP_RecordFallbackSpawnPoint / RP_FallbackSpawnPoint
 
 GalaxyRP fix: [Spawning] the spawn selectors below ended with
 trap->Error( ERR_DROP, "Couldn't find a spawn point" ) when the map had no info_player_deathmatch
-left, and on a dedicated server ERR_DROP is a process exit. /entremove refuses spawn points, but an
+left, and on a dedicated server ERR_DROP is a process exit. /entremove refuses the map's spawn points, but an
 /entload preset that holds none (hand-written, old, or saved before a map update) still frees every
 one of the map's and brings none back, and the next spawn, respawn or spectator join ended the server.
 

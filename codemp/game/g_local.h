@@ -2545,6 +2545,7 @@ qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
 const char *RP_EntityRefusalReason( const gentity_t *ent );
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
 qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent );
+qboolean RP_SpawnPointProtected( const gentity_t *ent );
 // GalaxyRP fix: [Configstrings] whether the gamestate can still take "needed" more bytes of
 // configstring, for a caller that is about to claim several at once and wants to find out before
 // it has claimed any of them.
@@ -2822,6 +2823,8 @@ void player_die (gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 void AddScore( gentity_t *ent, vec3_t origin, int score );
 void CalculateRanks( void );
 qboolean SpotWouldTelefrag( gentity_t *spot );
+qboolean RP_SpawnPointInSolid( const vec3_t origin, qboolean playerBox );
+qboolean RP_SpawnPointRefusedAtRuntime( gentity_t *ent, qboolean playerBox );
 
 extern gentity_t *gJMSaberEnt;
 
