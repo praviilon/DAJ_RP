@@ -154,6 +154,12 @@ extern vec3_t gPainPoint;
 // GalaxyRP: [Entity System] NPCs alive at once (bodies included) past which NPC_Spawn_Do() refuses;
 // a backstop for playability behind the entity reserve, not a crash guard -- see RP_NPCsAlive().
 #define RP_NPC_MAX_LIVE				256
+// GalaxyRP: [Entity System] an NPC or vehicle spawner with "respawn 1" fires again when one it made
+// dies -- never sooner than this after the death (RP_SpawnerRespawn in NPC_spawn.c), and its own delay
+// when that is longer. What its keys may ask for: a delay of at most an hour, a count of at most this many.
+#define RP_SPAWNER_RESPAWN_MIN		2000
+#define RP_SPAWNER_DELAY_MAX		3600000
+#define RP_SPAWNER_COUNT_MAX		1000
 
 // GalaxyRP fix: [Entity System] how many "#name" sub-BSP models a map can teach the game -- the
 // engine's own MAX_SUB_BSP (q_shared.h), past which CM_LoadSubBSP() Com_Error(ERR_DROP)s.
@@ -2582,6 +2588,9 @@ qboolean	RP_SpawnRouteIsLogical( const rpSpawnRoute_t *route );
 // Every player-driven caller of RP_SpawnForRoute() asks this first; g_entgrab.c.
 qboolean	RP_SpawnRouteHasRoom( const rpSpawnRoute_t *route );
 int			RP_NPCsAlive( void );	// GalaxyRP: [Entity System] NPC_spawn.c, for RP_NPC_MAX_LIVE
+qboolean	RP_HasUpper( const char *s );
+void		RP_SpawnerClampDelay( gentity_t *self, int scale );	// GalaxyRP: [Entity System] NPC_spawn.c
+void		RP_SpawnerClampCount( gentity_t *self );
 // GalaxyRP: [Entity System] misc_weapon_shooter's client pool (g_misc.c)
 qboolean	G_IsShooterClient( const gclient_t *cl );
 void		G_FreeClientForShooter( gclient_t *cl );

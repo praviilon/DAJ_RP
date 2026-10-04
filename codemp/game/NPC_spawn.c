@@ -75,6 +75,7 @@ extern void Wampa_SetBolts( gentity_t *self );
 // GalaxyRP: [Entity System] NPC and vehicle spawners -- see RP_SpawnerRespawn()
 static void RP_SpawnerQueuedFire( gentity_t *ent );
 static qboolean RP_SpawnerCountingDown( const gentity_t *spawner );
+static void RP_SpawnerScheduleRespawn( gentity_t *spawner );
 
 // PAIN functions...
 //
@@ -1451,6 +1452,13 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	//Check the spawner's count
 	if( ent->count != -1 )
 	{
+		// GalaxyRP fix: [Entity System] spent already (its last use cleared ent->use): nothing more.
+		// A spawn still scheduled on its think when a trigger used up the count went on to take the
+		// count below 0 -- past -1, which means no limit at all -- and the spawner never stopped again.
+		if ( ent->count <= 0 )
+		{
+			return NULL;
+		}
 		ent->count--;
 
 		if( ent->count <= 0 )
@@ -1542,8 +1550,13 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	{
 		ent->NPC_type = "random";
 	}
-	else
+	else if ( RP_HasUpper( ent->NPC_type ) )
 	{
+		// GalaxyRP fix: [Entity System] this copied and lowercased the type on every spawn, from a pool
+		// that is never freed -- a "respawn 1" spawner paid for it with every death. The copy is kept
+		// on the spawner, so once it is lowercase (the first spawn, or a type given lowercase) there is
+		// nothing to copy. The copy itself stays: the type may be a string literal (SP_NPC_Kyle and the
+		// like), which cannot be lowercased in place.
 		ent->NPC_type = Q_strlwr( G_NewString( ent->NPC_type ) );
 	}
 
@@ -2052,6 +2065,46 @@ extern void G_VehicleSpawn( gentity_t *self );
 // GalaxyRP: [Entity System] NPCs (vehicles included) in the networked region, alive or still lying
 // there as bodies -- what NPC_Spawn_Do() measures against RP_NPC_MAX_LIVE. A scan: NPC spawns are
 // rare next to frames, and a count kept by hand would drift the first time a free path forgot it.
+// GalaxyRP: [Entity System] whether an NPC type still has an uppercase letter to lowercase (NPC_Spawn_Do)
+qboolean RP_HasUpper( const char *s )
+{
+	for ( ; s && *s; s++ )
+	{
+		if ( *s >= 'A' && *s <= 'Z' )
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// GalaxyRP: [Entity System] a spawner's "delay" as its key gave it (scale 1000 when the key is in seconds,
+// 1 when it is in milliseconds already), kept within [0, RP_SPAWNER_DELAY_MAX] ms before it is scaled --
+// the multiply overflowed past 2147483 s and fired the spawner at once. And its "count": -1 (no limit)
+// or 1 to RP_SPAWNER_COUNT_MAX; any other negative means no limit too.
+void RP_SpawnerClampDelay( gentity_t *self, int scale )
+{
+	const int max = RP_SPAWNER_DELAY_MAX / ( scale > 0 ? scale : 1 );
+
+	if ( self->delay < 0 || self->delay > max )
+	{
+		G_LogPrintf( "%s at %s: delay %d clamped to %d\n", self->classname ? self->classname : "spawner",
+			vtos( self->s.origin ), self->delay, self->delay < 0 ? 0 : max );
+		self->delay = self->delay < 0 ? 0 : max;
+	}
+	self->delay *= ( scale > 0 ? scale : 1 );
+}
+
+void RP_SpawnerClampCount( gentity_t *self )
+{
+	if ( self->count < -1 || self->count > RP_SPAWNER_COUNT_MAX )
+	{
+		G_LogPrintf( "%s at %s: count %d clamped to %d\n", self->classname ? self->classname : "spawner",
+			vtos( self->s.origin ), self->count, self->count < -1 ? -1 : RP_SPAWNER_COUNT_MAX );
+		self->count = self->count < -1 ? -1 : RP_SPAWNER_COUNT_MAX;
+	}
+}
+
 int RP_NPCsAlive( void )
 {
 	int i, count = 0;
@@ -2127,7 +2180,7 @@ static void RP_SpawnerSpawnNow( gentity_t *ent )
 	{
 		return;
 	}
-	if ( ent->count != -1 )
+	if ( ent->count != -1 && ent->count < INT_MAX )
 	{
 		ent->count++;	// NPC_Spawn_Do() takes one off: this one is not one of its uses
 	}
@@ -2202,7 +2255,31 @@ static void RP_SpawnerQueuedFire( gentity_t *ent )
 		return;
 	}
 	ent->rpSpawnerQueued--;
-	ent->use( ent, ent, ent );
+	RP_SpawnerScheduleRespawn( ent );
+}
+
+// GalaxyRP fix: [Entity System] the spawn a death asks for, scheduled on the spawner's think -- never sooner
+// than RP_SPAWNER_RESPAWN_MIN after the death, and after the spawner's own delay when that is longer. This
+// used to fire the spawner's use at once: with no delay the next NPC stood there within the same frame, and
+// a spawner placed in a trigger_hurt or over a pit made one NPC per frame for as long as the table allowed,
+// each spawn costing pool memory that is never given back. Shy spawners wait to be unseen as before.
+static void RP_SpawnerScheduleRespawn( gentity_t *spawner )
+{
+	const int wait = ( spawner->delay > RP_SPAWNER_RESPAWN_MIN ) ? spawner->delay : RP_SPAWNER_RESPAWN_MIN;
+
+	if ( !Q_stricmp( spawner->classname, "NPC_Vehicle" ) )
+	{
+		spawner->think = G_VehicleSpawn;
+	}
+	else if ( spawner->spawnflags & 2048 )  // SHY
+	{
+		spawner->think = NPC_ShySpawn;
+	}
+	else
+	{
+		spawner->think = NPC_Spawn_Go;
+	}
+	spawner->nextthink = level.time + wait;
 }
 
 // player_die(): an NPC or vehicle has died -- its spawner fires again if it has "respawn"
@@ -2227,7 +2304,7 @@ void RP_SpawnerRespawn( gentity_t *npc )
 		spawner->rpSpawnerQueued++;
 		return;
 	}
-	spawner->use( spawner, npc, npc );
+	RP_SpawnerScheduleRespawn( spawner );
 }
 
 extern void Rancor_DropVictim( gentity_t *self );
@@ -2522,6 +2599,7 @@ void SP_NPC_spawner( gentity_t *self)
 	{
 		self->count = 1;
 	}
+	RP_SpawnerClampCount( self );
 
 	{//Stop loading of certain extra sounds
 		static	int	garbage;
@@ -2563,9 +2641,9 @@ void SP_NPC_spawner( gentity_t *self)
 			self->wait *= 1000;//1 = 1 msec, 1000 = 1 sec
 		}
 
-		if ( delayKey && !typedMs )
+		if ( delayKey )
 		{
-			self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
+			RP_SpawnerClampDelay( self, typedMs ? 1 : 1000 );//1 = 1 msec, 1000 = 1 sec
 		}
 	}
 
@@ -2786,7 +2864,7 @@ void SP_NPC_Vehicle( gentity_t *self)
 		}
 		if ( delayKey )
 		{
-			self->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
+			RP_SpawnerClampDelay( self, 1000 );//1 = 1 msec, 1000 = 1 sec
 		}
 	}
 
@@ -2797,6 +2875,7 @@ void SP_NPC_Vehicle( gentity_t *self)
 	{
 		self->count = 1;
 	}
+	RP_SpawnerClampCount( self );
 
 	G_SetOrigin( self, self->s.origin );
 	G_SetAngles( self, self->s.angles );
