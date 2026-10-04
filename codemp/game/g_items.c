@@ -3988,13 +3988,23 @@ void G_SpawnItem (gentity_t *ent, gitem_t *item) {
 	// until the map restarted. Written again now, for every later joiner, and for connected clients
 	// whose cgame registers a late CS_ITEMS change (CG_ConfigStringModified); older cgames keep the
 	// cone, which the note tells the admin.
-	if ( level.rp_map_loaded && !itemRegistered[ item - bg_itemlist ] )
+	// GalaxyRP fix: [Entity System] tested against CS_ITEMS itself, not itemRegistered[]: every NPC
+	// spawned after map load registers the items of the weapons it carries (NPC_PrecacheWeapons),
+	// without writing CS_ITEMS, so the table said "precached" for a weapon no client had ever seen.
+	if ( level.rp_map_loaded )
 	{
-		RegisterItem( item );
-		SaveRegisteredItems();
-		Q_strncpyz( level.rp_spawn_note, va( "%s was not precached by this map: players with an older client see a placeholder for it until the map restarts.", item->classname ),
-			sizeof( level.rp_spawn_note ) );
-		G_LogPrintf( "item %s precached after map load (CS_ITEMS rewritten)\n", item->classname );
+		char	items[MAX_STRING_CHARS];
+		int		index = (int)( item - bg_itemlist );
+
+		trap->GetConfigstring( CS_ITEMS, items, sizeof( items ) );
+		if ( index >= 0 && index < bg_numItems && ( index >= (int)strlen( items ) || items[index] != '1' ) )
+		{
+			RegisterItem( item );
+			SaveRegisteredItems();
+			Q_strncpyz( level.rp_spawn_note, va( "%s was not precached by this map: players with an older client see a placeholder for it until the map restarts.", item->classname ),
+				sizeof( level.rp_spawn_note ) );
+			G_LogPrintf( "item %s precached after map load (CS_ITEMS rewritten)\n", item->classname );
+		}
 	}
 
 	RegisterItem( item );

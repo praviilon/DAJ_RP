@@ -1449,25 +1449,17 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		}
 	}
 
-	//Check the spawner's count
-	if( ent->count != -1 )
+	// GalaxyRP fix: [Entity System] spent already (its last use cleared ent->use): nothing more.
+	// A spawn still scheduled on its think when a trigger used up the count went on to take the
+	// count below 0 -- past -1, which means no limit at all -- and the spawner never stopped again.
+	if ( ent->count != -1 && ent->count <= 0 )
 	{
-		// GalaxyRP fix: [Entity System] spent already (its last use cleared ent->use): nothing more.
-		// A spawn still scheduled on its think when a trigger used up the count went on to take the
-		// count below 0 -- past -1, which means no limit at all -- and the spawner never stopped again.
-		if ( ent->count <= 0 )
-		{
-			return NULL;
-		}
-		ent->count--;
-
-		if( ent->count <= 0 )
-		{
-			ent->use = 0;//never again
-			//FIXME: why not remove me...?  Because of all the string pointers?  Just do G_NewStrings?
-		}
+		return NULL;
 	}
 
+	// GalaxyRP fix: [Entity System] both refusals below come before the count is spent (further down):
+	// a refused spawn used to take a use all the same, and a count-1 spawner refused once was spent --
+	// use cleared, never spawned, never freed.
 	// GalaxyRP fix: [Entity System] this is the common path for every NPC the mod creates -- the
 	// /npc spawn command, an npc_spawner placed by a map, one added with /entadd, one fired by a
 	// trigger. The two G_Spawn() calls below (this entity and its tempGoal) are checked here
@@ -1496,6 +1488,18 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		G_LogPrintf( "npc_spawner at %s refused: %d NPCs alive (limit %d)\n",
 			vtos(ent->s.origin), RP_NPCsAlive(), RP_NPC_MAX_LIVE );
 		return NULL;
+	}
+
+	//Check the spawner's count
+	if( ent->count != -1 )
+	{
+		ent->count--;
+
+		if( ent->count <= 0 )
+		{
+			ent->use = 0;//never again
+			//FIXME: why not remove me...?  Because of all the string pointers?  Just do G_NewStrings?
+		}
 	}
 
 	newent = G_Spawn();

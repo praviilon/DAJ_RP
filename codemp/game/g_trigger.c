@@ -2095,21 +2095,27 @@ void SP_func_timer( gentity_t *self ) {
 
 	// GalaxyRP fix: [Entity System] a wait of 0 or less fired the timer's targets every frame for the
 	// rest of the map (nextthink never ahead of level.time); floored at 0.1 s, the rate the mod's other
-	// timed entities use, and random is never negative
+	// timed entities use
 	if ( self->wait < 0.1f ) {
 		G_LogPrintf( "func_timer at %s: wait %g raised to 0.1\n", vtos( self->s.origin ), self->wait );
 		self->wait = 0.1f;
-	}
-	if ( self->random < 0 ) {
-		self->random = 0;
 	}
 
 	self->use = func_timer_use;
 	self->think = func_timer_think;
 
 	if ( self->random >= self->wait ) {
-		self->random = self->wait - 1;//NOTE: was - FRAMETIME, but FRAMETIME is in msec (100) and these numbers are in *seconds*!
+		// GalaxyRP fix: [Entity System] was wait - 1 (a whole second, these are seconds): for any wait
+		// under 1 s -- the floored one above among them -- that left random negative, and the think's
+		// wait + crandom * random then landed in the past about half the time, so the timer went on
+		// firing its targets on consecutive frames. A tenth under wait, and never below zero.
+		self->random = self->wait - 0.1f;
 		trap->Print( "func_timer at %s has random >= wait\n", vtos( self->s.origin ) );
+	}
+	// GalaxyRP fix: [Entity System] and random is never negative, whichever way it got there (a
+	// negative key, or the clamp above on a wait of exactly 0.1)
+	if ( self->random < 0 ) {
+		self->random = 0;
 	}
 
 	if ( self->spawnflags & 1 ) {
