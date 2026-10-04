@@ -3126,7 +3126,12 @@ static void _PlayerFootStep( const vec3_t origin,
 			}
 			break;
 	}
-	if (soundType < FOOTSTEP_TOTAL)
+	// DAJ_RP: [dmflags] DF_NO_FOOTSTEPS (32) silences the step itself, for players and NPCs alike.
+	// The flag is Quake 3's, where pmove raised the footstep event and pm->noFootsteps stopped it;
+	// JKA moved footsteps into these client-side animation events and left pm->noFootsteps set but
+	// unread, so the flag did nothing. Only the sound: the dust puff and the footprint below stay,
+	// as do splashing and wading (EV_FOOTSPLASH/EV_FOOTWADE/EV_SWIM), which the flag never covered.
+	if (soundType < FOOTSTEP_TOTAL && !(cgs.dmflags & DF_NO_FOOTSTEPS))
 	{
 	 	trap->S_StartSound( NULL, cent->currentState.clientNum, CHAN_BODY, cgs.media.footsteps[soundType][rand()&3] );
 	}

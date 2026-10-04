@@ -140,6 +140,32 @@ void P_DamageFeedback( gentity_t *player ) {
 
 /*
 =============
+P_SealedInVehicle
+
+DAJ_RP: [Vehicles] true while a player rides a live walker or fighter -- exactly the riders G_Damage()
+(g_combat.c) refuses damage to unless DAMAGE_NO_PROTECTION is passed, which drowning does not pass.
+Kept as the same test on purpose: P_WorldEffects() asks it so that drowning and the damage it deals
+cannot disagree about who is protected.
+=============
+*/
+static qboolean P_SealedInVehicle( const gentity_t *ent )
+{
+	const gentity_t *veh;
+
+	if ( !ent->client || ent->client->ps.clientNum >= MAX_CLIENTS || !ent->client->ps.m_iVehicleNum )
+		return qfalse;
+
+	veh = &g_entities[ent->client->ps.m_iVehicleNum];
+
+	if ( !veh->m_pVehicle || veh->health <= 0 )
+		return qfalse;
+
+	return ( veh->m_pVehicle->m_pVehicleInfo->type == VH_WALKER
+		|| veh->m_pVehicle->m_pVehicleInfo->type == VH_FIGHTER ) ? qtrue : qfalse;
+}
+
+/*
+=============
 P_WorldEffects
 
 Check for lava / slime contents and drowning
@@ -170,7 +196,15 @@ void P_WorldEffects( gentity_t *ent ) {
 	// gives the full 12 seconds) and resets the drowning damage ramp. Only drowning: lava and
 	// slime below, and any trigger_hurt a map puts in its water, still hurt. (JA++'s version
 	// returns from this function early, which switches lava and slime off as well.)
-	if ( waterlevel == 3 && !(dmflags.integer & DF_NO_DROWN) ) {
+	//
+	// DAJ_RP: [Vehicles] and a player sealed in a live walker or fighter (P_SealedInVehicle) takes the
+	// same branch. G_Damage() already refused them the drowning damage, but the gurgle below is played
+	// before it is called, so a submerged AT-ST or fighter pilot heard himself drown every second and
+	// lost nothing -- while the damage ramp kept climbing, ready to hit at full strength the moment he
+	// climbed out. Now his air stays topped up and the ramp reset, as with DF_NO_DROWN. Speeders and
+	// animals do not seal their riders and still drown them; a destroyed vehicle stops protecting, in
+	// G_Damage() and here alike.
+	if ( waterlevel == 3 && !(dmflags.integer & DF_NO_DROWN) && !P_SealedInVehicle( ent ) ) {
 		#ifdef BASE_COMPAT
 			// envirosuit give air
 			if ( envirosuit )

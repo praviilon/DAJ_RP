@@ -915,6 +915,12 @@ qboolean BG_InKnockDownOnly( int anim );
 void DoFall(centity_t *cent, entityState_t *es, int clientNum)
 {
 	int delta = es->eventParm;
+	// DAJ_RP: [dmflags] DF_NO_FALLING (8) -- the server skips a player's fall damage under this flag
+	// (ClientEvents(), g_active.c), but the "*land1" grunt below was played on the same delta > 44
+	// that the damage starts at, with no look at the flag, so a hard landing sounded hurt and was
+	// not. Players only: NPCs never take fall damage through that code at all, flag or no flag.
+	// The heavy thud stays -- it is the landing, not the injury.
+	const qboolean landGrunt = (es->number < MAX_CLIENTS && (cgs.dmflags & DF_NO_FALLING)) ? qfalse : qtrue;
 
 	if (cent->currentState.eFlags & EF_DEAD)
 	{ //corpses crack into the ground ^_^
@@ -941,16 +947,22 @@ void DoFall(centity_t *cent, entityState_t *es, int clientNum)
 	else if (delta > 50)
 	{
 		trap->S_StartSound (NULL, es->number, CHAN_AUTO, cgs.media.fallSound );
-		trap->S_StartSound( NULL, cent->currentState.number, CHAN_VOICE,
-			CG_CustomSound( cent->currentState.number, "*land1.wav" ) );
-		cent->pe.painTime = cg.time;	// don't play a pain sound right after this
+		if ( landGrunt )
+		{
+			trap->S_StartSound( NULL, cent->currentState.number, CHAN_VOICE,
+				CG_CustomSound( cent->currentState.number, "*land1.wav" ) );
+			cent->pe.painTime = cg.time;	// don't play a pain sound right after this
+		}
 	}
 	else if (delta > 44)
 	{
 		trap->S_StartSound (NULL, es->number, CHAN_AUTO, cgs.media.fallSound );
-		trap->S_StartSound( NULL, cent->currentState.number, CHAN_VOICE,
-			CG_CustomSound( cent->currentState.number, "*land1.wav" ) );
-		cent->pe.painTime = cg.time;	// don't play a pain sound right after this
+		if ( landGrunt )
+		{
+			trap->S_StartSound( NULL, cent->currentState.number, CHAN_VOICE,
+				CG_CustomSound( cent->currentState.number, "*land1.wav" ) );
+			cent->pe.painTime = cg.time;	// don't play a pain sound right after this
+		}
 	}
 	else
 	{
@@ -1379,7 +1391,9 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_FOOTSTEP:
 		DEBUGNAME("EV_FOOTSTEP");
-		if (cg_footsteps.integer) {
+		// DAJ_RP: [dmflags] DF_NO_FOOTSTEPS (32) -- this one is the step pmove raises on a short
+		// landing (PM_CrashLand). The walking steps are animation events; see _PlayerFootStep().
+		if (cg_footsteps.integer && !(cgs.dmflags & DF_NO_FOOTSTEPS)) {
 			footstep_t	soundType;
 			switch( es->eventParm )
 			{
@@ -1430,7 +1444,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		break;
 	case EV_FOOTSTEP_METAL:
 		DEBUGNAME("EV_FOOTSTEP_METAL");
-		if (cg_footsteps.integer) {
+		if (cg_footsteps.integer && !(cgs.dmflags & DF_NO_FOOTSTEPS)) {
 			trap->S_StartSound (NULL, es->number, CHAN_BODY,
 				cgs.media.footsteps[ FOOTSTEP_METALWALK ][rand()&3] );
 		}
