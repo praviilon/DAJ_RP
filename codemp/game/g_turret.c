@@ -158,6 +158,13 @@ static void turret_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] a bolt is an entity that lives 10 seconds; with the table at the
+	// reserve the shot is skipped rather than walked into G_Spawn()'s ERR_DROP (see g_utils.c)
+	if ( G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		return;
+	}
+
 	VectorMA( start, -START_DIS, dir, org ); // dumb....
 	G_PlayEffectID( ent->genericValue13, org, dir );
 
@@ -936,6 +943,13 @@ qboolean turret_base_spawn_top( gentity_t *base )
 
 	//design specified shot speed
 	G_SpawnFloat( "shotspeed", "1100", &base->mass );
+	// GalaxyRP fix: [Entity System] a bolt that does not move (shotspeed 0, or backwards) never hits
+	// anything and lives its full 10 seconds -- the key comes off /entadd, so it is floored
+	if ( base->mass < 100 )
+	{
+		G_LogPrintf( "misc_turret at %s: shotspeed %g raised to 100\n", vtos( base->s.origin ), base->mass );
+		base->mass = 100;
+	}
 	top->mass = base->mass;
 
 	//even if we don't want to show health, let's at least light the crosshair up properly over ourself
@@ -964,8 +978,15 @@ qboolean turret_base_spawn_top( gentity_t *base )
 	top->radius = base->radius;
 
 	// How quickly to fire
-	if ( !base->wait )
+	// GalaxyRP fix: [Entity System] the zero test let a negative or tiny wait through, and a wait
+	// already past means a bolt on every think: floored at 100 ms, the mod's rate for its other
+	// timed entities, and the default kept for anything below that
+	if ( base->wait < 100 )
 	{
+		if ( base->wait )
+		{
+			G_LogPrintf( "misc_turret at %s: wait %g too short, default used\n", vtos( base->s.origin ), base->wait );
+		}
 		base->wait = 300 + Q_flrand(0.0f, 1.0f) * 55;
 	}
 	top->wait = base->wait;

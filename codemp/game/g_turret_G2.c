@@ -361,6 +361,12 @@ static void turretG2_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 		return;
 	}
 
+	// GalaxyRP fix: [Entity System] see turret_fire() in g_turret.c: no shot while the table is at the reserve
+	if ( G_EntitySlotsAvailable( 1 ) == qfalse )
+	{
+		return;
+	}
+
 	VectorMA( start, -START_DIS, dir, org ); // dumb....
 
 	if ( ent->random )
@@ -1170,6 +1176,25 @@ void finish_spawning_turretG2( gentity_t *base )
 	}
 
 	G_SpawnFloat( "shotspeed", "0", &base->mass );
+	// GalaxyRP fix: [Entity System] a shotspeed or wait below 100 off a spawn key (/entadd) meant
+	// missiles that never move, or one on every think, living their full 10 seconds -- the defaults
+	// below take over, as they do for 0; see misc_turret in g_turret.c
+	if ( base->mass < 100 )
+	{
+		if ( base->mass )
+		{
+			G_LogPrintf( "misc_turretG2 at %s: shotspeed %g too low, default used\n", vtos( base->s.origin ), base->mass );
+		}
+		base->mass = 0;
+	}
+	if ( base->wait < 100 )
+	{
+		if ( base->wait )
+		{
+			G_LogPrintf( "misc_turretG2 at %s: wait %g too short, default used\n", vtos( base->s.origin ), base->wait );
+		}
+		base->wait = 0;
+	}
 	if ( (base->spawnflags&SPF_TURRETG2_TURBO) )
 	{
 		if ( !base->random )

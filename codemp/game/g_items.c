@@ -1176,7 +1176,13 @@ void pas_think( gentity_t *ent )
 	{
 		ent->count--;
 
-		if ( ent->count )
+		// GalaxyRP fix: [Entity System] a shot is a missile, an entity: skipped (the round still
+		// counts) while the table is at the reserve, rather than walked into G_Spawn()'s ERR_DROP
+		if ( ent->count && G_EntitySlotsAvailable( 1 ) == qfalse )
+		{
+			ent->attackDebounceTime = level.time + 150;
+		}
+		else if ( ent->count )
 		{
 			pas_fire( ent );
 			ent->s.fireflag = 1;

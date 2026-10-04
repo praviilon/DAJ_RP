@@ -146,6 +146,14 @@ extern vec3_t gPainPoint;
 // That is the cost these guards exist to avoid, and the reason the one surviving call in G_Spawn
 // writes its reason to the log first.
 #define ZYK_ENTITY_RESERVE			64
+// GalaxyRP: [Logical Entities] the same idea for the logical region. G_SpawnLogical() ends the
+// server the way G_Spawn() does once every logical slot is in use, so the player-driven spawn paths
+// (/entadd, the entity-file loader, a dropped /entcopy, a misc_bsp rebuild) refuse while this many
+// logical slots are still free -- see RP_SpawnRouteHasRoom().
+#define ZYK_LOGICAL_ENTITY_RESERVE	16
+// GalaxyRP: [Entity System] NPCs alive at once (bodies included) past which NPC_Spawn_Do() refuses;
+// a backstop for playability behind the entity reserve, not a crash guard -- see RP_NPCsAlive().
+#define RP_NPC_MAX_LIVE				256
 
 // GalaxyRP fix: [Entity System] how many "#name" sub-BSP models a map can teach the game -- the
 // engine's own MAX_SUB_BSP (q_shared.h), past which CM_LoadSubBSP() Com_Error(ERR_DROP)s.
@@ -2507,9 +2515,9 @@ gentity_t	*G_Spawn (void);
 // entity -- callers should go through RP_SpawnForClassname() (g_spawn.c), which knows which
 // classes those are, rather than call this directly.
 gentity_t	*G_SpawnLogical( void );
-// GalaxyRP: [Logical Entities] free slots left in the logical region. Informational only (the
-// /entadd message and the entityinfo command); nothing gates on it, because exhausting that region
-// cannot drop the server the way the networked one can -- G_SpawnLogical() refuses instead.
+// GalaxyRP: [Logical Entities] free slots left in the logical region. The player-driven spawn paths
+// gate on it through RP_SpawnRouteHasRoom() (ZYK_LOGICAL_ENTITY_RESERVE), because G_SpawnLogical()
+// ends the server, as G_Spawn() does, once the region is full.
 int		G_FreeLogicalEntityCount( void );
 
 // GalaxyRP: [SP Maps] level.rp_sp_game
@@ -2549,6 +2557,14 @@ gentity_t	*RP_SpawnForRoute( const rpSpawnRoute_t *route );
 // edit does not move an entity across the region boundary (a slot cannot change region in place).
 qboolean	RP_ClassnameWantsLogical( const char *classname, qboolean nological, qboolean hasScriptTargetname );
 qboolean	RP_SpawnRouteIsLogical( const rpSpawnRoute_t *route );
+// GalaxyRP: [Logical Entities] room for an entity on this route, in the region it leads to: /entadd's
+// margin for a networked one (G_EntitySlotsAvailable(4)), ZYK_LOGICAL_ENTITY_RESERVE for a logical one.
+// Every player-driven caller of RP_SpawnForRoute() asks this first; g_entgrab.c.
+qboolean	RP_SpawnRouteHasRoom( const rpSpawnRoute_t *route );
+int			RP_NPCsAlive( void );	// GalaxyRP: [Entity System] NPC_spawn.c, for RP_NPC_MAX_LIVE
+// GalaxyRP: [Entity System] misc_weapon_shooter's client pool (g_misc.c)
+qboolean	G_IsShooterClient( const gclient_t *cl );
+void		G_FreeClientForShooter( gclient_t *cl );
 gentity_t *G_TempEntity( vec3_t origin, int event );
 gentity_t	*G_PlayEffect(int fxID, vec3_t org, vec3_t ang);
 gentity_t	*G_PlayEffectID(const int fxID, vec3_t org, vec3_t ang);

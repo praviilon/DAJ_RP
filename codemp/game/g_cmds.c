@@ -15465,6 +15465,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	qboolean aim_origin_ignored = qfalse;
 	qboolean typed_origin = qfalse;	// GalaxyRP: an origin key among the arguments, known before the spawn
 	float aim_offset = 0.0f;		// GalaxyRP: /entaddaim's "aimoffset": how far out from the surface
+	rpSpawnRoute_t route;			// GalaxyRP: [Logical Entities] which region the classname and keys lead to
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
@@ -15581,13 +15582,37 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		}
 	}
 
+	// GalaxyRP: [Logical Entities] the region depends on the classname and on two of the keys, so
+	// read the pairs once for that before an entity is taken; the loop below reads them again to
+	// apply them, exactly as before.
+	RP_SpawnRouteInit(&route);
+	RP_SpawnRouteNoteKey(&route, "classname", arg1);
+	for (i = 2; i + 1 < number_of_args; i += 2)
+	{
+		trap->Argv( i, key, sizeof( key ) );
+		trap->Argv( i + 1, arg2, sizeof( arg2 ) );
+		RP_SpawnRouteNoteKey(&route, key, arg2);
+	}
+
 	// GalaxyRP fix: [Entity System] /entadd is the other way an admin can walk the entity table off
 	// its end. G_Spawn() does not fail politely -- it calls trap->Error(ERR_DROP) and every player
 	// on the server is disconnected -- so refuse here while there is still room, and say why.
 	// Some classes allocate more than the one entity asked for (a mover builds its own trigger, an
 	// npc_spawner with no targetname spawns its NPC immediately), hence the margin.
-	if ( G_EntitySlotsAvailable( 4 ) == qfalse )
+	// GalaxyRP fix: [Logical Entities] asked of the region the route leads to: G_SpawnLogical() ends
+	// the server the same way once the logical region is full, and this only ever looked at the
+	// networked table -- see RP_SpawnRouteHasRoom().
+	if ( RP_SpawnRouteHasRoom( &route ) == qfalse )
 	{
+		if ( RP_SpawnRouteIsLogical( &route ) )
+		{
+			trap->SendServerCommand( ent-g_entities,
+				va("print \"Cannot add an entity: the server is near its logical entity limit. %d logical slots free, %d held in reserve.\n\"",
+					G_FreeLogicalEntityCount(), ZYK_LOGICAL_ENTITY_RESERVE) );
+			G_LogPrintf( "/entadd '%s' by %s refused: %d logical entity slots free\n",
+				arg1, ent->client->pers.netname, G_FreeLogicalEntityCount() );
+			return;
+		}
 		trap->SendServerCommand( ent-g_entities,
 			va("print \"Cannot add an entity: the server is near its entity limit. %d slots free, %d held in reserve.\n\"",
 				G_FreeEntityCount(), ZYK_ENTITY_RESERVE) );
@@ -15596,24 +15621,8 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		return;
 	}
 
-	// GalaxyRP: [Logical Entities] the region depends on the classname and on two of the keys, so
-	// read the pairs once for that before an entity is taken; the loop below reads them again to
-	// apply them, exactly as before.
-	{
-		rpSpawnRoute_t route;
-
-		RP_SpawnRouteInit(&route);
-		RP_SpawnRouteNoteKey(&route, "classname", arg1);
-		for (i = 2; i + 1 < number_of_args; i += 2)
-		{
-			trap->Argv( i, key, sizeof( key ) );
-			trap->Argv( i + 1, arg2, sizeof( arg2 ) );
-			RP_SpawnRouteNoteKey(&route, key, arg2);
-		}
-
-		// zyk: spawns the new entity
-		new_ent = RP_SpawnForRoute(&route);
-	}
+	// zyk: spawns the new entity
+	new_ent = RP_SpawnForRoute(&route);
 
 	if (new_ent)
 	{

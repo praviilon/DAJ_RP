@@ -1465,12 +1465,28 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	// trigger. The two G_Spawn() calls below (this entity and its tempGoal) are checked here
 	// together, because failing between them would leave a half-built NPC. As above, the NULL
 	// checks that follow can never fire; G_Spawn() ERR_DROPs rather than returning NULL.
-	if ( G_EntitySlotsAvailable( 2 ) == qfalse )
+	// GalaxyRP fix: [Entity System] three, not two: an NPC that carries a saber takes a third slot
+	// for it on this same frame (WP_SaberInitBladeData -> G_Spawn, unchecked), and its weapon is only
+	// known once its parms are parsed, below.
+	if ( G_EntitySlotsAvailable( 3 ) == qfalse )
 	{
 		Com_Printf( S_COLOR_RED "ERROR: NPC spawn refused, only %d entity slots free\n",
 			G_FreeEntityCount() );
 		G_LogPrintf( "npc_spawner at %s refused: %d entity slots free\n",
 			vtos(ent->s.origin), G_FreeEntityCount() );
+		return NULL;
+	}
+
+	// GalaxyRP: [Entity System] and a ceiling on NPCs alive at once, bodies included (they hold
+	// their slots until removed). The entity reserve above keeps the server up; this keeps it
+	// playable when a spawner fed by a trigger would otherwise fill the table to the reserve, after
+	// which no item, missile or /entadd fits either. Far above what any map keeps alive.
+	if ( RP_NPCsAlive() >= RP_NPC_MAX_LIVE )
+	{
+		Com_Printf( S_COLOR_RED "ERROR: NPC spawn refused, %d NPCs are alive already (limit %d)\n",
+			RP_NPCsAlive(), RP_NPC_MAX_LIVE );
+		G_LogPrintf( "npc_spawner at %s refused: %d NPCs alive (limit %d)\n",
+			vtos(ent->s.origin), RP_NPCsAlive(), RP_NPC_MAX_LIVE );
 		return NULL;
 	}
 
@@ -2032,6 +2048,24 @@ Which spawner made an NPC is NPC_Spawn_Do()'s link (gentity_t::zyk_npc_spawner a
 ===========================================================================
 */
 extern void G_VehicleSpawn( gentity_t *self );
+
+// GalaxyRP: [Entity System] NPCs (vehicles included) in the networked region, alive or still lying
+// there as bodies -- what NPC_Spawn_Do() measures against RP_NPC_MAX_LIVE. A scan: NPC spawns are
+// rare next to frames, and a count kept by hand would drift the first time a free path forgot it.
+int RP_NPCsAlive( void )
+{
+	int i, count = 0;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		if ( g_entities[i].inuse && g_entities[i].s.eType == ET_NPC && g_entities[i].client )
+		{
+			count++;
+		}
+	}
+
+	return count;
+}
 
 qboolean RP_IsNpcSpawnerClass( const char *classname )
 {

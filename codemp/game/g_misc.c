@@ -1516,7 +1516,7 @@ void SP_misc_bsp(gentity_t *ent)
 				refusal = "the map never spawned this sub-BSP's entity list";
 			else if (needed <= 0)
 				refusal = "its entity list is empty";
-			else if (G_EntitySlotsAvailable(needed * 2) == qfalse || G_FreeLogicalEntityCount() < needed * 2)
+			else if (G_EntitySlotsAvailable(needed * 2) == qfalse || G_FreeLogicalEntityCount() < needed * 2 + ZYK_LOGICAL_ENTITY_RESERVE)
 				refusal = va("%d entities would not fit", needed);
 			else if (G_AllocRemaining() < textLength * 4 + 65536)
 				refusal = "the game's memory pool is nearly full";
@@ -4779,9 +4779,41 @@ void faller_think(gentity_t *ent)
 	ent->nextthink = level.time + 25;
 }
 
+// GalaxyRP fix: [Entity System] a faller is an entity with a ragdoll that lives 15 seconds, and
+// misc_faller_create() took one with no check at all -- so a misc_faller with "interval 0" (or a
+// targeted one fired every frame) walked the table into G_Spawn()'s ERR_DROP, a process exit on
+// a dedicated server. Three bounds now: the interval is floored (SP_misc_faller), a faller is only
+// made while the table has room past the reserve, and one misc_faller keeps at most this many
+// alive at once (its fallers carry it as parent), which bounds the ragdoll cost even at a legal rate.
+#define RP_FALLER_MIN_INTERVAL	500
+#define RP_FALLER_MAX_LIVE		32
+
+static int RP_FallersAlive( const gentity_t *ent )
+{
+	int i, count = 0;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		if ( g_entities[i].inuse && g_entities[i].parent == ent && g_entities[i].think == faller_think )
+		{
+			count++;
+		}
+	}
+
+	return count;
+}
+
 void misc_faller_create( gentity_t *ent, gentity_t *other, gentity_t *activator )
 {
-	gentity_t *faller = G_Spawn();
+	gentity_t *faller;
+
+	if ( G_EntitySlotsAvailable( 1 ) == qfalse || RP_FallersAlive( ent ) >= RP_FALLER_MAX_LIVE )
+	{
+		return;
+	}
+
+	faller = G_Spawn();
+	faller->parent = ent;
 
 	faller->genericValue10 = G_SoundIndex("sound/player/fallsplat");
 	faller->genericValue9 = G_SoundIndex("sound/chars/stofficer1/misc/falling1");
@@ -4845,6 +4877,17 @@ void SP_misc_faller(gentity_t *ent)
 
 	G_SpawnInt("interval", "500", &ent->genericValue1);
 	G_SpawnInt("fudgefactor", "0", &ent->genericValue2);
+
+	// GalaxyRP fix: [Entity System] both come straight off spawn keys; see misc_faller_create()
+	if ( ent->genericValue1 < RP_FALLER_MIN_INTERVAL || ent->genericValue2 < 0 )
+	{
+		G_LogPrintf( "misc_faller at %s: interval %d / fudgefactor %d clamped to at least %d / 0\n",
+			vtos( ent->s.origin ), ent->genericValue1, ent->genericValue2, RP_FALLER_MIN_INTERVAL );
+		if ( ent->genericValue1 < RP_FALLER_MIN_INTERVAL )
+			ent->genericValue1 = RP_FALLER_MIN_INTERVAL;
+		if ( ent->genericValue2 < 0 )
+			ent->genericValue2 = 0;
+	}
 
 	if (!ent->targetname || !ent->targetname[0])
 	{
@@ -5352,17 +5395,30 @@ gclient_t *G_ClientForShooter(void)
 		g_shooterClientInit = qtrue;
 	}
 
+	// GalaxyRP fix: [Entity System] inuse was never set, so every shooter on the map was handed
+	// g_shooterClients[0] -- one shared ps.weapon and one shared aim for all of them -- and the
+	// ERR_DROP below could never be reached, nor could G_FreeClientForShooter() ever free anything.
+	// Marked now, handed out clean, and returned (G_FreeEntity) when the shooter goes; the 17th
+	// shooter is refused by its spawn function instead of ending the server.
 	while (i < MAX_SHOOTERS)
 	{
 		if (!g_shooterClients[i].inuse)
 		{
+			memset(&g_shooterClients[i].cl, 0, sizeof(g_shooterClients[i].cl));
+			g_shooterClients[i].inuse = qtrue;
 			return &g_shooterClients[i].cl;
 		}
 		i++;
 	}
 
-	Com_Error(ERR_DROP, "No free shooter clients - hit MAX_SHOOTERS");
 	return NULL;
+}
+
+// GalaxyRP: [Entity System] whether this client is one of the shooter pool's -- G_FreeEntity()
+// gives it back; SP_misc_weapon_shooter() keeps it across a spawn in place (/entedit)
+qboolean G_IsShooterClient(const gclient_t *cl)
+{
+	return (cl && g_shooterClientInit && cl >= &g_shooterClients[0].cl && cl <= &g_shooterClients[MAX_SHOOTERS - 1].cl) ? qtrue : qfalse;
 }
 
 void G_FreeClientForShooter(gclient_t *cl)
@@ -5381,7 +5437,13 @@ void G_FreeClientForShooter(gclient_t *cl)
 
 void misc_weapon_shooter_fire( gentity_t *self )
 {
-	FireWeapon( self, (self->spawnflags&1) );
+	// GalaxyRP fix: [Entity System] every shot is a missile, an entity, and some weapons fire more
+	// than one: with the table at the reserve the shot is skipped (the repeat below keeps its
+	// cadence) rather than walked into G_Spawn()'s ERR_DROP
+	if ( G_EntitySlotsAvailable( 4 ) == qtrue )
+	{
+		FireWeapon( self, (self->spawnflags&1) );
+	}
 	if ( (self->spawnflags&2) )
 	{//repeat
 		self->think = misc_weapon_shooter_fire;
@@ -5444,7 +5506,20 @@ void SP_misc_weapon_shooter( gentity_t *self )
 	char *s;
 
 	//alloc a client just for the weapon code to use
-	self->client = G_ClientForShooter();//(gclient_s *)trap->Malloc(sizeof(gclient_s), TAG_G_ALLOC, qtrue);
+	// GalaxyRP fix: [Entity System] spawned again in place (/entedit, /entrotate) it keeps the
+	// client it has; a new one takes a free one, and when the pool is out (MAX_SHOOTERS) the
+	// shooter is refused -- see G_ClientForShooter()
+	if ( !G_IsShooterClient( self->client ) )
+	{
+		self->client = G_ClientForShooter();//(gclient_s *)trap->Malloc(sizeof(gclient_s), TAG_G_ALLOC, qtrue);
+	}
+	if ( !self->client )
+	{
+		Q_strncpyz( level.rp_spawn_refusal, va( "the map has its %d weapon shooters already", MAX_SHOOTERS ), sizeof( level.rp_spawn_refusal ) );
+		G_LogPrintf( "misc_weapon_shooter at %s refused: %s\n", vtos( self->s.origin ), level.rp_spawn_refusal );
+		G_FreeEntity( self );
+		return;
+	}
 
 	G_SpawnString("weapon", "", &s);
 

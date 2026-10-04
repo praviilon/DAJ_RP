@@ -440,10 +440,12 @@ void RP_EntGrabRespawnInPlace( gentity_t *e )
 // zyk: room for a new entity in the region this route leads to. A networked one keeps /entadd's margin,
 // for /entadd's reason -- some classes take more than the one slot. G_SpawnLogical() ends the server when
 // the logical region is full, as G_Spawn() does, so a logical one asks too.
-static qboolean RP_GrabRouteHasRoom( const rpSpawnRoute_t *route )
+// GalaxyRP fix: [Logical Entities] shared with /entadd and the entity-file loader, which used to ask
+// about the networked table only and spawned a logical class straight into G_SpawnLogical()'s ERR_DROP.
+qboolean RP_SpawnRouteHasRoom( const rpSpawnRoute_t *route )
 {
 	if ( RP_SpawnRouteIsLogical( route ) )
-		return ( G_FreeLogicalEntityCount() > 16 ) ? qtrue : qfalse;
+		return ( G_FreeLogicalEntityCount() > ZYK_LOGICAL_ENTITY_RESERVE ) ? qtrue : qfalse;
 
 	return G_EntitySlotsAvailable( 4 );
 }
@@ -460,7 +462,7 @@ static gentity_t *RP_GrabRebuild( char **pairs, int count )
 	for ( i = 0; i + 1 < count; i += 2 )
 		RP_SpawnRouteNoteKey( &route, pairs[i], pairs[i + 1] );
 
-	if ( !RP_GrabRouteHasRoom( &route ) )
+	if ( !RP_SpawnRouteHasRoom( &route ) )
 		return NULL;
 
 	e = RP_SpawnForRoute( &route );
@@ -1296,7 +1298,7 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 		for ( i = 0; i + 1 < count; i += 2 )
 			RP_SpawnRouteNoteKey( &route, level.zyk_spawn_strings[num][i], level.zyk_spawn_strings[num][i + 1] );
 
-		if ( !RP_GrabRouteHasRoom( &route ) )
+		if ( !RP_SpawnRouteHasRoom( &route ) )
 		{
 			trap->SendServerCommand( ent->s.number, va( "print \"Cannot drop the copy: the server is near its entity limit (%d networked slots free, %d held in reserve; %d logical free).\n\"",
 				G_FreeEntityCount(), ZYK_ENTITY_RESERVE, G_FreeLogicalEntityCount() ) );

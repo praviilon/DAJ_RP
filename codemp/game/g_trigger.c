@@ -2161,14 +2161,33 @@ void asteroid_field_think(gentity_t *self)
 
 	if ( numAsteroids < self->count )
 	{
+		// GalaxyRP fix: [Entity System] the asteroid to copy is picked before a slot is taken. This
+		// took the slot first and, with no entity carrying the field's target, left it in use with
+		// nothing in it -- not counted (ownerNum never set), not thinking, never freed: one slot
+		// leaked every 500 ms for the rest of the map, from a target typo on /entadd.
+		gentity_t *copyAsteroid = asteroid_pick_random_asteroid( self );
+		gentity_t *newAsteroid;
+
+		if ( !copyAsteroid )
+		{
+			if ( !self->alt_fire )
+			{
+				self->alt_fire = qtrue;	// logged once per field
+				G_LogPrintf( "trigger_asteroid_field at %s: nothing has the targetname %s to copy, no asteroids spawned\n",
+					vtos( self->s.origin ), self->target ? self->target : "" );
+			}
+			self->nextthink = level.time + 10000;	// a template may still be added; look again later
+			return;
+		}
+		self->alt_fire = qfalse;
+
 		//need to spawn a new asteroid
-		gentity_t *newAsteroid = G_Spawn();
+		newAsteroid = G_Spawn();
 		if ( newAsteroid )
 		{
 			vec3_t startSpot, endSpot, startAngles;
 			float dist, speed = flrand( self->speed * 0.25f, self->speed * 2.0f );
 			int	capAxis, axis, time = 0;
-			gentity_t *copyAsteroid = asteroid_pick_random_asteroid( self );
 			if ( copyAsteroid )
 			{
 				newAsteroid->model = copyAsteroid->model;

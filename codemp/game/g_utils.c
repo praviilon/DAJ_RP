@@ -2850,6 +2850,13 @@ void G_FreeEntity( gentity_t *ed ) {
 	// at any other time. Before the memset, which clears the field.
 	RP_LegacySlotRelease( ed );
 
+	// GalaxyRP fix: [Entity System] a misc_weapon_shooter gives its pool client back (g_misc.c);
+	// nothing did, so with the pool marked in use a removed shooter kept its slot for the map
+	if ( G_IsShooterClient( ed->client ) )
+	{
+		G_FreeClientForShooter( ed->client );
+	}
+
 	memset (ed, 0, sizeof(*ed));
 	ed->classname = "freed";
 	ed->freetime = level.time;

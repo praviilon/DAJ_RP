@@ -8517,6 +8517,7 @@ void G_RunFrame( int levelTime ) {
 		int zyk_lines_read = 0;
 		int zyk_spawned = 0;
 		int zyk_sub_bsp_lines = 0;
+		int zyk_logical_refused = 0;	// GalaxyRP: [Logical Entities] lines skipped for want of a logical slot
 
 		strcpy(content,"");
 
@@ -8704,18 +8705,12 @@ void G_RunFrame( int levelTime ) {
 				// spawns its NPC immediately. Stop reading rather than skipping the line: the table only
 				// fills further from here, so every later line would be refused too, and a preset half
 				// applied from the front is easier to reason about than one with holes through it.
-				if (G_EntitySlotsAvailable(4) == qfalse)
-				{
-					G_LogPrintf("entity file %s: stopped at line %d after %d entities -- %d entity slots "
-						"free, %d of them reserved. The rest of the file was not loaded.\n",
-						level.load_entities_file, zyk_lines_read, zyk_spawned, G_FreeEntityCount(),
-						ZYK_ENTITY_RESERVE);
-					break;
-				}
-
-				// zyk: the line is good, so now take an entity for it
-				// GalaxyRP: [Logical Entities] in the region its classname belongs to, decided from
-				// the pairs already parsed above -- the same rule the map loader and /entadd use.
+				//
+				// GalaxyRP fix: [Logical Entities] asked of the region the line's classname leads to, as
+				// /entadd asks (RP_SpawnRouteHasRoom): this only looked at the networked table, and a
+				// preset of logical lines walked straight into G_SpawnLogical()'s ERR_DROP -- on every
+				// map load, for a default.txt. A logical refusal skips the line and reads on, since the
+				// networked lines after it may still fit; a networked one stops the file as before.
 				{
 					rpSpawnRoute_t route;
 					int m;
@@ -8725,6 +8720,32 @@ void G_RunFrame( int levelTime ) {
 					{
 						RP_SpawnRouteNoteKey(&route, zyk_keys[m / 2], zyk_values[m / 2]);
 					}
+
+					if (RP_SpawnRouteHasRoom(&route) == qfalse)
+					{
+						if (RP_SpawnRouteIsLogical(&route))
+						{
+							if (zyk_logical_refused == 0)
+							{
+								G_LogPrintf("entity file %s: line %d (%s) skipped -- %d logical entity slots free, "
+									"%d of them reserved. Every later logical line is skipped too.\n",
+									level.load_entities_file, zyk_lines_read, route.classname, G_FreeLogicalEntityCount(),
+									ZYK_LOGICAL_ENTITY_RESERVE);
+							}
+							zyk_logical_refused++;
+							continue;
+						}
+
+						G_LogPrintf("entity file %s: stopped at line %d after %d entities -- %d entity slots "
+							"free, %d of them reserved. The rest of the file was not loaded.\n",
+							level.load_entities_file, zyk_lines_read, zyk_spawned, G_FreeEntityCount(),
+							ZYK_ENTITY_RESERVE);
+						break;
+					}
+
+					// zyk: the line is good, so now take an entity for it
+					// GalaxyRP: [Logical Entities] in the region its classname belongs to, decided from
+					// the pairs already parsed above -- the same rule the map loader and /entadd use.
 					new_ent = RP_SpawnForRoute(&route);
 				}
 
@@ -8766,6 +8787,12 @@ void G_RunFrame( int levelTime ) {
 				G_LogPrintf("entity file %s: %d lines saved from a misc_bsp's sub-BSP skipped -- the misc_bsp "
 					"rebuilds those entities itself. Re-save the preset to drop the lines.\n",
 					level.load_entities_file, zyk_sub_bsp_lines);
+			}
+
+			if (zyk_logical_refused > 0)
+			{
+				G_LogPrintf("entity file %s: %d lines skipped for want of a logical entity slot (%d spawned).\n",
+					level.load_entities_file, zyk_logical_refused, zyk_spawned);
 			}
 		}
 
