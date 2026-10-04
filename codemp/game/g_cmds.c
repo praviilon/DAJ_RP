@@ -15478,7 +15478,8 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	char arg2[MAX_STRING_CHARS];
 	qboolean has_origin_set = qfalse; // zyk: if player do not pass an origin key, use the one set with /entorigin
 	qboolean has_angles_set = qfalse; // zyk: if player do not pass an angles key, use the one set with /entorigin
-	// GalaxyRP: [Entity System] /entaddaim: the surface aimed at, and whether an origin was left out
+	// GalaxyRP: [Entity System] /entaddaim: the surface aimed at, and whether an origin typed on the
+	// command line was left out (an /entorigin position is simply not what /entaddaim places by: no note)
 	vec3_t aim_point, aim_normal;
 	qboolean aim_origin_ignored = qfalse;
 	qboolean typed_origin = qfalse;	// GalaxyRP: an origin key among the arguments, known before the spawn
@@ -15712,9 +15713,6 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		{ // GalaxyRP: [Entity System] /entaddaim: on the surface aimed at, by the box its class is placed by
 			vec3_t mins, maxs, origin;
 
-			if (level.ent_origin_set == qtrue)
-				aim_origin_ignored = qtrue;
-
 			RP_EntGrabPlaceBox(arg1, NULL, mins, maxs);
 			RP_EntGrabPlace(aim_point, aim_normal, mins, maxs, origin);
 			zyk_main_set_entity_field(new_ent, "origin", va("%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]));
@@ -15792,7 +15790,7 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		trap->SendServerCommand( ent-g_entities, va("print \"Entity %d spawned at (%i %i %i)%s%s\n\"", new_ent->s.number,
 			(int)new_ent->s.origin[0], (int)new_ent->s.origin[1], (int)new_ent->s.origin[2],
 			new_ent->isLogical ? " (logical, not networked)" : "",
-			aim_origin_ignored ? ". /entaddaim places it where you aim: the origin given or set with /entorigin was not used." : "") );
+			aim_origin_ignored ? ". /entaddaim places it where you aim: the origin typed was not used." : "") );
 		if (RP_EntitySolidAroundSomeone(new_ent))
 			trap->SendServerCommand( ent-g_entities, "print \"^3It is solid and someone is inside it: step away, or ^7/entundo^3.\n\"" );
 		if (level.rp_spawn_note[0])

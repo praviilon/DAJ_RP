@@ -2069,6 +2069,9 @@ typedef struct level_locals_s {
 	// GalaxyRP: [Entity System] a note about the last spawn that went through, for the command to print
 	// (an item the map had not precached -- see G_SpawnItem). Cleared with rp_spawn_refusal.
 	char rp_spawn_note[256];
+	// GalaxyRP: [Entity System] who set the sky portal (CS_SKYBOXORG): 0 nobody, -1 the map's own
+	// misc_skyportal, N+1 the Entity System's entity N -- see SP_misc_skyportal() and RP_SkyPortalRelease()
+	int rp_skyportal_owner;
 	// GalaxyRP: [Entity System] what the md3 file behind each model index holds, read once per map
 	// the first time it is asked for (RP_ModelInfo() in g_utils.c): 0 not read yet, 1 read, -1 not
 	// readable (no such file, or not an md3 this can trust)
@@ -2546,6 +2549,7 @@ const char *RP_EntityRefusalReason( const gentity_t *ent );
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
 qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent );
 qboolean RP_SpawnPointProtected( const gentity_t *ent );
+void RP_SkyPortalRelease( gentity_t *ent );
 // GalaxyRP fix: [Configstrings] whether the gamestate can still take "needed" more bytes of
 // configstring, for a caller that is about to claim several at once and wants to find out before
 // it has claimed any of them.

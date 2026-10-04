@@ -1030,10 +1030,34 @@ void target_level_change_use(gentity_t *self, gentity_t *other, gentity_t *activ
 		return;
 	}
 
+	// GalaxyRP: [Entity System] who tripped it goes to the log before the map goes
+	G_LogPrintf( "target_level_change at %s used by %s: changing map to %s\n", vtos( self->s.origin ),
+		( activator && activator->client ) ? activator->client->pers.netname : "the map", self->message );
+
 	if (sv_cheats.integer)
 		trap->SendConsoleCommand(EXEC_APPEND, va("devmap %s\n", self->message));
 	else
 		trap->SendConsoleCommand(EXEC_APPEND, va("map %s\n", self->message));
+}
+
+// GalaxyRP: [Entity System] a map name as the "map" command takes it: letters, digits, '_', '-', '/'
+// and '.', not starting with '/', no "..", no separators. Bounded by MAX_QPATH, as the file system is.
+static qboolean RP_MapNameSane( const char *name )
+{
+	int i;
+
+	if ( !name || !name[0] || name[0] == '/' || strlen( name ) >= MAX_QPATH || strstr( name, ".." ) )
+		return qfalse;
+
+	for ( i = 0; name[i]; i++ )
+	{
+		char c = name[i];
+
+		if ( !( ( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' ) || ( c >= '0' && c <= '9' ) || c == '_' || c == '-' || c == '/' || c == '.' ) )
+			return qfalse;
+	}
+
+	return qtrue;
 }
 
 /*QUAKED target_level_change (1 0 0) (-4 -4 -4) (4 4 4)
@@ -1051,8 +1075,27 @@ void SP_target_level_change( gentity_t *self )
 		// GalaxyRP fix: [Entity System] was trap->Error(ERR_DROP) -- a fatal error and process exit
 		// on a dedicated server, reachable at runtime through the entity commands. Log and free.
 		G_LogPrintf( "target_level_change at %s has no \"mapname\"; not spawned.\n", vtos( self->s.origin ) );
+		RP_SpawnSaysWhy( self, "a target_level_change needs a mapname" );
 		G_FreeEntity( self );
 		return;
+	}
+
+	// GalaxyRP fix: [Entity System] one the entity commands place changes the map for everyone the
+	// moment a player trips it, so its mapname is checked now: a plain map name, and a map this server
+	// has (maps/<name>.bsp, the pk3s included). A typo would otherwise end the map with "map not found";
+	// the map's own are left as they are.
+	if ( RP_EntitySystemMade( self ) )
+	{
+		if ( !RP_MapNameSane( self->message ) )
+		{
+			if ( RP_RefuseAtRuntime( self, va( "\"%s\" is not a plain map name", self->message ) ) )
+				return;
+		}
+		else if ( !RP_FileExists( va( "maps/%s.bsp", self->message ) ) )
+		{
+			if ( RP_RefuseAtRuntime( self, va( "this server has no map \"%s\" (maps/%s.bsp)", self->message, self->message ) ) )
+				return;
+		}
 	}
 
 	G_SetOrigin( self, self->s.origin );

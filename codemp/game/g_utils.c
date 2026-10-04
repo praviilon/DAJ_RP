@@ -2862,6 +2862,10 @@ void G_FreeEntity( gentity_t *ed ) {
 		G_FreeClientForShooter( ed->client );
 	}
 
+	// GalaxyRP fix: [Entity System] the sky portal an admin added goes with its entity -- see
+	// RP_SkyPortalRelease() in g_misc.c. Before the memset, which clears the number it is known by.
+	RP_SkyPortalRelease( ed );
+
 	memset (ed, 0, sizeof(*ed));
 	ed->classname = "freed";
 	ed->freetime = level.time;

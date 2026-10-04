@@ -1720,23 +1720,34 @@ void SP_misc_skyportal (gentity_t *ent)
 	float	fov_x;
 
 	// GalaxyRP fix: [Entity System] added after map load, a sky portal replaces the map's for every
-	// client (CS_SKYBOXORG below) and flags every entity in its PVS as a portal entity, which nothing
-	// undoes: refused when the map has one already. One added where the map has none is allowed, and
-	// kept as an inert entity (G_PortalifyEntities used to free it) so it is listed, saved by /entsave
-	// and can be removed -- removing it leaves the sky as it is, which the note says.
+	// client (CS_SKYBOXORG below): refused when the map has one of its own, or when another entity the
+	// admins added is the sky portal now (level.rp_skyportal_owner: the one that set the sky, so that
+	// spawning it again in place -- /entedit -- is not refused as a second one). One added where the map
+	// has none is allowed, and kept as an inert entity (G_PortalifyEntities used to free it) so it is
+	// listed, saved by /entsave and can be removed -- and removing it clears the sky again, since the
+	// clients read CS_SKYBOXORG every frame: RP_SkyPortalRelease(), from G_FreeEntity(). (The portal
+	// flags it set on other entities only matter while there is a portal.)
 	if ( RP_EntitySystemMade( ent ) )
 	{
-		char current[MAX_STRING_CHARS];
-
-		// zyk: genericValue15 marks the one that set the sky, so that spawning it again in place (/entedit)
-		// is not refused as a second one
-		trap->GetConfigstring( CS_SKYBOXORG, current, sizeof( current ) );
-		if ( current[0] && !ent->genericValue15 && RP_RefuseAtRuntime( ent, "the map has a sky portal already; a second one would replace it for everyone" ) )
+		if ( level.rp_skyportal_owner == -1 && RP_RefuseAtRuntime( ent, "the map has a sky portal of its own; a second one would replace it for everyone" ) )
 		{
 			return;
 		}
-		ent->genericValue15 = 1;
-		Q_strncpyz( level.rp_spawn_note, "The sky portal is set for every client for the rest of the map: removing the entity does not undo it.", sizeof( level.rp_spawn_note ) );
+		if ( level.rp_skyportal_owner > 0 && level.rp_skyportal_owner != ent->s.number + 1 )
+		{
+			gentity_t *owner = &g_entities[level.rp_skyportal_owner - 1];
+
+			if ( owner->inuse && RP_RefuseAtRuntime( ent, va( "entity %d is the sky portal already: /entedit it, or /entremove it first", owner->s.number ) ) )
+			{
+				return;
+			}
+		}
+		level.rp_skyportal_owner = ent->s.number + 1;
+		Q_strncpyz( level.rp_spawn_note, "The sky portal is set for every client; removing this entity clears it again.", sizeof( level.rp_spawn_note ) );
+	}
+	else
+	{
+		level.rp_skyportal_owner = -1;
 	}
 
 	G_SpawnFloat ("fov", "80", &fov_x);	// GalaxyRP fix: [Entity System] through the parser that refuses NaN/Inf
@@ -1749,6 +1760,27 @@ void SP_misc_skyportal (gentity_t *ent)
 
 	ent->think = G_PortalifyEntities;
 	ent->nextthink = level.time + 1050; //give it some time first so that all other entities are spawned.
+}
+
+/*
+=================
+RP_SkyPortalRelease
+
+GalaxyRP fix: [Entity System] called by G_FreeEntity() for every entity: if this one is the sky portal
+the Entity System set (see SP_misc_skyportal), the sky goes with it -- CS_SKYBOXORG cleared, which every
+client reads each frame -- so /entremove, /entundo, /entload's clearing pass and a dropped /entcut all
+undo it, and the next one added is not refused as "a second one". The map's own portal (-1) is never
+an entity number and never released: its entity frees itself at map start with the sky set for good.
+=================
+*/
+void RP_SkyPortalRelease( gentity_t *ent )
+{
+	if ( !ent || level.rp_skyportal_owner <= 0 || level.rp_skyportal_owner != ent->s.number + 1 )
+		return;
+
+	level.rp_skyportal_owner = 0;
+	trap->SetConfigstring( CS_SKYBOXORG, "" );
+	G_LogPrintf( "sky portal entity %d removed: the sky is the map's own again\n", ent->s.number );
 }
 
 /*QUAKED misc_holocron (0 0 1) (-8 -8 -8) (8 8 8)
