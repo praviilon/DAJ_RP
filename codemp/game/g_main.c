@@ -8743,6 +8743,19 @@ void G_RunFrame( int levelTime ) {
 						break;
 					}
 
+					// GalaxyRP fix: [Entity System] and room in the game's memory pool, which every line's
+					// keys and values go into twice (the record and the spawn) and which is never freed
+					// within a map: G_Alloc() ends the server when it runs out, and a preset is the one
+					// place that reaches it unattended, at every map start. The line's own length bounds
+					// its decoded pairs. Stopped, as above: the pool only fills from here.
+					if (G_AllocRoomFor((int)strlen(content) * 2 + 64) == qfalse)
+					{
+						G_LogPrintf("entity file %s: stopped at line %d after %d entities -- %d bytes free in the "
+							"game's memory pool, %d of them reserved. The rest of the file was not loaded.\n",
+							level.load_entities_file, zyk_lines_read, zyk_spawned, G_AllocRemaining(), ZYK_ALLOC_RESERVE);
+						break;
+					}
+
 					// zyk: the line is good, so now take an entity for it
 					// GalaxyRP: [Logical Entities] in the region its classname belongs to, decided from
 					// the pairs already parsed above -- the same rule the map loader and /entadd use.

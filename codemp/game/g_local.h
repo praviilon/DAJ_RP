@@ -160,6 +160,9 @@ extern vec3_t gPainPoint;
 #define RP_SPAWNER_RESPAWN_MIN		2000
 #define RP_SPAWNER_DELAY_MAX		3600000
 #define RP_SPAWNER_COUNT_MAX		1000
+// GalaxyRP: [Entity System] bytes of the 4 MB game memory pool kept back from the entity commands --
+// see G_AllocRoomFor() in g_mem.c
+#define ZYK_ALLOC_RESERVE			(256 * 1024)
 
 // GalaxyRP fix: [Entity System] how many "#name" sub-BSP models a map can teach the game -- the
 // engine's own MAX_SUB_BSP (q_shared.h), past which CM_LoadSubBSP() Com_Error(ERR_DROP)s.
@@ -2279,6 +2282,12 @@ void		RP_MarkChild( gentity_t *maker, gentity_t *child );
 qboolean	RP_IsChildOf( const gentity_t *maker, const gentity_t *child );
 int			RP_FreeEntityChildren( gentity_t *maker );
 int			G_AllocRemaining( void );
+int			G_AllocPoolSize( void );
+qboolean	G_AllocRoomFor( int bytes );
+// GalaxyRP: [Entity System] what spawning an entity from its record costs the pool, worst case: the
+// record's strings twice over (the record and G_ParseField's copies), each rounded as G_Alloc rounds.
+int			RP_EntityRecordBytes( const gentity_t *e );
+int			RP_PairsBytes( char **pairs, int count );
 gentity_t	*RP_MiscBspForInstance( int instance );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
 void zyk_set_brush_model( gentity_t *ent );
@@ -2463,6 +2472,8 @@ void		RP_EntGrabRespawnInPlace( gentity_t *e );
 // in its slot (/entedit, /entrotate, a dropped /entcut): its sub-BSP entities, its triggers and
 // children, its Ghoul2 model. g_entgrab.c.
 void		RP_EntRespawnPrepare( gentity_t *e );
+// GalaxyRP: [Entity System] room in the pool to spawn this entity again from its record (g_entgrab.c)
+qboolean	RP_EntRespawnHasRoom( const gentity_t *e );
 void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
 void		Cmd_EntRotate_f( gentity_t *ent );

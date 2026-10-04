@@ -437,6 +437,11 @@ void RP_EntRespawnPrepare( gentity_t *e )
 		trap->G2API_CleanGhoul2Models( &e->ghoul2 );
 }
 
+qboolean RP_EntRespawnHasRoom( const gentity_t *e )
+{
+	return G_AllocRoomFor( RP_EntityRecordBytes( e ) );
+}
+
 void RP_EntGrabRespawnInPlace( gentity_t *e )
 {
 	if ( !e || !e->inuse )
@@ -472,7 +477,7 @@ static gentity_t *RP_GrabRebuild( char **pairs, int count )
 	for ( i = 0; i + 1 < count; i += 2 )
 		RP_SpawnRouteNoteKey( &route, pairs[i], pairs[i + 1] );
 
-	if ( !RP_SpawnRouteHasRoom( &route ) )
+	if ( !RP_SpawnRouteHasRoom( &route ) || !G_AllocRoomFor( RP_PairsBytes( pairs, count ) ) )
 		return NULL;
 
 	e = RP_SpawnForRoute( &route );
@@ -1317,6 +1322,13 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 			return;
 		}
 
+		// GalaxyRP: [Entity System] and in the game's memory pool, which the spawn draws on and never gives back
+		if ( !RP_EntRespawnHasRoom( held ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot drop the copy: the game's memory pool is nearly full (%d KB free).\n\"", G_AllocRemaining() / 1024 ) );
+			return;
+		}
+
 		copy = RP_SpawnForRoute( &route );
 		if ( !copy )
 		{
@@ -1379,6 +1391,14 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 		static char *backup[ZYK_MAX_SPAWN_STRING_SLOTS];
 		int count = level.zyk_spawn_strings_values_count[num];
 		gentity_t *rebuilt;
+
+		// GalaxyRP: [Entity System] room in the game's memory pool to spawn it again (twice, if its box
+		// has to be settled) -- asked before its record is written, so a refusal changes nothing
+		if ( !G_AllocRoomFor( RP_EntityRecordBytes( held ) * 2 ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot drop it: the game's memory pool is nearly full (%d KB free). It is still held: /entcancel puts it back.\n\"", G_AllocRemaining() / 1024 ) );
+			return;
+		}
 
 		if ( count > ZYK_MAX_SPAWN_STRING_SLOTS )
 			count = ZYK_MAX_SPAWN_STRING_SLOTS;
@@ -1666,6 +1686,14 @@ void Cmd_EntRotate_f( gentity_t *ent )
 		static char *backup[ZYK_MAX_SPAWN_STRING_SLOTS];
 		int count = level.zyk_spawn_strings_values_count[num];
 		gentity_t *rebuilt;
+
+		// GalaxyRP: [Entity System] room in the game's memory pool to spawn it again -- asked before its
+		// record is written, so a refusal changes nothing
+		if ( !RP_EntRespawnHasRoom( target ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot rotate entity %d: the game's memory pool is nearly full (%d KB free).\n\"", num, G_AllocRemaining() / 1024 ) );
+			return;
+		}
 
 		if ( count > ZYK_MAX_SPAWN_STRING_SLOTS )
 			count = ZYK_MAX_SPAWN_STRING_SLOTS;

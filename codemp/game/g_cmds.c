@@ -15449,6 +15449,22 @@ beyond a trigger of its own (a misc_bsp's sub-BSP, say), which a second spawn wo
 An NPC or vehicle spawner needs a targetname and a type the server has (zyk_entadd_spawner_problem()).
 ==================
 */
+// GalaxyRP: [Entity System] what the key/value arguments from `first` on would cost the pool, as
+// RP_PairsBytes() counts a record: each string rounded as G_Alloc() rounds, twice over, plus a margin
+static int zyk_args_bytes( int first, int count )
+{
+	char arg[MAX_STRING_CHARS];
+	int i, bytes = 64;
+
+	for ( i = first; i < count; i++ )
+	{
+		trap->Argv( i, arg, sizeof( arg ) );
+		bytes += ( ( (int)strlen( arg ) + 1 + 31 ) & ~31 ) * 2;
+	}
+
+	return bytes;
+}
+
 static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 	gentity_t *new_ent = NULL;
 	int number_of_args = trap->Argc();
@@ -15620,6 +15636,19 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 				G_FreeEntityCount(), ZYK_ENTITY_RESERVE) );
 		G_LogPrintf( "/entadd '%s' by %s refused: %d entity slots free\n",
 			arg1, ent->client->pers.netname, G_FreeEntityCount() );
+		return;
+	}
+
+	// GalaxyRP fix: [Entity System] and room in the game's memory pool, which every key and value typed
+	// goes into -- twice, with the spawn -- and which is never freed within a map: G_Alloc() ends the
+	// server when it runs out. See G_AllocRoomFor() in g_mem.c.
+	if ( G_AllocRoomFor( zyk_args_bytes( 1, number_of_args ) ) == qfalse )
+	{
+		trap->SendServerCommand( ent-g_entities,
+			va("print \"Cannot add an entity: the game's memory pool is nearly full (%d KB free, %d KB held in reserve). It is freed when the map changes.\n\"",
+				G_AllocRemaining() / 1024, ZYK_ALLOC_RESERVE / 1024) );
+		G_LogPrintf( "/entadd '%s' by %s refused: %d bytes free in the memory pool\n",
+			arg1, ent->client->pers.netname, G_AllocRemaining() );
 		return;
 	}
 
@@ -16113,6 +16142,18 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			(level.zyk_spawn_strings_values_count[entity_id] + (number_of_args - first_pair)) > ZYK_MAX_SPAWN_STRING_SLOTS)
 		{
 			trap->SendServerCommand( ent-g_entities, va("print \"Entity %d cannot hold that many key/value pairs (maximum %d).\n\"", entity_id, ZYK_MAX_SPAWN_STRING_SLOTS / 2) );
+			return;
+		}
+
+		// GalaxyRP fix: [Entity System] room in the game's memory pool for the pairs given and for the
+		// spawn below, which reads the whole record into the pool again -- see G_AllocRoomFor() in g_mem.c
+		if ( G_AllocRoomFor( RP_EntityRecordBytes( this_ent ) + zyk_args_bytes( first_pair, number_of_args ) ) == qfalse )
+		{
+			trap->SendServerCommand( ent-g_entities,
+				va("print \"Cannot edit entity %d: the game's memory pool is nearly full (%d KB free, %d KB held in reserve). It is freed when the map changes.\n\"",
+					entity_id, G_AllocRemaining() / 1024, ZYK_ALLOC_RESERVE / 1024) );
+			G_LogPrintf( "/entedit %d by %s refused: %d bytes free in the memory pool\n",
+				entity_id, ent->client->pers.netname, G_AllocRemaining() );
 			return;
 		}
 
@@ -19537,6 +19578,8 @@ void Cmd_EntSlots_f( gentity_t *ent ) {
 		used, slots, esOnly, RP_PLAYSOUND_POOL, reusable, reuses, limit ) );
 
 	Q_strcat( text, sizeof( text ), va( "^3Gamestate: ^7%d of %d bytes.\n", G_GamestateBytesUsed(), ZYK_GAMESTATE_BUDGET ) );
+	Q_strcat( text, sizeof( text ), va( "^3Memory pool: ^7%d of %d KB used, %d KB held in reserve; freed when the map changes.\n",
+		( G_AllocPoolSize() - G_AllocRemaining() ) / 1024, G_AllocPoolSize() / 1024, ZYK_ALLOC_RESERVE / 1024 ) );
 	Q_strcat( text, sizeof( text ), va( "^7A slot is reused only when there is no free one, or no room in the gamestate, for a new name -- or, for /playsound, once it holds %d.\n\n", RP_PLAYSOUND_POOL ) );
 
 	trap->SendServerCommand( ent-g_entities, va( "print \"%s\"", text ) );

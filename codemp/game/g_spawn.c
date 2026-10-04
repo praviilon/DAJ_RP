@@ -1448,8 +1448,15 @@ void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 			}
 			else
 			{ // zyk: edit the key
-				level.zyk_spawn_strings[ent->s.number][i] = G_NewString(key);
-				level.zyk_spawn_strings[ent->s.number][i + 1] = G_NewString(value);
+				// GalaxyRP fix: [Entity System] this allocated a fresh copy of the key and of the value
+				// on every set, from a pool that is never freed -- an /entedit that repeated a pair, a
+				// move or turn that wrote the same origin or angles again, each cost the pool the
+				// whole pair. The key is there already (the same key, compared without case) and is
+				// kept; the value is copied only when it differs from what is stored.
+				if (strcmp(level.zyk_spawn_strings[ent->s.number][i + 1], value) != 0)
+				{
+					level.zyk_spawn_strings[ent->s.number][i + 1] = G_NewString(value);
+				}
 			}
 
 			return;
@@ -1469,6 +1476,40 @@ void zyk_main_set_entity_field(gentity_t *ent, char *key, char *value)
 
 	// zyk: increases the counter
 	level.zyk_spawn_strings_values_count[ent->s.number] += 2;
+}
+
+// GalaxyRP: [Entity System] see g_local.h. One string costs G_Alloc() its length plus the terminator,
+// rounded up to 32; a record is read twice when it spawns (its own copy and G_ParseField's), hence twice.
+static int RP_StringAllocBytes( const char *s )
+{
+	return ( (int)strlen( s ? s : "" ) + 1 + 31 ) & ~31;
+}
+
+int RP_PairsBytes( char **pairs, int count )
+{
+	int i, bytes = 64;
+
+	if ( !pairs )
+		return bytes;
+	if ( count > ZYK_MAX_SPAWN_STRING_SLOTS )
+		count = ZYK_MAX_SPAWN_STRING_SLOTS;
+	for ( i = 0; i < count; i++ )
+		bytes += RP_StringAllocBytes( pairs[i] ) * 2;
+
+	return bytes;
+}
+
+int RP_EntityRecordBytes( const gentity_t *e )
+{
+	int num;
+
+	if ( !e || !e->inuse )
+		return 0;
+	num = (int)( e - g_entities );
+	if ( num < 0 || num >= MAX_ENTITIESTOTAL )
+		return 0;
+
+	return RP_PairsBytes( level.zyk_spawn_strings[num], level.zyk_spawn_strings_values_count[num] );
 }
 
 // GalaxyRP fix: [Entity System] true when this entity cannot take another key/value pair, so /entadd
