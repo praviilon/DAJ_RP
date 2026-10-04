@@ -42,12 +42,39 @@ qboolean	G_SpawnString( const char *key, const char *defaultString, char **out )
 	return qfalse;
 }
 
+// GalaxyRP fix: [Entity System] see RP_FINITE in g_local.h: a value that is not a number keeps the
+// default, and the key is logged -- once per key per spawn, which is as often as it can happen
+static qboolean RP_FiniteKey( const char *key, const char *value, float v )
+{
+	if ( RP_FINITE( v ) )
+		return qtrue;
+
+	G_LogPrintf( "spawn key \"%s\" = \"%s\" is not a number; default kept\n", key ? key : "", value ? value : "" );
+	return qfalse;
+}
+
+static qboolean RP_FiniteVecKey( const char *key, const char *value, const vec3_t v )
+{
+	if ( RP_FINITE( v[0] ) && RP_FINITE( v[1] ) && RP_FINITE( v[2] ) )
+		return qtrue;
+
+	G_LogPrintf( "spawn key \"%s\" = \"%s\" is not a number; default kept\n", key ? key : "", value ? value : "" );
+	return qfalse;
+}
+
 qboolean	G_SpawnFloat( const char *key, const char *defaultString, float *out ) {
 	char		*s;
 	qboolean	present;
 
 	present = G_SpawnString( key, defaultString, &s );
 	*out = atof( s );
+	if ( !RP_FiniteKey( key, s, *out ) )
+	{
+		*out = atof( defaultString );
+		if ( !RP_FINITE( *out ) )
+			*out = 0.0f;
+		return qfalse;
+	}
 	return present;
 }
 
@@ -68,6 +95,14 @@ qboolean	G_SpawnVector( const char *key, const char *defaultString, float *out )
 	if ( sscanf( s, "%f %f %f", &out[0], &out[1], &out[2] ) != 3 ) {
 		trap->Print( "G_SpawnVector: Failed sscanf on %s (default: %s)\n", key, defaultString );
 		VectorClear( out );
+		return qfalse;
+	}
+	// GalaxyRP fix: [Entity System] a component that is not a number: the default, or zero
+	if ( !RP_FiniteVecKey( key, s, out ) ) {
+		if ( s == defaultString || sscanf( defaultString, "%f %f %f", &out[0], &out[1], &out[2] ) != 3 ||
+			!RP_FINITE( out[0] ) || !RP_FINITE( out[1] ) || !RP_FINITE( out[2] ) ) {
+			VectorClear( out );
+		}
 		return qfalse;
 	}
 	return present;
@@ -1162,7 +1197,8 @@ void G_ParseField( const char *key, const char *value, gentity_t *ent )
 			*(char **)(b+f->ofs) = G_NewString (value);
 			break;
 		case F_VECTOR:
-			if ( sscanf( value, "%f %f %f", &vec[0], &vec[1], &vec[2] ) == 3 ) {
+			// GalaxyRP fix: [Entity System] a component that is not a number is read as a failed parse
+			if ( sscanf( value, "%f %f %f", &vec[0], &vec[1], &vec[2] ) == 3 && RP_FiniteVecKey( key, value, vec ) ) {
 				((float *)(b+f->ofs))[0] = vec[0];
 				((float *)(b+f->ofs))[1] = vec[1];
 				((float *)(b+f->ofs))[2] = vec[2];
@@ -1176,10 +1212,13 @@ void G_ParseField( const char *key, const char *value, gentity_t *ent )
 			*(int *)(b+f->ofs) = atoi(value);
 			break;
 		case F_FLOAT:
-			*(float *)(b+f->ofs) = atof(value);
+			v = atof(value);
+			*(float *)(b+f->ofs) = RP_FiniteKey( key, value, v ) ? v : 0.0f;
 			break;
 		case F_ANGLEHACK:
 			v = atof(value);
+			if ( !RP_FiniteKey( key, value, v ) )
+				v = 0.0f;
 			((float *)(b+f->ofs))[0] = 0;
 			((float *)(b+f->ofs))[1] = v;
 			((float *)(b+f->ofs))[2] = 0;

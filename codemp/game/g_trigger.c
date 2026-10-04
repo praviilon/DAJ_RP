@@ -658,7 +658,10 @@ void SP_trigger_multiple( gentity_t *ent )
 	G_SpawnInt("delay", "0", &ent->delay);
 
 	if ( (ent->wait > 0) && (ent->random >= ent->wait) ) {
-		ent->random = ent->wait - FRAMETIME;
+		// GalaxyRP fix: [Entity System] both are in seconds; this took off FRAMETIME (100 ms as a number)
+		// and left random at -99 s, which the think turned into a nextthink in the past about half the
+		// time -- the trigger re-fired on consecutive frames whatever wait said. As SP_func_timer does.
+		ent->random = ent->wait - 0.1f;
 		Com_Printf(S_COLOR_YELLOW"trigger_multiple has random >= wait\n");
 	}
 
@@ -794,7 +797,9 @@ void Do_Strike(gentity_t *ent)
 
 	if (localTrace.startsolid || localTrace.allsolid)
 	{ //got a bad spot, think again next frame to try another strike
-		ent->nextthink = level.time;
+		// GalaxyRP fix: [Entity System] "next frame" was every frame for the rest of the map for a
+		// trigger whose top is inside a brush (any brushless one placed with /entadd); its own wait
+		ent->nextthink = level.time + ent->wait;
 		return;
 	}
 
@@ -890,6 +895,25 @@ void SP_trigger_lightningstrike( gentity_t *ent )
 	if (!ent->damage)
 	{ //default 50
 		ent->damage = 50;
+	}
+
+	// GalaxyRP fix: [Entity System] the defaults above only replace zero; a negative wait struck every
+	// frame, a negative random put nextthink in the past, dmg and radius came straight off the keys
+	// ("radius 10000" was map-wide radius damage). Floored and capped, logged.
+	if ( ent->wait < 100 || ent->random < 0 || ent->damage < 0 || ent->radius < 0 || ent->radius > 4096 )
+	{
+		G_LogPrintf( "trigger_lightningstrike at %s: wait %g, random %g, dmg %d, radius %g clamped (wait >= 100, random >= 0, dmg >= 0, radius 0..4096)\n",
+			vtos( ent->s.origin ), ent->wait, ent->random, ent->damage, ent->radius );
+		if ( ent->wait < 100 )
+			ent->wait = 100;
+		if ( ent->random < 0 )
+			ent->random = 0;
+		if ( ent->damage < 0 )
+			ent->damage = 0;
+		if ( ent->radius < 0 )
+			ent->radius = 0;
+		if ( ent->radius > 4096 )
+			ent->radius = 4096;
 	}
 
 	InitTrigger( ent );
@@ -1127,6 +1151,14 @@ void AimAtTarget( gentity_t *self ) {
 
 	height = ent->s.origin[2] - origin[2];
 	gravity = g_gravity.value;
+	// GalaxyRP fix: [Entity System] a target below the pusher (or no gravity) put sqrt() of a negative --
+	// NaN -- into every pushed player's velocity, and "!time" does not catch NaN. No push, logged.
+	if ( height <= 0 || gravity <= 0 ) {
+		G_LogPrintf( "%s at %s: its target is not above it (height %g, gravity %g); no push\n",
+			self->classname ? self->classname : "push", vtos( self->s.origin ), height, gravity );
+		G_FreeEntity( self );
+		return;
+	}
 	time = sqrt( height / ( .5 * gravity ) );
 	if ( !time ) {
 		G_FreeEntity( self );
@@ -2060,6 +2092,17 @@ void func_timer_use( gentity_t *self, gentity_t *other, gentity_t *activator ) {
 void SP_func_timer( gentity_t *self ) {
 	G_SpawnFloat( "random", "1", &self->random);
 	G_SpawnFloat( "wait", "1", &self->wait );
+
+	// GalaxyRP fix: [Entity System] a wait of 0 or less fired the timer's targets every frame for the
+	// rest of the map (nextthink never ahead of level.time); floored at 0.1 s, the rate the mod's other
+	// timed entities use, and random is never negative
+	if ( self->wait < 0.1f ) {
+		G_LogPrintf( "func_timer at %s: wait %g raised to 0.1\n", vtos( self->s.origin ), self->wait );
+		self->wait = 0.1f;
+	}
+	if ( self->random < 0 ) {
+		self->random = 0;
+	}
 
 	self->use = func_timer_use;
 	self->think = func_timer_think;

@@ -5379,6 +5379,13 @@ void SP_emplaced_gun( gentity_t *ent )
 	G_SpawnInt( "count", "600", &ent->count );
 
 	G_SpawnFloat( "constraint", "60", &ent->s.origin2[0] );
+	// GalaxyRP fix: [Entity System] the turn constraint is an angle the client compares against; off a
+	// spawn key it had no floor, ceiling or sign check, and a negative one pinned the gunner's view
+	if ( ent->s.origin2[0] < 1 || ent->s.origin2[0] > 180 )
+	{
+		G_LogPrintf( "emplaced_gun at %s: constraint %g clamped to 1..180\n", vtos( ent->s.origin ), ent->s.origin2[0] );
+		ent->s.origin2[0] = ent->s.origin2[0] < 1 ? 1 : 180;
+	}
 
 	ent->s.modelindex = G_ModelIndex( (char *)name );
 	ent->s.modelGhoul2 = 1;

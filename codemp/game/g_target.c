@@ -862,7 +862,10 @@ void scriptrunner_run (gentity_t *self)
 				if ( !self->activator->script_targetname || !self->activator->script_targetname[0] )
 				{
 					//We don't have a script_targetname, so create a new one
-					self->activator->script_targetname = va( "newICARUSEnt%d", numNewICARUSEnts++ );
+					// GalaxyRP fix: [Entity System] va() hands out a rotating buffer; stored here, the name was
+					// overwritten by the next few va() calls anywhere in the frame -- and that is what every
+					// later G_Find(script_targetname) compared against. A copy of its own.
+					self->activator->script_targetname = G_NewString( va( "newICARUSEnt%d", numNewICARUSEnts++ ) );
 				}
 
 				if ( trap->ICARUS_ValidEnt( (sharedEntity_t *)self->activator ) )

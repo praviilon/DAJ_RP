@@ -1712,7 +1712,6 @@ will explode.
 */
 void SP_misc_skyportal (gentity_t *ent)
 {
-	char	*fov;
 	vec3_t	fogv;	//----(SA)
 	int		fogn;	//----(SA)
 	int		fogf;	//----(SA)
@@ -1740,8 +1739,7 @@ void SP_misc_skyportal (gentity_t *ent)
 		Q_strncpyz( level.rp_spawn_note, "The sky portal is set for every client for the rest of the map: removing the entity does not undo it.", sizeof( level.rp_spawn_note ) );
 	}
 
-	G_SpawnString ("fov", "80", &fov);
-	fov_x = atof (fov);
+	G_SpawnFloat ("fov", "80", &fov_x);	// GalaxyRP fix: [Entity System] through the parser that refuses NaN/Inf
 
 	isfog += G_SpawnVector ("fogcolor", "0 0 0", fogv);
 	isfog += G_SpawnInt ("fognear", "0", &fogn);
@@ -4736,6 +4734,8 @@ void SP_misc_maglock ( gentity_t *self )
 	//FIXME: for some reason, when you re-load a level, these fail to find their doors...?  Random?  Testing an additional 200ms after the START_TIME_FIND_LINKS
 	self->nextthink = level.time + START_TIME_FIND_LINKS+200;//START_TIME_FIND_LINKS;//because we need to let the doors link up and spawn their triggers first!
 }
+#define RP_MAGLOCK_LINK_TRIES	50	// GalaxyRP: [Entity System] 5 seconds of looking for its door
+
 void maglock_link( gentity_t *self )
 {
 	//find what we're supposed to be attached to
@@ -4759,25 +4759,28 @@ void maglock_link( gentity_t *self )
 		G_FreeEntity( self );
 		return;
 	}
-	if ( trace.fraction == 1.0 )
+	// GalaxyRP fix: [Entity System] pointed at no surface, or at something that is not a door: this
+	// tried again every 100 ms for the rest of the map (a door may still be coming, at map load). It
+	// gives up after RP_MAGLOCK_LINK_TRIES, logged -- a maglock added with /entadd facing a wall
+	// otherwise thought forever.
+	if ( trace.fraction == 1.0 || trace.entityNum >= ENTITYNUM_WORLD || Q_stricmp( "func_door", g_entities[trace.entityNum].classname ) )
 	{
+		if ( ++self->genericValue2 >= RP_MAGLOCK_LINK_TRIES )
+		{
+			G_LogPrintf( "misc_maglock at %s is not pointed at a func_door (after %d tries); removed.\n", vtos(self->s.origin), self->genericValue2 );
+			G_FreeEntity( self );
+			return;
+		}
 		self->think = maglock_link;
 		self->nextthink = level.time + 100;
 		/*
 		Com_Error( ERR_DROP,"misc_maglock at %s pointed at no surface\n", vtos(self->s.origin) );
+		Com_Error( ERR_DROP,"misc_maglock at %s not pointed at a door\n", vtos(self->s.origin) );
 		G_FreeEntity( self );
 		*/
 		return;
 	}
 	traceEnt = &g_entities[trace.entityNum];
-	if ( trace.entityNum >= ENTITYNUM_WORLD || !traceEnt || Q_stricmp( "func_door", traceEnt->classname ) )
-	{
-		self->think = maglock_link;
-		self->nextthink = level.time + 100;
-		//Com_Error( ERR_DROP,"misc_maglock at %s not pointed at a door\n", vtos(self->s.origin) );
-		//G_FreeEntity( self );
-		return;
-	}
 
 	//check the traceEnt, make sure it's a door and give it a lockCount and deactivate it
 	//find the trigger for the door

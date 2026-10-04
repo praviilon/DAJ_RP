@@ -1862,7 +1862,8 @@ void SP_misc_siege_item (gentity_t *ent)
 	ent->s.modelindex = G_ModelIndex(ent->model);
 
 	//Is the model a ghoul2 model?
-	if ( ent->model && !Q_stricmp( &ent->model[strlen(ent->model) - 4], ".glm" ) )
+	// GalaxyRP fix: [Entity System] a model name shorter than four characters indexed before the string
+	if ( ent->model && strlen( ent->model ) >= 4 && !Q_stricmp( &ent->model[strlen(ent->model) - 4], ".glm" ) )
 	{ //apparently so.
         ent->s.modelGhoul2 = 1;
 	}

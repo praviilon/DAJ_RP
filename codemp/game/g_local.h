@@ -160,6 +160,16 @@ extern vec3_t gPainPoint;
 #define RP_SPAWNER_RESPAWN_MIN		2000
 #define RP_SPAWNER_DELAY_MAX		3600000
 #define RP_SPAWNER_COUNT_MAX		1000
+// GalaxyRP fix: [Entity System] whether a float parsed from a spawn key is a number at all. atof() and
+// sscanf("%f") accept "nan", "inf", "-infinity" and "1e400" (an overflow is +inf), and every spawn
+// key reaches them: origin, angles, mins, maxs, speed, wait... A NaN origin makes an entity nobody can
+// reach or remove and a NaN velocity goes out to every client. G_SpawnFloat, G_SpawnVector and
+// G_ParseField keep the default and log instead (g_spawn.c).
+#if defined(_MSC_VER)
+#define RP_FINITE(x)				( _finite( (double)(x) ) != 0 )
+#else
+#define RP_FINITE(x)				( isfinite( (x) ) )
+#endif
 // GalaxyRP: [Entity System] bytes of the 4 MB game memory pool kept back from the entity commands --
 // see G_AllocRoomFor() in g_mem.c
 #define ZYK_ALLOC_RESERVE			(256 * 1024)
