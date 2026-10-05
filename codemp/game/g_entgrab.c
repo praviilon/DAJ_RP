@@ -225,7 +225,8 @@ static const char *rp_map_exempt_classes[] = {
 	"misc_model_shield_power_converter", "misc_model_ammo_power_converter", "misc_model_gun_rack",
 	"misc_model_ammo_rack",
 	// decor
-	"misc_model_breakable", "misc_model_cargo_small", "fx_runner", "target_speaker", "misc_exploding_crate", "misc_gas_tank",
+	"misc_model_breakable", "misc_model_cargo_small", "misc_model_ghoul", "fx_runner", "target_speaker", "misc_exploding_crate",
+	"misc_gas_tank",
 	NULL
 };
 
@@ -441,6 +442,17 @@ void RP_EntRespawnPrepare( gentity_t *e )
 	// it the same way. (/entedit used to skip this and leaked one model per edit.)
 	if ( e->ghoul2 )
 		trap->G2API_CleanGhoul2Models( &e->ghoul2 );
+
+	// DAJ_RP: [SP Maps] and the one every client built for it: a client builds an entity's Ghoul2 model
+	// (CG_General) only when it has none, so a misc_model_ghoul edited to another model or skin went on
+	// showing the old one. Each client drops its own now, as for a removed entity (G_FreeEntity), and
+	// builds it again from what the spawn sends. Not for a player or NPC -- the client refuses that for
+	// a player, and an NPC's is its own business -- nor a logical entity, which no client has.
+	if ( e->s.modelGhoul2 && !e->client && !e->isLogical )
+	{
+		G_KillG2Queue( e->s.number );
+		e->s.modelGhoul2 = 0;
+	}
 
 	// GalaxyRP fix: [Entity System] and the spawn function gets a fresh entity to set up, not what its
 	// last spawn left -- see RP_EntResetForRespawn() in g_spawn.c
@@ -734,8 +746,16 @@ static float RP_EntGrabScaleShift( const gentity_t *e )
 {
 	float scale = e->modelScale[2];
 
-	// DAJ_RP: [SP Maps] and the cargo crate, a misc_model_breakable underneath (SP_misc_model_cargo_small)
-	if ( !e->classname || ( Q_stricmp( e->classname, "misc_model_breakable" ) != 0 && Q_stricmp( e->classname, "misc_model_cargo_small" ) != 0 ) )
+	// DAJ_RP: [SP Maps] and the cargo crate, a misc_model_breakable underneath (SP_misc_model_cargo_small),
+	// and a SOLID misc_model_ghoul, which is raised the same way (SP_misc_model_ghoul; any other one is not)
+	if ( !e->classname )
+		return 0.0f;
+	if ( Q_stricmp( e->classname, "misc_model_ghoul" ) == 0 )
+	{
+		if ( !( e->spawnflags & 1 ) )
+			return 0.0f;
+	}
+	else if ( Q_stricmp( e->classname, "misc_model_breakable" ) != 0 && Q_stricmp( e->classname, "misc_model_cargo_small" ) != 0 )
 		return 0.0f;
 	if ( !( scale > 0.0f ) || scale == 1.0f )
 		return 0.0f;

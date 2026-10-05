@@ -1999,6 +1999,8 @@ void CG_AddPacketEntities( qboolean isPortal );
 qboolean CG_GreyItem( int type, int tag, int plSide );
 void CG_ManualEntityRender(centity_t *cent);
 void CG_Beam( centity_t *cent );
+// DAJ_RP: [SP Maps] the skin a model entry "@<file>.skin" names, registered; 0 for any other entry
+qhandle_t CG_ModelEntrySkin( const char *entry );
 void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int toTime, vec3_t out );
 
 void CG_PositionEntityOnTag( refEntity_t *entity, const refEntity_t *parent,

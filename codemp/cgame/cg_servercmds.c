@@ -910,6 +910,9 @@ static void CG_ConfigStringModified( void ) {
 		{
             cgs.gameModels[ num-CS_MODELS ] = 0;
 		}
+
+		// DAJ_RP: [SP Maps] a misc_model_ghoul's skin entry: the skin, loaded now -- see CG_ModelEntrySkin()
+		CG_ModelEntrySkin( str );
 // GHOUL2 Insert start
 		/*
 	} else if ( num >= CS_CHARSKINS && num < CS_CHARSKINS+MAX_CHARSKINS ) {

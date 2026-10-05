@@ -1474,6 +1474,9 @@ Ghoul2 Insert End
 		{//FIXME: register here so that stuff gets precached!!!
 			cgs.gameModels[i] = 0;
 		}
+
+		// DAJ_RP: [SP Maps] a misc_model_ghoul's skin entry: the skin, loaded now -- see CG_ModelEntrySkin()
+		CG_ModelEntrySkin( cModelName );
 	}
 	cg.loadLCARSStage = 8;
 /*

@@ -893,6 +893,32 @@ void CG_G2ServerBoneAngles(centity_t *cent);
 
 extern qboolean BG_GetRootSurfNameWithVariant( void *ghoul2, const char *rootSurfName, char *returnSurfName, int returnSize );
 
+/*
+==================
+CG_ModelEntrySkin
+
+DAJ_RP: [SP Maps] a model table entry that names a skin -- "@" and a .skin file, which a misc_model_ghoul
+with a "skin" key registers (SP_misc_model_ghoul, game/g_misc.c) -- registered, and its handle; 0 for any
+other entry. "@" is what keeps the entry from being loaded as a model, here and by older clients, which
+skip it as they skip a saber name and show the model's own skin. Called when the entry arrives (at
+connect, CG_RegisterGraphics, and later, CG_ConfigStringModified), so the skin is loaded before the model
+is drawn, and by CG_General when it builds the model.
+==================
+*/
+qhandle_t CG_ModelEntrySkin( const char *entry )
+{
+	size_t len;
+
+	if ( !entry || entry[0] != '@' )
+		return 0;
+
+	len = strlen( entry );
+	if ( len < 7 || Q_stricmp( entry + len - 5, ".skin" ) != 0 )
+		return 0;
+
+	return trap->R_RegisterSkin( entry + 1 );
+}
+
 static void CG_General( centity_t *cent ) {
 	refEntity_t			ent;
 	entityState_t		*s1;
@@ -1421,7 +1447,15 @@ Ghoul2 Insert End
 			int skin = 0;
 
 			trap->G2API_InitGhoul2Model(&cent->ghoul2, modelName, 0, 0, 0, 0, 0);
-			if (cent->ghoul2 && trap->G2API_SkinlessModel(cent->ghoul2, 0))
+
+			// DAJ_RP: [SP Maps] a skin the server names for it: a misc_model_ghoul's "skin" key, sent as a model
+			// entry "@<skin file>" in modelindex2 (SP_misc_model_ghoul, game/g_misc.c) -- see CG_ModelEntrySkin()
+			if (cent->ghoul2 && cent->currentState.modelindex2 > 0 && cent->currentState.modelindex2 < MAX_MODELS &&
+				(skin = CG_ModelEntrySkin(CG_ConfigString(CS_MODELS + cent->currentState.modelindex2))) != 0)
+			{
+				trap->G2API_SetSkin(cent->ghoul2, 0, skin, skin);
+			}
+			else if (cent->ghoul2 && trap->G2API_SkinlessModel(cent->ghoul2, 0))
 			{ //well, you'd never want a skinless model, so try to get his skin...
 				Q_strncpyz(skinName, modelName, MAX_QPATH);
 				l = strlen(skinName);

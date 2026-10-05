@@ -2316,6 +2316,12 @@ void		RP_MarkChild( gentity_t *maker, gentity_t *child );
 // DAJ_RP: [Dispensers] the model one of those shows: its "model" key's .md3 if the server has it, else the
 // default (logged for a key that is not there); sets ent->model. g_spawn.c.
 const char	*RP_DispenserModel( gentity_t *ent, const char *defaultModel );
+// DAJ_RP: [SP Maps] where a model key's file is (1 as typed, 2 the path in candidate, 0 not on the server),
+// with ext added to a name without one; g_spawn.c. And misc_model_ghoul's checks for one the Entity
+// System makes -- what is wrong with its model, frames or radius, or NULL with the model's path and the
+// skin entry it registers ("" for none) filled in; g_misc.c.
+int			RP_FindModelFileExt( const char *model, const char *ext, char *candidate, int candidateSize );
+const char	*RP_GhoulSpawnProblem( gentity_t *ent, char *path, int pathSize, char *skinEntry, int skinSize );
 qboolean	RP_IsChildOf( const gentity_t *maker, const gentity_t *child );
 int			RP_FreeEntityChildren( gentity_t *maker );
 int			G_AllocRemaining( void );

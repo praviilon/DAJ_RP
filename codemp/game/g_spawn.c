@@ -355,6 +355,7 @@ void SP_misc_model_static(gentity_t *ent);
 void SP_misc_exploding_crate( gentity_t *ent ); // zyk: added this function
 void SP_misc_model_breakable( gentity_t *ent ) ;
 void SP_misc_model_cargo_small( gentity_t *ent );	// DAJ_RP: [SP Maps] g_misc.c
+void SP_misc_model_ghoul( gentity_t *ent );			// DAJ_RP: [SP Maps] g_misc.c
 void SP_rp_light( gentity_t *ent );
 void SP_misc_gas_tank( gentity_t *ent ); // zyk: added this function
 void SP_misc_G2model(gentity_t *ent);
@@ -662,6 +663,7 @@ spawn_t	spawns[] = {
 	{ "misc_model_ammo_rack",				SP_misc_model_ammo_rack}, // zyk: added this code
 	{ "misc_model_breakable",				SP_misc_model_breakable },
 	{ "misc_model_cargo_small",				SP_misc_model_cargo_small },	// DAJ_RP: [SP Maps]
+	{ "misc_model_ghoul",					SP_misc_model_ghoul },			// DAJ_RP: [SP Maps]
 	{ "misc_model_gun_rack",				SP_misc_model_gun_rack}, // zyk: added this code
 	{ "misc_model_health_power_converter",	SP_misc_model_health_power_converter },
 	{ "misc_model_shield_power_converter",	SP_misc_model_shield_power_converter },
@@ -2458,9 +2460,12 @@ RP_DispenserModel(): the model a dispenser or cargo crate shows (RP_ModelKeyClas
 ent->model: its "model" key's file, found as above and an .md3, or defaultModel -- with no key, and, for
 an entity the Entity System did not make (that one was refused instead), with a key whose file is not on
 the server or is not an .md3, which is logged.
+
+DAJ_RP: [SP Maps] RP_FindModelFileExt(): the same lookup with the extension added to a name that has none
+given -- ".glm" for a misc_model_ghoul (RP_GhoulModel() in g_misc.c); RP_FindModelFile() is it with ".md3".
 =================
 */
-static int RP_FindModelFile( const char *model, char *candidate, int candidateSize )
+int RP_FindModelFileExt( const char *model, const char *ext, char *candidate, int candidateSize )
 {
 	const char *base;
 	const char *path = model;
@@ -2478,13 +2483,18 @@ static int RP_FindModelFile( const char *model, char *candidate, int candidateSi
 	base = base ? base + 1 : path;
 	hasExtension = strchr( base, '.' ) ? qtrue : qfalse;
 
-	if ( (int)( strlen( path ) + 7 + 4 ) >= candidateSize )
+	if ( (int)( strlen( path ) + 7 + strlen( ext ) ) >= candidateSize )
 		return 0;
 
 	Com_sprintf( candidate, candidateSize, "%s%s%s", Q_stricmpn( path, "models/", 7 ) ? "models/" : "",
-		path, hasExtension ? "" : ".md3" );
+		path, hasExtension ? "" : ext );
 
 	return RP_FileExists( candidate ) ? 2 : 0;
+}
+
+static int RP_FindModelFile( const char *model, char *candidate, int candidateSize )
+{
+	return RP_FindModelFileExt( model, ".md3", candidate, candidateSize );
 }
 
 static qboolean RP_IsMd3Name( const char *model )
@@ -2544,6 +2554,29 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 		return RP_SpawnRefuse( ent, ( level.rp_soundsets_state > 0 ) ?
 			va( "soundSet %s is not one of the server's ambient sound sets (sound/sound.txt)", shown ) :
 			va( "soundSet %s is not one the map already uses (the server cannot read sound/sound.txt to check it)", shown ) );
+	}
+
+	// DAJ_RP: [SP Maps] a misc_model_ghoul: its .glm model on the server, frames and radius in range
+	// (RP_GhoulSpawnProblem() in g_misc.c), and a slot for the model and for the skin entry it will
+	// register -- a "skin" whose file is not there is not refused: the default skin is shown instead
+	if ( Q_stricmp( ent->classname, "misc_model_ghoul" ) == 0 )
+	{
+		char path[MAX_QPATH], skinEntry[MAX_QPATH], reason[256];
+		const char *names[2];
+		const char *problem;
+		int count = 0;
+
+		problem = RP_GhoulSpawnProblem( ent, path, sizeof( path ), skinEntry, sizeof( skinEntry ) );
+		if ( problem )
+			return RP_SpawnRefuse( ent, problem );
+
+		names[count++] = path;
+		if ( skinEntry[0] )
+			names[count++] = skinEntry;
+		if ( !RP_SlotRoomFor( CS_MODELS, names, count, 0, reason, sizeof( reason ) ) )
+			return RP_SpawnRefuse( ent, reason );
+
+		return qfalse;
 	}
 
 	breakable = ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 ) ? qtrue : qfalse;
@@ -2700,6 +2733,10 @@ static const char *RP_EntitySystemSpawnedEmpty( gentity_t *ent )
 		return NULL;
 
 	if ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 )
+		return "model";
+
+	// DAJ_RP: [SP Maps] (its skin entry is not needed: without one it shows its default skin)
+	if ( Q_stricmp( ent->classname, "misc_model_ghoul" ) == 0 )
 		return "model";
 
 	if ( RP_FuncRegistersModels( ent->classname ) && ent->model && ent->model[0] && ent->model[0] != '*' && ent->model[0] != '#' )

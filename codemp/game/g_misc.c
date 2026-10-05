@@ -1443,7 +1443,7 @@ void SP_misc_gas_tank( gentity_t *ent )
 "model"		arbitrary .glm file to display
 */
 void SP_misc_G2model( gentity_t *ent ) {
-	RP_SpawnSaysWhy( ent, "misc_G2model does nothing in multiplayer: use misc_model_breakable for a model" );
+	RP_SpawnSaysWhy( ent, "misc_G2model does nothing in multiplayer: use misc_model_ghoul for a .glm model, misc_model_breakable for an .md3" );
 
 #if 0
 	char name1[200] = "models/players/kyle/modelmp.glm";
@@ -1459,6 +1459,386 @@ void SP_misc_G2model( gentity_t *ent ) {
 #else
 	G_FreeEntity( ent );
 #endif
+}
+
+/*QUAKED misc_model_ghoul (1 0 0) (-16 -16 -16) (16 16 16) SOLID LOOP x x x x x x x x x x START_OFF
+DAJ_RP: [SP Maps] a Ghoul2 (.glm) model, drawn by the client's own code for Ghoul2 props (CG_General in
+cgame/cg_ents.c builds it from the model's name, as for Lugormod's .glm models) -- single player's static
+model (g_misc_model.cpp), with these added:
+
+"model"			any .glm file: as given, or under models/ ("map_objects/x/y.glm" works); ".glm" is added to a
+				name with no extension, and '\' read as '/'. A map's entity whose file the server does not have,
+				or that is not a .glm, is logged and removed; the Entity System refuses one
+"skin"			the skin file next to the model: "test" is <the model's folder>/model_test.skin. No key, "" or
+				"default" is the model's own (a model without one shows model_default.skin from its folder);
+				a skin whose file is not on the server shows that too, and says so (logged, and to the admin
+				who made it). Players need the DAJ_RP client for a skin of their own -- see CG_General()
+"angles"		as usual
+"mins"/"maxs"	its box, default -16 -16 -16 / 16 16 16: what the entity commands aim at and place, and, with
+				SOLID, what it blocks
+"radius"		how far from its origin the model reaches, 1 to 255 (the most the network carries): the client
+				stops drawing it when a sphere this big around the origin is out of view. Default: the box's
+				farthest corner, at least 50 (single player's). The drawn scale multiplies it on the client
+"modelscale"	the drawn size and the box, as misc_model_breakable's: 0.01 to 10.23; "zykmodelscale" (a
+				percentage) still decides the drawn size if given; "modelscale_vec" scales the box only.
+				A SOLID one is raised by what the scale took off the bottom of its box, as a breakable is,
+				to keep the box's bottom where it was (the entity commands, which place it by its box, allow
+				for it -- RP_EntGrabScaleShift() in g_entgrab.c); any other is placed, and drawn, from its
+				origin, which stays where it is -- as single player's, which has no box to raise it by
+"startframe"	frames of the model's animation file (.gla), 0 to 65534, both played: the client plays them
+"endframe"		once at 20 a second and stays on the last one. Only "startframe": that frame alone, a pose;
+				only "endframe": from frame 0. No key: the model's base pose. A frame past the file's last
+				shows frame 0 (the renderer checks)
+"light"/"color"	a light on the model, as misc_model_breakable's
+"targetname"	using it shows or hides it
+
+SOLID (1)		blocks movement and shots with its box, as misc_model_breakable's SOLID
+LOOP (2)		plays the frames over and over: the server restarts them each time the last one is reached
+				(with the client's 100 ms blend back to the first); nothing for a single frame
+START_OFF (4096)	starts hidden (as misc_model_breakable's): not sent to the clients, not solid
+
+The Entity System refuses one with a negative frame, one past 65534, an "endframe" before "startframe",
+or a "radius" out of range; a map's own logs them and leaves them out.
+*/
+#define RP_GHOUL_SOLID			1
+#define RP_GHOUL_LOOP			2
+#define RP_GHOUL_START_OFF		4096
+#define RP_GHOUL_MAX_FRAME		65534	// the end sent is one past the last frame, in a 16-bit field
+#define RP_GHOUL_MIN_RADIUS		50		// single player's s.radius for the class
+#define RP_GHOUL_MAX_RADIUS		255		// entityState_t::g2radius is 8 bits on the wire
+#define RP_GHOUL_SOLID_CONTENTS	( CONTENTS_SOLID|CONTENTS_OPAQUE|CONTENTS_BODY|CONTENTS_MONSTERCLIP|CONTENTS_BOTCLIP )
+
+// the model's path: NULL and path filled in, or what is wrong. The path a client is sent has to fit
+// MAX_QPATH: the client copies a model name into a buffer that size.
+static const char *RP_GhoulModel( const char *model, char *path, int pathSize )
+{
+	char typed[MAX_QPATH * 2], candidate[MAX_QPATH];
+	const char *found;
+	size_t len;
+	int i, where;
+
+	if ( !model || !model[0] )
+		return "it has no model";
+
+	if ( strlen( model ) >= sizeof( typed ) )
+		return va( "model %s is not on the server", RP_ShownText( model ) );
+
+	// DAJ_RP: [SP Maps] '\' as '/', and no leading '/' (the path every client is sent is the one name for
+	// the model), as Lugormod reads a model key
+	Q_strncpyz( typed, model, sizeof( typed ) );
+	for ( i = 0; typed[i]; i++ )
+	{
+		if ( typed[i] == '\\' )
+			typed[i] = '/';
+	}
+	i = 0;
+	while ( typed[i] == '/' )
+		i++;
+	if ( !typed[i] )
+		return va( "model %s is not on the server", RP_ShownText( model ) );
+
+	where = RP_FindModelFileExt( typed + i, ".glm", candidate, sizeof( candidate ) );
+	if ( !where )
+		return va( "model %s is not on the server", RP_ShownText( model ) );
+
+	found = ( where == 2 ) ? candidate : typed + i;
+	len = strlen( found );
+	if ( len < 5 || Q_stricmp( found + len - 4, ".glm" ) != 0 )
+		return va( "model %s is not a .glm model", RP_ShownText( found ) );
+	if ( (int)len >= MAX_QPATH || (int)len >= pathSize )
+		return va( "model %s has too long a path (at most %d characters)", RP_ShownText( found ), MAX_QPATH - 1 );
+
+	Q_strncpyz( path, found, pathSize );
+	return NULL;
+}
+
+// the frames "startframe" and "endframe" ask for: NULL, with *animated qfalse for neither key, or what is
+// wrong with them
+static const char *RP_GhoulFrames( int *start, int *end, qboolean *animated )
+{
+	char *startText = NULL, *endText = NULL;
+	qboolean hasStart, hasEnd;
+
+	hasStart = ( G_SpawnString( "startframe", "", &startText ) && startText && startText[0] ) ? qtrue : qfalse;
+	hasEnd = ( G_SpawnString( "endframe", "", &endText ) && endText && endText[0] ) ? qtrue : qfalse;
+
+	*animated = qfalse;
+	*start = *end = 0;
+	if ( !hasStart && !hasEnd )
+		return NULL;
+
+	*start = hasStart ? atoi( startText ) : 0;
+	*end = hasEnd ? atoi( endText ) : *start;
+
+	if ( *start < 0 || *start > RP_GHOUL_MAX_FRAME )
+		return va( "startframe %d is not a frame from 0 to %d", *start, RP_GHOUL_MAX_FRAME );
+	if ( *end < 0 || *end > RP_GHOUL_MAX_FRAME )
+		return va( "endframe %d is not a frame from 0 to %d", *end, RP_GHOUL_MAX_FRAME );
+	if ( *end < *start )
+		return va( "endframe %d is before startframe %d", *end, *start );
+
+	*animated = qtrue;
+	return NULL;
+}
+
+// the "radius" key: NULL, with *given qfalse when there is none, or what is wrong with it
+static const char *RP_GhoulRadiusKey( int *radius, qboolean *given )
+{
+	float value = 0.0f;
+
+	*given = G_SpawnFloat( "radius", "0", &value );
+	*radius = 0;
+	if ( !*given )
+		return NULL;
+
+	if ( !( value >= 1.0f && value <= (float)RP_GHOUL_MAX_RADIUS ) )
+		return va( "radius %s is not from 1 to %d", RP_ShownText( va( "%g", value ) ), RP_GHOUL_MAX_RADIUS );
+
+	*radius = (int)( value + 0.5f );
+	if ( *radius > RP_GHOUL_MAX_RADIUS )
+		*radius = RP_GHOUL_MAX_RADIUS;
+	return NULL;
+}
+
+// the skin entry the "skin" key registers for the model at path -- "@" and the skin file's path, which the
+// client's code before DAJ_RP's skips as it skips a saber name -- or "" for none. Returns why a skin that
+// was asked for is not used, or NULL.
+static const char *RP_GhoulSkin( const char *path, char *entry, int entrySize )
+{
+	char *skin = NULL;
+	char file[MAX_QPATH * 2];
+	const char *slash;
+	int i, folderLen;
+
+	entry[0] = '\0';
+
+	if ( !G_SpawnString( "skin", "", &skin ) || !skin || !skin[0] || !Q_stricmp( skin, "default" ) )
+		return NULL;
+
+	for ( i = 0; skin[i]; i++ )
+	{
+		const char c = skin[i];
+
+		if ( !( ( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' ) || ( c >= '0' && c <= '9' ) || c == '_' || c == '-' ) )
+			return "the skin key is not a skin name (letters, digits, '_' and '-' only)";
+	}
+
+	slash = strrchr( path, '/' );
+	folderLen = slash ? (int)( slash - path ) + 1 : 0;	// with the '/'
+	if ( folderLen + 6 + i + 5 >= (int)sizeof( file ) )
+		return va( "skin %s makes too long a path", skin );
+
+	Com_sprintf( file, sizeof( file ), "%.*smodel_%s.skin", folderLen, path, skin );
+	if ( (int)strlen( file ) + 1 >= MAX_QPATH || (int)strlen( file ) + 1 >= entrySize )
+		return va( "skin file %s has too long a path (at most %d characters)", RP_ShownText( file ), MAX_QPATH - 2 );
+	if ( !RP_FileExists( file ) )
+		return va( "skin file %s is not on the server", RP_ShownText( file ) );
+
+	Com_sprintf( entry, entrySize, "@%s", file );
+	return NULL;
+}
+
+const char *RP_GhoulSpawnProblem( gentity_t *ent, char *path, int pathSize, char *skinEntry, int skinSize )
+{
+	const char *problem;
+	int start, end, radius;
+	qboolean animated, given;
+
+	skinEntry[0] = '\0';
+
+	problem = RP_GhoulModel( ent->model, path, pathSize );
+	if ( problem )
+		return problem;
+	problem = RP_GhoulFrames( &start, &end, &animated );
+	if ( problem )
+		return problem;
+	problem = RP_GhoulRadiusKey( &radius, &given );
+	if ( problem )
+		return problem;
+
+	RP_GhoulSkin( path, skinEntry, skinSize );
+	return NULL;
+}
+
+static void RP_GhoulShow( gentity_t *ent, qboolean shown )
+{
+	if ( shown )
+	{
+		ent->r.svFlags &= ~SVF_NOCLIENT;
+		ent->s.eFlags &= ~EF_NODRAW;
+		ent->r.contents = ( ent->spawnflags & RP_GHOUL_SOLID ) ? RP_GHOUL_SOLID_CONTENTS : 0;
+	}
+	else
+	{
+		ent->r.svFlags |= SVF_NOCLIENT;
+		ent->s.eFlags |= EF_NODRAW;
+		ent->r.contents = 0;
+	}
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
+static void misc_model_ghoul_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	G_ActivateBehavior( self, BSET_USE );
+	RP_GhoulShow( self, ( self->r.svFlags & SVF_NOCLIENT ) ? qtrue : qfalse );
+}
+
+// LOOP: the client plays the frames again when torsoFlip changes (CG_General's EF_G2ANIMATING routine);
+// genericValue5 is how long they take
+static void misc_model_ghoul_loop( gentity_t *self )
+{
+	self->s.torsoFlip = !self->s.torsoFlip;
+	self->nextthink = level.time + self->genericValue5;
+}
+
+void SP_misc_model_ghoul( gentity_t *ent )
+{
+	char path[MAX_QPATH], skinEntry[MAX_QPATH];
+	const char *problem;
+	qboolean esMade = RP_EntitySystemMade( ent );
+	qboolean bHasScale, animated, radiusGiven, lightSet, colorSet;
+	float uniformScale = 0.0f, light = 100.0f, temp = 0.0f;
+	vec3_t color;
+	int start, end, radius, percent = 0, k;
+
+	problem = RP_GhoulModel( ent->model, path, sizeof( path ) );
+	if ( problem )
+	{
+		RP_SpawnSaysWhy( ent, problem );
+		G_LogPrintf( "misc_model_ghoul %d at %s: %s; removed\n", ent->s.number, vtos( ent->s.origin ), problem );
+		G_FreeEntity( ent );
+		return;
+	}
+	if ( strcmp( path, ent->model ) )
+		ent->model = G_NewStringRaw( path );
+
+	ent->s.eType = ET_GENERAL;
+	ent->s.modelindex = RP_EntityModelIndex( ent, ent->model );
+	if ( !ent->s.modelindex && !esMade )
+	{
+		// the Entity System's own is refused after the spawn instead (RP_EntitySystemSpawnedEmpty)
+		G_LogPrintf( "misc_model_ghoul %d at %s: no room for model %s; removed\n", ent->s.number, vtos( ent->s.origin ), ent->model );
+		G_FreeEntity( ent );
+		return;
+	}
+	ent->s.modelGhoul2 = 1;
+
+	// the skin entry, or the model's own skin -- said, when one was asked for
+	ent->s.modelindex2 = 0;
+	problem = RP_GhoulSkin( ent->model, skinEntry, sizeof( skinEntry ) );
+	if ( problem )
+	{
+		G_LogPrintf( "misc_model_ghoul %d at %s: %s; its default skin is shown\n", ent->s.number, vtos( ent->s.origin ), problem );
+		if ( esMade )
+			Q_strncpyz( level.rp_spawn_note, va( "%s: the model's default skin is shown.", problem ), sizeof( level.rp_spawn_note ) );
+	}
+	else if ( skinEntry[0] )
+	{
+		ent->s.modelindex2 = RP_EntityModelIndex( ent, skinEntry );
+	}
+
+	// the box
+	G_SpawnVector( "mins", "-16 -16 -16", ent->r.mins );
+	G_SpawnVector( "maxs", "16 16 16", ent->r.maxs );
+
+	// the radius: the key, or the box's farthest corner (before any scale: the client scales it itself)
+	problem = RP_GhoulRadiusKey( &radius, &radiusGiven );
+	if ( problem )
+		G_LogPrintf( "misc_model_ghoul %d at %s: %s; the default is used\n", ent->s.number, vtos( ent->s.origin ), problem );
+	if ( problem || !radiusGiven )
+	{
+		vec3_t corner;
+		float reach;
+
+		for ( k = 0; k < 3; k++ )
+			corner[k] = ( fabs( ent->r.mins[k] ) > fabs( ent->r.maxs[k] ) ) ? fabs( ent->r.mins[k] ) : fabs( ent->r.maxs[k] );
+		reach = VectorLength( corner );
+		radius = ( reach > (float)RP_GHOUL_MAX_RADIUS ) ? RP_GHOUL_MAX_RADIUS : (int)ceil( reach );
+		if ( radius < RP_GHOUL_MIN_RADIUS )
+			radius = RP_GHOUL_MIN_RADIUS;
+	}
+	ent->s.g2radius = radius;
+
+	// the scale, as misc_model_breakable's (SP_misc_model_breakable)
+	bHasScale = G_SpawnVector( "modelscale_vec", "0 0 0", ent->modelScale );
+	if ( !bHasScale )
+	{
+		G_SpawnFloat( "modelscale", "0", &temp );
+		if ( temp != 0.0f )
+		{
+			ent->modelScale[0] = ent->modelScale[1] = ent->modelScale[2] = temp;
+			bHasScale = qtrue;
+			uniformScale = temp;
+		}
+	}
+	if ( bHasScale )
+	{
+		float oldMins2 = ent->r.mins[2];
+
+		ent->r.maxs[0] *= ent->modelScale[0];
+		ent->r.mins[0] *= ent->modelScale[0];
+		ent->r.maxs[1] *= ent->modelScale[1];
+		ent->r.mins[1] *= ent->modelScale[1];
+		ent->r.maxs[2] *= ent->modelScale[2];
+		ent->r.mins[2] *= ent->modelScale[2];
+		if ( ent->spawnflags & RP_GHOUL_SOLID )
+			ent->s.origin[2] += ( oldMins2 - ent->r.mins[2] );
+	}
+	if ( !G_SpawnInt( "zykmodelscale", "0", &percent ) )
+	{
+		if ( uniformScale > 0.0f )
+		{
+			percent = (int)( uniformScale * 100.0f + 0.5f );
+			if ( percent < 1 )
+				percent = 1;
+			if ( percent > 1023 )
+				percent = 1023;
+			ent->s.iModelScale = percent;
+		}
+		else
+		{
+			ent->s.iModelScale = 0;
+		}
+	}
+
+	// the light
+	lightSet = G_SpawnFloat( "light", "100", &light );
+	colorSet = G_SpawnVector( "color", "1 1 1", color );
+	ent->s.constantLight = ( lightSet || colorSet ) ? RP_PackConstantLight( light, color ) : 0;
+
+	// the frames: CG_General plays torsoAnim up to legsAnim, the last one not played, and again whenever
+	// torsoFlip changes -- which it does here on every spawn, so a client that builds the model anew
+	// (RP_EntRespawnPrepare() has it do that on /entedit) plays them on it too
+	ent->s.torsoAnim = ent->s.legsAnim = 0;
+	problem = RP_GhoulFrames( &start, &end, &animated );
+	if ( problem )
+	{
+		G_LogPrintf( "misc_model_ghoul %d at %s: %s; not animated\n", ent->s.number, vtos( ent->s.origin ), problem );
+		animated = qfalse;
+	}
+	if ( animated )
+	{
+		ent->s.eFlags |= EF_G2ANIMATING;
+		ent->s.torsoAnim = start;
+		ent->s.legsAnim = end + 1;
+		ent->s.torsoFlip = !ent->s.torsoFlip;
+
+		if ( ( ent->spawnflags & RP_GHOUL_LOOP ) && end > start )
+		{
+			ent->genericValue5 = ( end - start + 1 ) * 50;
+			ent->think = misc_model_ghoul_loop;
+			ent->nextthink = level.time + ent->genericValue5;
+		}
+	}
+
+	ent->use = misc_model_ghoul_use;
+	ent->takedamage = qfalse;
+
+	G_SetOrigin( ent, ent->s.origin );
+	G_SetAngles( ent, ent->s.angles );
+
+	// shown, or START_OFF -- this links it
+	RP_GhoulShow( ent, ( ent->spawnflags & RP_GHOUL_START_OFF ) ? qfalse : qtrue );
 }
 
 //===========================================================
