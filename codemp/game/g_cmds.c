@@ -12698,16 +12698,20 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// Its own SendServerCommand call, like every other section here: SV_SendServerCommand
 				// (sv_main.cpp) silently drops the WHOLE formatted "print \"...\"" message once it passes
 				// 1022 characters, and the Misc block below is already split twice for exactly that
-				// reason. This one runs near 330, so it has room for another entry later.
+				// reason. This one runs near 560 with the two tables added, so it still has room.
 				//
 				// The logged-out note is the access rule for both, stated once rather than tagged on each
 				// row: both commands refuse sess.amrpgmode == 2 at the door. Both are toggles, which is
 				// the other thing a player cannot guess and the reason the guards below them are scoped
 				// to joining only.
+				// DAJ_RP: [Mini-Games] and the two live tables. Joining stays logged-out only; the tables
+				// are open to anyone, dead or spectating included, so the note says which rule is which.
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Mini-Games--------\n\
-^7For logged-out players only. Both are toggles -- run the command again to leave.\n\
+^7Joining is for logged-out players only; anyone can view the tables. Both modes are toggles -- run the command again to leave.\n\
 ^3/duelmode: ^7Joins the Duel Tournament, a one-on-one saber bracket in the map's duel arena.\n\
-^3/meleemode: ^7Joins the Melee Battle, a fists-only free-for-all on the map's melee catwalk.\n\n\"");
+^3/dueltable [page]: ^7Shows the Duel Tournament live. Page 1 is the standings, page 2 and up the matches.\n\
+^3/meleemode: ^7Joins the Melee Battle, a fists-only free-for-all on the map's melee catwalk.\n\
+^3/meleetable: ^7Shows the Melee Battle live: time left and the fighters still in, with their kills.\n\n\"");
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------Misc--------\n\
 ^3/roll <faces> ^7or ^3/roll <dice>d<faces>: ^7Rolls 1-10 dice of 2-100 faces. Seen by players near you.\n\
 ^3/rollall <faces> ^7or ^3/rollall <dice>d<faces>: ^7Same roll, seen by the whole server. Usable while dead or spectating.\n\
@@ -21979,18 +21983,75 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 
 /*
 ==================
-Cmd_DuelTable_f
+Mini-game tables
+
+DAJ_RP: [Mini-Games] the live views of the two mini-games: /dueltable for the Duel Tournament and
+/meleetable for the Melee Battle. Both read the state the games already keep and change nothing.
+
+Built a line at a time through RP_TableAdd(), which sends what it has and starts again whenever the
+next line would pass RP_LIST_FLUSH_AT -- SV_SendServerCommand drops a whole message past 1022
+characters, and a full 32-player list runs to roughly twice that.
+==================
+*/
+static void RP_TableAdd( int clientNum, char *buf, size_t size, const char *line )
+{
+	if ( buf[0] && (int)(strlen(buf) + strlen(line)) > RP_LIST_FLUSH_AT )
+	{
+		trap->SendServerCommand( clientNum, va("print \"%s\"", buf) );
+		buf[0] = '\0';
+	}
+
+	Q_strcat( buf, size, line );
+}
+
+static void RP_TableSend( int clientNum, char *buf )
+{
+	if ( buf[0] )
+	{
+		trap->SendServerCommand( clientNum, va("print \"%s\"", buf) );
+		buf[0] = '\0';
+	}
+}
+
+// zyk: time left on a mini-game timer as m:ss, never negative
+static const char *RP_TableTimeLeft( int timer )
+{
+	int seconds = ( timer - level.time + 999 ) / 1000;
+
+	if ( seconds < 0 )
+		seconds = 0;
+
+	return va( "%d:%02d", seconds / 60, seconds % 60 );
+}
+
+// zyk: a duelist's name for the status line, or a placeholder when the slot holds nobody
+static const char *RP_DuelistName( int id )
+{
+	if ( id >= 0 && id < MAX_CLIENTS && g_entities[id].client && g_entities[id].client->pers.connected == CON_CONNECTED )
+		return g_entities[id].client->pers.netname;
+
+	return "^3(left)";
+}
+
+/*
+==================
+duel_show_table
+
+The Duel Tournament standings: a status line, the match count, then every duelist ranked by points,
+with the health and shield they kept across their duels breaking a tie and then the player slot.
+ent NULL sends it to everyone, which is what the tournament does after each match.
 ==================
 */
 void duel_show_table(gentity_t *ent)
 {
 	int i = 0;
 	int j = 0;
-	int chosen_player_id = -1;
 	int array_length = 0;
 	char content[1024];
+	char line[(MAX_NETNAME * 2) + 96];
 	int sorted_players[MAX_CLIENTS]; // zyk: used to show score of players by ordering from the highest score to lowest
 	int show_table_id = -1;
+	const char *paused = level.duel_tournament_paused ? " ^1(paused)" : "";
 
 	if (ent)
 	{
@@ -22003,153 +22064,283 @@ void duel_show_table(gentity_t *ent)
 		return;
 	}
 
+	content[0] = '\0';
+
+	// DAJ_RP: [Mini-Games] what the tournament is doing right now, so the table can be read live
+	if (level.duel_tournament_mode == 1)
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Duel Tournament: ^7signing up, starts in ^3%s^7. Duelists: ^3%d%s\n",
+			RP_TableTimeLeft(level.duel_tournament_timer), level.duelists_quantity, paused);
+	}
+	else if (level.duel_tournament_mode == 3)
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Duel Tournament: ^7next match: %s ^7vs %s%s\n",
+			RP_DuelistName(level.duelist_1_id), RP_DuelistName(level.duelist_2_id), paused);
+	}
+	else if (level.duel_tournament_mode == 4)
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Duel Tournament: ^7duel: %s ^7vs %s^7, ^3%s ^7left%s\n",
+			RP_DuelistName(level.duelist_1_id), RP_DuelistName(level.duelist_2_id),
+			RP_TableTimeLeft(level.duel_tournament_timer), paused);
+	}
+	else
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Duel Tournament: ^7between matches%s\n", paused);
+	}
+	RP_TableAdd(show_table_id, content, sizeof(content), line);
+
 	// zyk: put the number of matches
-	strcpy(content, va("\n^7Total: %d\nPlayed: %d\n\n", level.duel_matches_quantity, level.duel_matches_done));
+	Com_sprintf(line, sizeof(line), "^7Total: %d\nPlayed: %d\n\n", level.duel_matches_quantity, level.duel_matches_done);
+	RP_TableAdd(show_table_id, content, sizeof(content), line);
 
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{ // zyk: adding players to sorted_players and calculating the array length
-		if (level.duel_players[i] != -1)
+		if (level.duel_players[i] != -1 && g_entities[i].client)
 		{
 			sorted_players[array_length] = i;
 			array_length++;
 		}
 	}
 
-	for (i = 0; i < array_length; i++)
-	{ // zyk: sorting sorted_players array
-		for (j = 1; j < array_length; j++)
+	for (i = 1; i < array_length; i++)
+	{ // zyk: highest score first, then the most hp and shield kept, then the lowest player id
+		const int this_id = sorted_players[i];
+
+		for (j = i; j > 0; j--)
 		{
-			if ((level.duel_players[sorted_players[j]] > level.duel_players[sorted_players[j - 1]]) ||
-				(level.duel_players[sorted_players[j]] == level.duel_players[sorted_players[j - 1]] &&
-					level.duel_players_hp[sorted_players[j]] > level.duel_players_hp[sorted_players[j - 1]]) ||
-					(level.duel_players[sorted_players[j]] == level.duel_players[sorted_players[j - 1]] &&
-						level.duel_players_hp[sorted_players[j]] == level.duel_players_hp[sorted_players[j - 1]] &&
-						sorted_players[j] < sorted_players[j - 1]))
-			{ // zyk: score of j is higher than j - 1, or remaining hp and shield of j higher than j - 1, or player id of j lower than j - 1
-				chosen_player_id = sorted_players[j - 1];
-				sorted_players[j - 1] = sorted_players[j];
-				sorted_players[j] = chosen_player_id;
+			const int prev_id = sorted_players[j - 1];
+
+			if (level.duel_players[this_id] > level.duel_players[prev_id] ||
+				(level.duel_players[this_id] == level.duel_players[prev_id] && level.duel_players_hp[this_id] > level.duel_players_hp[prev_id]) ||
+				(level.duel_players[this_id] == level.duel_players[prev_id] && level.duel_players_hp[this_id] == level.duel_players_hp[prev_id] && this_id < prev_id))
+			{
+				sorted_players[j] = prev_id;
+			}
+			else
+			{
+				break;
 			}
 		}
+
+		sorted_players[j] = this_id;
 	}
 
 	for (i = 0; i < array_length; i++)
 	{
-		gentity_t *player_ent = &g_entities[sorted_players[i]];
-		char entry[(MAX_NETNAME * 2) + 64];
+		const int id = sorted_players[i];
 
-		// GalaxyRP fix: [overflow] this row was appended with strcpy(content, va("%s...", content,
-		// ...)). va() formats into a 32000-byte buffer and knows nothing about the destination, so
-		// once the table passed content's size that strcpy wrote off the end of a stack array.
-		// Unlike Cmd_DuelTable_f, which pages at eight rows, this lists every duelist: 32 of them
-		// builds about 1880 bytes into char content[1024], and it overflows from 18 onwards. Rows
-		// are now formatted into their own bounded buffer and appended with Q_strcat, and the
-		// message is flushed and continued whenever the next row would not fit. Same text, same
-		// order, same recipient.
-		Com_sprintf(entry, sizeof(entry), "^7%s^7: ^3%d  ^1%d\n", player_ent->client->pers.netname, level.duel_players[player_ent->s.number], level.duel_players_hp[player_ent->s.number]);
-
-		if ((int)(strlen(content) + strlen(entry)) > RP_LIST_FLUSH_AT)
-		{
-			trap->SendServerCommand(show_table_id, va("print \"%s\"", content));
-			strcpy(content, "");
-		}
-
-		Q_strcat(content, sizeof(content), entry);
+		Com_sprintf(line, sizeof(line), "^7%d. %s^7: ^3%d pts  ^1%d hp\n", i + 1, g_entities[id].client->pers.netname, level.duel_players[id], level.duel_players_hp[id]);
+		RP_TableAdd(show_table_id, content, sizeof(content), line);
 	}
 
-	Q_strcat(content, sizeof(content), "\n");
-	trap->SendServerCommand(show_table_id, va("print \"%s\"", content));
+	RP_TableAdd(show_table_id, content, sizeof(content), "\n");
+	RP_TableSend(show_table_id, content);
 }
 
+extern qboolean duel_tournament_valid_duelist(gentity_t *ent);
+
+/*
+==================
+Cmd_DuelTable_f
+
+/dueltable [page]: page 1 (and no page at all) is the standings, from page 2 on the match list, eight
+matches a page.
+==================
+*/
 void Cmd_DuelTable_f(gentity_t *ent) {
 	char arg1[MAX_STRING_CHARS];
-	int page = 0;
+	int page = 1;
 	int i = 0;
-	int results_per_page = 8;
+	const int results_per_page = 8;
+	int last_page = 1;
 	char content[MAX_STRING_CHARS];
 
-	strcpy(content, "");
+	content[0] = '\0';
 
-	if (trap->Argc() == 1)
+	// DAJ_RP: [Mini-Games] no page number shows page 1, the standings, rather than an error
+	if (trap->Argc() > 1)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"You must pass a page number. Example: ^3/dueltable 1^7\n\"");
-		return;
-	}
+		trap->Argv(1, arg1, sizeof(arg1));
 
-	trap->Argv(1, arg1, sizeof(arg1));
+		page = atoi(arg1);
 
-	page = atoi(arg1);
-
-	if (page < 1)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Invalid page number\n\"");
-		return;
+		if (page < 1)
+		{
+			trap->SendServerCommand(ent->s.number, "print \"Use ^3/dueltable [page]^7: page 1 is the standings, page 2 and up the matches.\n\"");
+			return;
+		}
 	}
 
 	if (page == 1)
 	{
 		duel_show_table(ent);
+		return;
+	}
+
+	// DAJ_RP: [Mini-Games] every page past the first used to print a blank page whenever it had no
+	// matches to show -- with no tournament on, during sign-up, and past the last match. Each of
+	// those now says which.
+	if (level.duel_tournament_mode == 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"There is no duel tournament now\n\"");
+		return;
+	}
+
+	if (level.duel_matches_quantity <= 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"The match list is drawn up when the tournament begins.\n\"");
+		return;
+	}
+
+	last_page = 1 + (level.duel_matches_quantity + results_per_page - 1) / results_per_page;
+
+	if (page > last_page)
+	{
+		if (last_page == 2)
+			trap->SendServerCommand(ent->s.number, va("print \"No page %d. The matches are on page 2.\n\"", page));
+		else
+			trap->SendServerCommand(ent->s.number, va("print \"No page %d. The matches are on pages 2 to %d.\n\"", page, last_page));
+		return;
+	}
+
+	Q_strcat(content, sizeof(content), va("\n^3Matches, page %d of %d\n", page - 1, last_page - 1));
+
+	// zyk: makes i start from the first result of the correct page
+	for (i = results_per_page * (page - 2); i < results_per_page * (page - 1) && i < level.duel_matches_quantity; i++)
+	{
+		const int first_id = level.duel_matches[i][0];
+		const int second_id = level.duel_matches[i][1];
+		gentity_t *first_duelist = (first_id >= 0 && first_id < MAX_CLIENTS) ? &g_entities[first_id] : NULL;
+		gentity_t *second_duelist = (second_id >= 0 && second_id < MAX_CLIENTS) ? &g_entities[second_id] : NULL;
+		char first_name[MAX_NETNAME + 8];
+		char second_name[MAX_NETNAME + 8];
+		char line[(MAX_NETNAME * 2) + 96];
+
+		Q_strncpyz(first_name, "^3Left Tournament", sizeof(first_name));
+		Q_strncpyz(second_name, "^3Left Tournament", sizeof(second_name));
+
+		if (first_duelist && duel_tournament_valid_duelist(first_duelist) == qtrue)
+		{ // zyk: first duelist still in Tournament
+			Com_sprintf(first_name, sizeof(first_name), "^7%s", first_duelist->client->pers.netname);
+		}
+
+		if (second_duelist && duel_tournament_valid_duelist(second_duelist) == qtrue)
+		{ // zyk: second duelist still in Tournament
+			Com_sprintf(second_name, sizeof(second_name), "^7%s", second_duelist->client->pers.netname);
+		}
+
+		if (i < level.duel_matches_done)
+		{ // zyk: this match was already played in this tournament cycle
+			Com_sprintf(line, sizeof(line), "%s ^3%d x %d %s\n", first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name);
+		}
+		else if (i == level.duel_matches_done)
+		{ // zyk: current match, with the time left while the duel is on
+			Com_sprintf(line, sizeof(line), "%s ^1%d x %d %s%s\n", first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name,
+				level.duel_tournament_mode == 4 ? va("   ^3Time: ^7%s", RP_TableTimeLeft(level.duel_tournament_timer)) : "");
+		}
+		else
+		{ // zyk: match not played yet in this tournament cycle
+			Com_sprintf(line, sizeof(line), "%s ^7%d x %d %s\n", first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name);
+		}
+
+		Q_strcat(content, sizeof(content), line);
+	}
+
+	trap->SendServerCommand(ent->s.number, va("print \"%s\n\"", content));
+}
+
+/*
+==================
+Cmd_MeleeTable_f
+
+DAJ_RP: [Mini-Games] /meleetable: the Melee Battle as it stands -- its phase and time, then every
+fighter still in, ranked by kills and then by player slot. A fighter who is knocked out leaves the
+roster (melee_players[] goes back to -1), so only those still in can be listed.
+==================
+*/
+void Cmd_MeleeTable_f(gentity_t *ent) {
+	char content[1024];
+	char line[MAX_NETNAME + 64];
+	int sorted[MAX_CLIENTS];
+	int count = 0;
+	int i, j;
+
+	if (level.melee_mode == 0)
+	{
+		trap->SendServerCommand(ent->s.number, "print \"There is no Melee Battle now\n\"");
+		return;
+	}
+
+	content[0] = '\0';
+
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (level.melee_players[i] != -1 && g_entities[i].client && g_entities[i].client->pers.connected == CON_CONNECTED)
+		{
+			sorted[count++] = i;
+		}
+	}
+
+	for (i = 1; i < count; i++)
+	{ // zyk: most kills first, then the lowest player id
+		const int this_id = sorted[i];
+
+		for (j = i; j > 0; j--)
+		{
+			const int prev_id = sorted[j - 1];
+
+			if (level.melee_players[this_id] > level.melee_players[prev_id] ||
+				(level.melee_players[this_id] == level.melee_players[prev_id] && this_id < prev_id))
+			{
+				sorted[j] = prev_id;
+			}
+			else
+			{
+				break;
+			}
+		}
+
+		sorted[j] = this_id;
+	}
+
+	if (level.melee_mode == 1)
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Melee Battle: ^7signing up, starts in ^3%s^7. Fighters: ^3%d\n\n",
+			RP_TableTimeLeft(level.melee_mode_timer), count);
+	}
+	else if (level.melee_mode == 2)
+	{
+		Com_sprintf(line, sizeof(line), "\n^3Melee Battle: ^7in progress, ^3%s ^7left. Fighters left: ^3%d\n\n",
+			RP_TableTimeLeft(level.melee_mode_timer), count);
 	}
 	else
 	{
-		page--;
+		Com_sprintf(line, sizeof(line), "\n^3Melee Battle: ^7battle over\n\n");
+	}
+	RP_TableAdd(ent->s.number, content, sizeof(content), line);
 
-		// zyk: makes i start from the first result of the correct page
-		i = results_per_page * (page - 1);
+	for (i = 0; i < count; i++)
+	{
+		const int id = sorted[i];
 
-		while (i < (results_per_page * page) && i < level.duel_matches_quantity)
+		if (level.melee_mode == 1)
+		{ // zyk: nobody has fought yet, so there are no kills to show
+			Com_sprintf(line, sizeof(line), "^7%d. %s\n", i + 1, g_entities[id].client->pers.netname);
+		}
+		else if (level.melee_mode == 3)
 		{
-			gentity_t *first_duelist = &g_entities[level.duel_matches[i][0]];
-			gentity_t *second_duelist = &g_entities[level.duel_matches[i][1]];
-			char first_name[96];
-			char second_name[96];
-
-			strcpy(first_name, "^3Left Tournament");
-			strcpy(second_name, "^3Left Tournament");
-
-			if (first_duelist && first_duelist->client && 
-				first_duelist->client->pers.connected == CON_CONNECTED &&
-				first_duelist->client->sess.sessionTeam != TEAM_SPECTATOR &&
-				level.duel_players[first_duelist->s.number] != -1)
-			{ // zyk: first duelist still in Tournament
-				strcpy(first_name, va("^7%s", first_duelist->client->pers.netname));
-			}
-
-			if (second_duelist && second_duelist->client &&
-				second_duelist->client->pers.connected == CON_CONNECTED &&
-				second_duelist->client->sess.sessionTeam != TEAM_SPECTATOR &&
-				level.duel_players[second_duelist->s.number] != -1)
-			{ // zyk: second duelist still in Tournament
-				strcpy(second_name, va("^7%s", second_duelist->client->pers.netname));
-			}
-
-			if (i < level.duel_matches_done)
-			{ // zyk: this match was already played in this tournament cycle
-				strcpy(content, va("%s%s ^3%d x %d %s\n", content, first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name));
-			}
-			else if (i == level.duel_matches_done)
-			{ // zyk: current match
-				char duel_time_remaining[32];
-
-				strcpy(duel_time_remaining, "");
-
-				if (level.duel_tournament_mode == 4)
-				{ // zyk: this duel is the current one, show the time remaining in seconds
-					strcpy(duel_time_remaining, va("   ^3Time: ^7%d", (level.duel_tournament_timer - level.time) / 1000));
-				}
-
-				strcpy(content, va("%s%s ^1%d x %d %s%s\n", content, first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name, duel_time_remaining));
-			}
-			else
-			{ // zyk: match not played yet in this tournament cycle
-				strcpy(content, va("%s%s ^7%d x %d %s\n", content, first_name, level.duel_matches[i][2], level.duel_matches[i][3], second_name));
-			}
-
-			i++;
+			Com_sprintf(line, sizeof(line), "^7Winner: %s^7: ^3%d kills\n", g_entities[id].client->pers.netname, level.melee_players[id]);
+		}
+		else
+		{
+			Com_sprintf(line, sizeof(line), "^7%d. %s^7: ^3%d kills\n", i + 1, g_entities[id].client->pers.netname, level.melee_players[id]);
 		}
 
-		trap->SendServerCommand(ent->s.number, va("print \"\n^7%s\n\"", content));
+		RP_TableAdd(ent->s.number, content, sizeof(content), line);
 	}
+
+	RP_TableAdd(ent->s.number, content, sizeof(content), "\n");
+	RP_TableSend(ent->s.number, content);
 }
 
 /*
@@ -23161,122 +23352,6 @@ void Cmd_Music_f(gentity_t* ent) {
 	return;
 }
 
-// GalaxyRP fix: [validation] the old inline check was content[strlen(content) - 1] == '\n' with no
-// guard for an empty content -- if a leaderboard record was ever short a line (a truncated/malformed
-// leaderboard.txt, or an fgets() call that used to go unchecked -- see the fgets() NULL checks added
-// in Cmd_DuelBoard_f below), content could be empty ("") and strlen(content) - 1 underflows to
-// (size_t)-1, indexing out of bounds. Guard the empty case here once instead of at every call site.
-// GalaxyRP fix: [cleanup] was static. The Duel Tournament leaderboard writer in g_main.c needs
-// the same "strip a trailing newline, and do nothing to an empty string" behaviour -- it was open
-// coding "if (content[strlen(content) - 1] == '\n')" roughly twenty times, which indexes
-// content[SIZE_MAX] whenever the buffer is empty. Shared rather than duplicated.
-void RP_StripTrailingNewline(char *s)
-{
-	size_t len = strlen(s);
-	if (len > 0 && s[len - 1] == '\n')
-	{
-		s[len - 1] = '\0';
-	}
-}
-
-/*
-==================
-Cmd_DuelBoard_f
-==================
-*/
-void Cmd_DuelBoard_f(gentity_t *ent) {
-	char arg1[MAX_STRING_CHARS];
-	int page = 1; // zyk: page the user wants to see
-	char file_content[MAX_STRING_CHARS];
-	char content[512]; // GalaxyRP fix: [cleanup] was 64 -- too small for a player name longer than
-						// 63 characters, which would get split across two fgets() calls and desync
-						// that record's fields. 512, as the old /maplist file reader had.
-	int i = 0;
-	int results_per_page = rp_list_cmds_results_per_page.integer; // zyk: number of results per page
-	FILE *leaderboard_file;
-
-	if (trap->Argc() < 2)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Use ^3/duelboard <page number> ^7to see the Duel Tournament Leaderboard, which shows the winners and their number of tournaments won\n\"");
-		return;
-	}
-
-	trap->Argv(1, arg1, sizeof(arg1));
-
-	if (level.duel_leaderboard_step > 0)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Leaderboard is being generated. Please wait some seconds\n\"");
-		return;
-	}
-
-	strcpy(file_content, "");
-	strcpy(content, "");
-
-	page = atoi(arg1);
-
-	// GalaxyRP fix: [validation] atoi() only catches a page argument that parses to exactly 0; a
-	// negative page number (e.g. "/duelboard -5") passed this check straight through and made both
-	// pagination loop bounds below negative, so neither loop below ever ran and the command
-	// silently printed a blank page instead of reporting the bad input.
-	if (page <= 0)
-	{
-		trap->SendServerCommand(ent->s.number, "print \"Invalid page number\n\"");
-		return;
-	}
-
-	leaderboard_file = fopen("GalaxyRP/leaderboard.txt", "r");
-	if (leaderboard_file != NULL)
-	{
-		// GalaxyRP fix: [security] each leaderboard record is 3 lines (header, name, wins); this
-		// used to check fgets()'s return value only on the first of the 3 reads per iteration and
-		// ignore it on the other two, so a truncated/malformed leaderboard.txt (a record not a clean
-		// multiple of 3 lines) could read past a real record boundary or operate on stale content.
-		// Bail out of the skip-loop the moment any read fails instead. The 3 discarded lines here
-		// are never used for output, so there's no need to newline-strip them.
-		while (i < (results_per_page * (page - 1)))
-		{ // zyk: reads the file until it reaches the position corresponding to the page number
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-			i++;
-		}
-
-		while (i < (results_per_page * page))
-		{
-			// zyk: unused header/separator line for this record
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-
-			// zyk: player name
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-			RP_StripTrailingNewline(content);
-			// GalaxyRP fix: [security] this used to be strcpy(file_content, va("%s%s     ",
-			// file_content, content)) -- file_content is a fixed MAX_STRING_CHARS (1024-byte) stack
-			// buffer, and that strcpy had no bounds check on the destination at all. Enough
-			// entries on one page (or rp_list_cmds_results_per_page set too high) overflows it.
-			// Q_strcat never writes past the destination's declared size.
-			Q_strcat(file_content, sizeof(file_content), content);
-			Q_strcat(file_content, sizeof(file_content), "     ");
-
-			// zyk: number of tournaments won
-			if (fgets(content, sizeof(content), leaderboard_file) == NULL) break;
-			RP_StripTrailingNewline(content);
-			Q_strcat(file_content, sizeof(file_content), "^3");
-			Q_strcat(file_content, sizeof(file_content), content);
-			Q_strcat(file_content, sizeof(file_content), "^7\n");
-
-			i++;
-		}
-
-		fclose(leaderboard_file);
-		trap->SendServerCommand(ent->s.number, va("print \"\n%s\n\"", file_content));
-	}
-	else
-	{
-		trap->SendServerCommand(ent->s.number, "print \"No leaderboard yet\n\"");
-		return;
-	}
-}
-
 // GalaxyRP: [Training Saber fix] pers.training_mode is only ever written by this command and by
 // ClientBegin's reset -- it is never told about a saber reselection (/saber, the saber-select UI,
 // or a DB-driven saber reload on spawn), which fully re-parses the new saber's parms and resets
@@ -23695,7 +23770,6 @@ command_t commands[] = {
 	{ "createcredits",		Cmd_CreditCreate_f,			CMD_RPG | CMD_NOINTERMISSION },
 	{ "createitem",			Cmd_CreateItem_f,			CMD_LOGGEDIN},
 	{ "duelarena",			Cmd_DuelArena_f,			CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
-	{ "duelboard",			Cmd_DuelBoard_f,			CMD_NOINTERMISSION },
 	{ "duelmode",			Cmd_DuelMode_f,				CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "duelpause",			Cmd_DuelPause_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "dueltable",			Cmd_DuelTable_f,			CMD_NOINTERMISSION },
@@ -23745,6 +23819,7 @@ command_t commands[] = {
 	{ "logout",				Cmd_LogoutAccount_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "meleearena",			Cmd_MeleeArena_f,			CMD_LOGGEDIN | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "meleemode",			Cmd_MeleeMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "meleetable",			Cmd_MeleeTable_f,			CMD_NOINTERMISSION },
 	{ "modversion",			Cmd_ModVersion_f,			CMD_NOINTERMISSION },
 	{ "new",				Cmd_Register_F,				CMD_NOINTERMISSION },
 	{ "news",				Cmd_News_f,					0 },

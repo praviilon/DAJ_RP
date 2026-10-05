@@ -1926,12 +1926,6 @@ typedef struct level_locals_s {
 
 	int duel_matches_quantity; // zyk: quantity of matches in this tournament
 	int duel_matches_done; // zyk: how many matches were already done
-	int duel_leaderboard_step; // zyk: used to calculate the leaderboard position of the current duel tournament winner
-	int duel_leaderboard_timer; // zyk: timer used when calculating the leaderboard
-	int duel_leaderboard_score; // zyk: number of tournaments won by the current winner
-	char duel_leaderboard_acc[32]; // zyk: account of the current winner
-	char duel_leaderboard_name[36]; // zyk: current name of the current winner
-	int duel_leaderboard_index; // zyk: index of the line in the leaderboard file in which the current winner must be inserted (winners are sorted by the number of tournament wins in the file)
 	// GalaxyRP fix: [Duel Tournament] was declared qboolean, which is `typedef enum { qfalse, qtrue }`
 	// -- a two-value enum holding client numbers 0..MAX_CLIENTS-1 plus a -1 sentinel. It worked only
 	// because the compiler happens to pick an int-sized underlying type; the values were always out
@@ -2936,11 +2930,6 @@ void RP_CVU_itemLifetime(void);
 void RP_CVU_addAmmoScale(void);
 int RP_CorpseSecondsToMs(int seconds);
 
-// GalaxyRP fix: [validation] rp_list_cmds_results_per_page gates the pagination math in
-// Cmd_DuelBoard_f (g_cmds.c) -- see RP_CVU_listCmdsResultsPerPage's comment in
-// g_cvar.c for why it needs a minimum of 1 rather than the usual clamp-to-0 pattern.
-void RP_CVU_listCmdsResultsPerPage(void);
-
 // GalaxyRP fix: [validation] duel and minigame cvars whose feature becomes permanently unusable
 // below a certain value rather than merely odd -- each clamps to its own lowest working value
 // instead of 0. See the individual comments in g_cvar.c for what breaks and why.
@@ -3229,7 +3218,6 @@ void Svcmd_ToggleAllowVote_f( void );
 #define XCVAR_PROTO
 	#include "g_xcvar.h"
 #undef XCVAR_PROTO
-void RP_StripTrailingNewline( char *s );
 void G_RegisterCvars( void );
 void G_UpdateCvars( void );
 
