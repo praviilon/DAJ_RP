@@ -4689,9 +4689,9 @@ void SP_misc_model_gun_rack( gentity_t *ent )
 		}
 	}
 
-	// DAJ_RP: [Dispensers] its "model" key's .md3 if the server has it (single player ignored the key and
-	// always drew the kejim rack; the base maps name imperial/ ones), else that one -- RP_DispenserModel()
-	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_GUN_RACK ) );
+	// DAJ_RP: [Dispensers] always this one, as single player draws it: a rack's "model" key is not used (the
+	// base maps name imperial/ racks, which single player never shows)
+	ent->s.modelindex = G_ModelIndex( RP_MODEL_GUN_RACK );
 
 	G_SetOrigin( ent, ent->s.origin );
 	G_SetAngles( ent, ent->s.angles );
@@ -4856,8 +4856,8 @@ void spawn_rack_goods( gentity_t *ent )
 		GunRackAddItem( ent, health, ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 0.5f, (Q_flrand(0.0f, 1.0f) * 4 + 4 ) * pos, 24 );
 	}
 
-	// DAJ_RP: [Dispensers] the model SP_misc_model_ammo_rack() chose -- see SP_misc_model_gun_rack()
-	ent->s.modelindex = G_ModelIndex( ( ent->model && ent->model[0] ) ? ent->model : RP_MODEL_AMMO_RACK );
+	// DAJ_RP: [Dispensers] always this one, as single player -- see SP_misc_model_gun_rack()
+	ent->s.modelindex = G_ModelIndex( RP_MODEL_AMMO_RACK );
 
 	G_SetOrigin( ent, ent->s.origin );
 	G_SetAngles( ent, ent->s.angles );
@@ -4920,9 +4920,6 @@ void SP_misc_model_ammo_rack( gentity_t *ent )
 	{
 		RegisterItem( BG_FindItem( "item_medpak_instant" ));
 	}
-
-	// DAJ_RP: [Dispensers] which model it shows, decided while its keys are read -- see SP_misc_model_gun_rack()
-	RP_DispenserModel( ent, RP_MODEL_AMMO_RACK );
 
 	ent->think = spawn_rack_goods;
 	ent->nextthink = level.time + 100;

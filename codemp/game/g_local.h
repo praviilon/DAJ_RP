@@ -2304,9 +2304,9 @@ int			RP_FreeEntityTriggers( gentity_t *target );
 // GalaxyRP: [Entity System] the child link (gentity_t::rpMadeBy) and the one call that frees everything
 // an entity made for itself -- its triggers and its stamped children. g_spawn.c.
 void		RP_MarkChild( gentity_t *maker, gentity_t *child );
-// DAJ_RP: [Dispensers] the model each dispenser, rack and cargo crate shows when its "model" key does not
-// say -- the spawn functions (g_misc.c) and the Entity System's model check (RP_EntitySystemSpawnRefused,
-// g_spawn.c) use the same names
+// DAJ_RP: [Dispensers] the model each dispenser and cargo crate shows when its "model" key does not say, and
+// the one each rack always shows (a rack's key is not used, as in single player) -- the spawn functions
+// (g_misc.c) and the Entity System's model check (RP_EntitySystemSpawnRefused, g_spawn.c) use the same names
 #define RP_MODEL_AMMO_FLOOR_UNIT	"/models/items/a_pwr_converter.md3"
 #define RP_MODEL_SHIELD_FLOOR_UNIT	"/models/items/a_shield_converter.md3"
 #define RP_MODEL_POWER_CONVERTER	"models/items/power_converter.md3"

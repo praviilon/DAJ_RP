@@ -2402,30 +2402,32 @@ qboolean RP_RefuseAtRuntime( gentity_t *ent, const char *reason )
 =================
 RP_ModelKeyClass
 
-DAJ_RP: [Dispensers] the classes whose "model" key is optional -- with none, the spawn function shows a
-model of its own: the ammo and shield floor units, the three model power converters, the two racks and the
-cargo crate. On one the Entity System makes, RP_EntitySystemSpawnRefused() checks a "model" key as it checks
-a misc_model_breakable's -- the file must be on the server and be an .md3 -- and that the model it will
-show, the key's or its own, gets a slot: a typo used to take a model slot for good and leave an invisible
-station, and a full table an invisible one. Any other one (the map's own) is not refused: its spawn
-function shows its own model instead and logs why -- RP_DispenserModel(). NULL for any other class.
+DAJ_RP: [Dispensers] the classes that show a model of their own: the ammo and shield floor units, the three
+model power converters and the cargo crate, whose "model" key, when given, replaces it, and the two racks,
+which always show theirs, as single player does (their key is not used). On one the Entity System makes,
+RP_EntitySystemSpawnRefused() checks a "model" key it uses as it checks a misc_model_breakable's -- the file
+must be on the server and be an .md3 -- and that the model it will show, the key's or its own, gets a slot:
+a typo used to take a model slot for good and leave an invisible station, and a full table an invisible
+one. Any other one (the map's own) is not refused: its spawn function shows its own model instead and logs
+why -- RP_DispenserModel(). NULL for any other class.
 =================
 */
 typedef struct {
 	const char	*classname;
 	const char	*defaultModel;
 	qboolean	breakable;	// spawned as a misc_model_breakable: it registers the breakable's sound
+	qboolean	keyUnused;	// its "model" key is not used: it always shows defaultModel (the racks)
 } rpModelKeyClass_t;
 
 static const rpModelKeyClass_t rp_model_key_classes[] = {
-	{ "misc_ammo_floor_unit",				RP_MODEL_AMMO_FLOOR_UNIT,	qfalse },
-	{ "misc_shield_floor_unit",				RP_MODEL_SHIELD_FLOOR_UNIT,	qfalse },
-	{ "misc_model_ammo_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
-	{ "misc_model_shield_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
-	{ "misc_model_health_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
-	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse },
-	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse },
-	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue },
+	{ "misc_ammo_floor_unit",				RP_MODEL_AMMO_FLOOR_UNIT,	qfalse,	qfalse },
+	{ "misc_shield_floor_unit",				RP_MODEL_SHIELD_FLOOR_UNIT,	qfalse,	qfalse },
+	{ "misc_model_ammo_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
+	{ "misc_model_shield_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
+	{ "misc_model_health_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
+	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse,	qtrue },
+	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse,	qtrue },
+	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue,	qfalse },
 };
 
 static const rpModelKeyClass_t *RP_ModelKeyClass( const char *classname )
@@ -2452,7 +2454,7 @@ DAJ_RP: [Dispensers] RP_FindModelFile(): where a model key's file is -- as typed
 ".md3" added when the name has no extension (2, the path in candidate) -- the lookup misc_model_breakable
 has always had in RP_EntitySystemSpawnRefused(); 0 when neither is on the server.
 
-RP_DispenserModel(): the model a dispenser, rack or cargo crate shows (RP_ModelKeyClass()), set in
+RP_DispenserModel(): the model a dispenser or cargo crate shows (RP_ModelKeyClass()), set in
 ent->model: its "model" key's file, found as above and an .md3, or defaultModel -- with no key, and, for
 an entity the Entity System did not make (that one was refused instead), with a key whose file is not on
 the server or is not an .md3, which is logged.
@@ -2549,7 +2551,7 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 		ent->model[0] != '*' && ent->model[0] != '#' ) ? qtrue : qfalse;
 	keyClass = RP_ModelKeyClass( ent->classname );
 
-	if ( breakable || md3Mover || ( keyClass && ent->model && ent->model[0] ) )
+	if ( breakable || md3Mover || ( keyClass && !keyClass->keyUnused && ent->model && ent->model[0] ) )
 	{
 		const char *model = ent->model;
 		char candidate[MAX_QPATH];
@@ -2565,20 +2567,20 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 		if ( where == 2 )
 			ent->model = G_NewStringRaw( candidate );
 
-		if ( ( breakable || keyClass ) && !RP_IsMd3Name( ent->model ) )
+		if ( ( breakable || keyClass ) && !RP_IsMd3Name( ent->model ) )	// keyClass: one whose key is used
 			return RP_SpawnRefuse( ent, va( "model %s is not an .md3 model", ent->model ) );
 	}
 
 	// DAJ_RP: [Dispensers] the one model a dispenser, rack or cargo crate registers -- its key's, checked
-	// above, or its own (and the cargo crate, a breakable that can always be damaged, its sound) -- has to
-	// get a slot, as a misc_model_breakable's below. See RP_ModelKeyClass().
+	// above, or its own (always, for a rack) -- and the cargo crate, a breakable that can always be damaged,
+	// its sound, have to get a slot, as a misc_model_breakable's below. See RP_ModelKeyClass().
 	if ( keyClass )
 	{
 		const char *names[1];
 		char reason[256];
 		int otherBytes = 0;
 
-		names[0] = ( ent->model && ent->model[0] ) ? ent->model : keyClass->defaultModel;
+		names[0] = ( !keyClass->keyUnused && ent->model && ent->model[0] ) ? ent->model : keyClass->defaultModel;
 		if ( keyClass->breakable && !RP_SoundRegistered( RP_BREAKABLE_SOUND ) )
 			otherBytes = (int)strlen( RP_BREAKABLE_SOUND ) + 1;
 
