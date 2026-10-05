@@ -11830,9 +11830,6 @@ void initialize_rpg_skills(gentity_t *ent)
 		ent->client->pers.thermal_vision = qfalse;
 		ent->client->pers.thermal_vision_cooldown_time = 0;
 
-		ent->client->pers.credits_modifier = 0;
-		ent->client->pers.score_modifier = 0;
-
 		ent->client->pers.buy_sell_timer = 0;
 		ent->client->pers.vertical_dfa_timer = 0;
 
@@ -15316,6 +15313,45 @@ static const char *zyk_spawner_team_problem( const char *value )
 	return NULL;
 }
 
+// DAJ_RP: [NPC Rewards] what is wrong with an "npccredits" or "npcxp" value on an NPC or vehicle spawner, or NULL:
+// a whole number from 0 to RP_REWARD_MAX_CREDITS or RP_REWARD_MAX_XP, and none on a vehicle spawner -- a vehicle
+// pays nothing (RP_PayNpcKillReward()). An empty value is none and always fine. Used by /entadd and /entedit.
+static const char *zyk_spawner_reward_problem( qboolean vehicle, const char *key, const char *value )
+{
+	static char problem[256];
+	const qboolean credits = !Q_stricmp( key, "npccredits" ) ? qtrue : qfalse;
+	const int max = credits ? RP_REWARD_MAX_CREDITS : RP_REWARD_MAX_XP;
+	const char *p;
+
+	if ( !value || !value[0] )
+	{
+		return NULL;
+	}
+
+	if ( vehicle )
+	{
+		Com_sprintf( problem, sizeof( problem ), "Vehicles pay no kill reward: ^3%s^7 is for an ^3npc_spawner^7.", credits ? "npccredits" : "npcxp" );
+		return problem;
+	}
+
+	for ( p = value; *p; p++ )
+	{
+		if ( *p < '0' || *p > '9' || ( p - value ) >= 9 )
+		{
+			break;
+		}
+	}
+
+	if ( *p || atoi( value ) > max )
+	{
+		Com_sprintf( problem, sizeof( problem ), "^3%s %s^7: the reward is a whole number from ^30^7 to ^3%d^7 (%s per kill).",
+			credits ? "npccredits" : "npcxp", zyk_shown_name( value ), max, credits ? "credits" : "XP" );
+		return problem;
+	}
+
+	return NULL;
+}
+
 /*
 ==================
 zyk_entadd_spawner_problem
@@ -15333,11 +15369,12 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 	static char problem[256];
 	char key[MAX_STRING_CHARS], value[MAX_STRING_CHARS];
 	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS], effect[MAX_STRING_CHARS], team[MAX_STRING_CHARS];
+	char reward_credits[MAX_STRING_CHARS], reward_xp[MAX_STRING_CHARS];
 	qboolean has_type = qfalse;
 	qboolean vehicle = !Q_stricmp( classname, "npc_vehicle" ) ? qtrue : qfalse;
 	int i;
 
-	targetname[0] = npc_type[0] = effect[0] = team[0] = '\0';
+	targetname[0] = npc_type[0] = effect[0] = team[0] = reward_credits[0] = reward_xp[0] = '\0';
 	for ( i = 2; i + 1 < number_of_args; i += 2 )
 	{
 		trap->Argv( i, key, sizeof( key ) );
@@ -15358,6 +15395,14 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		else if ( !Q_stricmp( key, "npcteam" ) )
 		{
 			Q_strncpyz( team, value, sizeof( team ) );
+		}
+		else if ( !Q_stricmp( key, "npccredits" ) )
+		{
+			Q_strncpyz( reward_credits, value, sizeof( reward_credits ) );
+		}
+		else if ( !Q_stricmp( key, "npcxp" ) )
+		{
+			Q_strncpyz( reward_xp, value, sizeof( reward_xp ) );
 		}
 	}
 
@@ -15380,6 +15425,22 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		if ( problem_team )
 		{
 			return problem_team;
+		}
+	}
+
+	// DAJ_RP: [NPC Rewards] "npccredits" and "npcxp" -- see RP_SpawnerRewardKeys() (NPC_spawn.c)
+	if ( reward_credits[0] || reward_xp[0] )
+	{
+		const char *problem_reward = zyk_spawner_reward_problem( vehicle, "npccredits", reward_credits );
+
+		if ( !problem_reward )
+		{
+			problem_reward = zyk_spawner_reward_problem( vehicle, "npcxp", reward_xp );
+		}
+
+		if ( problem_reward )
+		{
+			return problem_reward;
 		}
 	}
 
@@ -16142,6 +16203,17 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 						return;
 					}
 				}
+				// DAJ_RP: [NPC Rewards] "npccredits" and "npcxp" -- removing them is always fine
+				if ((Q_stricmp(key, "npccredits") == 0 || Q_stricmp(key, "npcxp") == 0) && Q_stricmp(arg2, "zykremovekey") != 0)
+				{
+					const char *problem_reward = zyk_spawner_reward_problem(!Q_stricmp(this_ent->classname, "npc_vehicle") ? qtrue : qfalse, key, arg2);
+
+					if (problem_reward)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem_reward) );
+						return;
+					}
+				}
 			}
 		}
 
@@ -16382,7 +16454,6 @@ static char zyk_entsave_line[ZYK_ENTITY_FILE_ENCODED_LENGTH * 2];
 #define ZYK_ENTSAVE_CINEMATIC		32
 #define ZYK_ENTSAVE_NOTSOLID		64
 #define ZYK_ENTSAVE_STARTINSOLID	128
-#define ZYK_ENTSAVE_CREDITS			32768
 
 static qboolean zyk_entsave_add(const char *key, const char *value)
 {
@@ -16470,11 +16541,11 @@ static const char *zyk_entsave_effect_word(int mode)
 
 // GalaxyRP: [Entity System] an NPC's one-time line, with_text as above. NULL if it does not fit.
 //  - spawnflags: the class bits 1, 2, 4 and 8 (a wampa's wander/search, a droid's ALWAYSDIE, a sniper's
-//    NO_HIDE -- every other type ignores them), CINEMATIC 32, STARTINSOLID 128 and zyk's custom-credits 32768
-//    as the NPC has them; NOTSOLID 64 only while it is still untouchable (r.contents 0), so one /npc effect
-//    clear made solid is saved solid -- or, not started up yet, as the flag says. Never DROPTOFLOOR / a Jedi's
-//    ambush 16, SHY 2048 or the internal 65536.
-//  - genericvalue7: the credits 32768 gives (client->pers.credits_modifier, copied from the spawner's).
+//    NO_HIDE -- every other type ignores them), CINEMATIC 32 and STARTINSOLID 128 as the NPC has them;
+//    NOTSOLID 64 only while it is still untouchable (r.contents 0), so one /npc effect clear made solid is saved
+//    solid -- or, not started up yet, as the flag says. Never DROPTOFLOOR / a Jedi's ambush 16, SHY 2048, the
+//    internal 65536, or zyk's old custom-credits 32768, which nothing honours any more.
+//  - npccredits, npcxp: what its killer is paid (gentity_t::rpRewardCredits/rpRewardXP), when it pays anything.
 //  - npceffect: its /npc effect mode now; a release in progress is no mode.
 //  - npcteam, NPC_targetname, NPC_target, showhealth: see zyk_entsave_add_common().
 //  - noBasicSounds, noCombatSounds, noExtraSounds: the sounds it was told not to load. Any value means yes to
@@ -16482,7 +16553,7 @@ static const char *zyk_entsave_effect_word(int mode)
 // Not its health: it comes back with its type's.
 static const char *zyk_entsave_npc_line(gentity_t *ent, const char *escaped_type, qboolean with_text)
 {
-	int spawnflags = ent->spawnflags & (1 | 2 | 4 | 8 | ZYK_ENTSAVE_CINEMATIC | ZYK_ENTSAVE_STARTINSOLID | ZYK_ENTSAVE_CREDITS);
+	int spawnflags = ent->spawnflags & (1 | 2 | 4 | 8 | ZYK_ENTSAVE_CINEMATIC | ZYK_ENTSAVE_STARTINSOLID);
 	const char *effect = zyk_entsave_effect_word(ent->client->pers.phase_mode);
 
 	if ((ent->spawnflags & ZYK_ENTSAVE_NOTSOLID) && (!ent->rpBaseTeam || ent->r.contents == 0))
@@ -16497,7 +16568,9 @@ static const char *zyk_entsave_npc_line(gentity_t *ent, const char *escaped_type
 
 	if (!zyk_entsave_add_common(ent, spawnflags, with_text))
 		return NULL;
-	if ((spawnflags & ZYK_ENTSAVE_CREDITS) && !zyk_entsave_add("genericvalue7", va("%d", ent->client->pers.credits_modifier)))
+	if (ent->rpRewardCredits > 0 && !zyk_entsave_add("npccredits", va("%d", ent->rpRewardCredits)))
+		return NULL;
+	if (ent->rpRewardXP > 0 && !zyk_entsave_add("npcxp", va("%d", ent->rpRewardXP)))
 		return NULL;
 	if (effect && !zyk_entsave_add("npceffect", effect))
 		return NULL;
@@ -19320,6 +19393,105 @@ int check_xp(int currentLevel) {
 
 /*
 ==================
+RP_PayNpcKillReward
+
+DAJ_RP: [NPC Rewards] called from player_die() (g_combat.c) for everything that dies, with the attacker it
+has resolved. An NPC -- not a vehicle -- that carries a reward from its spawner's "npccredits" or "npcxp"
+(gentity_t::rpRewardCredits/rpRewardXP, RP_SpawnerRewardKeys() in NPC_spawn.c) pays it to that attacker
+if it is a player logged in to a character; anyone else, logged out, an NPC, the world, is paid nothing.
+Whatever its team: a reward is the admin's choice for that spawner. The reward is cleared either way, so
+it is paid at most once.
+
+Credits go through add_credits(), so rp_max_rpg_credits caps them. XP carries over from level to level, as
+many levels as it covers, each through increase_level() for its skillpoints, health, shield and message;
+at rp_rpg_max_level there is nothing for XP to do and it is not given, the same refusal /givexp makes. One
+write saves credits, XP, level and skillpoints together, and one console line tells the player.
+==================
+*/
+void RP_PayNpcKillReward( gentity_t *npc, gentity_t *killer )
+{
+	int credits, xp;
+	int credits_given = 0, xp_given = 0;
+	char line[512];
+	const char *name;
+
+	if ( !npc || !npc->NPC || !npc->client )
+		return;
+
+	credits = npc->rpRewardCredits;
+	xp = npc->rpRewardXP;
+	npc->rpRewardCredits = 0;
+	npc->rpRewardXP = 0;
+
+	if ( credits <= 0 && xp <= 0 )
+		return;
+
+	if ( npc->client->NPC_class == CLASS_VEHICLE )
+		return;
+
+	if ( !killer || !killer->inuse || !killer->client || killer->s.number < 0 || killer->s.number >= MAX_CLIENTS ||
+		killer->client->pers.connected != CON_CONNECTED || killer->client->sess.amrpgmode != 2 || killer->client->pers.CharID <= 0 )
+		return;
+
+	name = ( npc->NPC_type && npc->NPC_type[0] ) ? npc->NPC_type : "an NPC";
+	Com_sprintf( line, sizeof( line ), "^3Reward for killing ^7%s^3:", name );
+
+	if ( credits > 0 )
+	{
+		const int before = killer->client->pers.credits;
+
+		add_credits( killer, credits );
+		credits_given = killer->client->pers.credits - before;
+
+		if ( credits_given <= 0 )
+			Q_strcat( line, sizeof( line ), " ^7no credits (already at the maximum)" );
+		else if ( credits_given < credits )
+			Q_strcat( line, sizeof( line ), va( " ^2+%d credits ^7(the maximum)", credits_given ) );
+		else
+			Q_strcat( line, sizeof( line ), va( " ^2+%d credits", credits_given ) );
+	}
+
+	if ( xp > 0 )
+	{
+		if ( credits > 0 )
+			Q_strcat( line, sizeof( line ), "^3," );
+
+		if ( killer->client->pers.level >= rp_rpg_max_level.integer )
+		{
+			Q_strcat( line, sizeof( line ), " ^7no XP (maximum level)" );
+		}
+		else
+		{
+			xp_given = xp;
+			killer->client->pers.xp += xp;
+			Q_strcat( line, sizeof( line ), va( " ^2+%d XP", xp ) );
+		}
+	}
+
+	trap->SendServerCommand( killer->s.number, va( "print \"%s\n\"", line ) );
+
+	// zyk: each level the XP covers, as /givexp would grant it; whatever is left counts toward the next one
+	while ( xp_given > 0 && killer->client->pers.level < rp_rpg_max_level.integer &&
+		killer->client->pers.xp >= check_xp( killer->client->pers.level ) )
+	{
+		killer->client->pers.xp -= check_xp( killer->client->pers.level );
+		increase_level( killer, qtrue, 1 );
+	}
+
+	if ( xp_given > 0 && killer->client->pers.level >= rp_rpg_max_level.integer )
+	{ // zyk: this reward reached the cap: as /givexp leaves it, no XP toward a next level
+		killer->client->pers.xp = 0;
+	}
+
+	if ( credits_given > 0 || xp_given > 0 )
+	{
+		update_chars_table_row_with_current_values( killer );
+		G_LogPrintf( "NPC reward: %s^7 killed %s (%d): %d credits, %d XP\n", killer->client->pers.netname, name, npc->s.number, credits_given, xp_given );
+	}
+}
+
+/*
+==================
 Cmd_GiveXp_f
 ==================
 */
@@ -19506,7 +19678,7 @@ static void zyk_print_lines( gentity_t *ent, const char * const *lines, int coun
 
 void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	static char entlist_line[512];
-	const char *lines[64];	// 39 now
+	const char *lines[64];	// 40 now
 	int n = 0;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
@@ -19526,6 +19698,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
 	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
 	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7; ^3npcteam player^7, ^3enemy^7, ^3neutral^7 or ^3free^7 sets their side, as ^3/npc team^7 does.\n";
+	lines[n++] = "^7NPC kill rewards: on an ^3npc_spawner^7, ^3npccredits <0-100000>^7 and ^3npcxp <0-100>^7 are paid to the logged-in player who kills one of its NPCs. Vehicles pay nothing.\n";
 
 	lines[n++] = "^5Finding and changing\n";
 	lines[n++] = entlist_line;

@@ -826,6 +826,63 @@
 				play "sound/interface/button1.wav"
 			}
 		}
+		// DAJ_RP: [NPC Rewards] npccredits and npcxp: paid to the logged-in player who kills one of its NPCs
+		itemDef
+		{
+			name                rpx_spcredits
+			type                ITEM_TYPE_NUMERICFIELD
+			style               0
+			text                "Credits reward: "
+			cvar                "ui_rpx_sp_credits"
+			maxchars            6
+			maxPaintChars       6
+			rect                432 266 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			outlinecolor        1 .5 .5 .5
+			backcolor           0 0 0 .6
+			border              1
+			bordercolor         .5 .5 .5 .6
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"0"
+			}
+			descText            "Credits for the logged-in player who kills one, 0 to 100000; 0: none"
+		}
+		itemDef
+		{
+			name                rpx_spxp
+			type                ITEM_TYPE_NUMERICFIELD
+			style               0
+			text                "XP reward: "
+			cvar                "ui_rpx_sp_xp"
+			maxchars            3
+			maxPaintChars       3
+			rect                432 286 180 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			outlinecolor        1 .5 .5 .5
+			backcolor           0 0 0 .6
+			border              1
+			bordercolor         .5 .5 .5 .6
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"0"
+			}
+			descText            "XP for the logged-in player who kills one, 0 to 100; 0: none"
+		}
 		itemDef
 		{
 			name                rpx_spvhbar

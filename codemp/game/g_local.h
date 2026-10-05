@@ -683,7 +683,18 @@ struct gentity_s {
 	// has run. /entsave writes "npcteam" on a one-time line only when its team differs from this, so an NPC whose
 	// team nobody changed comes back exactly as its type makes it.
 	int			rpBaseTeam;
+
+	// DAJ_RP: [NPC Rewards] on an npc_spawner: its "npccredits" and "npcxp" keys, the credits and XP the
+	// logged-in player who kills one of its NPCs is given (RP_SpawnerRewardKeys(), NPC_spawn.c). Copied onto
+	// each NPC by NPC_Spawn_Do(); on the NPC, what its death pays out (RP_PayNpcKillReward(), g_combat.c),
+	// set back to 0 once paid. 0 is none. Never set on a vehicle.
+	int			rpRewardCredits;
+	int			rpRewardXP;
 };
+
+// DAJ_RP: [NPC Rewards] the most an npc_spawner's "npccredits" and "npcxp" may pay for one kill
+#define RP_REWARD_MAX_CREDITS	100000
+#define RP_REWARD_MAX_XP		100
 
 #define DAMAGEREDIRECT_HEAD		1
 #define DAMAGEREDIRECT_RLEG		2
@@ -1137,9 +1148,10 @@ typedef struct clientPersistant_s {
 
 	int max_force_power; // zyk: max force power the player can have based on skill_levels[54] value
 
-	int score_modifier; // zyk: sets the amount of extra score a player can get by defeating some npcs
+	// DAJ_RP: [NPC Rewards] score_modifier and credits_modifier used to sit here. Kills wrote them -- an NPC's
+	// own credits_modifier came from its spawner's spawnflags 32768 and genericvalue7 -- and nothing ever read
+	// them back, so no kill paid anything. NPC kill rewards are gentity_t::rpRewardCredits/rpRewardXP now.
 
-	int credits_modifier; // zyk: sets the amount of extra credits a player can get by killing rpg players or some npcs
 	int credits; // zyk: the amount of credits (RPG Mode currency) this player has now
 	int CharID;
 
@@ -2371,6 +2383,7 @@ qboolean zyk_load_remap_file( const char *file_path );
 int			RP_BreakStringEdRefs( char *text );
 qboolean	RP_HasStringEdRef( const char *text );
 const char	*RP_ShownText( const char *text );
+void		RP_PayNpcKillReward( gentity_t *npc, gentity_t *killer );
 qboolean	RP_SoundSetKnown( const char *name );
 // GalaxyRP fix: [Shader Remap] /remapreset's worker -- returns how many remaps it cleared. See the
 // definition in g_utils.c for why it sends the configstring twice and in that order.

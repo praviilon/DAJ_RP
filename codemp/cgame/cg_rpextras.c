@@ -778,7 +778,8 @@ menu's settings -- each sent only when it changes something. The type is checked
 server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in case they changed since.
 Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen. The
 health bar (showhealth) is both kinds'. The effect (npceffect) is an NPC spawner's only: vehicles cannot
-have one. The team (npcteam) is both kinds', as /npc team is.
+have one. The team (npcteam) is both kinds', as /npc team is. The kill rewards (npccredits, npcxp) are an NPC
+spawner's only: a vehicle pays nothing, and the server refuses them on one.
 ==================
 */
 static void RPX_SpawnSpawner( void ) {
@@ -857,6 +858,19 @@ static void RPX_SpawnSpawner( void ) {
 
 		if ( health > 0 ) {
 			Q_strcat( cmd, sizeof( cmd ), va( " health \"%d\"", health ) );
+		}
+		// DAJ_RP: [NPC Rewards] what the logged-in player who kills one is paid; the server's limits
+		// (RP_REWARD_MAX_CREDITS, RP_REWARD_MAX_XP), and 0 is none, so nothing is sent for it
+		{
+			const int credits = RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_credits" ), 0, 100000 );
+			const int xp = RPX_ClampInt( RPX_CvarInt( "ui_rpx_sp_xp" ), 0, 100 );
+
+			if ( credits > 0 ) {
+				Q_strcat( cmd, sizeof( cmd ), va( " npccredits \"%d\"", credits ) );
+			}
+			if ( xp > 0 ) {
+				Q_strcat( cmd, sizeof( cmd ), va( " npcxp \"%d\"", xp ) );
+			}
 		}
 		if ( ondeath[0] ) {
 			Q_strcat( cmd, sizeof( cmd ), va( " NPC_target \"%s\"", ondeath ) );

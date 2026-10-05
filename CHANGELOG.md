@@ -44,6 +44,7 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - **Extras** in the Galaxy RP menu (logged-in players): Props, Effects, NPCs & Vehicles, Music and Sounds menus list what the server has and spawn or play your pick, with a 3D preview for props and an in-menu preview for effects. Lights makes a light a trigger can switch on and off, and Spawners a named NPC or vehicle spawner (count, delay, respawn and more); Props, Effects, Lights and Spawners place it on the surface you aim at, with an Offset slider. The server still decides who may use each command. Requires the updated client files.
 - Single Player map support has been expanded with fixes from OJP and well newly added support to play Jedi Outcast SP Maps in Jedi Academy.
 - New server cvars have been added for more control over item respawn and despawn rates.
+- Reward system (XP and credits) for defeating NPCs.
 
 ### Changed
 - **Private duels are saber duels again**: the vanilla force restriction was commented out in this fork, making a private duel the only one in the JKA family with no restriction at all. It is back for `/duel` -- only Saber Offense, Saber Defense, Jump and Push-while-locked -- and a duel is once more sealed off from the rest of the map, so a duellist can no longer Grip, Mind Trick or Push a bystander and a bystander can no longer do the same back. Use `/engage_fullforceduel` for the old behaviour.

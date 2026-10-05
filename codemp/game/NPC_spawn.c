@@ -1855,14 +1855,17 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	// vehicle, since the spawner may be gone by the time NPC_Begin() applies it after its type's defaults.
 	newent->rpSpawnerTeam = ent->rpSpawnerTeam;
 
-	// zyk: this spawnflag allows setting a custom amount of credits this npc should give
-	if (ent->spawnflags & 32768)
+	// DAJ_RP: [NPC Rewards] the spawner's "npccredits" and "npcxp": what this NPC's killer is paid. (The old
+	// spawnflags 32768 + genericvalue7 credits are not honoured any more -- nothing ever paid them.)
+	if ( newent->client->NPC_class != CLASS_VEHICLE )
 	{
-		newent->client->pers.credits_modifier = ent->genericValue7;
+		newent->rpRewardCredits = ent->rpRewardCredits;
+		newent->rpRewardXP = ent->rpRewardXP;
 	}
 	else
 	{
-		newent->client->pers.credits_modifier = 0;
+		newent->rpRewardCredits = 0;
+		newent->rpRewardXP = 0;
 	}
 
 	if ( !newent->message && newent->client->NPC_class == CLASS_IMPERIAL )
@@ -2459,6 +2462,45 @@ static void RP_SpawnerTeamKey( gentity_t *self )
 	self->rpSpawnerTeam = ( team >= 0 ) ? team + 1 : 0;
 }
 
+/*
+==================
+RP_SpawnerRewardKey / RP_SpawnerRewardKeys
+
+DAJ_RP: [NPC Rewards] an npc_spawner's "npccredits" and "npcxp": the credits and XP each NPC it makes pays the
+logged-in player who kills it (RP_PayNpcKillReward(), g_combat.c). Whole numbers, 0 (or no key) being none;
+/entadd and /entedit refuse anything outside 0..RP_REWARD_MAX_CREDITS and 0..RP_REWARD_MAX_XP, and a value
+that reaches here another way -- an entity file, a map -- is brought into range and logged. Read every time,
+like npcteam, so a spawner spawned again in place without the key loses the reward.
+==================
+*/
+static int RP_SpawnerRewardKey( gentity_t *self, const char *key, int max )
+{
+	char *text = NULL;
+	int value;
+
+	if ( !G_SpawnString( key, "", &text ) || !text || !text[0] )
+		return 0;
+
+	value = atoi( text );
+
+	if ( value < 0 || value > max )
+	{
+		const int fixed = ( value < 0 ) ? 0 : max;
+
+		G_LogPrintf( "%s %d: \"%s\" %s is outside 0..%d, using %d\n", self->classname ? self->classname : "spawner",
+			self->s.number, key, RP_ShownText( text ), max, fixed );
+		value = fixed;
+	}
+
+	return value;
+}
+
+static void RP_SpawnerRewardKeys( gentity_t *self )
+{
+	self->rpRewardCredits = RP_SpawnerRewardKey( self, "npccredits", RP_REWARD_MAX_CREDITS );
+	self->rpRewardXP = RP_SpawnerRewardKey( self, "npcxp", RP_REWARD_MAX_XP );
+}
+
 /*QUAKED NPC_spawner (1 0 0) (-16 -16 -24) (16 16 40) x x x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
 
 DROPTOFLOOR - NPC can be in air, but will spawn on the closest floor surface below it
@@ -2672,6 +2714,9 @@ void SP_NPC_spawner( gentity_t *self)
 
 	// GalaxyRP: [Entity System] "npcteam" -- see RP_NpcTeamFromName(). Read every time, like npceffect.
 	RP_SpawnerTeamKey( self );
+
+	// DAJ_RP: [NPC Rewards] "npccredits" and "npcxp" -- see RP_SpawnerRewardKeys()
+	RP_SpawnerRewardKeys( self );
 	/*
 	if ( self->delay > 0 )
 	{
@@ -2897,6 +2942,11 @@ void SP_NPC_Vehicle( gentity_t *self)
 
 	// GalaxyRP: [Entity System] "npcteam" -- /npc team takes vehicles too; see RP_NpcTeamFromName()
 	RP_SpawnerTeamKey( self );
+
+	// DAJ_RP: [NPC Rewards] a vehicle pays nothing: /entadd and /entedit refuse npccredits and npcxp on an
+	// NPC_Vehicle, and one given them another way is not read
+	self->rpRewardCredits = 0;
+	self->rpRewardXP = 0;
 	//FIXME: PRECACHE!!!
 
 	if ( self->targetname )

@@ -2724,54 +2724,12 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 		attacker = &g_entities[self->client->ps.otherKiller];
 	}
 
-	// zyk: setting the credits_modifier and the bonus score for the RPG player
-	if (attacker && attacker->client && attacker->client->sess.amrpgmode == 2)
-	{
-		if (!self->NPC && self->client->sess.amrpgmode == 2)
-		{ // zyk: RPG Mode player score and credits
-			attacker->client->pers.credits_modifier = self->client->pers.level;
-			attacker->client->pers.score_modifier = self->client->pers.level / 50;
-
-			// GalaxyRP fix: [Quests] a bonus used to follow -- +1 score and +20 credits for killing a
-			// player who had finished the Universe Quest. It tested universe_quest_progress against
-			// NUM_OF_UNIVERSE_QUEST_OBJ (22), and nothing in the tree ever wrote that field: no assignment,
-			// no database column, no session string. It sat at 0, so the bonus was never once paid.
-		}
-		else if (self->NPC && self->client->NPC_class == CLASS_VEHICLE)
-		{ // zyk: vehicles will not give any score or credits
-			attacker->client->pers.credits_modifier = -10;
-			attacker->client->pers.score_modifier = -1;
-		}
-		// GalaxyRP fix: [Dead Code] removed guardian score/credits else-if (guardian_invoked_by_id always -1)
-		else if (self->NPC && self->client->ps.fd.forcePowerMax > 0 && self->client->ps.stats[STAT_WEAPONS] & (1 << WP_SABER))
-		{ // zyk: force-user saber npcs give more score and credits
-			attacker->client->pers.credits_modifier = 10;
-			attacker->client->pers.score_modifier = 1;
-		}
-
-		if (self->NPC && self->client->ps.stats[STAT_MAX_HEALTH] >= 500)
-		{ // zyk: npcs with more than 500 hp gives more score
-			attacker->client->pers.score_modifier += 1;
-			attacker->client->pers.credits_modifier += 20;
-		}
-
-		if (self->NPC && self->client->pers.credits_modifier > 0)
-		{ // zyk: npc with a custom amount of credits set
-			attacker->client->pers.credits_modifier = self->client->pers.credits_modifier;
-		}
-
-		// GalaxyRP fix: [Quests] a "player defeated the map guardian npc" score/credit bonus block used
-		// to live here, gated on level.guardian_quest. Cmd_GuardianQuest_f (its only setter) was deleted
-		// as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and level.guardian_quest/
-		// level.guardian_quest_timer have been removed along with it, so this block is removed too.
-
-		// GalaxyRP fix: [Dead Code] removed rpg_class==2 Bounty Hunter credits bonus (rpg_class always 0)
-
-		// GalaxyRP fix: [Quests] the "Bounty Quest manager" credit-bonus block used to live here.
-		// Cmd_BountyQuest_f (its only setter for level.bounty_quest_choose_target/target_id) was
-		// deleted as unreachable dead code (see the GalaxyRP fix comment in g_cmds.c), and those level
-		// fields have been removed along with it, so this block is removed too.
-	}
+	// DAJ_RP: [NPC Rewards] an NPC whose spawner set "npccredits" or "npcxp" pays its killer, if that is a
+	// logged-in player -- see RP_PayNpcKillReward() (g_cmds.c). Here, after the attacker has been resolved
+	// above (a turret's owner, whoever pushed it into a pit or a crusher; a vehicle's guns are already the
+	// pilot's). This replaces a block that set the killer's credits_modifier and score_modifier from the
+	// victim -- an RPG player's level, an NPC's spawnflags 32768 + genericvalue7 -- which nothing ever read.
+	RP_PayNpcKillReward( self, attacker );
 
 	// GalaxyRP fix: [Quests] a "map guardian npc defeated by a non-rpg player" notification block
 	// used to live here, gated on level.guardian_quest -- removed for the same reason as the block
