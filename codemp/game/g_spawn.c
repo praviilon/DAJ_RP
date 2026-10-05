@@ -1168,6 +1168,142 @@ char *G_NewString_Safe( const char *string )
 
 /*
 ===============
+RP_EntResetForRespawn
+
+GalaxyRP fix: [Entity System] an entity spawned again in its own slot -- /entedit, /entrotate, a dropped
+/entcut, /entcancel of one -- keeps its struct, and every spawn function is written for a fresh one. So
+whatever the last spawn (or the game since) left in it stayed, and the spawn function went on from there:
+  - a value whose key the record does not have was never read again, and the conversions a spawn
+    function does on it ran once more. A func_door with no "wait" took its default 2 s and turned it into
+    2000 ms; spawned again, 2000 became 2,000,000 -- 33 minutes -- and the door, opened once, stayed open.
+    The same for a func_button's wait (16 minutes pressed) and a trigger_multiple's speed (the delay
+    before target2 fires) when it has a target2;
+  - a key taken out of the record (zykremovekey) kept its value until the map changed: a door whose
+    targetname was removed still answered the old name, and grew no walk-up trigger of its own;
+  - what a spawnflag switches on was never switched off again: a door or trigger edited out of INACTIVE
+    stayed inactive, a func_usable or func_wall out of START_OFF came back solid but invisible, a
+    misc_model_breakable out of it stayed hidden.
+Called by RP_EntRespawnPrepare() (g_entgrab.c), the one step every spawn in place goes through, after
+the entity is out of a team it followed and its children are gone: everything a key can set (the fields
+table -- not the classname, which the record always has, nor the ICARUS parms, which are not kept here),
+and the state a newly made entity starts without (flags, what it draws and sends, what it blocks, whether
+it takes damage, its callbacks and next think, its looping sound), go back to nothing. The spawn function
+then sets up exactly what the record describes, as on a fresh map -- runtime state included: a trigger a
+target_deactivate switched off is active again, a breakable is at full health.
+
+One thing stays: an NPC or vehicle spawner counting down to its next spawn keeps the countdown -- the
+respawn of an NPC that died, or one waiting its turn, is still to come after an edit, as it always was
+(RP_SpawnerKeys() in NPC_spawn.c). The name a team's leader answers for its followers comes back after
+the spawn function, as at map load -- RP_TeamLeaderTakeName() below.
+===============
+*/
+void RP_EntResetForRespawn( gentity_t *e )
+{
+	byte *b = (byte *)e;
+	int i;
+
+	if ( !e || !e->inuse )
+		return;
+
+	for ( i = 0; i < (int)ARRAY_LEN( fields ); i++ )
+	{
+		const field_t *f = &fields[i];
+
+		if ( f->type >= F_PARM1 || !Q_stricmp( f->name, "classname" ) )
+			continue;
+
+		switch ( f->type )
+		{
+		case F_INT:
+			*(int *)( b + f->ofs ) = 0;
+			break;
+		case F_FLOAT:
+			*(float *)( b + f->ofs ) = 0.0f;
+			break;
+		case F_STRING:
+			*(char **)( b + f->ofs ) = NULL;
+			break;
+		case F_VECTOR:
+		case F_ANGLEHACK:
+			VectorClear( (float *)( b + f->ofs ) );
+			break;
+		default:
+			break;
+		}
+	}
+
+	e->flags &= FL_TEAMSLAVE;	// a follower is out of its team by now; kept as it is, not set here
+	e->s.eFlags = 0;
+	e->r.svFlags = 0;
+	e->r.contents = 0;
+	e->s.solid = 0;
+	e->clipmask = 0;
+	e->takedamage = qfalse;
+
+	// an NPC or vehicle spawner counting down to a spawn keeps it: a respawn of an NPC that died, or one
+	// waiting its turn, is still to come after an edit (RP_SpawnerKeys() in NPC_spawn.c)
+	if ( !RP_SpawnerCountingDown( e ) )
+	{
+		e->think = NULL;
+		e->nextthink = 0;
+	}
+	e->reached = NULL;
+	e->blocked = NULL;
+	e->touch = NULL;
+	e->use = NULL;
+	e->pain = NULL;
+	e->die = NULL;
+
+	e->s.loopSound = 0;
+	e->s.loopIsSoundset = qfalse;
+}
+
+/*
+===============
+RP_TeamLeaderTakeName
+
+GalaxyRP fix: [Entity System] at map load G_FindTeams() moves a follower's targetname onto its team's
+leader -- a trigger targets the team through its leader -- after every spawn function has run, so a door
+leading a team named only on a follower builds its walk-up trigger as one without a name does, and answers
+the name from then on. A leader spawned again in its slot (RP_EntResetForRespawn() cleared its name, its
+spawn function ran with only its own) takes it back the same way, from zyk_main_spawn_entity(), once its
+spawn is done: the first follower in its chain whose record names one -- the one G_FindTeams(), and
+RP_TeamLinkEntity() since, linked last -- as G_FindTeams() leaves it. Nothing for any other entity: one
+that is not leading followers, or whose followers have no name.
+===============
+*/
+void RP_TeamLeaderTakeName( gentity_t *e )
+{
+	gentity_t *m;
+	int steps = 0;
+
+	if ( !e || !e->inuse || e->teammaster != e || !e->teamchain )
+		return;
+
+	for ( m = e->teamchain; m && steps < MAX_GENTITIES; m = m->teamchain, steps++ )
+	{
+		const int num = m->s.number;
+		int i;
+
+		if ( !m->inuse || m->teammaster != e )
+			continue;
+
+		for ( i = 0; i + 1 < level.zyk_spawn_strings_values_count[num] && i + 1 < ZYK_MAX_SPAWN_STRING_SLOTS; i += 2 )
+		{
+			const char *key = level.zyk_spawn_strings[num][i];
+			const char *value = level.zyk_spawn_strings[num][i + 1];
+
+			if ( key && value && value[0] && !Q_stricmp( key, "targetname" ) )
+			{
+				e->targetname = G_NewString( value );
+				return;
+			}
+		}
+	}
+}
+
+/*
+===============
 G_ParseField
 
 Takes a key/value pair and sets the binary values
@@ -2585,6 +2721,9 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	if ( ent->inuse )
 	{
 		RP_TeamLinkEntity( ent );
+
+		// GalaxyRP fix: [Entity System] a leader spawned again in place answers its followers' name again
+		RP_TeamLeaderTakeName( ent );
 	}
 
 	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in

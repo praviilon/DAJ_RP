@@ -2508,6 +2508,14 @@ void		RP_EntGrabRespawnInPlace( gentity_t *e );
 // in its slot (/entedit, /entrotate, a dropped /entcut): its sub-BSP entities, its triggers and
 // children, its Ghoul2 model. g_entgrab.c.
 void		RP_EntRespawnPrepare( gentity_t *e );
+// GalaxyRP fix: [Entity System] the last step of RP_EntRespawnPrepare(): what the record's keys set, and the
+// state a fresh entity starts without, back to nothing before the spawn function runs again. g_spawn.c.
+void		RP_EntResetForRespawn( gentity_t *e );
+// GalaxyRP fix: [Entity System] a team leader spawned again in place takes its followers' name back, as
+// G_FindTeams() gives it at map load (zyk_main_spawn_entity). g_spawn.c.
+void		RP_TeamLeaderTakeName( gentity_t *e );
+// GalaxyRP: [Entity System] an NPC or vehicle spawner counting down to a spawn (NPC_spawn.c)
+qboolean	RP_SpawnerCountingDown( const gentity_t *spawner );
 // GalaxyRP: [Entity System] room in the pool to spawn this entity again from its record (g_entgrab.c)
 qboolean	RP_EntRespawnHasRoom( const gentity_t *e );
 // GalaxyRP: [Entity System] team links (teammaster / teamchain, built by G_FindTeams() at map load) kept

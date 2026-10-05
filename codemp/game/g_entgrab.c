@@ -441,6 +441,10 @@ void RP_EntRespawnPrepare( gentity_t *e )
 	// it the same way. (/entedit used to skip this and leaked one model per edit.)
 	if ( e->ghoul2 )
 		trap->G2API_CleanGhoul2Models( &e->ghoul2 );
+
+	// GalaxyRP fix: [Entity System] and the spawn function gets a fresh entity to set up, not what its
+	// last spawn left -- see RP_EntResetForRespawn() in g_spawn.c
+	RP_EntResetForRespawn( e );
 }
 
 qboolean RP_EntRespawnHasRoom( const gentity_t *e )
@@ -1272,6 +1276,180 @@ static gentity_t *RP_GrabPickTarget( gentity_t *ent, const char *cmd )
 
 /*
 ==================
+RP_GrabWarnMapLinks
+
+GalaxyRP: [Entity System] a copy keeps the original's keys, the ones that link it to other entities among
+them, and where those are the map's own the copy goes on working with the map: a copy of half of a map
+door pair joins the pair (team) and moves with it, led by the map's door; a map trigger or button that
+targets the original's name uses the copy too (and a door with a name builds no walk-up trigger of its
+own); the map's scripts may drive a copy with the original's script_targetname; and a copy of a map button
+fires the map door it targets. That is left as it is -- it may be what the admin wants -- and said, once
+the copy is down, with the key to remove to free it (zykremovekey, which works on a spawn in place since
+RP_EntResetForRespawn()). Only links to entities the map made (rpMapEntity): a copy of the admins' own
+entities is linked as they built it, and says nothing.
+==================
+*/
+#define RP_LINK_SHOWN	4	// entities named in one line; the rest are counted
+
+static const char *rp_link_target_keys[] = { "target", "target2", "target3", "target4", "target5", "target6", NULL };
+
+// a record value fit for a print line: no quote, line break or ';' that would end the command
+static const char *RP_GrabLinkText( const char *value, char *buf, int size )
+{
+	int i;
+
+	Q_strncpyz( buf, RP_ShownText( value ), size );
+	for ( i = 0; buf[i]; i++ )
+	{
+		if ( buf[i] == '"' || buf[i] == '\n' || buf[i] == '\r' || buf[i] == ';' )
+			buf[i] = '?';
+	}
+	return buf;
+}
+
+// "44 (trigger_multiple), 50 (func_button)", then "and N more" past RP_LINK_SHOWN
+static void RP_GrabLinkListAdd( char *list, int size, int *count, const gentity_t *e )
+{
+	char cls[48];
+
+	if ( *count < RP_LINK_SHOWN )
+	{
+		Q_strcat( list, size, va( "%s%d (%s)", *count ? ", " : "", e->s.number,
+			RP_GrabLinkText( e->classname ? e->classname : "noclass", cls, sizeof( cls ) ) ) );
+	}
+	( *count )++;
+}
+
+static void RP_GrabLinkListEnd( char *list, int size, int count )
+{
+	if ( count > RP_LINK_SHOWN )
+		Q_strcat( list, size, va( " and %d more", count - RP_LINK_SHOWN ) );
+}
+
+// a live entity the map made, other than the copy
+static qboolean RP_GrabIsMapPeer( const gentity_t *x, const gentity_t *copy )
+{
+	return ( x && x != copy && x->inuse && x->rpMapEntity ) ? qtrue : qfalse;
+}
+
+static void RP_GrabWarnMapLinks( gentity_t *ent, gentity_t *copy )
+{
+	const int num = copy->s.number;
+	const char *value;
+	char list[256], shown[64];
+	gentity_t *x;
+	int count, k;
+
+	// its team: joined, with the map's own in it
+	if ( copy->team && copy->team[0] && !copy->isLogical )
+	{
+		gentity_t *leader = ( copy->teammaster && copy->teammaster->inuse ) ? copy->teammaster : copy;
+		int steps = 0;
+
+		list[0] = '\0';
+		count = 0;
+		for ( x = leader; x && steps < MAX_GENTITIES; x = x->teamchain, steps++ )
+		{
+			if ( RP_GrabIsMapPeer( x, copy ) )
+				RP_GrabLinkListAdd( list, sizeof( list ), &count, x );
+		}
+		RP_GrabLinkListEnd( list, sizeof( list ), count );
+
+		if ( count )
+		{
+			RP_GrabLinkText( copy->team, shown, sizeof( shown ) );
+			if ( copy->item )
+				trap->SendServerCommand( ent->s.number, va( "print \"^3It joined the map's item team %s with %s: only one of the team is out at a time. ^7/entedit %d team zykremovekey^3 takes it out.\n\"",
+					shown, list, num ) );
+			else if ( copy->s.eType == ET_MOVER && leader != copy )
+				trap->SendServerCommand( ent->s.number, va( "print \"^3It joined the map's team %s with %s: they move together, led by %d. ^7/entedit %d team zykremovekey^3 makes it move on its own.\n\"",
+					shown, list, leader->s.number, num ) );
+			else
+				trap->SendServerCommand( ent->s.number, va( "print \"^3It joined the map's team %s with %s. ^7/entedit %d team zykremovekey^3 takes it out.\n\"",
+					shown, list, num ) );
+		}
+	}
+
+	// its name: a target of the map's own, which use the copy too
+	value = RP_GrabRecordValue( num, "targetname" );
+	if ( value && value[0] )
+	{
+		list[0] = '\0';
+		count = 0;
+		RP_FOR_EACH_ENTITY( x )
+		{
+			if ( !RP_GrabIsMapPeer( x, copy ) )
+				continue;
+			for ( k = 0; rp_link_target_keys[k]; k++ )
+			{
+				const char *target = RP_GrabRecordValue( x->s.number, rp_link_target_keys[k] );
+
+				if ( target && !Q_stricmp( target, value ) )
+				{
+					RP_GrabLinkListAdd( list, sizeof( list ), &count, x );
+					break;
+				}
+			}
+		}
+		RP_GrabLinkListEnd( list, sizeof( list ), count );
+
+		if ( count )
+			trap->SendServerCommand( ent->s.number, va( "print \"^3The map's %s %s its name %s, so %s this copy too. ^7/entedit %d targetname zykremovekey^3 frees it.\n\"",
+				list, count == 1 ? "targets" : "target", RP_GrabLinkText( value, shown, sizeof( shown ) ), count == 1 ? "it uses" : "they use", num ) );
+	}
+
+	// its script_targetname: one the map's own have, whose scripts may drive the copy
+	value = RP_GrabRecordValue( num, "script_targetname" );
+	if ( value && value[0] )
+	{
+		list[0] = '\0';
+		count = 0;
+		RP_FOR_EACH_ENTITY( x )
+		{
+			const char *other;
+
+			if ( !RP_GrabIsMapPeer( x, copy ) )
+				continue;
+			other = RP_GrabRecordValue( x->s.number, "script_targetname" );
+			if ( other && !Q_stricmp( other, value ) )
+				RP_GrabLinkListAdd( list, sizeof( list ), &count, x );
+		}
+		RP_GrabLinkListEnd( list, sizeof( list ), count );
+
+		if ( count )
+			trap->SendServerCommand( ent->s.number, va( "print \"^3The map's %s %s its script_targetname %s too: the map's scripts may drive this copy. ^7/entedit %d script_targetname zykremovekey^3 frees it.\n\"",
+				list, count == 1 ? "has" : "have", RP_GrabLinkText( value, shown, sizeof( shown ) ), num ) );
+	}
+
+	// its targets: names of the map's own, which it fires
+	for ( k = 0; rp_link_target_keys[k]; k++ )
+	{
+		value = RP_GrabRecordValue( num, rp_link_target_keys[k] );
+		if ( !value || !value[0] )
+			continue;
+
+		list[0] = '\0';
+		count = 0;
+		RP_FOR_EACH_ENTITY( x )
+		{
+			const char *name;
+
+			if ( !RP_GrabIsMapPeer( x, copy ) )
+				continue;
+			name = RP_GrabRecordValue( x->s.number, "targetname" );
+			if ( name && !Q_stricmp( name, value ) )
+				RP_GrabLinkListAdd( list, sizeof( list ), &count, x );
+		}
+		RP_GrabLinkListEnd( list, sizeof( list ), count );
+
+		if ( count )
+			trap->SendServerCommand( ent->s.number, va( "print \"^3Its %s %s names the map's %s: it fires %s too. ^7/entedit %d %s zykremovekey^3 stops that.\n\"",
+				rp_link_target_keys[k], RP_GrabLinkText( value, shown, sizeof( shown ) ), list, count == 1 ? "that one" : "those", num, rp_link_target_keys[k] ) );
+	}
+}
+
+/*
+==================
 RP_GrabDrop
 
 The second /entcopy or /entcut: the held entity lands where the admin is aiming now. A copy is a new
@@ -1390,6 +1568,8 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 		G_LogPrintf( "%s dropped a copy of entity %d as entity %d at %s\n", pers->netname, num, copy->s.number, originText );
 		trap->SendServerCommand( ent->s.number, va( "print \"Copy of entity %d dropped: entity %d at (%s)%s.\n\"", num, copy->s.number, originText,
 			copy->isLogical ? ", logical" : "" ) );
+		// GalaxyRP: [Entity System] and what of the map it is still linked to
+		RP_GrabWarnMapLinks( ent, copy );
 		return;
 	}
 	else

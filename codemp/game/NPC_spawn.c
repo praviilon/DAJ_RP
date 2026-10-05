@@ -74,7 +74,6 @@ extern void Wampa_SetBolts( gentity_t *self );
 
 // GalaxyRP: [Entity System] NPC and vehicle spawners -- see RP_SpawnerRespawn()
 static void RP_SpawnerQueuedFire( gentity_t *ent );
-static qboolean RP_SpawnerCountingDown( const gentity_t *spawner );
 static void RP_SpawnerScheduleRespawn( gentity_t *spawner );
 
 // PAIN functions...
@@ -2238,8 +2237,9 @@ static void RP_SpawnerKeys( gentity_t *self )
 
 // the spawner is counting down to a spawn -- its delay, waiting to be unseen, its spawn one now, or a
 // waiting respawn's turn -- which a fire now would replace (an entity has one think). Due this very frame
-// but not run yet counts: nextthink is 0 once it has run.
-static qboolean RP_SpawnerCountingDown( const gentity_t *spawner )
+// but not run yet counts: nextthink is 0 once it has run. Also what RP_EntResetForRespawn() (g_spawn.c)
+// leaves alone, so a spawn in place keeps the countdown, as RP_SpawnerKeys() expects.
+qboolean RP_SpawnerCountingDown( const gentity_t *spawner )
 {
 	return ( spawner->nextthink > 0 && ( spawner->think == NPC_Spawn_Go || spawner->think == NPC_ShySpawn ||
 		spawner->think == G_VehicleSpawn || spawner->think == RP_SpawnerSpawnNow || spawner->think == RP_SpawnerQueuedFire ) ) ? qtrue : qfalse;
