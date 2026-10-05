@@ -1834,10 +1834,63 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 		backuprefdef.rdflags |= RDF_NOFOG;
 	}
 
+	// DAJ_RP: [Sky Portal] the renderer now considers this map to have a sky portal until the world
+	// is loaded again -- see cg.skyPortalDrawn and CG_DrawSkyOnlyPass()
+	cg.skyPortalDrawn = qtrue;
+
 	// draw the skybox
 	trap->R_RenderScene( &cg.refdef );
 
 	cg.refdef = backuprefdef;
+}
+
+/*
+==========================
+CG_DrawSkyOnlyPass
+
+DAJ_RP: [Sky Portal] the map's own sky, drawn after an added sky portal has been removed.
+
+The first sky portal scene the renderer is given sets a "this map has a sky portal" flag of its own
+(skyboxportal in rd-vanilla/rd-vulkan, tr.world->skyboxportal in rd-rend2) that only loading the world
+map again clears. While it is set the normal view leaves out every sky surface, on the understanding
+that the portal pass has already drawn the sky, and does not clear the screen first. So once
+/entremove or /entundo cleared CS_SKYBOXORG and the portal pass stopped, nothing drew the sky any more:
+the default renderer showed whatever the last frames left behind (the "outside the map" smear), Vulkan
+its plain clear colour, and rd-rend2 kept redrawing the last portal camera it had stored -- the old
+portal image, turning with the view. vid_restart cured it only because it loads the world again.
+
+This draws the sky the portal pass would have, from the player's own viewpoint: a sky portal scene
+(RDF_SKYBOXPORTAL) without RDF_DRAWSKYBOX, which the renderers treat as "sky surfaces only". The
+normal view then draws everything else over it exactly as it does over a real portal, so the frame
+looks as it did before any portal was added. It renders no entities: called before anything is added
+to this frame's scene, and the renderer hands a scene only the entities added since the last one.
+
+Called from CG_DrawActiveFrame() after CG_CalcScreenEffects(), so that a screen shake has already
+moved cg.refdef.vieworg and this pass lines up with the view drawn after it.
+==========================
+*/
+static void CG_DrawSkyOnlyPass( void )
+{
+	refdef_t skyRefdef;
+
+	if ( cg.refdef.rdflags & RDF_NOWORLDMODEL )
+	{ // hyperspace, or anything else with no world in it: there is no sky to draw
+		return;
+	}
+
+	skyRefdef = cg.refdef;
+	skyRefdef.rdflags |= RDF_SKYBOXPORTAL;
+	skyRefdef.rdflags &= ~RDF_DRAWSKYBOX;
+	skyRefdef.time = cg.time;
+
+	// CG_DrawActiveFrame() fills cg.refdef.areamask in only after this point; take this frame's, so an
+	// area a door has just opened or closed matches the view drawn after it
+	if ( cg.snap )
+	{
+		memcpy( skyRefdef.areamask, cg.snap->areamask, sizeof( skyRefdef.areamask ) );
+	}
+
+	trap->R_RenderScene( &skyRefdef );
 }
 
 /*
@@ -2668,6 +2721,15 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	}
 
 	CG_CalcScreenEffects();
+
+	// DAJ_RP: [Sky Portal] a sky portal this client drew on this map has since been removed: draw the
+	// map's own sky, which the renderer no longer draws by itself -- see CG_DrawSkyOnlyPass(). After
+	// CG_CalcScreenEffects() for the shaken view, and before the blend blob and the packet entities
+	// below, which would otherwise go into this scene instead of the real one.
+	if ( !(cstr && cstr[0]) && cg.skyPortalDrawn )
+	{
+		CG_DrawSkyOnlyPass();
+	}
 
 	// first person blend blobs, done after AnglesToAxis
 	if ( !cg.renderingThirdPerson && cg.predictedPlayerState.pm_type != PM_SPECTATOR ) {

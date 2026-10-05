@@ -1100,6 +1100,14 @@ Ghoul2 Insert End
 	// it and any bars it drew underneath), and on which cg.time -- the Sense Health readout sits there
 	int crosshairAnchorTime;
 	float crosshairAnchorX, crosshairAnchorY;
+
+	// DAJ_RP: [Sky Portal] qtrue once CG_DrawSkyBoxPortal() has rendered a sky portal scene on this
+	// map. The renderer then keeps a "this map has a sky portal" flag of its own until the world is
+	// loaded again, and with it set it no longer draws the map's sky in the normal view -- so once
+	// the portal is removed (CS_SKYBOXORG cleared) CG_DrawSkyOnlyPass() has to draw that sky instead.
+	// Cleared with the rest of cg at CG_Init(), which runs exactly when the renderer's flag is reset
+	// (a map load or a vid_restart, both of which load the world map again).
+	qboolean skyPortalDrawn;
 } cg_t;
 
 #define MAX_TICS	14
