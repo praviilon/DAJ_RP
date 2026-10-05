@@ -634,6 +634,33 @@ idealclass	-	Can only be used by this class/these classes. You can specify use b
 				multiple classes with the use of |, e.g.:
 				"Imperial Medic|Imperial Assassin|Imperial Demolitionist"
 */
+
+/*
+==================
+RP_TriggerRegisterSoundSet
+
+GalaxyRP fix: [Ambient Sets] a trigger's "soundSet" becomes the map-wide ambience when it fires
+(multi_trigger_run sets CS_GLOBAL_AMBIENT_SET), but a client only loads a set whose name is in a
+CS_AMBIENT_SET slot -- or that was the global one when it connected -- and the engine plays nothing for
+a set it has not loaded (S_UpdateAmbientSet). The map's own triggers get their slot from
+G_PrecacheSoundsets() at the end of the map's spawn; one spawned after that (/entadd, /entaddaim,
+/entedit, an entity preset) never did, so it was silent for every player already in the game until
+they reconnected. Its name goes into a slot now, as it spawns: cgame loads a slot that arrives mid-game
+(CG_ConfigStringModified), so the set is ready before the trigger fires and plays at once, and players
+who join later load it with the rest. The name has been checked against sound/sound.txt already
+(RP_EntitySystemSpawnRefused() refuses the entity before its spawn function runs), and a full table
+or gamestate gives slot 0 -- the trigger stays silent, as it was. During the map's spawn there is
+nothing to do here: G_PrecacheSoundsets() does it.
+==================
+*/
+static void RP_TriggerRegisterSoundSet( gentity_t *ent )
+{
+	if ( level.spawning || !ent->soundSet || !ent->soundSet[0] )
+		return;
+
+	G_SoundSetIndex( ent->soundSet );
+}
+
 void SP_trigger_multiple( gentity_t *ent )
 {
 	char	*s;
@@ -685,6 +712,7 @@ void SP_trigger_multiple( gentity_t *ent )
 	}
 
 	InitTrigger( ent );
+	RP_TriggerRegisterSoundSet( ent );
 	trap->LinkEntity ((sharedEntity_t *)ent);
 }
 
@@ -760,6 +788,7 @@ void SP_trigger_once( gentity_t *ent )
 	ent->delay *= 1000;//1 = 1 msec, 1000 = 1 sec
 
 	InitTrigger( ent );
+	RP_TriggerRegisterSoundSet( ent );
 	trap->LinkEntity ((sharedEntity_t *)ent);
 }
 
