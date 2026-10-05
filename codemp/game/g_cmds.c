@@ -19393,6 +19393,45 @@ int check_xp(int currentLevel) {
 
 /*
 ==================
+RP_LevelUpFromXP
+
+DAJ_RP: [XP System] turns the XP a character holds into levels: while it covers the next level's
+check_xp() and the character is under rp_rpg_max_level, that much is taken off and one level counted;
+what is left is kept toward the next one. The levels are then granted in ONE increase_level() call --
+skillpoints, max health and shield still per level in there -- so the player gets one "New Level" line
+however many it was. A character this brings to the cap keeps no XP, as there is no next level to fill.
+Returns the levels gained; adding the XP, saving the row and any message of their own are the callers'
+(Cmd_GiveXp_f(), RP_PayNpcKillReward()), which used to do this each their own way: /givexp set XP to 0
+after a level, throwing any remainder away, and the reward granted level by level, a line each.
+==================
+*/
+static int RP_LevelUpFromXP( gentity_t *ent )
+{
+	int level = ent->client->pers.level;
+	int levels = 0;
+
+	while ( level < rp_rpg_max_level.integer && ent->client->pers.xp >= check_xp( level ) )
+	{
+		ent->client->pers.xp -= check_xp( level );
+		level++;
+		levels++;
+	}
+
+	if ( levels > 0 )
+	{
+		increase_level( ent, qtrue, levels );
+
+		if ( ent->client->pers.level >= rp_rpg_max_level.integer )
+		{
+			ent->client->pers.xp = 0;
+		}
+	}
+
+	return levels;
+}
+
+/*
+==================
 RP_PayNpcKillReward
 
 DAJ_RP: [NPC Rewards] called from player_die() (g_combat.c) for everything that dies, with the attacker it
@@ -19403,8 +19442,8 @@ Whatever its team: a reward is the admin's choice for that spawner. The reward i
 it is paid at most once.
 
 Credits go through add_credits(), so rp_max_rpg_credits caps them. XP carries over from level to level, as
-many levels as it covers, each through increase_level() for its skillpoints, health, shield and message;
-at rp_rpg_max_level there is nothing for XP to do and it is not given, the same refusal /givexp makes. One
+many levels as it covers, through RP_LevelUpFromXP() as /givexp's does; at rp_rpg_max_level there is nothing
+for XP to do and it is not given, the same refusal /givexp makes. One
 write saves credits, XP, level and skillpoints together, and one console line tells the player.
 ==================
 */
@@ -19470,17 +19509,10 @@ void RP_PayNpcKillReward( gentity_t *npc, gentity_t *killer )
 
 	trap->SendServerCommand( killer->s.number, va( "print \"%s\n\"", line ) );
 
-	// zyk: each level the XP covers, as /givexp would grant it; whatever is left counts toward the next one
-	while ( xp_given > 0 && killer->client->pers.level < rp_rpg_max_level.integer &&
-		killer->client->pers.xp >= check_xp( killer->client->pers.level ) )
+	// zyk: each level the XP covers, granted at once -- see RP_LevelUpFromXP()
+	if ( xp_given > 0 )
 	{
-		killer->client->pers.xp -= check_xp( killer->client->pers.level );
-		increase_level( killer, qtrue, 1 );
-	}
-
-	if ( xp_given > 0 && killer->client->pers.level >= rp_rpg_max_level.integer )
-	{ // zyk: this reward reached the cap: as /givexp leaves it, no XP toward a next level
-		killer->client->pers.xp = 0;
+		RP_LevelUpFromXP( killer );
 	}
 
 	if ( credits_given > 0 || xp_given > 0 )
@@ -19544,8 +19576,8 @@ void Cmd_GiveXp_f(gentity_t* ent) {
 	// happens whenever rp_rpg_max_level is lowered below an existing character's level) is refused too.
 	// Same refusal, same wording, as Cmd_LevelGive_f already gives for this case.
 	//
-	// This also makes the "leveled up" message below unconditionally true: with level < the cap,
-	// increase_level(..., 1) always gains exactly one level.
+	// This also makes the "leveled up" message below true whenever it is sent: with level < the cap,
+	// RP_LevelUpFromXP() gains at least one level once the XP reaches the threshold.
 	if (g_entities[client_id].client->pers.level >= rp_rpg_max_level.integer)
 	{
 		trap->SendServerCommand(ent - g_entities, va("print \"^1That player is already at or above the maximum level (%d), operation not done.\n\"", rp_rpg_max_level.integer));
@@ -19563,12 +19595,13 @@ void Cmd_GiveXp_f(gentity_t* ent) {
 	// threshold (a row written under a different check_xp() formula, or edited directly in the
 	// database) could never satisfy "==" again, permanently freezing that character's level with no
 	// symptom other than XP that climbs and never converts. ">=" costs nothing and cannot get stuck.
-	if (g_entities[client_id].client->pers.xp >= check_xp(g_entities[client_id].client->pers.level)) {
-
-		increase_level(&g_entities[client_id], qtrue, 1);
+	//
+	// DAJ_RP: [XP System] through RP_LevelUpFromXP(), which keeps what is left over toward the next level.
+	// This set XP to 0 after the level instead -- the same thing while XP only ever reached its threshold
+	// exactly, but a character holding more (after a /leveldown, whose lower level needs less) lost the
+	// rest. A stored excess big enough now takes the levels it covers, at once, as an NPC reward does.
+	if (RP_LevelUpFromXP(&g_entities[client_id]) > 0) {
 		trap->SendServerCommand(ent - g_entities, va("print \"^2Target player leveled up. Their current level is: ^3%i^2. Their skillpoint count is: ^3%i^2.\n\"", g_entities[client_id].client->pers.level, g_entities[client_id].client->pers.skillpoints));
-		// GalaxyRP (Alex): [XP System] Player levelled up, so their xp is now 0.
-		g_entities[client_id].client->pers.xp = 0;
 	}
 
 	update_chars_table_row_with_current_values(&g_entities[client_id]);
