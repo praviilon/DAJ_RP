@@ -225,7 +225,7 @@ static const char *rp_map_exempt_classes[] = {
 	"misc_model_shield_power_converter", "misc_model_ammo_power_converter", "misc_model_gun_rack",
 	"misc_model_ammo_rack",
 	// decor
-	"misc_model_breakable", "fx_runner", "target_speaker", "misc_exploding_crate", "misc_gas_tank",
+	"misc_model_breakable", "misc_model_cargo_small", "fx_runner", "target_speaker", "misc_exploding_crate", "misc_gas_tank",
 	NULL
 };
 
@@ -734,7 +734,8 @@ static float RP_EntGrabScaleShift( const gentity_t *e )
 {
 	float scale = e->modelScale[2];
 
-	if ( !e->classname || Q_stricmp( e->classname, "misc_model_breakable" ) != 0 )
+	// DAJ_RP: [SP Maps] and the cargo crate, a misc_model_breakable underneath (SP_misc_model_cargo_small)
+	if ( !e->classname || ( Q_stricmp( e->classname, "misc_model_breakable" ) != 0 && Q_stricmp( e->classname, "misc_model_cargo_small" ) != 0 ) )
 		return 0.0f;
 	if ( !( scale > 0.0f ) || scale == 1.0f )
 		return 0.0f;

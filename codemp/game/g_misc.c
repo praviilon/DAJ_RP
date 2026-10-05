@@ -1017,6 +1017,149 @@ void misc_model_breakable_die( gentity_t *self, gentity_t *inflictor, gentity_t 
 }
 
 
+/*
+=================
+misc_model_cargo_small
+
+DAJ_RP: [SP Maps] single player's small cargo crate (Jedi Outcast's kejim_base and kejim_post place it), which
+had no spawn function in MP, so those maps came up without their crates. A misc_model_breakable with single
+player's settings: solid, no damage model, 25 health (an explicit "health" 0 leaves it unbreakable), crate
+debris (material 11) a half as many again (radius 1.5), a small splash when it goes (splashRadius 96,
+splashDamage 1), each only when its key does not say otherwise, and kejim/cargo_small.md3 for a model. Only
+heavy weapons hurt it (FL_DMG_BY_HEAVY_WEAP_ONLY: rockets, explosives, mines, repeater alt fire, vehicles...).
+When it breaks it drops what its spawnflags say, around where it stood:
+
+  MEDPACK (1)    item_medpak_instant
+  SHIELDS (2)    item_shield_sm_instant
+  BACTA (4)      item_medpac, MP's bacta canister
+  BATTERIES (8)  nothing -- MP has no battery item
+
+The spawnflags are those four only: as breakable flags they would mean something else (8 is "no damage
+model"), and single player's difficulty bits, which the kejim maps set too (512, 1024), mean nothing here.
+The record keeps them as the map or the admin wrote them.
+=================
+*/
+#define RP_CARGO_MEDPACK	1
+#define RP_CARGO_SHIELDS	2
+#define RP_CARGO_BACTA		4
+#define RP_CARGO_BATTERIES	8
+
+// the item a crate drops for that flag -- precached for clients now, as a G_SpawnItem() after map load does
+static gitem_t *RP_CargoDropItem( const char *classname )
+{
+	gitem_t *item = BG_FindItem( classname );
+
+	if ( !item )
+	{
+		return NULL;
+	}
+
+	if ( level.rp_map_loaded )
+	{
+		char items[MAX_STRING_CHARS];
+		const int index = (int)( item - bg_itemlist );
+
+		trap->GetConfigstring( CS_ITEMS, items, sizeof( items ) );
+		if ( index >= 0 && index < bg_numItems && ( index >= (int)strlen( items ) || items[index] != '1' ) )
+		{
+			RegisterItem( item );
+			SaveRegisteredItems();
+			G_LogPrintf( "item %s precached after map load (CS_ITEMS rewritten)\n", item->classname );
+		}
+	}
+
+	RegisterItem( item );
+	return item;
+}
+
+static void RP_CargoLaunch( const char *classname, const vec3_t org, float x, float y )
+{
+	gitem_t *item = BG_FindItem( classname );
+	vec3_t where, still;
+
+	if ( !item )
+	{
+		return;
+	}
+
+	VectorSet( where, org[0] + Q_flrand( -1.0f, 1.0f ) * 8 + x, org[1] + Q_flrand( -1.0f, 1.0f ) * 8 + y, org[2] + 16 );
+	VectorClear( still );
+	LaunchItem( item, where, still );
+}
+
+void misc_model_cargo_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath )
+{
+	const int flags = self->genericValue11;
+	vec3_t org;
+
+	// copied first: with no damage model the breakable is freed as it dies
+	VectorCopy( self->r.currentOrigin, org );
+
+	misc_model_breakable_die( self, inflictor, attacker, damage, meansOfDeath );
+
+	// each in its own quadrant, so they do not land on top of each other
+	if ( flags & RP_CARGO_MEDPACK )
+	{
+		RP_CargoLaunch( "item_medpak_instant", org, 16, 16 );
+	}
+	if ( flags & RP_CARGO_SHIELDS )
+	{
+		RP_CargoLaunch( "item_shield_sm_instant", org, -16, 16 );
+	}
+	if ( flags & RP_CARGO_BACTA )
+	{
+		RP_CargoLaunch( "item_medpac", org, -16, -16 );
+	}
+}
+
+void SP_misc_model_cargo_small( gentity_t *ent )
+{
+	const int flags = ent->spawnflags;
+	int material = 0;
+
+	ent->genericValue11 = flags & ( RP_CARGO_MEDPACK | RP_CARGO_SHIELDS | RP_CARGO_BACTA );
+
+	if ( flags & RP_CARGO_MEDPACK )
+	{
+		RP_CargoDropItem( "item_medpak_instant" );
+	}
+	if ( flags & RP_CARGO_SHIELDS )
+	{
+		RP_CargoDropItem( "item_shield_sm_instant" );
+	}
+	if ( flags & RP_CARGO_BACTA )
+	{
+		RP_CargoDropItem( "item_medpac" );
+	}
+
+	G_SpawnInt( "health", "25", &ent->health );
+	G_SpawnInt( "splashRadius", "96", &ent->splashRadius );
+	G_SpawnInt( "splashDamage", "1", &ent->splashDamage );
+
+	// its key's .md3 if the server has it, else the crate -- RP_DispenserModel() in g_spawn.c
+	RP_DispenserModel( ent, RP_MODEL_CARGO_SMALL );
+
+	ent->spawnflags = 1 | 8;	// SOLID, NO_DMODEL
+
+	SP_misc_model_breakable( ent );
+
+	if ( !ent->inuse || ent->think == G_FreeEntity )
+	{
+		return;
+	}
+
+	// read again after the breakable's own defaults (material 8, radius 1)
+	G_SpawnInt( "material", "11", &material );
+	ent->material = (material_t)material;
+	G_SpawnFloat( "radius", "1.5", &ent->radius );
+
+	ent->flags |= FL_DMG_BY_HEAVY_WEAP_ONLY;
+	if ( ent->takedamage )
+	{
+		ent->die = misc_model_cargo_die;
+	}
+}
+
 void misc_model_throw_at_target4( gentity_t *self, gentity_t *activator )
 {
 	vec3_t	pushDir, kvel;
@@ -2612,12 +2755,8 @@ void SP_misc_ammo_floor_unit(gentity_t *ent)
 		ent->health = 60;
 	}
 
-	if (!ent->model || !ent->model[0])
-	{
-		ent->model = "/models/items/a_pwr_converter.md3";
-	}
-
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// DAJ_RP: [Dispensers] its "model" key's .md3 if the server has it, else its own -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_AMMO_FLOOR_UNIT ) );
 
 	ent->s.eFlags = 0;
 	ent->r.svFlags |= SVF_PLAYER_USABLE;
@@ -2699,12 +2838,8 @@ void SP_misc_shield_floor_unit( gentity_t *ent )
 		ent->health = 60;
 	}
 
-	if (!ent->model || !ent->model[0])
-	{
-		ent->model = "/models/items/a_shield_converter.md3";
-	}
-
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// DAJ_RP: [Dispensers] its "model" key's .md3 if the server has it, else its own -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_SHIELD_FLOOR_UNIT ) );
 
 	ent->s.eFlags = 0;
 	ent->r.svFlags |= SVF_PLAYER_USABLE;
@@ -2747,10 +2882,12 @@ void SP_misc_shield_floor_unit( gentity_t *ent )
 
 
 /*QUAKED misc_model_shield_power_converter (1 0 0) (-16 -16 -16) (16 16 16)
-model="models/items/psd_big.md3"
+model="models/items/power_converter.md3"
 Gives shield energy when used.
 
-"count" - the amount of ammo given when used (default 200)
+"count" - max charge value (default 200)
+"chargerate" - recharge 1 point every this many milliseconds (default 100)
+"nodrain" - don't drain power from me
 */
 //------------------------------------------------------------
 void SP_misc_model_shield_power_converter( gentity_t *ent )
@@ -2764,10 +2901,9 @@ void SP_misc_model_shield_power_converter( gentity_t *ent )
 	VectorSet (ent->r.maxs, 16, 16, 16);
 
 	// zyk: if no model is set, use default model
-	if (!ent->model)
-		ent->model = "models/items/psd_sm.md3";
-
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// DAJ_RP: [Dispensers] the power converter, as the ammo and health converters have (psd_sm.md3 is not
+	// under models/items), and for an empty key or one whose .md3 the server has not -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_POWER_CONVERTER ) );
 
 	ent->s.eFlags = 0;
 	ent->r.svFlags |= SVF_PLAYER_USABLE;
@@ -2779,7 +2915,14 @@ void SP_misc_model_shield_power_converter( gentity_t *ent )
 	ent->genericValue4 = ent->count; //initial value
 	ent->think = check_recharge;
 
-	ent->s.maxhealth = ent->s.health = ent->count;
+	// DAJ_RP: [Dispensers] "nodrain", as on misc_shield_floor_unit: shield_power_converter_use() already
+	// honoured it, nothing read it. A unit that never drains shows no fill bar.
+	G_SpawnInt("nodrain", "0", &ent->genericValue12);
+
+	if (!ent->genericValue12)
+	{
+		ent->s.maxhealth = ent->s.health = ent->count;
+	}
 	ent->s.shouldtarget = qtrue;
 	ent->s.teamowner = 0;
 	ent->s.owner = ENTITYNUM_NONE;
@@ -2794,7 +2937,13 @@ void SP_misc_model_shield_power_converter( gentity_t *ent )
 
 	//G_SoundIndex("sound/movers/objects/useshieldstation.wav");
 
-	ent->s.modelindex2 = G_ModelIndex("/models/items/psd_big.md3");	// Precache model
+	// DAJ_RP: [Dispensers] its sounds, as misc_shield_floor_unit has them. genericValue7 is the sound played
+	// when it stops giving and when the player lets go (check_recharge()); it was never set, so that was
+	// sound 0 -- an empty name every client tried to load ("S_findname: empty name"). The psd_big.md3 it
+	// registered as a second model is gone: an ET_GENERAL entity never draws one, so it only took a slot.
+	G_SoundIndex("sound/interface/shieldcon_run");
+	ent->genericValue7 = G_SoundIndex("sound/interface/shieldcon_done");
+	G_SoundIndex("sound/interface/shieldcon_empty");
 }
 
 
@@ -2803,9 +2952,11 @@ void SP_misc_model_shield_power_converter( gentity_t *ent )
 EnergyAmmoShieldStationSettings
 ================
 */
+// DAJ_RP: [Dispensers] "count" and now "chargerate" too, as the floor units read them. With no chargerate
+// (genericValue5 0) check_recharge() refilled it by 1 every server frame, so how fast depended on sv_fps.
 void EnergyAmmoStationSettings(gentity_t *ent)
 {
-	G_SpawnInt( "count", "200", &ent->count );
+	EnergyShieldStationSettings( ent );
 }
 
 /*
@@ -2827,78 +2978,90 @@ ammo_power_converter_use
 // - It drained 3 per use whether or not it gave anything, and never stopped its loop sound. It now
 //   drains only when it actually gave something, and stops the sound when it doesn't.
 #define RP_AMMO_CONVERTER_DRAIN	3	// the charge one giving use costs -- unchanged from before
+// DAJ_RP: [Dispensers] and its sounds are now the ammo floor unit's: ammocon_run while it gives, ammocon_done
+// when it stops giving (and, from check_recharge(), when the player lets go -- that sound was 0, an empty
+// name every client tried to load: "S_findname: empty name"), ammocon_empty when someone who needs ammo
+// uses it empty, repeated every chargerate + 100 ms as the floor unit does. It gives every 100 ms; between
+// those uses nothing changes (it used to switch its loop sound off on every use in between).
 void ammo_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *activator)
 {
-	int			stop = 1;
-
 	if (!activator || !activator->client)
 	{
 		return;
 	}
 
-	if (self->setTime < level.time)
+	if (self->setTime >= level.time)
 	{
-		self->setTime = level.time + 100;
+		return;
+	}
+	self->setTime = level.time + 100;
 
-		if (self->genericValue12 || self->count > 0)	// Has it got any power left?
+	if (self->genericValue12 || self->count > 0)	// Has it got any power left?
+	{
+		int i;
+		qboolean gave = qfalse;
+
+		for (i = AMMO_BLASTER; i < AMMO_MAX; i++)
 		{
-			int i;
-			qboolean gave = qfalse;
+			int max_ammo = RP_MaxAmmo(i);
+			int add = max_ammo * 0.1;
 
-			for (i = AMMO_BLASTER; i < AMMO_MAX; i++)
+			if (!RP_DispenserMayGiveAmmo(activator, i) || activator->client->ps.ammo[i] >= max_ammo)
 			{
-				int max_ammo = RP_MaxAmmo(i);
-				int add = max_ammo * 0.1;
-
-				if (!RP_DispenserMayGiveAmmo(activator, i) || activator->client->ps.ammo[i] >= max_ammo)
-				{
-					continue;
-				}
-
-				if (add < 1)
-				{
-					add = 1;
-				}
-
-				Add_Ammo(activator, i, add);
-				gave = qtrue;
+				continue;
 			}
 
-			if (gave)
+			if (add < 1)
 			{
-				if (!self->s.loopSound)
-				{
-					self->s.loopSound = G_SoundIndex("sound/player/pickupshield.wav");
-				}
-
-				if (!self->genericValue12)
-				{
-					self->count -= RP_AMMO_CONVERTER_DRAIN;
-					if (self->count < 0)
-					{
-						self->count = 0;
-					}
-				}
-				stop = 0;
-
-				self->fly_sound_debounce_time = level.time + 500;
-				self->activator = activator;
+				add = 1;
 			}
+
+			Add_Ammo(activator, i, add);
+			gave = qtrue;
 		}
-		else if (RP_PlayerNeedsDispenserAmmo(activator))
-		{ // empty and held by someone who needs ammo: keep hold of it so it does not recharge until they
-		  // let go. check_recharge() refills a converter with no activator by 1 every frame (it has no
-		  // "chargerate"), which otherwise matched the drain and let a held, empty converter keep giving.
+
+		if (gave)
+		{
+			if (!self->s.loopSound)
+			{
+				self->s.loopSound = G_SoundIndex("sound/interface/ammocon_run");
+				self->s.loopIsSoundset = qfalse;
+			}
+
+			if (!self->genericValue12)
+			{
+				self->count -= RP_AMMO_CONVERTER_DRAIN;
+				if (self->count < 0)
+				{
+					self->count = 0;
+				}
+			}
+
 			self->fly_sound_debounce_time = level.time + 500;
 			self->activator = activator;
+			return;
 		}
 	}
-
-	if (stop)
-	{
+	else if (RP_PlayerNeedsDispenserAmmo(activator))
+	{ // empty and held by someone who needs ammo: keep hold of it so it does not recharge until they
+	  // let go. check_recharge() refills a converter with no activator, which otherwise matched the
+	  // drain and let a held, empty converter keep giving.
 		self->s.loopSound = 0;
 		self->s.loopIsSoundset = qfalse;
+		G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/interface/ammocon_empty"));
+		self->setTime = level.time + self->genericValue5 + 100;
+		self->fly_sound_debounce_time = level.time + 500;
+		self->activator = activator;
+		return;
 	}
+
+	// nothing given: the player is full (or needs nothing it has to give). If it was running, it is done.
+	if (self->s.loopSound)
+	{
+		G_Sound(self, CHAN_AUTO, self->genericValue7);
+	}
+	self->s.loopSound = 0;
+	self->s.loopIsSoundset = qfalse;
 }
 
 
@@ -2906,7 +3069,8 @@ void ammo_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *act
 model="models/items/power_converter.md3"
 Gives ammo energy when used.
 
-"count" - the amount of ammo given when used (default 200)
+"count" - max charge value (default 200)
+"chargerate" - recharge 1 point every this many milliseconds (default 100)
 "nodrain" - don't drain power from me
 */
 //------------------------------------------------------------
@@ -2920,7 +3084,9 @@ void SP_misc_model_ammo_power_converter( gentity_t *ent )
 	VectorSet (ent->r.mins, -16, -16, -16);
 	VectorSet (ent->r.maxs, 16, 16, 16);
 
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// DAJ_RP: [Dispensers] a default model, as the shield and health converters have: with no "model" key
+	// this registered no model at all and the converter was invisible (but solid) -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_POWER_CONVERTER ) );
 
 	ent->s.eFlags = 0;
 	ent->r.svFlags |= SVF_PLAYER_USABLE;
@@ -2950,6 +3116,11 @@ void SP_misc_model_ammo_power_converter( gentity_t *ent )
 	trap->LinkEntity ((sharedEntity_t *)ent);
 
 	//G_SoundIndex("sound/movers/objects/useshieldstation.wav");
+
+	// DAJ_RP: [Dispensers] the ammo floor unit's sounds -- see ammo_power_converter_use()
+	G_SoundIndex("sound/interface/ammocon_run");
+	ent->genericValue7 = G_SoundIndex("sound/interface/ammocon_done");
+	G_SoundIndex("sound/interface/ammocon_empty");
 }
 
 /*
@@ -2957,9 +3128,10 @@ void SP_misc_model_ammo_power_converter( gentity_t *ent )
 EnergyHealthStationSettings
 ================
 */
+// DAJ_RP: [Dispensers] "count" and "chargerate", as the shield units read them
 void EnergyHealthStationSettings(gentity_t *ent)
 {
-	G_SpawnInt( "count", "200", &ent->count );
+	EnergyShieldStationSettings( ent );
 }
 
 /*
@@ -2967,6 +3139,10 @@ void EnergyHealthStationSettings(gentity_t *ent)
 health_power_converter_use
 ================
 */
+// DAJ_RP: [Dispensers] it drains now, as the shield converter does: each heal takes what it gave from its
+// charge ("count"), an empty one gives nothing, plays shieldcon_empty and recharges ("chargerate") once the
+// player lets go -- held empty, it stays held, so it gives no trickle -- and "nodrain" keeps it full. The
+// line that took the charge was commented out, so "count" did nothing and it healed without end.
 void health_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *activator)
 {
 	int dif,add;
@@ -2982,12 +3158,13 @@ void health_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *a
 		if (!self->s.loopSound)
 		{
 			self->s.loopSound = G_SoundIndex("sound/player/pickuphealth.wav");
+			self->s.loopIsSoundset = qfalse;
 		}
 		self->setTime = level.time + 100;
 
 		dif = activator->client->ps.stats[STAT_MAX_HEALTH] - activator->health;
 
-		if (dif > 0)					// Already at full armor?
+		if (dif > 0)					// Already at full health?
 		{
 			if (dif >/*MAX_AMMO_GIVE*/5)
 			{
@@ -3003,7 +3180,14 @@ void health_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *a
 				add = self->count;
 			}
 
-			//self->count -= add;
+			if (!self->genericValue12)
+			{
+				self->count -= add;
+			}
+			if (self->count <= 0)
+			{
+				self->setTime = 0;
+			}
 			stop = 0;
 
 			self->fly_sound_debounce_time = level.time + 500;
@@ -3013,19 +3197,36 @@ void health_power_converter_use( gentity_t *self, gentity_t *other, gentity_t *a
 		}
 	}
 
-	if (stop)
+	if (stop || self->count <= 0)
 	{
+		if (self->s.loopSound && self->setTime < level.time)
+		{
+			if (self->count <= 0)
+			{
+				G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/interface/shieldcon_empty"));
+			}
+			else
+			{
+				G_Sound(self, CHAN_AUTO, self->genericValue7);
+			}
+		}
 		self->s.loopSound = 0;
 		self->s.loopIsSoundset = qfalse;
+		if (self->setTime < level.time)
+		{
+			self->setTime = level.time + self->genericValue5+100;
+		}
 	}
 }
 
 
 /*QUAKED misc_model_health_power_converter (1 0 0) (-16 -16 -16) (16 16 16)
 model="models/items/power_converter.md3"
-Gives ammo energy when used.
+Gives health when used.
 
-"count" - the amount of ammo given when used (default 200)
+"count" - max charge value (default 200)
+"chargerate" - recharge 1 point every this many milliseconds (default 100)
+"nodrain" - don't drain power from me
 */
 //------------------------------------------------------------
 void SP_misc_model_health_power_converter( gentity_t *ent )
@@ -3039,10 +3240,8 @@ void SP_misc_model_health_power_converter( gentity_t *ent )
 	VectorSet (ent->r.maxs, 16, 16, 16);
 
 	// zyk: if no model is set, use default model
-	if (!ent->model)
-		ent->model = "models/items/power_converter.md3";
-
-	ent->s.modelindex = G_ModelIndex( ent->model );
+	// DAJ_RP: [Dispensers] also for an empty key, or one whose .md3 the server has not -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_POWER_CONVERTER ) );
 
 	ent->s.eFlags = 0;
 	ent->r.svFlags |= SVF_PLAYER_USABLE;
@@ -3056,7 +3255,13 @@ void SP_misc_model_health_power_converter( gentity_t *ent )
 	ent->genericValue4 = ent->count; //initial value
 	ent->think = check_recharge;
 
-	//ent->s.maxhealth = ent->s.health = ent->count;
+	// DAJ_RP: [Dispensers] "nodrain", and the fill bar of one that drains -- see health_power_converter_use()
+	G_SpawnInt("nodrain", "0", &ent->genericValue12);
+
+	if (!ent->genericValue12)
+	{
+		ent->s.maxhealth = ent->s.health = ent->count;
+	}
 	ent->s.shouldtarget = qtrue;
 	ent->s.teamowner = 0;
 	ent->s.owner = ENTITYNUM_NONE;
@@ -3070,6 +3275,7 @@ void SP_misc_model_health_power_converter( gentity_t *ent )
 	//G_SoundIndex("sound/movers/objects/useshieldstation.wav");
 	G_SoundIndex("sound/player/pickuphealth.wav");
 	ent->genericValue7 = G_SoundIndex("sound/interface/shieldcon_done");
+	G_SoundIndex("sound/interface/shieldcon_empty");
 
 	if (level.gametype == GT_SIEGE)
 	{ //show on radar from everywhere
@@ -4281,7 +4487,10 @@ REPEATER - Puts one or more repeater guns on the rack.
 ROCKET - Puts one or more rocket launchers on the rack.
 */
 
-void GunRackAddItem( gitem_t *gun, vec3_t org, vec3_t angs, float ffwd, float fright, float fup )
+// DAJ_RP: [Dispensers] rack is the rack the item is put on: the item is its child (RP_MarkChild()), so the
+// entity commands that remove the rack or spawn it again in place take its items with it, and the spawn
+// puts fresh ones up -- they stayed behind, floating, after /entremove, and doubled with every /entedit.
+void GunRackAddItem( gentity_t *rack, gitem_t *gun, vec3_t org, vec3_t angs, float ffwd, float fright, float fup )
 {
 	vec3_t		fwd, right;
 	gentity_t	*it_ent = G_Spawn();
@@ -4410,6 +4619,11 @@ void GunRackAddItem( gitem_t *gun, vec3_t org, vec3_t angs, float ffwd, float fr
 			it_ent->s.eFlags |= EF_DROPPEDWEAPON;
 
 		trap->LinkEntity( (sharedEntity_t *)it_ent );
+
+		if ( rack )
+		{
+			RP_MarkChild( rack, it_ent );
+		}
 	}
 }
 
@@ -4471,11 +4685,13 @@ void SP_misc_model_gun_rack( gentity_t *ent )
 	{
 		for ( i = 0; i < ct; i++ )
 		{
-			GunRackAddItem( itemList[i], ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 2, ( i - 1 ) * 9 + Q_flrand(-1.0f, 1.0f) * 2, ofz[i] );
+			GunRackAddItem( ent, itemList[i], ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 2, ( i - 1 ) * 9 + Q_flrand(-1.0f, 1.0f) * 2, ofz[i] );
 		}
 	}
 
-	ent->s.modelindex = G_ModelIndex( "models/map_objects/kejim/weaponsrack.md3" );
+	// DAJ_RP: [Dispensers] its "model" key's .md3 if the server has it (single player ignored the key and
+	// always drew the kejim rack; the base maps name imperial/ ones), else that one -- RP_DispenserModel()
+	ent->s.modelindex = G_ModelIndex( RP_DispenserModel( ent, RP_MODEL_GUN_RACK ) );
 
 	G_SetOrigin( ent, ent->s.origin );
 	G_SetAngles( ent, ent->s.angles );
@@ -4581,7 +4797,7 @@ void spawn_rack_goods( gentity_t *ent )
 	{
 		for ( i = 0; i < ct; i++ )
 		{
-			GunRackAddItem( itemList[i], ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 0.5f, (i-1)* 8, 7.0f );
+			GunRackAddItem( ent, itemList[i], ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 0.5f, (i-1)* 8, 7.0f );
 		}
 	}
 
@@ -4619,7 +4835,7 @@ void spawn_rack_goods( gentity_t *ent )
 			//	the gun so we don't put the pack on the same spot..so pick either the left or right side
 			pos = (Q_flrand(0.0f, 1.0f) > .5 ) ? -1 : 1;
 
-			GunRackAddItem( it, ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 2, (Q_flrand(0.0f, 1.0f) * 6 + 4 ) * pos, v_off );
+			GunRackAddItem( ent, it, ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 2, (Q_flrand(0.0f, 1.0f) * 6 + 4 ) * pos, v_off );
 		}
 	}
 
@@ -4637,10 +4853,11 @@ void spawn_rack_goods( gentity_t *ent )
 			pos *= -1;
 		}
 
-		GunRackAddItem( health, ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 0.5f, (Q_flrand(0.0f, 1.0f) * 4 + 4 ) * pos, 24 );
+		GunRackAddItem( ent, health, ent->s.origin, ent->s.angles, Q_flrand(-1.0f, 1.0f) * 0.5f, (Q_flrand(0.0f, 1.0f) * 4 + 4 ) * pos, 24 );
 	}
 
-	ent->s.modelindex = G_ModelIndex( "models/map_objects/kejim/weaponsrung.md3" );
+	// DAJ_RP: [Dispensers] the model SP_misc_model_ammo_rack() chose -- see SP_misc_model_gun_rack()
+	ent->s.modelindex = G_ModelIndex( ( ent->model && ent->model[0] ) ? ent->model : RP_MODEL_AMMO_RACK );
 
 	G_SetOrigin( ent, ent->s.origin );
 	G_SetAngles( ent, ent->s.angles );
@@ -4703,6 +4920,9 @@ void SP_misc_model_ammo_rack( gentity_t *ent )
 	{
 		RegisterItem( BG_FindItem( "item_medpak_instant" ));
 	}
+
+	// DAJ_RP: [Dispensers] which model it shows, decided while its keys are read -- see SP_misc_model_gun_rack()
+	RP_DispenserModel( ent, RP_MODEL_AMMO_RACK );
 
 	ent->think = spawn_rack_goods;
 	ent->nextthink = level.time + 100;

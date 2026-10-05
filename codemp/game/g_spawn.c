@@ -354,6 +354,7 @@ void SP_misc_model(gentity_t *ent);
 void SP_misc_model_static(gentity_t *ent);
 void SP_misc_exploding_crate( gentity_t *ent ); // zyk: added this function
 void SP_misc_model_breakable( gentity_t *ent ) ;
+void SP_misc_model_cargo_small( gentity_t *ent );	// DAJ_RP: [SP Maps] g_misc.c
 void SP_rp_light( gentity_t *ent );
 void SP_misc_gas_tank( gentity_t *ent ); // zyk: added this function
 void SP_misc_G2model(gentity_t *ent);
@@ -660,6 +661,7 @@ spawn_t	spawns[] = {
 	{ "misc_model_ammo_power_converter",	SP_misc_model_ammo_power_converter },
 	{ "misc_model_ammo_rack",				SP_misc_model_ammo_rack}, // zyk: added this code
 	{ "misc_model_breakable",				SP_misc_model_breakable },
+	{ "misc_model_cargo_small",				SP_misc_model_cargo_small },	// DAJ_RP: [SP Maps]
 	{ "misc_model_gun_rack",				SP_misc_model_gun_rack}, // zyk: added this code
 	{ "misc_model_health_power_converter",	SP_misc_model_health_power_converter },
 	{ "misc_model_shield_power_converter",	SP_misc_model_shield_power_converter },
@@ -2396,9 +2398,129 @@ qboolean RP_RefuseAtRuntime( gentity_t *ent, const char *reason )
 	return qtrue;
 }
 
+/*
+=================
+RP_ModelKeyClass
+
+DAJ_RP: [Dispensers] the classes whose "model" key is optional -- with none, the spawn function shows a
+model of its own: the ammo and shield floor units, the three model power converters, the two racks and the
+cargo crate. On one the Entity System makes, RP_EntitySystemSpawnRefused() checks a "model" key as it checks
+a misc_model_breakable's -- the file must be on the server and be an .md3 -- and that the model it will
+show, the key's or its own, gets a slot: a typo used to take a model slot for good and leave an invisible
+station, and a full table an invisible one. Any other one (the map's own) is not refused: its spawn
+function shows its own model instead and logs why -- RP_DispenserModel(). NULL for any other class.
+=================
+*/
+typedef struct {
+	const char	*classname;
+	const char	*defaultModel;
+	qboolean	breakable;	// spawned as a misc_model_breakable: it registers the breakable's sound
+} rpModelKeyClass_t;
+
+static const rpModelKeyClass_t rp_model_key_classes[] = {
+	{ "misc_ammo_floor_unit",				RP_MODEL_AMMO_FLOOR_UNIT,	qfalse },
+	{ "misc_shield_floor_unit",				RP_MODEL_SHIELD_FLOOR_UNIT,	qfalse },
+	{ "misc_model_ammo_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
+	{ "misc_model_shield_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
+	{ "misc_model_health_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse },
+	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse },
+	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse },
+	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue },
+};
+
+static const rpModelKeyClass_t *RP_ModelKeyClass( const char *classname )
+{
+	int i;
+
+	if ( !classname )
+		return NULL;
+
+	for ( i = 0; i < (int)ARRAY_LEN( rp_model_key_classes ); i++ )
+	{
+		if ( !Q_stricmp( classname, rp_model_key_classes[i].classname ) )
+			return &rp_model_key_classes[i];
+	}
+
+	return NULL;
+}
+
+/*
+=================
+RP_FindModelFile / RP_DispenserModel
+
+DAJ_RP: [Dispensers] RP_FindModelFile(): where a model key's file is -- as typed (1), or under models/ with
+".md3" added when the name has no extension (2, the path in candidate) -- the lookup misc_model_breakable
+has always had in RP_EntitySystemSpawnRefused(); 0 when neither is on the server.
+
+RP_DispenserModel(): the model a dispenser, rack or cargo crate shows (RP_ModelKeyClass()), set in
+ent->model: its "model" key's file, found as above and an .md3, or defaultModel -- with no key, and, for
+an entity the Entity System did not make (that one was refused instead), with a key whose file is not on
+the server or is not an .md3, which is logged.
+=================
+*/
+static int RP_FindModelFile( const char *model, char *candidate, int candidateSize )
+{
+	const char *base;
+	const char *path = model;
+	qboolean hasExtension;
+
+	if ( !model || !model[0] )
+		return 0;
+
+	if ( RP_FileExists( model ) )
+		return 1;
+
+	base = strrchr( model, '/' );
+	while ( *path == '/' )
+		path++;
+	base = base ? base + 1 : path;
+	hasExtension = strchr( base, '.' ) ? qtrue : qfalse;
+
+	if ( (int)( strlen( path ) + 7 + 4 ) >= candidateSize )
+		return 0;
+
+	Com_sprintf( candidate, candidateSize, "%s%s%s", Q_stricmpn( path, "models/", 7 ) ? "models/" : "",
+		path, hasExtension ? "" : ".md3" );
+
+	return RP_FileExists( candidate ) ? 2 : 0;
+}
+
+static qboolean RP_IsMd3Name( const char *model )
+{
+	const size_t len = model ? strlen( model ) : 0;
+
+	return ( len >= 5 && Q_stricmp( model + len - 4, ".md3" ) == 0 ) ? qtrue : qfalse;
+}
+
+const char *RP_DispenserModel( gentity_t *ent, const char *defaultModel )
+{
+	char candidate[MAX_QPATH];
+	int where;
+
+	if ( !ent->model || !ent->model[0] )
+	{
+		ent->model = (char *)defaultModel;
+		return ent->model;
+	}
+
+	where = RP_FindModelFile( ent->model, candidate, sizeof( candidate ) );
+	if ( where == 2 )
+		ent->model = G_NewStringRaw( candidate );
+
+	if ( where && RP_IsMd3Name( ent->model ) )
+		return ent->model;
+
+	G_LogPrintf( "%s %d at %s: model %s %s; %s is shown instead\n", ent->classname ? ent->classname : "noclass",
+		ent->s.number, vtos( ent->s.origin ), RP_ShownText( ent->model ),
+		where ? "is not an .md3 model" : "is not on the server", defaultModel );
+	ent->model = (char *)defaultModel;
+	return ent->model;
+}
+
 qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 {
 	qboolean breakable, md3Mover;
+	const rpModelKeyClass_t *keyClass;
 
 	level.rp_spawn_refusal[0] = '\0';
 
@@ -2425,40 +2547,45 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 	breakable = ( Q_stricmp( ent->classname, "misc_model_breakable" ) == 0 ) ? qtrue : qfalse;
 	md3Mover = ( Q_stricmpn( ent->classname, "func_", 5 ) == 0 && ent->model && ent->model[0] &&
 		ent->model[0] != '*' && ent->model[0] != '#' ) ? qtrue : qfalse;
+	keyClass = RP_ModelKeyClass( ent->classname );
 
-	if ( breakable || md3Mover )
+	if ( breakable || md3Mover || ( keyClass && ent->model && ent->model[0] ) )
 	{
 		const char *model = ent->model;
+		char candidate[MAX_QPATH];
+		int where;
 
 		if ( !model || !model[0] )
 			return RP_SpawnRefuse( ent, "it has no model" );
 
-		if ( !RP_FileExists( model ) )
-		{
-			char candidate[MAX_QPATH];
-			const char *base = strrchr( model, '/' );
-			const char *path = model;
-			qboolean hasExtension;
-
-			while ( *path == '/' )
-				path++;
-			base = base ? base + 1 : path;
-			hasExtension = strchr( base, '.' ) ? qtrue : qfalse;
-
-			if ( (int)( strlen( path ) + 7 + 4 ) >= (int)sizeof( candidate ) )
-				return RP_SpawnRefuse( ent, va( "model %s is not on the server", model ) );
-
-			Com_sprintf( candidate, sizeof( candidate ), "%s%s%s", Q_stricmpn( path, "models/", 7 ) ? "models/" : "",
-				path, hasExtension ? "" : ".md3" );
-
-			if ( !RP_FileExists( candidate ) )
-				return RP_SpawnRefuse( ent, va( "model %s is not on the server", model ) );
-
+		// DAJ_RP: [Dispensers] the lookup, now shared with RP_DispenserModel() -- unchanged
+		where = RP_FindModelFile( model, candidate, sizeof( candidate ) );
+		if ( !where )
+			return RP_SpawnRefuse( ent, va( "model %s is not on the server", model ) );
+		if ( where == 2 )
 			ent->model = G_NewStringRaw( candidate );
-		}
 
-		if ( breakable && ( strlen( ent->model ) < 5 || Q_stricmp( ent->model + strlen( ent->model ) - 4, ".md3" ) != 0 ) )
+		if ( ( breakable || keyClass ) && !RP_IsMd3Name( ent->model ) )
 			return RP_SpawnRefuse( ent, va( "model %s is not an .md3 model", ent->model ) );
+	}
+
+	// DAJ_RP: [Dispensers] the one model a dispenser, rack or cargo crate registers -- its key's, checked
+	// above, or its own (and the cargo crate, a breakable that can always be damaged, its sound) -- has to
+	// get a slot, as a misc_model_breakable's below. See RP_ModelKeyClass().
+	if ( keyClass )
+	{
+		const char *names[1];
+		char reason[256];
+		int otherBytes = 0;
+
+		names[0] = ( ent->model && ent->model[0] ) ? ent->model : keyClass->defaultModel;
+		if ( keyClass->breakable && !RP_SoundRegistered( RP_BREAKABLE_SOUND ) )
+			otherBytes = (int)strlen( RP_BREAKABLE_SOUND ) + 1;
+
+		if ( !RP_SlotRoomFor( CS_MODELS, names, 1, otherBytes, reason, sizeof( reason ) ) )
+			return RP_SpawnRefuse( ent, reason );
+
+		return qfalse;
 	}
 
 	// GalaxyRP: [Slot Reuse] every model name the spawn function is about to register has to get a
