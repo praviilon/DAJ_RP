@@ -1108,6 +1108,10 @@ Ghoul2 Insert End
 	// Cleared with the rest of cg at CG_Init(), which runs exactly when the renderer's flag is reset
 	// (a map load or a vid_restart, both of which load the world map again).
 	qboolean skyPortalDrawn;
+
+	// DAJ_RP: [Sky Portal] the area mask the previous frame's world view was given (CG_DrawActiveFrame()
+	// keeps it), which CG_DrawSkyOnlyPass() hands its sky pass instead of this frame's -- see there.
+	byte lastViewAreamask[MAX_MAP_AREA_BYTES];
 } cg_t;
 
 #define MAX_TICS	14

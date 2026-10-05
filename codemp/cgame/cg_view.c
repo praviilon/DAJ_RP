@@ -1883,12 +1883,19 @@ static void CG_DrawSkyOnlyPass( void )
 	skyRefdef.rdflags &= ~RDF_DRAWSKYBOX;
 	skyRefdef.time = cg.time;
 
-	// CG_DrawActiveFrame() fills cg.refdef.areamask in only after this point; take this frame's, so an
-	// area a door has just opened or closed matches the view drawn after it
-	if ( cg.snap )
-	{
-		memcpy( skyRefdef.areamask, cg.snap->areamask, sizeof( skyRefdef.areamask ) );
-	}
+	// The PREVIOUS frame's area mask, deliberately, not this frame's. A renderer rebuilds its list of
+	// visible leaves only when a scene's area mask differs from the scene before it -- that is how it
+	// learns a door opened or closed. rd-rend2 does not draw a sky portal scene when it is given one: it
+	// stores it and draws it, with the world view, while handling the next scene, and both views then
+	// go by that next scene's comparison -- against this one. With this frame's mask in both, a door
+	// change was never seen: the world view kept the old leaves, and the area behind the door was drawn
+	// by neither view, so old frames showed through it until the view moved into another cluster. With
+	// the previous frame's, the world view differs from this pass exactly when its mask changed, so
+	// every renderer rebuilds then and only then. The cost is that the sky behind a door is drawn one
+	// frame late on the frame the door changes. (CG_DrawSkyBoxPortal() passes an all-clear mask instead,
+	// cg.refdef having just been cleared, which makes every world view count as changed and rebuilds
+	// the leaves every frame while any door on the map is shut.)
+	memcpy( skyRefdef.areamask, cg.lastViewAreamask, sizeof( skyRefdef.areamask ) );
 
 	trap->R_RenderScene( &skyRefdef );
 }
@@ -2776,6 +2783,10 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );
+
+	// DAJ_RP: [Sky Portal] every frame, portal or not, so that the frame the sky-only pass starts on
+	// already has the right one -- see CG_DrawSkyOnlyPass()
+	memcpy( cg.lastViewAreamask, cg.refdef.areamask, sizeof( cg.lastViewAreamask ) );
 
 	// warning sounds when powerup is wearing off
 	CG_PowerupTimerSounds();
