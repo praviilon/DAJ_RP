@@ -1130,7 +1130,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"light|100|Radius of a constant dynamic light around its origin, up to 1020. 100 when only color is given.\n"
 		"color|1 1 1|Colour of that light, red green blue from 0 to 1. Giving light or color turns the light on.\n"
 		"soundSet||An ambient sound set (bmodelSet in sound/sound.txt): doors, plats, buttons and trains play its start, loop and stop sounds as they move, and func_rotating as it is started and stopped (its loop also while it spins from spawn). Refused if the server does not know the set.\n"
-		"team||Movers with the same team move as one: the first is the leader, using any member uses the leader, and a member's targetname moves to the leader. Not on func_breakable.\n"
+		"team||Movers with the same team move as one: the first is the leader, using any member uses the leader, and a member's targetname moves to the leader. Rotators, bobbers and pendulums of a team start and stop together, and start as the leader spawned (its name and START_ON or START_OFF decide). Not on func_breakable.\n"
 		"linear|0|1: doors, plats, buttons and trains move at a steady speed instead of easing in and out.\n"
 		"target||Doors, plats and buttons fire it as they start to open.\n"
 		"opentarget||Doors, plats and buttons fire it when fully open.\n"

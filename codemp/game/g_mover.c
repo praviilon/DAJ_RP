@@ -498,7 +498,10 @@ void G_MoverTeam( gentity_t *ent ) {
 		}
 
 		// if the pusher has a "blocked" function, call it
-		if (ent->blocked) {
+		// GalaxyRP fix: [SP Maps] only when the master itself is moving: the team is run now while a member
+		// moves and the master stands (RP_MoverTeamMoving()), and a door that is not moving must not reverse
+		// -- open -- because a rotator of its team was blocked; that member just waits, as a rotator does
+		if (ent->blocked && ( ent->s.pos.trType != TR_STATIONARY || ent->s.apos.trType != TR_STATIONARY )) {
 			ent->blocked( ent, obstacle );
 		}
 		return;
@@ -524,6 +527,22 @@ G_RunMover
 
 ================
 */
+// GalaxyRP: [SP Maps] whether any member of the team ent leads is moving (ent alone when it leads none)
+static qboolean RP_MoverTeamMoving( const gentity_t *ent )
+{
+	const gentity_t *part;
+	int steps;
+
+	for ( part = ent, steps = 0; part && steps < MAX_GENTITIES; part = part->teamchain, steps++ )
+	{
+		if ( !part->inuse )
+			break;
+		if ( part->s.pos.trType != TR_STATIONARY || part->s.apos.trType != TR_STATIONARY )
+			return qtrue;
+	}
+	return qfalse;
+}
+
 void G_RunMover( gentity_t *ent ) {
 	// if not a team captain, don't do anything, because
 	// the captain will handle everything
@@ -532,7 +551,10 @@ void G_RunMover( gentity_t *ent ) {
 	}
 
 	// if stationary at one of the positions, don't move anything
-	if ( ent->s.pos.trType != TR_STATIONARY || ent->s.apos.trType != TR_STATIONARY ) {
+	// GalaxyRP fix: [SP Maps] -- nothing of the team: a member moving while its master stood still (a rotator
+	// in a door's team, a script moving one member, a team of rotators toggled apart) was never moved here,
+	// so the server held it where it was while every client, evaluating its trajectory, drew it moving
+	if ( RP_MoverTeamMoving( ent ) ) {
 		G_MoverTeam( ent );
 	}
 
@@ -2313,46 +2335,266 @@ static float RP_MoverSinePhase( const trajectory_t *tr )
 
 /*
 ================
+RP_ToggleMover*
+
+GalaxyRP fix: [SP Maps] starting and stopping the three movers a use toggles -- func_rotating (its spin),
+func_bobbing (its bob), func_pendulum (its swing) -- for a whole team at once. A team ("team" key) moves
+as one body: G_RunMover() runs it from its master, and a use of any member reaches the master (its name
+is the team's: G_FindTeams() moves a member's targetname onto it). The per-entity toggles they had let a
+master stop while a member went on, or the other way round: the server then held the member still while
+every client, evaluating its trajectory, drew it moving.
+
+A use goes to the master, as Use_BinaryMover() takes it there, and every rotator, bobber and pendulum of
+the team is set to the opposite of what the master is doing; other members (a door) are left to their
+own use. When the master is of another class, the used entity toggles alone, as before. A member of a
+team whose master is gone or not its own does nothing, as Use_BinaryMover() does.
+
+A team starts the way its master spawned (RP_ToggleMoverTeamMatch): after G_FindTeams() at map load and
+after a preset, and whenever the Entity System links an entity into a team.
+================
+*/
+typedef enum
+{
+	RP_TOGGLE_NONE,
+	RP_TOGGLE_ROTATING,
+	RP_TOGGLE_BOBBING,
+	RP_TOGGLE_PENDULUM
+} rpToggleKind_t;
+
+static rpToggleKind_t RP_ToggleMoverKind( const gentity_t *e )
+{
+	if ( !e || !e->inuse || !e->classname || e->s.eType != ET_MOVER )
+		return RP_TOGGLE_NONE;
+	if ( !Q_stricmp( e->classname, "func_rotating" ) )
+		return RP_TOGGLE_ROTATING;
+	if ( !Q_stricmp( e->classname, "func_bobbing" ) )
+		return RP_TOGGLE_BOBBING;
+	if ( !Q_stricmp( e->classname, "func_pendulum" ) )
+		return RP_TOGGLE_PENDULUM;
+	return RP_TOGGLE_NONE;
+}
+
+static qboolean RP_ToggleMoverRunning( const gentity_t *e )
+{
+	switch ( RP_ToggleMoverKind( e ) )
+	{
+	case RP_TOGGLE_ROTATING:
+		return ( e->s.apos.trType != TR_STATIONARY ) ? qtrue : qfalse;
+	case RP_TOGGLE_BOBBING:
+		return ( e->s.pos.trType == TR_SINE ) ? qtrue : qfalse;
+	case RP_TOGGLE_PENDULUM:
+		return ( e->s.apos.trType == TR_SINE ) ? qtrue : qfalse;
+	default:
+		return qfalse;
+	}
+}
+
+// the time a sine mover restarts from so that it carries on at the place in its cycle it stopped at (radius)
+static int RP_ToggleMoverResumeTime( const trajectory_t *tr, float phase )
+{
+	return level.time - (int)floorf( 0.5f + tr->trDuration * phase );
+}
+
+/*
+Starts (run) or stops one of them. Stopping holds it where the server has it (RP_MoverHoldAngles /
+RP_MoverHoldOrigin) and keeps its place in the cycle in radius, as single player keeps it; starting
+carries on from there. atSpawn: it has only just spawned, so it has never moved -- a bobber or a pendulum
+is then held where it stands with its cycle at the start (radius 0, which is where it stands), and a
+rotator makes no start or stop sound, only its loop.
+*/
+static void RP_ToggleMoverSet( gentity_t *e, qboolean run, qboolean atSpawn )
+{
+	const rpToggleKind_t kind = RP_ToggleMoverKind( e );
+
+	if ( kind == RP_TOGGLE_NONE || RP_ToggleMoverRunning( e ) == run )
+		return;
+
+	switch ( kind )
+	{
+	case RP_TOGGLE_ROTATING:
+		if ( run )
+		{
+			if ( e->soundSet && e->soundSet[0] )
+			{
+				e->s.soundSetIndex = G_SoundSetIndex( e->soundSet );
+				if ( !atSpawn )
+					G_AddEvent( e, EV_BMODEL_SOUND, BMS_START );
+				e->s.loopSound = BMS_MID;
+				e->s.loopIsSoundset = qtrue;
+			}
+			// from the angles it stopped at, starting now
+			VectorCopy( e->r.currentAngles, e->s.apos.trBase );
+			e->s.apos.trTime = level.time;
+			e->s.apos.trType = TR_LINEAR;
+		}
+		else
+		{
+			RP_MoverHoldAngles( e, qtrue );
+			// stop the sound if it stops moving
+			e->s.loopSound = 0;
+			e->s.loopIsSoundset = qfalse;
+			if ( !atSpawn && e->soundSet && e->soundSet[0] )
+			{
+				e->s.soundSetIndex = G_SoundSetIndex( e->soundSet );
+				G_AddEvent( e, EV_BMODEL_SOUND, BMS_END );
+			}
+		}
+		break;
+
+	case RP_TOGGLE_BOBBING:
+		if ( run )
+		{
+			VectorCopy( e->s.origin, e->s.pos.trBase );
+			e->s.pos.trTime = RP_ToggleMoverResumeTime( &e->s.pos, e->radius );
+			e->s.pos.trType = TR_SINE;
+		}
+		else if ( atSpawn )
+		{
+			e->radius = 0.0f;
+			VectorCopy( e->s.origin, e->r.currentOrigin );
+			RP_MoverHoldOrigin( e );
+		}
+		else
+		{
+			e->radius = RP_MoverSinePhase( &e->s.pos );
+			RP_MoverHoldOrigin( e );
+		}
+		break;
+
+	case RP_TOGGLE_PENDULUM:
+		if ( run )
+		{
+			VectorCopy( e->s.angles, e->s.apos.trBase );
+			e->s.apos.trTime = RP_ToggleMoverResumeTime( &e->s.apos, e->radius );
+			e->s.apos.trType = TR_SINE;
+		}
+		else if ( atSpawn )
+		{
+			e->radius = 0.0f;
+			VectorCopy( e->s.angles, e->r.currentAngles );
+			RP_MoverHoldAngles( e, qfalse );
+		}
+		else
+		{
+			e->radius = RP_MoverSinePhase( &e->s.apos );
+			RP_MoverHoldAngles( e, qfalse );
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+// the master a member's use goes to: itself when it is in no team, NULL when its team is broken
+static gentity_t *RP_ToggleMoverMaster( gentity_t *self )
+{
+	gentity_t *master;
+
+	if ( !( self->flags & FL_TEAMSLAVE ) )
+		return self;
+
+	master = self->teammaster;
+	if ( !master || master == self || !master->inuse || ( master->flags & FL_TEAMSLAVE ) ||
+		master->teammaster != master || !master->team || !self->team || strcmp( master->team, self->team ) )
+	{
+		return NULL;
+	}
+	return master;
+}
+
+static void RP_ToggleMoverUse( gentity_t *self )
+{
+	gentity_t *master = RP_ToggleMoverMaster( self );
+	gentity_t *part;
+	qboolean run;
+	int steps;
+
+	if ( !master )
+		return;
+
+	if ( RP_ToggleMoverKind( master ) == RP_TOGGLE_NONE )
+	{	// a door or another mover leads the team: this one toggles alone
+		G_ActivateBehavior( self, BSET_USE );
+		RP_ToggleMoverSet( self, RP_ToggleMoverRunning( self ) ? qfalse : qtrue, qfalse );
+		return;
+	}
+
+	if ( master != self && ( master->flags & FL_INACTIVE ) )
+		return;
+
+	G_ActivateBehavior( master, BSET_USE );
+
+	run = RP_ToggleMoverRunning( master ) ? qfalse : qtrue;
+	for ( part = master, steps = 0; part && steps < MAX_GENTITIES; part = part->teamchain, steps++ )
+	{
+		if ( !part->inuse )
+			break;
+		RP_ToggleMoverSet( part, run, qfalse );
+	}
+}
+
+/*
+================
+RP_ToggleMoverTeamMatch
+
+GalaxyRP fix: [SP Maps] the rotators, bobbers and pendulums of the master's team take the state the master
+is in -- spinning or still -- so the team starts as one body the way its master spawned: the first of the
+team in the map, whose own name and START_ON / START_OFF decide. Its members' were decided by each one
+alone when it spawned, before G_FindTeams() moved a member's name onto the master: a named member started
+still and, its name gone, nothing could start it. Called after G_FindTeams() and when the Entity System
+links an entity into a team (zyk_main_spawn_entity()), so on members that have only just spawned.
+================
+*/
+void RP_ToggleMoverTeamMatch( gentity_t *master )
+{
+	gentity_t *part;
+	qboolean run;
+	int steps;
+
+	if ( !master || !master->inuse || master->teammaster != master || !master->teamchain ||
+		RP_ToggleMoverKind( master ) == RP_TOGGLE_NONE )
+	{
+		return;
+	}
+
+	run = RP_ToggleMoverRunning( master );
+	for ( part = master->teamchain, steps = 0; part && steps < MAX_GENTITIES; part = part->teamchain, steps++ )
+	{
+		if ( !part->inuse )
+			break;
+		RP_ToggleMoverSet( part, run, qtrue );
+	}
+}
+
+// every team in the map, after G_FindTeams()
+void RP_ToggleMoverTeamsMatch( void )
+{
+	int i;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities; i++ )
+	{
+		gentity_t *e = &g_entities[i];
+
+		if ( e->inuse && e->teammaster == e && e->teamchain )
+			RP_ToggleMoverTeamMatch( e );
+	}
+}
+
+/*
+================
 func_rotating_use
 
 GalaxyRP fix: [SP Maps] this existed but nothing assigned it: InitMover() left every func_rotating with
 Use_BinaryMover(), and a use sent it to pos1 -- the world origin 0 0 0 -- in the middle of the map. Now
 SP_func_rotating() gives it to every rotator without health (single player gives it to the named ones;
 here the Stun Baton and PLAYER_USE reach unnamed ones too). It stops the spin where it is
-(RP_MoverHoldAngles) and starts it again from there.
+(RP_MoverHoldAngles) and starts it again from there -- for its whole team: RP_ToggleMoverUse().
 ================
 */
 void func_rotating_use( gentity_t *self, gentity_t *other, gentity_t *activator )
 {
-	G_ActivateBehavior( self, BSET_USE );
-
-	if(	self->s.apos.trType == TR_LINEAR )
-	{
-		RP_MoverHoldAngles( self, qtrue );
-		// stop the sound if it stops moving
-		self->s.loopSound = 0;
-		self->s.loopIsSoundset = qfalse;
-		// play stop sound too?
-		if ( self->soundSet && self->soundSet[0] )
-		{
-			self->s.soundSetIndex = G_SoundSetIndex(self->soundSet);
-			G_AddEvent( self, EV_BMODEL_SOUND, BMS_END );
-		}
-	}
-	else
-	{
-		if ( self->soundSet && self->soundSet[0] )
-		{
-			self->s.soundSetIndex = G_SoundSetIndex(self->soundSet);
-			G_AddEvent( self, EV_BMODEL_SOUND, BMS_START );
-			self->s.loopSound = BMS_MID;
-			self->s.loopIsSoundset = qtrue;
-		}
-		// from the angles it stopped at, starting now
-		VectorCopy( self->r.currentAngles, self->s.apos.trBase );
-		self->s.apos.trTime = level.time;
-		self->s.apos.trType = TR_LINEAR;
-	}
+	RP_ToggleMoverUse( self );
 }
 
 /*QUAKED func_rotating (0 .5 .8) ? START_ON RADAR X_AXIS Y_AXIS IMPACT x PLAYER_USE INACTIVE
@@ -2482,6 +2724,10 @@ void SP_func_rotating (gentity_t *ent) {
 		}
 	}
 	ent->s.apos.trType = TR_LINEAR;
+	// GalaxyRP fix: [SP Maps] spinning from its own angles now: trTime was left 0, so one added after map load
+	// started at the angle it would have reached spinning since the map began, and its first frame on the
+	// server turned it -- and pushed whatever stood by it -- through all of that at once
+	ent->s.apos.trTime = level.time;
 
 	// GalaxyRP fix: [SP Maps] using a func_rotating ran Use_BinaryMover() (InitMover's), which sent it to
 	// the world origin 0 0 0; one with health keeps func_breakable's use (it breaks). Every other one now
@@ -2541,19 +2787,7 @@ player keeps it), and the next use carries on from that place.
 */
 void func_bobbing_use( gentity_t *self, gentity_t *other, gentity_t *activator )
 {
-	G_ActivateBehavior( self, BSET_USE );
-
-	if ( self->s.pos.trType == TR_SINE )
-	{
-		self->radius = RP_MoverSinePhase( &self->s.pos );
-		RP_MoverHoldOrigin( self );
-	}
-	else
-	{
-		VectorCopy( self->s.origin, self->s.pos.trBase );
-		self->s.pos.trTime = level.time - (int)floorf( 0.5f + self->s.pos.trDuration * self->radius );
-		self->s.pos.trType = TR_SINE;
-	}
+	RP_ToggleMoverUse( self );	// for its whole team, see RP_ToggleMover*
 }
 
 /*QUAKED func_bobbing (0 .5 .8) ? X_AXIS Y_AXIS START_OFF x x x PLAYER_USE INACTIVE
@@ -2628,19 +2862,7 @@ stops mid-swing where it is and carries on from the same place in its swing on t
 */
 void func_pendulum_use( gentity_t *self, gentity_t *other, gentity_t *activator )
 {
-	G_ActivateBehavior( self, BSET_USE );
-
-	if ( self->s.apos.trType == TR_SINE )
-	{
-		self->radius = RP_MoverSinePhase( &self->s.apos );
-		RP_MoverHoldAngles( self, qfalse );
-	}
-	else
-	{
-		VectorCopy( self->s.angles, self->s.apos.trBase );
-		self->s.apos.trTime = level.time - (int)floorf( 0.5f + self->s.apos.trDuration * self->radius );
-		self->s.apos.trType = TR_SINE;
-	}
+	RP_ToggleMoverUse( self );	// for its whole team, see RP_ToggleMover*
 }
 
 /*QUAKED func_pendulum (0 .5 .8) ? x x START_OFF x x x PLAYER_USE INACTIVE

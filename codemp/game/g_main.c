@@ -2146,6 +2146,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// general initialization
 	G_FindTeams();
+	RP_ToggleMoverTeamsMatch();	// GalaxyRP: [SP Maps] a team of rotators/bobbers/pendulums starts as its master
 
 	// make sure we have flags for CTF, etc
 	if( level.gametype >= GT_TEAM ) {
@@ -8545,6 +8546,7 @@ void G_RunFrame( int levelTime ) {
 		// zyk: CTF need to have the flags spawned again when an entity file is loaded
 		// general initialization
 		G_FindTeams();
+		RP_ToggleMoverTeamsMatch();	// GalaxyRP: [SP Maps] see G_InitGame()
 
 		// make sure we have flags for CTF, etc
 		if( level.gametype >= GT_TEAM ) {

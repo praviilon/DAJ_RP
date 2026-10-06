@@ -2598,6 +2598,8 @@ const char *RP_EntityRefusalReason( const gentity_t *ent );
 qboolean RP_SoundSetRadius( const char *name, int *radius );	// GalaxyRP: [Entity System] g_spawn.c
 void RP_SpeakerAudienceFrame( void );	// GalaxyRP: [Entity System] g_main.c
 void RP_SkyPortalUnflag( void );	// GalaxyRP: [Entity System] g_misc.c
+void RP_ToggleMoverTeamMatch( gentity_t *master );	// GalaxyRP: [SP Maps] g_mover.c
+void RP_ToggleMoverTeamsMatch( void );
 qboolean RP_ClassIsSpawnPoint( const char *classname );	// GalaxyRP: [Entity System] info_player_* and the four CTF spawn classes
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
 void RP_PushTriggerNetSync( gentity_t *self );	// GalaxyRP: [SP Maps] g_trigger.c

@@ -3030,6 +3030,12 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 
 		// GalaxyRP fix: [Entity System] a leader spawned again in place answers its followers' name again
 		RP_TeamLeaderTakeName( ent );
+
+		// GalaxyRP fix: [SP Maps] and a rotator, bobber or pendulum of a team goes as its master goes
+		// (RP_ToggleMoverTeamMatch() in g_mover.c): one joining a team, or the team of a master spawned
+		// again in place
+		if ( ent->teammaster && ent->teammaster->inuse )
+			RP_ToggleMoverTeamMatch( ent->teammaster );
 	}
 
 	// GalaxyRP: [Logical Entities] never for a logical entity: ICARUS keeps its per-entity state in
