@@ -1281,6 +1281,17 @@ void RP_EntResetForRespawn( gentity_t *e )
 	e->s.loopSound = 0;
 	e->s.loopIsSoundset = qfalse;
 
+	// GalaxyRP: [Entity System] the health bar a client draws under the crosshair (s.maxhealth not 0), what
+	// it shows (s.health), the health it is scaled from (maxHealth: G_ScaleNetHealth()), and whether the
+	// crosshair marks the entity -- and, on an NPC spawner, gives the NPCs it makes a bar (s.shouldtarget,
+	// NPC_Begin()) -- are not keys, so nothing cleared them: a dispenser edited to nodrain 1, a func_breakable
+	// or an NPC spawner edited out of showhealth, kept the bar. Every spawn function that wants them sets
+	// them again.
+	e->maxHealth = 0;
+	e->s.maxhealth = 0;
+	e->s.health = 0;
+	e->s.shouldtarget = qfalse;
+
 	// GalaxyRP: [Entity System] a speaker's hearing range (RP_SpeakerAudienceFrame()), set again by
 	// SP_target_speaker() when it still has a sound set
 	e->rpAudibleRange = 0.0f;
@@ -2552,24 +2563,38 @@ must be on the server and be an .md3 -- and that the model it will show, the key
 a typo used to take a model slot for good and leave an invisible station, and a full table an invisible
 one. Any other one (the map's own) is not refused: its spawn function shows its own model instead and logs
 why -- RP_DispenserModel(). NULL for any other class.
+
+GalaxyRP: [Slot Reuse] and the sounds its spawn function registers after the model -- a dispenser's three --
+get a slot and their bytes too: with the gamestate nearly full, the model fitted and the sounds did not, and
+the station was silent, its "done" sound index 0 an empty name every client tried to load on every use.
+Keep each list the same as its spawn function's G_SoundIndex() calls (g_misc.c). (The radar icon a floor
+unit or the health converter registers in siege only is not counted.)
 =================
 */
+#define RP_MODEL_KEY_SOUNDS	3
+
 typedef struct {
 	const char	*classname;
 	const char	*defaultModel;
 	qboolean	breakable;	// spawned as a misc_model_breakable: it registers the breakable's sound
 	qboolean	keyUnused;	// its "model" key is not used: it always shows defaultModel (the racks)
+	const char	*sounds[RP_MODEL_KEY_SOUNDS];	// what its spawn function registers besides (NULL: no more)
 } rpModelKeyClass_t;
 
+#define RP_SOUNDS_AMMOCON	{ "sound/interface/ammocon_run", "sound/interface/ammocon_done", "sound/interface/ammocon_empty" }
+#define RP_SOUNDS_SHIELDCON	{ "sound/interface/shieldcon_run", "sound/interface/shieldcon_done", "sound/interface/shieldcon_empty" }
+#define RP_SOUNDS_HEALTHCON	{ "sound/player/pickuphealth.wav", "sound/interface/shieldcon_done", "sound/interface/shieldcon_empty" }
+#define RP_SOUNDS_NONE		{ NULL, NULL, NULL }
+
 static const rpModelKeyClass_t rp_model_key_classes[] = {
-	{ "misc_ammo_floor_unit",				RP_MODEL_AMMO_FLOOR_UNIT,	qfalse,	qfalse },
-	{ "misc_shield_floor_unit",				RP_MODEL_SHIELD_FLOOR_UNIT,	qfalse,	qfalse },
-	{ "misc_model_ammo_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
-	{ "misc_model_shield_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
-	{ "misc_model_health_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse },
-	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse,	qtrue },
-	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse,	qtrue },
-	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue,	qfalse },
+	{ "misc_ammo_floor_unit",				RP_MODEL_AMMO_FLOOR_UNIT,	qfalse,	qfalse,	RP_SOUNDS_AMMOCON },
+	{ "misc_shield_floor_unit",				RP_MODEL_SHIELD_FLOOR_UNIT,	qfalse,	qfalse,	RP_SOUNDS_SHIELDCON },
+	{ "misc_model_ammo_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse,	RP_SOUNDS_AMMOCON },
+	{ "misc_model_shield_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse,	RP_SOUNDS_SHIELDCON },
+	{ "misc_model_health_power_converter",	RP_MODEL_POWER_CONVERTER,	qfalse,	qfalse,	RP_SOUNDS_HEALTHCON },
+	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse,	qtrue,	RP_SOUNDS_NONE },
+	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse,	qtrue,	RP_SOUNDS_NONE },
+	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue,	qfalse,	RP_SOUNDS_NONE },
 };
 
 static const rpModelKeyClass_t *RP_ModelKeyClass( const char *classname )
@@ -2750,14 +2775,27 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 	if ( keyClass )
 	{
 		const char *names[1];
+		const char *sounds[RP_MODEL_KEY_SOUNDS + 1];
 		char reason[256];
-		int otherBytes = 0;
+		int otherBytes = 0, soundCount = 0, i;
 
 		names[0] = ( !keyClass->keyUnused && ent->model && ent->model[0] ) ? ent->model : keyClass->defaultModel;
-		if ( keyClass->breakable && !RP_SoundRegistered( RP_BREAKABLE_SOUND ) )
-			otherBytes = (int)strlen( RP_BREAKABLE_SOUND ) + 1;
+
+		// GalaxyRP: [Slot Reuse] its sounds (see RP_ModelKeyClass()): the model goes in first, so the bytes
+		// of those not registered yet are counted with it, and then they need slots of their own
+		for ( i = 0; i < RP_MODEL_KEY_SOUNDS && keyClass->sounds[i]; i++ )
+			sounds[soundCount++] = keyClass->sounds[i];
+		if ( keyClass->breakable )
+			sounds[soundCount++] = RP_BREAKABLE_SOUND;
+		for ( i = 0; i < soundCount; i++ )
+		{
+			if ( !RP_SoundRegistered( sounds[i] ) )
+				otherBytes += (int)strlen( sounds[i] ) + 1;
+		}
 
 		if ( !RP_SlotRoomFor( CS_MODELS, names, 1, otherBytes, reason, sizeof( reason ) ) )
+			return RP_SpawnRefuse( ent, reason );
+		if ( soundCount && !RP_SlotRoomFor( CS_SOUNDS, sounds, soundCount, 0, reason, sizeof( reason ) ) )
 			return RP_SpawnRefuse( ent, reason );
 
 		return qfalse;
@@ -2877,6 +2915,11 @@ static const char *RP_EntitySystemSpawnedEmpty( gentity_t *ent )
 
 	// DAJ_RP: [SP Maps] (its skin entry is not needed: without one it shows its default skin)
 	if ( Q_stricmp( ent->classname, "misc_model_ghoul" ) == 0 )
+		return "model";
+
+	// GalaxyRP: [Slot Reuse] a dispenser, rack or cargo crate (RP_ModelKeyClass()) -- each sets its model in
+	// its spawn function, the ammo rack too since it registers it there (SP_misc_model_ammo_rack())
+	if ( RP_ModelKeyClass( ent->classname ) )
 		return "model";
 
 	if ( RP_FuncRegistersModels( ent->classname ) && ent->model && ent->model[0] && ent->model[0] != '*' && ent->model[0] != '#' )

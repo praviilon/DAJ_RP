@@ -1774,6 +1774,9 @@ typedef struct cgs_s {
 	// GalaxyRP: [Ambient Sets] the CS_AMBIENT_SET slots whose sound set this client has loaded -- at connect
 	// (CG_AS_Register()) or when the slot arrived later (CG_ConfigStringModified())
 	qboolean	ambientSetLoaded[MAX_AMBIENT_SETS];
+	// GalaxyRP: [Ambient Sets] such a slot arrived this frame: the set file is parsed again once, after
+	// the snapshots -- CG_AS_ParsePending() in cg_view.c
+	qboolean	ambientSetsPending;
 
 } cgs_t;
 

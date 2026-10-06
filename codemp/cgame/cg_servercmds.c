@@ -948,6 +948,8 @@ static void CG_ConfigStringModified( void ) {
 	// precache list alone, since clearing it resets the area ambience the player is hearing. The server
 	// only lets a name through that sound/sound.txt defines (RP_SoundSetKnown(), g_spawn.c): the engine
 	// drops a client whose list holds a name the file has not.
+	// The parse itself waits for the end of the snapshots (CG_AS_ParsePending() in cg_view.c), so a preset
+	// that brings several new sets at once parses the file once, not once per set.
 	else if ( num > CS_AMBIENT_SET && num < CS_AMBIENT_SET + MAX_AMBIENT_SETS )
 	{
 		const int slot = num - CS_AMBIENT_SET;
@@ -956,7 +958,7 @@ static void CG_ConfigStringModified( void ) {
 		{
 			cgs.ambientSetLoaded[slot] = qtrue;
 			trap->AS_AddPrecacheEntry( str );
-			trap->AS_ParseSets();
+			cgs.ambientSetsPending = qtrue;
 		}
 	}
 	else if ( num >= CS_SIEGE_STATE && num < CS_SIEGE_STATE+1 )

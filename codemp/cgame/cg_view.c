@@ -2500,6 +2500,27 @@ extern void CG_ActualLoadDeferredPlayers( void );
 
 static int cg_siegeClassIndex = -2;
 
+/*
+=================
+CG_AS_ParsePending
+
+GalaxyRP: [Ambient Sets] the set file parsed again for the sound sets that arrived since the last frame
+(CG_ConfigStringModified() put their names on the engine's precache list): once, however many arrived.
+Each parse adds every set already loaded once more, and the area ambience (CS_GLOBAL_AMBIENT_SET) fades
+from its old copy to the new one over a second -- the engine gives a new copy a new id and fades on any
+change of id. Batching makes that once per batch instead of once per set; doing away with it needs the
+engine to skip a set it already has.
+=================
+*/
+static void CG_AS_ParsePending( void )
+{
+	if ( !cgs.ambientSetsPending )
+		return;
+
+	cgs.ambientSetsPending = qfalse;
+	trap->AS_ParseSets();
+}
+
 void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
 	int		inwater;
 	const char *cstr;
@@ -2564,6 +2585,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	// set up cg.snap and possibly cg.nextSnap
 	CG_ProcessSnapshots();
+
+	// GalaxyRP: [Ambient Sets] after every server command of this frame's snapshots, before anything plays a set
+	CG_AS_ParsePending();
 
 	trap->ROFF_UpdateEntities();
 

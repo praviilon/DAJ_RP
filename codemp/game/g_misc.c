@@ -5341,6 +5341,11 @@ void SP_misc_model_ammo_rack( gentity_t *ent )
 	ent->think = spawn_rack_goods;
 	ent->nextthink = level.time + 100;
 
+	// GalaxyRP: [Slot Reuse] its model now, as RP_EntitySystemSpawnRefused() (g_spawn.c) found room for it:
+	// registered only by spawn_rack_goods() 100 ms later, it could find the room taken by then and leave the
+	// rack invisible. spawn_rack_goods() sets the same index again.
+	ent->s.modelindex = G_ModelIndex( RP_MODEL_AMMO_RACK );
+
 	G_SetOrigin( ent, ent->s.origin );
 	G_SetAngles( ent, ent->s.angles );
 
