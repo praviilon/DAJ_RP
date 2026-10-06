@@ -52,8 +52,8 @@ Touch_Item() -- unlike single player's -- ignores a hidden item, so the pickup n
 item is now shown to Touch_Item() for the pickup and hidden again after it, and, as in single player,
 each use gives the items again: they are the stock it gives from, kept off the map (a use of an item's
 own name still shows it there, and the next give takes it off again). The usual pickup rules apply --
-a player at full health gets no medpak. A weapon or powerup someone picked up off the map, waiting to
-respawn (EF_ITEMPLACEHOLDER), is not given.
+a player at full health gets no medpak, and an item not taken is left where it was. An item someone picked up
+off the map, waiting to respawn, is not given until it is back.
 
 The pickup event the player gets names the item's entity, and the client reads the item from that
 entity's last state it received -- one never sent to it gives the pickup sound and name of whatever
@@ -84,7 +84,15 @@ void Use_Target_Give( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 			continue;
 		}
 
+		// a weapon or powerup a player took off the map, waiting to respawn
 		if ( t->s.eFlags & EF_ITEMPLACEHOLDER ) {
+			continue;
+		}
+
+		// GalaxyRP fix: [SP Maps] and any other item a player took off the map: hidden, but waiting to
+		// respawn (Touch_Item()), it read as stock -- it was given again and the give's own think took the
+		// place of its respawn, so it never came back on the map
+		if ( t->think == RespawnItem && t->nextthink > 0 ) {
 			continue;
 		}
 
@@ -96,11 +104,19 @@ void Use_Target_Give( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 			continue;
 		}
 
-		if ( t->genericValue9 || ( t->flags & FL_DROPPED_ITEM ) ) {
-			// a dropped item: removed by Touch_Item()'s own means once picked up, left as it was if not
+		// GalaxyRP fix: [SP Maps] taken or not: a pickup Touch_Item() refuses (a player at full health and a
+		// medpak) returns before it changes the item, and every pickup it makes hides the item (EF_NODRAW) or
+		// leaves its placeholder (EF_ITEMPLACEHOLDER) -- neither was set going in. One not taken is left as it
+		// was: on the map when shown, hidden when stock. It used to be taken off the map all the same.
+		if ( !( t->s.eFlags & ( EF_NODRAW | EF_ITEMPLACEHOLDER ) ) ) {
 			if ( hidden ) {
 				t->s.eFlags |= EF_NODRAW;
 			}
+			continue;
+		}
+
+		if ( t->genericValue9 || ( t->flags & FL_DROPPED_ITEM ) ) {
+			// a dropped item, picked up: removed by Touch_Item()'s own means
 			continue;
 		}
 

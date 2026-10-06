@@ -1859,7 +1859,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common target" },
 	{ "target_give", 0, NULL,
-		"Gives the activator the items named by its target, as if they had walked over them (the usual pickup rules apply: a player at full health gets no medpak), then keeps those items off the map. Each use gives them again, so the items work as its stock: place them anywhere, they spawn hidden because they have a targetname. Using an item's own name still shows it on the map, and the next give takes it off again. A weapon or powerup someone picked up off the map is not given until it respawns.",
+		"Gives the activator the items named by its target, as if they had walked over them (the usual pickup rules apply: a player at full health gets no medpak), then keeps those items off the map. Each use gives them again, so the items work as its stock: place them anywhere, they spawn hidden because they have a targetname. Using an item's own name still shows it on the map, and the next give takes it off again. An item someone picked up off the map is not given until it respawns. A player who cannot take one (full health for a medpak) leaves it where it is.",
 		NULL,
 		"target||The targetname of the item entities to give (all with that name). Entities that are not items are skipped.\n"
 		"targetname||Using it gives the items to the activator.",
@@ -1916,7 +1916,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"target_position targetname apex1",
 		"common target target_push target_teleporter" },
 	{ "target_print", 0, NULL,
-		"Prints its message in the middle of the screen when used: to everyone, to one team, or only to the activator. A message starting with @ is looked up in the game's string files. Text placed with the entity commands has any @@@ run broken up for safety.",
+		"Prints its message in the middle of the screen when used: to everyone, to one team, or only to the activator. A message starting with @ is looked up in the game's string files. Text placed with the entity commands has any run of three @ signs broken up for safety.",
 		"1|REDTEAM|Only players on the red team see it.\n"
 		"2|BLUETEAM|Only players on the blue team see it (with 1, both teams do).\n"
 		"4|PRIVATE|Only the activator sees it (overrides 1 and 2).",

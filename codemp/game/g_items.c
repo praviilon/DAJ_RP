@@ -3123,6 +3123,10 @@ void RespawnItem( gentity_t *ent ) {
 	//ent->s.eFlags &= ~EF_NODRAW;
 	ent->s.eFlags &= ~(EF_NODRAW | EF_ITEMPLACEHOLDER);
 	ent->r.svFlags &= ~SVF_NOCLIENT;
+	// GalaxyRP fix: [SP Maps] shown by its name within the 300 ms a target_give keeps a given item in every
+	// snapshot (Use_Target_Give()), it went on being sent to every client: nextthink = 0 below cancels the
+	// unlink that would have ended it. No item is sent to everyone otherwise.
+	ent->r.svFlags &= ~SVF_BROADCAST;
 	trap->LinkEntity ((sharedEntity_t *)ent);
 
 	if ( ent->item->giType == IT_POWERUP ) {
