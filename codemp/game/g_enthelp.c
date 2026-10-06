@@ -118,11 +118,19 @@ static void RP_EhAdd( rpEhOut_t *o, const char *s )
 	}
 }
 
+// GalaxyRP fix: [Entity Help] a line starts white unless it sets a colour of its own: the console resets the
+// colour only at the start of a print, and the lines are packed several to a print, so a line with no colour
+// code went on in the colour the line before it ended in -- a list's names in its cyan heading's colour.
+// Leading line breaks are kept in front of it.
 static void RP_EhLine( rpEhOut_t *o, const char *s )
 {
 	char line[RP_EH_PRINT_MAX * 4];
+	int breaks = 0;
 
-	Com_sprintf( line, sizeof( line ), "%s\n", s );
+	while ( s[breaks] == '\n' )
+		breaks++;
+
+	Com_sprintf( line, sizeof( line ), "%.*s%s%s\n", breaks, s, Q_IsColorString( s + breaks ) ? "" : "^7", s + breaks );
 	RP_EhAdd( o, line );
 }
 
@@ -553,12 +561,15 @@ static int RP_EhGroupOf( const char *name )
 	return (int)ARRAY_LEN( rp_eh_groups ) - 1;
 }
 
+// GalaxyRP fix: [Entity Help] a space before each tag, so it reads apart from the name: "item_botroam L x"
 static const char *RP_EhListName( const char *name, qboolean logical )
 {
 	const rpEntHelp_t *h = RP_EhEntry( name );
+	const qboolean mapOnly = ( h && ( h->flags & RP_EH_MAPONLY ) ) ? qtrue : qfalse;
+	const qboolean gametype = ( h && ( h->flags & RP_EH_GAMETYPE ) ) ? qtrue : qfalse;
 
-	return va( "%s%s%s%s", name, logical ? "^5L^7" : "", ( h && ( h->flags & RP_EH_MAPONLY ) ) ? "^1x^7" : "",
-		( h && ( h->flags & RP_EH_GAMETYPE ) ) ? "^3g^7" : "" );
+	return va( "%s%s%s%s%s", name, logical ? " ^5L" : "", mapOnly ? " ^1x" : "", gametype ? " ^3g" : "",
+		( logical || mapOnly || gametype ) ? "^7" : "" );
 }
 
 static void RP_EhList( rpEhOut_t *o, int page )

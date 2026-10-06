@@ -106,7 +106,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common misc_ammo_floor_unit misc_shield_floor_unit misc_model_ammo_power_converter misc_model_shield_power_converter misc_model_health_power_converter" },
 	{ "emplaced_eweb", 0, NULL,
-		"Single player's E-Web. In DAJ_RP it spawns exactly as an emplaced_gun: the same turret chair model, health, keys and spawnflags.",
+		"Single player's E-Web. In GalaxyRP it spawns exactly as an emplaced_gun: the same turret chair model, health, keys and spawnflags.",
 		"1|CANRESPAWN|Comes back after it is destroyed (4 seconds plus count ms later), with 320 health instead of 800.\n"
 		"1024|NO_DROP|Stays at its origin height instead of dropping onto the floor below.",
 		"angle||The direction it points: the base facing the gunner turns from.\n"
@@ -514,7 +514,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"info_siege_radaricon icon gfx/hud/i_icon_medkit targetname icon1",
 		"common info_siege_objective" },
 	{ "item_ammodisp", 0, NULL,
-		"Ammo dispenser, a holdable that is kept. Using it does nothing in DAJ_RP (its toss is switched off). While carrying it, "
+		"Ammo dispenser, a holdable that is kept. Using it does nothing in GalaxyRP (its toss is switched off). While carrying it, "
 		"or the health dispenser, pressing Use on a player of your team refills the ammo of the weapon in their hands a shot at a "
 		"time, and heals them if they are hurt.",
 		NULL,
@@ -535,14 +535,14 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"items common" },
 	{ "item_botroam", RP_EH_MAPONLY, "It does nothing in multiplayer: its spawn function is empty and no code reads it.",
-		"A bot roaming hint from Quake 3 maps. In DAJ_RP nothing reads it: it spawns as an empty logical entity and does nothing.",
+		"A bot roaming hint from Quake 3 maps. In GalaxyRP nothing reads it: it spawns as an empty logical entity and does nothing.",
 		NULL,
 		NULL,
 		NULL,
 		"common" },
 	{ "item_cloak", 0, NULL,
 		"Cloaking device, a holdable that is kept: using it makes the player invisible, using it again ends it, at most once a "
-		"second. It uses no fuel in DAJ_RP. A downed player cannot cloak.",
+		"second. It uses no fuel in GalaxyRP. A downed player cannot cloak.",
 		NULL,
 		NULL,
 		"item_cloak",
@@ -581,7 +581,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"item_force_enlighten_light count 30",
 		"items common item_force_enlighten_dark" },
 	{ "item_healthdisp", 0, NULL,
-		"Health dispenser, a holdable that is kept. Using it does nothing in DAJ_RP (its toss is switched off). While carrying it, "
+		"Health dispenser, a holdable that is kept. Using it does nothing in GalaxyRP (its toss is switched off). While carrying it, "
 		"or the ammo dispenser, pressing Use on a hurt player of your team heals them 4 at a time, and refills the ammo of the "
 		"weapon in their hands.",
 		NULL,
@@ -853,7 +853,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 	{ "misc_model_ghoul", 0, NULL,
 		"A Ghoul2 (.glm) model prop: any .glm with an optional skin, which can play a range of its animation frames once or looped and carry a light. "
 		"Using it (targetname) shows or hides it, and it takes no damage. The Entity System refuses a model not on the server or not a .glm, bad frames or radius, or no model slot. "
-		"Players need the DAJ_RP client to see a skin of its own.",
+		"Players need the GalaxyRP client to see a skin of its own.",
 		"1|SOLID|Blocks movement and shots with its box.\n"
 		"2|LOOP|Plays the frames over and over (needs more than one frame).\n"
 		"4096|START_OFF|Starts hidden and not solid.",
@@ -1781,7 +1781,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common ref_tag" },
 	{ "rp_light", 0, NULL,
-		"A DAJ_RP light and nothing else: a dynamic light at its origin, with no model and nothing to collide with. Unlike the map compiler's light it exists at run time, so the Entity System can place it anywhere. Using it (by its targetname) switches it between its on and its off light.",
+		"A GalaxyRP light and nothing else: a dynamic light at its origin, with no model and nothing to collide with. Unlike the map compiler's light it exists at run time, so the Entity System can place it anywhere. Using it (by its targetname) switches it between its on and its off light.",
 		"1|START_OFF|Starts switched off, showing its off light (dark by default).",
 		"light|300|Radius when on, in units (up to 1020).\n"
 		"color|1 1 1|Red green blue, each 0 to 1, when on.\n"
@@ -1828,7 +1828,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"target_activate targetname unlock target door1",
 		"common target target_deactivate" },
 	{ "target_autosave", RP_EH_MAPONLY | RP_EH_REMOVED, "Single player only: multiplayer has nothing to save, so it removes itself at spawn.",
-		"Single player saved the game when this was used. DAJ_RP accepts it so single-player maps load without complaint, and it removes itself at once.",
+		"Single player saved the game when this was used. GalaxyRP accepts it so single-player maps load without complaint, and it removes itself at once.",
 		NULL,
 		NULL,
 		NULL,
@@ -1860,8 +1860,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"targetname||Using it starts the countdown.",
 		"target_delay targetname later wait 3 target lights1",
 		"common target" },
-	{ "target_escapetrig", RP_EH_MAPONLY | RP_EH_REMOVED, "Only works in the single-player gametype, which DAJ_RP does not run: it removes itself at spawn.",
-		"Starts, or with escapegoal ends, a timed escape in the single-player gametype (survivors get points and the round ends). In every gametype DAJ_RP runs it removes itself at spawn.",
+	{ "target_escapetrig", RP_EH_MAPONLY | RP_EH_REMOVED, "Only works in the single-player gametype, which GalaxyRP does not run: it removes itself at spawn.",
+		"Starts, or with escapegoal ends, a timed escape in the single-player gametype (survivors get points and the round ends). In every gametype GalaxyRP runs it removes itself at spawn.",
 		NULL,
 		"escapetime|60000|Milliseconds given for the escape.\n"
 		"escapegoal|0|Non-zero: using it ends an escape in progress instead of starting one.",
@@ -2096,7 +2096,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"wait|0|trigger_multiple: seconds before it can fire again. -1 fires once only, 0 fires again every frame while touched.\n"
 		"random|0|trigger_multiple: seconds added to or taken from wait at random. Kept below wait.\n"
 		"delay|0|trigger_once and trigger_multiple: whole seconds between being set off and firing the targets.\n"
-		"soundSet||trigger_once and trigger_multiple: an ambient sound set from sound/sound.txt that becomes the whole map's ambience, for everyone, when it fires. DAJ_RP refuses a name that file lacks, and the set plays at once without a reconnect.\n"
+		"soundSet||trigger_once and trigger_multiple: an ambient sound set from sound/sound.txt that becomes the whole map's ambience, for everyone, when it fires. GalaxyRP refuses a name that file lacks, and the set plays at once without a reconnect.\n"
 		"team||trigger_once and trigger_multiple: 1 or 2, only clients on that team (red or blue) can touch it, so nobody in a game without teams. trigger_hurt: Siege only.\n"
 		"targetname||Being used: trigger_once and trigger_multiple fire, trigger_hurt and trigger_lightningstrike switch on or off.",
 		NULL,
@@ -2113,12 +2113,12 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"model||Required: *N, the inline model whose bounds are the field.\n"
 		"target||Targetname of the asteroid templates to copy. With none found it logs once and looks again every 10 seconds.\n"
-		"count|1|Most asteroids at one time, at most 64. DAJ_RP: was effectively 0 when not set, so the field spawned nothing.\n"
+		"count|1|Most asteroids at one time, at most 64.\n"
 		"speed|10000|Average speed in units per second: each asteroid moves at 0.25 to 2 times this.",
 		"trigger_asteroid_field model *1 target asteroid count 5 speed 400",
 		"common trigger func_rotating" },
 	{ "trigger_hurt", 0, NULL,
-		"Damages players, NPCs and vehicles touching it: dmg every 0.1 seconds, or once a second with SLOW. The timer is the trigger's, so with several inside one is hurt per tick. With CAN_TARGET, using it switches it on and off and the player who used it gets the kill credit. DAJ_RP: armor, shields, god mode and spawn protection now count unless NO_PROTECTION is set.",
+		"Damages players, NPCs and vehicles touching it: dmg every 0.1 seconds, or once a second with SLOW. The timer is the trigger's, so with several inside one is hurt per tick. With CAN_TARGET, using it switches it on and off and the player who used it gets the kill credit. Armor, shields, god mode and spawn protection count unless NO_PROTECTION is set.",
 		"1|START_OFF|Starts off (removed from the world). Only CAN_TARGET can switch it on.\n"
 		"2|CAN_TARGET|Using it switches it on and off.\n"
 		"4|SILENT|No effect: no hurt sound is played anyway.\n"
@@ -2155,7 +2155,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"trigger_location model *1 message Cantina",
 		"common trigger target_location" },
 	{ "trigger_multiple", 0, NULL,
-		"A repeatable trigger: fires its targets when a player or NPC touching it meets its conditions, or when it is used, then waits wait seconds. Its usescript runs and soundSet (if any) becomes the map ambience each time. With target2, target fires only once until the trigger has been clear for speed seconds, then target2 fires. DAJ_RP: random no longer breaks wait.",
+		"A repeatable trigger: fires its targets when a player or NPC touching it meets its conditions, or when it is used, then waits wait seconds. Its usescript runs and soundSet (if any) becomes the map ambience each time. With target2, target fires only once until the trigger has been clear for speed seconds, then target2 fires. Unlike the original game, random does not break wait.",
 		"1|CLIENTONLY|NPCs cannot set it off by touch.\n"
 		"2|FACING|Only fires while the toucher looks within 45 degrees of its angle.\n"
 		"4|USE_BUTTON|Only fires while a player in it presses Use (not attacking, not following). Plays the button animation and shows the use hint.\n"
@@ -2223,7 +2223,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"trigger_shipboundary model *1 target turnpoint traveltime 2000",
 		"common trigger trigger_hyperspace info_notnull" },
 	{ "trigger_space", 0, NULL,
-		"Space. Players and NPCs whose origin is inside have almost no gravity and, after 0.5 seconds, suffocate: 50 to 70 damage every 0.1 to 0.2 seconds, armor ignored. Vehicles and droids do not suffocate, and a rider inside an enclosed cockpit is protected. DAJ_RP: NPCs suffocate too and lose the space state when they leave. It cannot be switched off (INACTIVE does nothing).",
+		"Space. Players and NPCs whose origin is inside have almost no gravity and, after 0.5 seconds, suffocate: 50 to 70 damage every 0.1 to 0.2 seconds, armor ignored. Vehicles and droids do not suffocate, and a rider inside an enclosed cockpit is protected. NPCs suffocate too, and lose the space state when they leave. It cannot be switched off (INACTIVE does nothing).",
 		NULL,
 		NULL,
 		"trigger_space model *1",
