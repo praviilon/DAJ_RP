@@ -15786,12 +15786,15 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		{ // zyk: if origin or angles were not passed, use the origin or angles set with /entorigin
 			if (has_origin_set == qfalse)
 			{
-				zyk_main_set_entity_field(new_ent, "origin", G_NewString(va("%f %f %f", level.ent_origin[0], level.ent_origin[1], level.ent_origin[2])));
+				// GalaxyRP fix: [Entity System] va() strings, here and for the angles below, as the other
+				// branches pass: zyk_main_set_entity_field() copies them into the record, and a G_NewString()
+				// copy made here was never used and stayed in the level's memory pool until the map changed
+				zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", level.ent_origin[0], level.ent_origin[1], level.ent_origin[2]));
 			}
 
 			if (has_angles_set == qfalse)
 			{
-				zyk_main_set_entity_field(new_ent, "angles", G_NewString(va("%f %f %f", level.ent_angles[0], level.ent_angles[1], level.ent_angles[2])));
+				zyk_main_set_entity_field(new_ent, "angles", va("%f %f %f", level.ent_angles[0], level.ent_angles[1], level.ent_angles[2]));
 			}
 		}
 		else if (has_origin_set == qfalse)
@@ -17838,14 +17841,57 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 	}
 }
 
+/*
+==================
+Cmd_SpawnPlatform_f
+
+GalaxyRP fix: [Entity System] /spawnplatform [height]: a func_plat lift, the catwalk model, its resting
+top at the admin's feet, rising height units (128 by default; 0: it stays put, a floor tile) when someone
+steps onto it -- it rises at once with the admin on it. It used to be placed at the admin's origin, the
+middle of the body, with the 8 units of travel func_plat works out from its 16-unit box: it rested inside
+the admin's legs, and the admin standing in its trigger set it trying to rise, blocked, hurting him and
+reversing, over and over. The travel is clamped so a rider standing where the admin stands fits under
+whatever is above, or the lift would crush its rider against the ceiling the same way. The keys are an
+ordinary record (/entedit, /entsave): "height" is the travel.
+==================
+*/
+#define RP_PLATFORM_HEIGHT_DEFAULT	128
+#define RP_PLATFORM_HEIGHT_MAX		4096
+#define RP_PLATFORM_HALF_THICKNESS	8	// its mins/maxs below: the top surface is this far above its origin
+
 void Cmd_SpawnPlatform_f(gentity_t* ent) 
 {
 	gentity_t* new_ent = NULL;
+	int height = RP_PLATFORM_HEIGHT_DEFAULT;
+	int asked;
+	char arg[MAX_STRING_CHARS];
+	char ceilingNote[96] = "";
+	vec3_t feet;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
 	{
 		return;
 	}
+
+	if (trap->Argc() > 1)
+	{
+		int i;
+
+		trap->Argv(1, arg, sizeof(arg));
+		for (i = 0; arg[i] && i < 6; i++)
+		{
+			if (arg[i] < '0' || arg[i] > '9')
+				break;
+		}
+		if (!arg[0] || arg[i] || atoi(arg) > RP_PLATFORM_HEIGHT_MAX)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Usage: /spawnplatform <height (optional)>: how far it rises, 0 to %d units (default %d; 0: it stays put).\n\"",
+				RP_PLATFORM_HEIGHT_MAX, RP_PLATFORM_HEIGHT_DEFAULT) );
+			return;
+		}
+		height = atoi(arg);
+	}
+	asked = height;
 
 	// GalaxyRP fix: [Entity System] this and /spawndummy were the two Entity System commands still
 	// reaching G_Spawn() with no check, while /entadd -- which the same admin bit gates, and which
@@ -17862,16 +17908,45 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		return;
 	}
 
+	// where the admin's feet are: the bottom of the player box
+	VectorCopy( ent->client->ps.origin, feet );
+	feet[2] += DEFAULT_MINS_2;
+
+	// the room above for a rider standing where the admin stands -- a player's box carried up height
+	// units; nothing to measure when the admin is already inside something
+	if (height > 0)
+	{
+		const vec3_t riderMins = { -15, -15, DEFAULT_MINS_2 };
+		const vec3_t riderMaxs = { 15, 15, DEFAULT_MAXS_2 };
+		vec3_t top;
+		trace_t tr;
+
+		VectorCopy( ent->client->ps.origin, top );
+		top[2] += height;
+		trap->Trace( &tr, ent->client->ps.origin, riderMins, riderMaxs, top, ent->s.number, MASK_PLAYERSOLID & ~CONTENTS_BODY, qfalse, 0, 0 );
+		if (!tr.startsolid && !tr.allsolid && tr.fraction < 1.0f)
+		{
+			height = (int)floor( tr.endpos[2] - ent->client->ps.origin[2] );
+			if (height < 0)
+				height = 0;
+			Com_sprintf( ceilingNote, sizeof(ceilingNote), " (lowered from %d to fit under what is above)", asked );
+		}
+	}
+
 	new_ent = G_Spawn();
 
 	if (new_ent)
 	{
+		// GalaxyRP fix: [Entity System] the values go in as va() strings: zyk_main_set_entity_field()
+		// copies them into the record. A G_NewString() copy of the origin, made here, was never used and
+		// stayed in the level's memory pool until the map changed.
 		zyk_main_set_entity_field(new_ent, "classname", "func_plat");
-		zyk_main_set_entity_field(new_ent, "origin", G_NewString(va("%f %f %f", ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2])));
+		zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", feet[0], feet[1], feet[2] + height - RP_PLATFORM_HALF_THICKNESS));
 		zyk_main_set_entity_field(new_ent, "angles", "0 0 0");
 		zyk_main_set_entity_field(new_ent, "spawnflags", "1024");
 		zyk_main_set_entity_field(new_ent, "mins", "-64 -64 -8");
 		zyk_main_set_entity_field(new_ent, "maxs", "64 64 8");
+		zyk_main_set_entity_field(new_ent, "height", va("%d", height));
 		zyk_main_set_entity_field(new_ent, "model", "models/map_objects/factory/catw2_b.md3");
 
 		zyk_main_spawn_entity(new_ent);
@@ -17887,6 +17962,17 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		if (new_ent->s.number != 0)
 		{
 			level.last_spawned_entity = new_ent;
+		}
+
+		if (height > 0)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Platform %d spawned at (%i %i %i): a lift rising %d units when someone steps onto it%s. ^3/entedit %d height <units>^7 changes it.\n\"",
+				new_ent->s.number, (int)feet[0], (int)feet[1], (int)feet[2], height, ceilingNote, new_ent->s.number) );
+		}
+		else
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Platform %d spawned at (%i %i %i): it stays where it is%s. ^3/entedit %d height <units>^7 makes it a lift.\n\"",
+				new_ent->s.number, (int)feet[0], (int)feet[1], (int)feet[2], ceilingNote, new_ent->s.number) );
 		}
 	}
 
@@ -17922,7 +18008,9 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 	if (new_ent)
 	{
 		zyk_main_set_entity_field(new_ent, "classname", "zyk_training_pole");
-		zyk_main_set_entity_field(new_ent, "origin", G_NewString(va("%f %f %f", ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2])));
+		// GalaxyRP fix: [Entity System] a va() string: zyk_main_set_entity_field() copies it into the record, and
+		// the G_NewString() copy made here was never used and stayed in the level's memory pool
+		zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2]));
 		zyk_main_set_entity_field(new_ent, "angles", "0 0 0");
 		zyk_main_set_entity_field(new_ent, "spawnflags", "1");
 
@@ -19757,7 +19845,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
 	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";
 	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
-	lines[n++] = "^3/spawnplatform: ^7Spawns a platform where the player is.\n";
+	lines[n++] = "^3/spawnplatform <height (optional)>: ^7Spawns a lift platform under your feet that rises 128 units, or that height (0: it stays put), when someone steps onto it; lowered to fit under a ceiling.\n";
 	lines[n++] = "^3/spawndummy: ^7Spawns a dummy where the player is.\n";
 	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3misc_model_ghoul^7 (a .glm model), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server. See ^3/enthelp^7.\n";
 
