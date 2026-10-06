@@ -849,6 +849,26 @@ static int spawncmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((spawn_t*)b)->name );
 }
 
+// DAJ_RP: [Entity Help] the table, for /enthelp (g_enthelp.c): how many classes, and the i-th one's name
+// and whether it is a logical class
+int RP_SpawnClassCount( void ) {
+	return (int)ARRAY_LEN( spawns );
+}
+
+const char *RP_SpawnClassName( int i, qboolean *logical ) {
+	if ( i < 0 || i >= (int)ARRAY_LEN( spawns ) ) {
+		if ( logical ) {
+			*logical = qfalse;
+		}
+		return NULL;
+	}
+
+	if ( logical ) {
+		*logical = spawns[i].logical;
+	}
+	return spawns[i].name;
+}
+
 // GalaxyRP: [Logical Entities] the table's answer alone. Item classes (bg_itemlist) are not in the
 // table and so are never logical: they are pickups, linked and networked.
 qboolean G_IsLogicalEntity( const char *classname ) {

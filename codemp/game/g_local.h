@@ -2496,6 +2496,13 @@ qboolean	RP_RecordIsMapEntity( int num );
 // changed like any other entity; every other map entity (M) is protected -- see g_entgrab.c
 qboolean	RP_MapEntityExempt( const gentity_t *ent );
 qboolean	RP_MapEntityProtected( const gentity_t *ent );
+qboolean	RP_MapExemptClass( const char *classname );	// DAJ_RP: [Entity Help] the class alone, as /enthelp tells it
+// DAJ_RP: [Entity Help] /enthelp (g_enthelp.c), the spawn table it lists (g_spawn.c), and its own table, read-only, for the tests
+void		Cmd_EntHelp_f( gentity_t *ent );
+int			RP_SpawnClassCount( void );
+const char	*RP_SpawnClassName( int i, qboolean *logical );
+int			RP_EntHelpCount( void );
+const char	*RP_EntHelpField( int i, int field, int *flags );
 const char	*RP_MapEntityLinkKey( const gentity_t *ent );
 const char	*RP_MapEntityRefusalNote( const gentity_t *ent );
 qboolean	RP_EntitySystemMade( const gentity_t *ent );

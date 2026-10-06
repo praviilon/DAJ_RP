@@ -19736,6 +19736,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^5Finding and changing\n";
 	lines[n++] = entlist_line;
 	lines[n++] = "^3/entnear <distance>: ^7Lists entities in less than 200 map units or distance passed as argument.\n";
+	lines[n++] = "^3/enthelp <classname, entity id or part of a name> <key (optional)>: ^7Shows what an entity class does, its keys and spawnflags, with an example; with a key, that key alone. Without a name: the entity you aim at. ^3/enthelp list^7 lists every class.\n";
 	lines[n++] = "^3/entedit <entity id (optional)> <key> <value>...: ^7Edits the entity you aim at, or that id; without key/value pairs it shows its info. The classname cannot be changed.\n";
 	lines[n++] = "^3/entremove <entity id (optional)> <last entity id (optional)>: ^7Removes the entity you aim at, or that id, or every entity from the first id to the second when two are given (a range cannot cross from networked to logical ids). A removed door or platform takes its trigger with it. Spawn points cannot be removed.\n";
 	lines[n++] = "^7/entedit and /entremove do not change the map's own entities (^3M^7; those marked ^3E^7 can be changed) or those the game creates (^3G^7: saber entities, door triggers, missiles, NPCs, dropped items). View them with /entedit, copy them with /entcopy; use ^3/npc kill^7 for NPCs.\n";
@@ -19758,7 +19759,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
 	lines[n++] = "^3/spawnplatform: ^7Spawns a platform where the player is.\n";
 	lines[n++] = "^3/spawndummy: ^7Spawns a dummy where the player is.\n";
-	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server.\n";
+	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3misc_model_ghoul^7 (a .glm model), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server. See ^3/enthelp^7.\n";
 
 	lines[n++] = "\n^3--------Shader Remaps--------\n";
 	lines[n++] = "^3/remap <shader> <new shader>: ^7Remaps shader in the map.\n";
@@ -23989,6 +23990,7 @@ command_t commands[] = {
 	{ "entcut",				Cmd_EntCut_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entdeletefile",		Cmd_EntDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entedit",			Cmd_EntEdit_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "enthelp",			Cmd_EntHelp_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },	// DAJ_RP: [Entity Help] g_enthelp.c
 	{ "entitiesandremaps",	Cmd_EntitiesAndRemaps_f,	CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entlist",			Cmd_EntList_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entload",			Cmd_EntLoad_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },

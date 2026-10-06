@@ -236,7 +236,7 @@ static const char *rp_map_link_keys[] = {
 	NULL
 };
 
-static qboolean RP_MapExemptClass( const char *classname )
+qboolean RP_MapExemptClass( const char *classname )
 {
 	int i;
 
