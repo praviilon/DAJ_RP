@@ -982,7 +982,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"misc_siege_item model models/map_objects/kejim/cargo_small.md3 goaltarget goal1",
 		"common info_siege_objective" },
 	{ "misc_skyportal", 0, NULL,
-		"Makes the map's sky show the view from this point, for every client, with the field of view and fog its keys give. Entities it can see are sent to every client. "
+		"Makes the map's sky show the view from this point, for every client, with the field of view and fog its keys give. Entities it can see are sent to every client while it is there. "
 		"The Entity System refuses one on a map with a sky portal of its own, or while another added one is the sky portal. Removing it gives the map its own sky back.",
 		NULL,
 		"fov|80|Field of view of the sky view, degrees.\n"
@@ -2006,7 +2006,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"4|GLOBAL|Each use plays it at full volume for everyone (not with looping).\n"
 		"8|ACTIVATOR|Each use plays it on the activator (not with looping). Forced on when noise starts with *.",
 		"noise||Required unless soundSet is given: the sound file to play. Missing, the entity is not spawned.\n"
-		"soundSet||An ambient sound set from sound/sound.txt, played instead of noise. Placed with the entity commands, an unknown set is refused.\n"
+		"soundSet||An ambient sound set from sound/sound.txt, played instead of noise. It is sent only to players within hearing range of the set (its radius in sound.txt, plus 512). Placed with the entity commands, an unknown set is refused.\n"
 		"wait|0|Seconds between automatic replays, played by the clients without any use. Only works when random is non-zero too (a stock quirk).\n"
 		"random|0|Seconds of variance on wait. Must be non-zero for wait to repeat at all.\n"
 		"targetname||Using it plays or toggles the sound.",

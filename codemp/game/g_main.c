@@ -7669,6 +7669,49 @@ static const char *zyk_entity_line_vehicle_npc_spawner( char (*keys)[ZYK_ENTITY_
 	return NULL;
 }
 
+/*
+================
+RP_SpeakerAudienceFrame
+
+GalaxyRP: [Entity System] a target_speaker with a sound set is sent only to the clients that can hear it
+(SVF_BROADCASTCLIENTS, see SP_target_speaker()): its r.broadcastClients bits are set here every frame,
+after the clients have moved and before the server builds their snapshots, for every connected client
+whose eye -- the point the client listens from and the engine sends from -- is within rpAudibleRange.
+A client whose bit is clear is not sent it at all; one whose bit is set is sent it wherever it stands.
+================
+*/
+void RP_SpeakerAudienceFrame( void )
+{
+	int e, c;
+
+	for ( e = MAX_CLIENTS; e < level.num_entities && e < MAX_GENTITIES; e++ )
+	{
+		gentity_t *speaker = &g_entities[e];
+		float rangeSq;
+
+		if ( !speaker->inuse || speaker->rpAudibleRange <= 0.0f || !( speaker->r.svFlags & SVF_BROADCASTCLIENTS ) )
+			continue;
+
+		speaker->r.broadcastClients[0] = speaker->r.broadcastClients[1] = 0u;
+		rangeSq = speaker->rpAudibleRange * speaker->rpAudibleRange;
+
+		for ( c = 0; c < MAX_CLIENTS; c++ )
+		{
+			gentity_t *player = &g_entities[c];
+			vec3_t eye, d;
+
+			if ( !player->inuse || !player->client || player->client->pers.connected != CON_CONNECTED )
+				continue;
+
+			VectorCopy( player->client->ps.origin, eye );
+			eye[2] += player->client->ps.viewheight;
+			VectorSubtract( speaker->r.currentOrigin, eye, d );
+			if ( VectorLengthSquared( d ) <= rangeSq )
+				speaker->r.broadcastClients[c / 32] |= ( 1u << ( c % 32 ) );
+		}
+	}
+}
+
 void G_RunFrame( int levelTime ) {
 	int			i;
 	gentity_t	*ent;
@@ -9038,6 +9081,9 @@ void G_RunFrame( int levelTime ) {
 #ifdef _G_FRAME_PERFANAL
 	trap->PrecisionTimer_Start(&timer_Queues);
 #endif
+	// GalaxyRP: [Entity System] which clients each sound-set speaker is sent to this frame
+	RP_SpeakerAudienceFrame();
+
 	//At the end of the frame, send out the ghoul2 kill queue, if there is one
 	G_SendG2KillQueue();
 

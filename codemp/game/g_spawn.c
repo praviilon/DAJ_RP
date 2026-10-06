@@ -1280,6 +1280,10 @@ void RP_EntResetForRespawn( gentity_t *e )
 
 	e->s.loopSound = 0;
 	e->s.loopIsSoundset = qfalse;
+
+	// GalaxyRP: [Entity System] a speaker's hearing range (RP_SpeakerAudienceFrame()), set again by
+	// SP_target_speaker() when it still has a sound set
+	e->rpAudibleRange = 0.0f;
 }
 
 /*
@@ -2300,12 +2304,39 @@ line that starts with generalSet, localSet or bmodelSet (case-sensitive, as the 
 then -- past one character -- the first word. Names are compared ignoring case, as the client's name map
 does (sstring_t). If the server cannot read the file, only a name the map itself has already registered
 is accepted: every client has loaded those.
+
+GalaxyRP: [Entity System] each set's "radius" is kept as well, read the way the client reads it
+(AS_GetLocalSet(), snd_ambient.cpp), for RP_SoundSetRadius(): only a localSet's body has one, and the
+body is the lines after the set's name line for as long as each one starts with a word the client
+takes there -- timeBetweenWaves, subWaves, loopedWave, volRange or radius, in any case. The first other
+word ends it (a ';' comment, the next set's name, anything). Without a radius line, or in any other
+kind of set, it is the client's default, 250.
 ==================
 */
 #define RP_MAX_KNOWN_SOUNDSETS	2048
 #define RP_SOUNDSET_NAME_LEN	128
+#define RP_SOUNDSET_DEFAULT_RADIUS	250	// the client's default (CSetGroup::AddSet(), snd_ambient.cpp)
 static char rp_soundSetNames[RP_MAX_KNOWN_SOUNDSETS][RP_SOUNDSET_NAME_LEN];
+static int rp_soundSetRadius[RP_MAX_KNOWN_SOUNDSETS];
 static int rp_numSoundSetNames = 0;
+
+// GalaxyRP: [Entity System] whether a line's first word is one the client reads in a localSet's body
+static qboolean RP_SoundSetBodyWord( const char *word, qboolean *isRadius )
+{
+	static const char *bodyWords[] = { "timeBetweenWaves", "subWaves", "loopedWave", "volRange", "radius" };
+	int i;
+
+	*isRadius = qfalse;
+	for ( i = 0; i < (int)ARRAY_LEN( bodyWords ); i++ )
+	{
+		if ( !Q_stricmp( word, bodyWords[i] ) )
+		{
+			*isRadius = ( i == (int)ARRAY_LEN( bodyWords ) - 1 ) ? qtrue : qfalse;
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
 
 static void RP_LoadSoundSetNames( void )
 {
@@ -2314,6 +2345,7 @@ static void RP_LoadSoundSetNames( void )
 	char *buf = NULL;
 	const char *p;
 	int len, k, overflow = 0;
+	int body = -1;	// the localSet whose body the lines are in, -1 outside one
 
 	level.rp_soundsets_state = -1;
 	rp_numSoundSetNames = 0;
@@ -2339,6 +2371,8 @@ static void RP_LoadSoundSetNames( void )
 
 	for ( p = buf; *p; )
 	{
+		qboolean setLine = qfalse;
+
 		for ( k = 0; k < (int)ARRAY_LEN( keywords ); k++ )
 		{
 			const int kwLen = (int)strlen( keywords[k] );
@@ -2347,6 +2381,9 @@ static void RP_LoadSoundSetNames( void )
 
 			if ( strncmp( p, keywords[k], kwLen ) != 0 )
 				continue;
+
+			setLine = qtrue;
+			body = -1;
 
 			// the client steps past the keyword and one more character, then reads a word with sscanf
 			q = p + kwLen;
@@ -2366,9 +2403,41 @@ static void RP_LoadSoundSetNames( void )
 				n++;
 			}
 			rp_soundSetNames[rp_numSoundSetNames][n] = '\0';
+			rp_soundSetRadius[rp_numSoundSetNames] = RP_SOUNDSET_DEFAULT_RADIUS;
 			if ( n > 0 && ( !q[n] || isspace( (unsigned char)q[n] ) ) )
+			{
+				if ( k == 1 )	// localSet: its body may give a radius
+					body = rp_numSoundSetNames;
 				rp_numSoundSetNames++;	// a name too long to keep whole is left out: it can never match
+			}
 			break;
+		}
+
+		if ( !setLine && body >= 0 )
+		{
+			char word[64];
+			qboolean isRadius;
+
+			// the client reads the first word wherever it is -- blank lines are passed over
+			if ( sscanf( p, "%63s", word ) == 1 )
+			{
+				if ( !RP_SoundSetBodyWord( word, &isRadius ) )
+				{
+					body = -1;	// any other word ends the body
+				}
+				else if ( isRadius )
+				{
+					int radius;
+
+					// as the client: "%s %d" from the line on, the number left as it was when none follows
+					if ( sscanf( p, "%*s %d", &radius ) == 1 )
+						rp_soundSetRadius[body] = radius;
+				}
+			}
+			else
+			{
+				body = -1;	// nothing left in the file
+			}
 		}
 
 		// on to the next line: the client ends a line at either '\r' or '\n'
@@ -2416,6 +2485,42 @@ qboolean RP_SoundSetKnown( const char *name )
 			return qtrue;
 	}
 	return qfalse;
+}
+
+/*
+==================
+RP_SoundSetRadius
+
+GalaxyRP: [Entity System] the radius sound/sound.txt gives an ambient set, the distance at which the
+client's volume for it reaches 0 (AS_PlayLocalSet(), snd_ambient.cpp): RP_LoadSoundSetNames() keeps it.
+A name the file defines twice takes its last definition, as the client's name map does. qfalse when the
+server could not read the file; a name it does not define gets the client's default.
+==================
+*/
+qboolean RP_SoundSetRadius( const char *name, int *radius )
+{
+	int i;
+
+	*radius = RP_SOUNDSET_DEFAULT_RADIUS;
+
+	if ( level.rp_soundsets_state == 0 )
+		RP_LoadSoundSetNames();
+
+	if ( level.rp_soundsets_state <= 0 )
+		return qfalse;
+
+	if ( !name || !name[0] )
+		return qtrue;
+
+	for ( i = rp_numSoundSetNames - 1; i >= 0; i-- )
+	{
+		if ( !Q_stricmp( rp_soundSetNames[i], name ) )
+		{
+			*radius = rp_soundSetRadius[i];
+			break;
+		}
+	}
+	return qtrue;
 }
 
 void RP_SpawnSaysWhy( gentity_t *ent, const char *reason )

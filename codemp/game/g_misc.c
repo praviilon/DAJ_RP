@@ -2257,8 +2257,8 @@ void SP_misc_skyportal (gentity_t *ent)
 	// spawning it again in place -- /entedit -- is not refused as a second one). One added where the map
 	// has none is allowed, and kept as an inert entity (G_PortalifyEntities used to free it) so it is
 	// listed, saved by /entsave and can be removed -- and removing it clears the sky again, since the
-	// clients read CS_SKYBOXORG every frame: RP_SkyPortalRelease(), from G_FreeEntity(). (The portal
-	// flags it set on other entities only matter while there is a portal.)
+	// clients read CS_SKYBOXORG every frame: RP_SkyPortalRelease(), from G_FreeEntity(). The marks it
+	// set on the entities it can see (isPortalEnt) go with it: RP_SkyPortalUnflag().
 	if ( RP_EntitySystemMade( ent ) )
 	{
 		if ( level.rp_skyportal_owner == -1 && RP_RefuseAtRuntime( ent, "the map has a sky portal of its own; a second one would replace it for everyone" ) )
@@ -2274,6 +2274,11 @@ void SP_misc_skyportal (gentity_t *ent)
 				return;
 			}
 		}
+		// GalaxyRP fix: [Entity System] spawned again in place (/entedit, /entrotate, a dropped /entcut) it is
+		// not released first: the entities it marked from where it stood are unmarked before it marks the
+		// ones it can see from here (G_PortalifyEntities). The map has no portal of its own, so every mark
+		// in the world is this one's.
+		RP_SkyPortalUnflag();
 		level.rp_skyportal_owner = ent->s.number + 1;
 		Q_strncpyz( level.rp_spawn_note, "The sky portal is set for every client; removing this entity clears it again.", sizeof( level.rp_spawn_note ) );
 	}
@@ -2296,6 +2301,37 @@ void SP_misc_skyportal (gentity_t *ent)
 
 /*
 =================
+RP_SkyPortalUnflag
+
+GalaxyRP fix: [Entity System] G_PortalifyEntities() marks every entity the sky portal can see as part of
+the sky (s.isPortalEnt), and the marks are network state that outlived an added portal: the engine sends
+a marked entity to every client every frame, whatever it can see (sv_snapshot.cpp), and a client plays a
+marked fx_runner's effect only in the sky view (cg_ents.c) -- with the portal gone, invisible until the map
+changed. Called only for a portal the Entity System added (the map then has none of its own, so every
+mark is that portal's): when it is removed, and before it marks again from where it is spawned anew. An
+fx_runner used while marked was also set to be sent to everyone (fx_runner_use()), and nothing else sets
+that on one: cleared with its mark.
+=================
+*/
+void RP_SkyPortalUnflag( void )
+{
+	int i;
+
+	for ( i = 0; i < MAX_GENTITIES; i++ )
+	{
+		gentity_t *e = &g_entities[i];
+
+		if ( !e->inuse || !e->s.isPortalEnt )
+			continue;
+
+		e->s.isPortalEnt = qfalse;
+		if ( e->s.eType == ET_FX )
+			e->r.svFlags &= ~SVF_BROADCAST;
+	}
+}
+
+/*
+=================
 RP_SkyPortalRelease
 
 GalaxyRP fix: [Entity System] called by G_FreeEntity() for every entity: if this one is the sky portal
@@ -2312,6 +2348,7 @@ void RP_SkyPortalRelease( gentity_t *ent )
 
 	level.rp_skyportal_owner = 0;
 	trap->SetConfigstring( CS_SKYBOXORG, "" );
+	RP_SkyPortalUnflag();
 	G_LogPrintf( "sky portal entity %d removed: the sky is the map's own again\n", ent->s.number );
 }
 

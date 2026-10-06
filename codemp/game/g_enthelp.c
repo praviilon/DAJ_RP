@@ -554,6 +554,10 @@ static void RP_EhList( rpEhOut_t *o, int page )
 		if ( rp_eh_groups[g].page != page )
 			continue;
 
+		// DAJ_RP fix: [Entity Help] the heading first: a long group (the NPCs) is printed in chunks as it
+		// fills, and with the heading after the loops its first chunk came out under the previous group's
+		RP_EhLine( o, va( "^5%s", rp_eh_groups[g].title ) );
+
 		line[0] = '\0';
 		for ( i = 0; i < count; i++ )
 		{
@@ -585,7 +589,6 @@ static void RP_EhList( rpEhOut_t *o, int page )
 			}
 		}
 
-		RP_EhLine( o, va( "^5%s", rp_eh_groups[g].title ) );
 		if ( line[0] )
 			RP_EhLine( o, line );
 	}

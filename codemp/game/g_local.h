@@ -669,6 +669,10 @@ struct gentity_s {
 	qboolean	rpSpawnerRespawn;
 	int			rpSpawnerQueued;
 
+	// GalaxyRP: [Entity System] on a target_speaker with a soundSet: the distance within which a client is
+	// sent it (its set's radius + RP_SPEAKER_AUDIBLE_MARGIN), 0 on anything else -- RP_SpeakerAudienceFrame()
+	float		rpAudibleRange;
+
 	// GalaxyRP: [Entity System] on an npc_spawner: its "npceffect" key, the /npc effect mode every NPC it
 	// makes starts with (an RP_PHASE_* value, RP_PHASE_NONE for none) -- see RP_NpcEffectFromName()
 	int			rpSpawnerEffect;
@@ -2590,6 +2594,10 @@ qboolean	RP_MusicFileExists( const char *music );
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
 const char *RP_EntityRefusalReason( const gentity_t *ent );
+#define RP_SPEAKER_AUDIBLE_MARGIN	512.0f	// GalaxyRP: [Entity System] see SP_target_speaker()
+qboolean RP_SoundSetRadius( const char *name, int *radius );	// GalaxyRP: [Entity System] g_spawn.c
+void RP_SpeakerAudienceFrame( void );	// GalaxyRP: [Entity System] g_main.c
+void RP_SkyPortalUnflag( void );	// GalaxyRP: [Entity System] g_misc.c
 qboolean RP_ClassIsSpawnPoint( const char *classname );	// GalaxyRP: [Entity System] info_player_* and the four CTF spawn classes
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
 void RP_PushTriggerNetSync( gentity_t *self );	// GalaxyRP: [SP Maps] g_trigger.c

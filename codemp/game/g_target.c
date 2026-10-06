@@ -417,14 +417,36 @@ void SP_target_speaker( gentity_t *ent ) {
 	G_SpawnFloat( "wait", "0", &ent->wait );
 	G_SpawnFloat( "random", "0", &ent->random );
 
+	// GalaxyRP fix: [Entity System] spawned again in place (/entedit) without its soundSet, it kept the
+	// set's index and played the set as well as its noise
+	ent->rpAudibleRange = 0.0f;
+	ent->s.soundSetIndex = 0;
+
 	if ( G_SpawnString ( "soundSet", "", &s ) )
 	{	// this is a sound set
+		int radius;
+
 		ent->s.soundSetIndex = G_SoundSetIndex(s);
-		// GalaxyRP fix: [Entity System] sent to every client rather than made EF_PERMANENT, which the engine
-		// never sends after the baseline taken at map start: one added later, or respawned by /entload or
-		// the default.txt preset (which frees and respawns the map's own), was silent -- see SP_misc_bsp().
+		// GalaxyRP fix: [Entity System] not EF_PERMANENT, which the engine never sends after the baseline
+		// taken at map start: one added later, or respawned by /entload or the default.txt preset (which
+		// frees and respawns the map's own), was silent, and one freed after the baseline went on playing
+		// for everyone. Sent instead to the clients close enough to hear it -- within its set's radius,
+		// where the client's volume for it reaches 0, plus RP_SPEAKER_AUDIBLE_MARGIN for the movement
+		// between snapshots: RP_SpeakerAudienceFrame() (g_main.c) sets them every frame. Wherever it
+		// stands, a wall included, as a permanent one was heard. (Sending it to everyone, as it was for a
+		// while, filled every client's snapshot with every speaker on the map: bespin_undercity has 94.)
+		// When the server cannot read sound/sound.txt it does not know the radius: then to everyone.
 		ent->s.eFlags = 0;
-		ent->r.svFlags |= SVF_BROADCAST;
+		if ( RP_SoundSetRadius( s, &radius ) )
+		{
+			ent->rpAudibleRange = (float)( radius > 0 ? radius : 0 ) + RP_SPEAKER_AUDIBLE_MARGIN;
+			ent->r.svFlags |= SVF_BROADCASTCLIENTS;
+			ent->r.broadcastClients[0] = ent->r.broadcastClients[1] = 0u;
+		}
+		else
+		{
+			ent->r.svFlags |= SVF_BROADCAST;
+		}
 		VectorCopy( ent->s.origin, ent->s.pos.trBase );
 		trap->LinkEntity ((sharedEntity_t *)ent);
 		return;
