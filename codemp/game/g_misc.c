@@ -6171,8 +6171,48 @@ void G_FreeClientForShooter(gclient_t *cl)
 	}
 }
 
+/*
+================
+RP_WeaponShooterAim
+
+GalaxyRP fix: [SP Maps] misc_weapon_shooter_aim()'s body, so the shot can use it too: points the shooter
+at its target's current position. qfalse when it has no target or the target is gone.
+================
+*/
+static qboolean RP_WeaponShooterAim( gentity_t *self )
+{
+	gentity_t *targ;
+	vec3_t dir;
+
+	if ( !self->target )
+	{
+		return qfalse;
+	}
+
+	targ = G_Find( NULL, FOFS(targetname), self->target );
+	if ( !targ )
+	{
+		self->enemy = NULL;
+		return qfalse;
+	}
+
+	self->enemy = targ;
+	// GalaxyRP fix: [SP Maps] the direction computed here was overwritten with the target's
+	// absolute position before vectoangles(), so the shooter aimed at the angles of a
+	// world coordinate instead of at its target.
+	VectorSubtract( targ->r.currentOrigin, self->r.currentOrigin, dir );
+	VectorCopy( targ->r.currentOrigin, self->pos1 );
+	vectoangles( dir, self->client->ps.viewangles );
+	SetClientViewAngle( self, self->client->ps.viewangles );
+	return qtrue;
+}
+
 void misc_weapon_shooter_fire( gentity_t *self )
 {
+	// GalaxyRP fix: [SP Maps] a repeating shooter's think is this one, not misc_weapon_shooter_aim, so
+	// its aim froze where it was when it started firing: each shot now aims at where the target is
+	RP_WeaponShooterAim( self );
+
 	// GalaxyRP fix: [Entity System] every shot is a missile, an entity, and some weapons fire more
 	// than one: with the table at the reserve the shot is skipped (the repeat below keeps its
 	// cadence) rather than walked into G_Spawn()'s ERR_DROP
@@ -6191,6 +6231,8 @@ void misc_weapon_shooter_fire( gentity_t *self )
 	}
 }
 
+void misc_weapon_shooter_aim( gentity_t *self );
+
 void misc_weapon_shooter_use ( gentity_t *self, gentity_t *other, gentity_t *activator )
 {
 	if ( self->think == misc_weapon_shooter_fire )
@@ -6200,7 +6242,19 @@ void misc_weapon_shooter_use ( gentity_t *self, gentity_t *other, gentity_t *act
 		self->think = G_FreeEntity;
 		self->nextthink = level.time;
 		*/
-		self->nextthink = 0;
+		// GalaxyRP fix: [SP Maps] only nextthink was cleared, so think stayed misc_weapon_shooter_fire
+		// and every later use took this branch again: a TOGGLE shooter, once stopped, never fired
+		// again (t1_sour's intro shooter). One with a target goes back to following it.
+		if ( self->target )
+		{
+			self->think = misc_weapon_shooter_aim;
+			self->nextthink = level.time + FRAMETIME;
+		}
+		else
+		{
+			self->think = NULL;
+			self->nextthink = 0;
+		}
 		return;
 	}
 	//otherwise, fire
@@ -6210,28 +6264,10 @@ void misc_weapon_shooter_use ( gentity_t *self, gentity_t *other, gentity_t *act
 void misc_weapon_shooter_aim( gentity_t *self )
 {
 	//update my aim
-	if ( self->target )
+	if ( RP_WeaponShooterAim( self ) )
 	{
-		gentity_t *targ = G_Find( NULL, FOFS(targetname), self->target );
-		if ( targ )
-		{
-			vec3_t dir;
-
-			self->enemy = targ;
-			// GalaxyRP fix: [SP Maps] the direction computed here was overwritten with the target's
-			// absolute position before vectoangles(), so the shooter aimed at the angles of a
-			// world coordinate instead of at its target.
-			VectorSubtract( targ->r.currentOrigin, self->r.currentOrigin, dir );
-			VectorCopy( targ->r.currentOrigin, self->pos1 );
-			vectoangles( dir, self->client->ps.viewangles );
-			SetClientViewAngle( self, self->client->ps.viewangles );
-			//FIXME: don't keep doing this unless target is a moving target?
-			self->nextthink = level.time + FRAMETIME;
-		}
-		else
-		{
-			self->enemy = NULL;
-		}
+		//FIXME: don't keep doing this unless target is a moving target?
+		self->nextthink = level.time + FRAMETIME;
 	}
 }
 

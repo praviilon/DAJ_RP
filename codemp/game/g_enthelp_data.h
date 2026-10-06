@@ -123,9 +123,10 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"emplaced_gun angle 90",
 		"common emplaced_eweb" },
 	{ "func_bobbing", 0, NULL,
-		"A brush or .md3 model that bobs up and down (or along X or Y) forever from spawn, in a smooth sine motion. A player or NPC in its way is killed outright unless CRUSH_THROUGH is set. It has no use of its own: using it (a target, PLAYER_USE) runs the generic mover code, which moves it to the world origin 0 0 0 and ends the bobbing, so do not target it.",
+		"A brush or .md3 model that bobs up and down (or along X or Y) from spawn, in a smooth sine motion. A player or NPC in its way is killed outright unless CRUSH_THROUGH is set. Using it (targetname, PLAYER_USE, the Stun Baton) stops it where it is, and the next use carries on from the same place in its cycle.",
 		"1|X_AXIS|Bobs along the X axis instead of Z.\n"
-		"2|Y_AXIS|Bobs along the Y axis instead of Z.",
+		"2|Y_AXIS|Bobs along the Y axis instead of Z.\n"
+		"4|START_OFF|Starts still, at the place in the cycle phase gives: the first use starts it.",
 		"height|32|How far it bobs each way, in units.\n"
 		"speed|4|Seconds for one full cycle.\n"
 		"phase|0|Where in the cycle it starts, 0 to 1.\n"
@@ -208,8 +209,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common" },
 	{ "func_pendulum", 0, NULL,
-		"A brush or .md3 model that swings back and forth forever from spawn, pivoting on its origin (a map's pendulum needs an origin brush at the pivot). Its swing time follows its length below the pivot (its mins height, at least 8) and gravity. A player or NPC in its way is killed outright unless CRUSH_THROUGH is set. It has no use of its own: using it moves it to the world origin 0 0 0, so do not target it.",
-		NULL,
+		"A brush or .md3 model that swings back and forth from spawn, pivoting on its origin (a map's pendulum needs an origin brush at the pivot). Its swing time follows its length below the pivot (its mins height, at least 8) and gravity. A player or NPC in its way is killed outright unless CRUSH_THROUGH is set. Using it (targetname, PLAYER_USE, the Stun Baton) stops it where it is in its swing, and the next use carries on from there.",
+		"4|START_OFF|Starts still, at the point of its swing phase gives: the first use starts it.",
 		"speed|30|Degrees it swings to each side.\n"
 		"phase|0|Where in the swing it starts, 0 to 1.\n"
 		"angles||Its orientation, also for an .md3 model (angles2 is not used). It swings around its own roll axis, so the yaw picks the plane it swings in.\n"
@@ -229,7 +230,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"func_plat model *1 height 128",
 		"common mover" },
 	{ "func_rotating", 0, NULL,
-		"A brush or .md3 model that spins forever from spawn around its origin (a map's one needs an origin brush), around Z unless X_AXIS or Y_AXIS is set. Blocked, it stops until the way is clear, unless IMPACT. With health it can also be broken (the func_breakable keys apply). It has no on or off: START_ON is ignored, and using it moves it to the world origin 0 0 0 (or breaks it, with health), so do not target it.",
+		"A brush or .md3 model that spins around its origin (a map's one needs an origin brush), around Z unless X_AXIS or Y_AXIS is set. Blocked, it stops until the way is clear, unless IMPACT. Using it (targetname, PLAYER_USE, the Stun Baton) stops it where it is, and the next use starts it again, with its soundSet's start, loop and stop sounds. One with a targetname starts still unless START_ON, one without spins from spawn. With health it can be broken instead (the func_breakable keys apply): it always spins, and using it breaks it.",
+		"1|START_ON|With a targetname: spins from spawn (without it, the first use starts it). One without a targetname always does.\n"
 		"2|RADAR|Shown on the radar, as Siege asteroids are.\n"
 		"4|X_AXIS|Spins around the X axis (roll) instead of Z.\n"
 		"8|Y_AXIS|Spins around the Y axis (pitch) instead of Z.\n"
@@ -1079,7 +1081,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"common misc_turret misc_sentry_turret" },
 	{ "misc_weapon_shooter", 0, NULL,
 		"Fires a weapon from its origin each time it is used (targetname), at the entity its target names (aim kept up to date) or along its angles. "
-		"ALTFIRE uses the alternate fire. With TOGGLE the first use starts firing every wait ms and the next use stops it (it does not start again after that). "
+		"ALTFIRE uses the alternate fire. With TOGGLE a use starts firing every wait ms, aiming each shot at where its target is, and the next use stops it. "
 		"At most 16 per map, the 17th is refused.",
 		"1|ALTFIRE|Fires the weapon's alternate fire.\n"
 		"2|TOGGLE|Keeps firing every wait ms until used again.",
@@ -1127,7 +1129,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"angle||On func_door and func_button the direction they move (-1 up, -2 down), not a facing. A *N model only turns on func_static and func_pendulum.\n"
 		"light|100|Radius of a constant dynamic light around its origin, up to 1020. 100 when only color is given.\n"
 		"color|1 1 1|Colour of that light, red green blue from 0 to 1. Giving light or color turns the light on.\n"
-		"soundSet||An ambient sound set (bmodelSet in sound/sound.txt): doors, plats, buttons and trains play its start, loop and stop sounds as they move. Refused if the server does not know the set.\n"
+		"soundSet||An ambient sound set (bmodelSet in sound/sound.txt): doors, plats, buttons and trains play its start, loop and stop sounds as they move, and func_rotating as it is started and stopped (its loop also while it spins from spawn). Refused if the server does not know the set.\n"
 		"team||Movers with the same team move as one: the first is the leader, using any member uses the leader, and a member's targetname moves to the leader. Not on func_breakable.\n"
 		"linear|0|1: doors, plats, buttons and trains move at a steady speed instead of easing in and out.\n"
 		"target||Doors, plats and buttons fire it as they start to open.\n"
@@ -1138,11 +1140,11 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"common" },
 	{ "npc", RP_EH_TOPIC, NULL,
 		"Shared behaviour of every npc_* spawner (npc_spawner, npc_vehicle and the named classes such as npc_stormtrooper). /entadd needs a targetname: firing that name spawns one NPC, after delay. Each spawn uses one of count, and when the last is used the spawner fires its target and removes itself. spawnnow and respawn work only on a named spawner. A spawn is skipped (count kept) when 256 NPCs are alive or entity slots run short. Its NPCs get npc_targetname, npc_target, health, scripts and spawnflags from it.",
-		"16|DROPTOFLOOR|Traces the spawner down to the floor, but the NPC is still made at the spawner's own origin, so it has no visible effect. For Jedi or Luke allies and Tavion, Reborn, Desann or Shadowtrooper enemies it is CEILING: the NPC clings where placed and drops on seeing an enemy or being hurt.\n"
+		"16|DROPTOFLOOR|Traces the spawner down to the floor, but the NPC is still made at the spawner's own origin, so it has no visible effect (single player is the same). For Jedi or Luke allies and Tavion, Reborn, Desann or Shadowtrooper enemies it is CEILING: the NPC clings where placed and drops on seeing an enemy or being hurt.\n"
 		"32|CINEMATIC|The NPC starts with no AI (cinematic behaviour state) and stands until a script moves it.\n"
 		"64|NOTSOLID|The NPC is not solid at all and is not checked for a blocked spawn spot. Wins over npceffect.\n"
 		"128|STARTINSOLID|Does not try to free an NPC that spawns inside something solid.\n"
-		"2048|SHY|When fired, waits until no player is within 128 units or looking at the spot (checked every second). The editor's SHY box (256) does nothing.\n"
+		"2048|SHY|When fired, waits until no player is within 128 units or looking at the spot (checked every second). The editor's SHY box (256) does nothing (single player is the same).\n"
 		"65536|MILLISECONDS|wait and delay are given in milliseconds instead of seconds. The spawner also sets it on itself.",
 		"npc_type||The NPC type (see /list npcs). Required on npc_spawner, a vehicle name on npc_vehicle. The named classes pick their own.\n"
 		"targetname||Required by /entadd and /entedit: using this name (trigger, button, /entuse) spawns an NPC. Without one (maps, /entsave files) it spawns one at map start and is gone.\n"
@@ -1789,7 +1791,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"shooter_blaster targetname gun1 angle 90",
 		"common" },
 	{ "spawnpoint", RP_EH_TOPIC, NULL,
-		"Where players appear: info_player_deathmatch (FFA and every mode's fallback, info_player_start becomes one), info_player_start_red/blue (Team FFA), info_player_duel/duel1/duel2 (Duel, Power Duel), team_CTF_* (CTF), info_player_siegeteam1/2 (Siege, else deathmatch) and info_player_intermission (spectators). A player appears 9 units above a random free point (in FFA and duels, among the furthest from where they died) facing its angle, and its target fires. A point with someone on it or a wall in the player's box is skipped. One added inside a wall is refused, the map's own and its fixes' info_player_* points cannot be removed (added ones can), and with none left players spawn where the map's first one was.",
+		"Where players appear: info_player_deathmatch (FFA and every mode's fallback, info_player_start becomes one), info_player_start_red/blue (Team FFA), info_player_duel/duel1/duel2 (Duel, Power Duel), team_CTF_* (CTF), info_player_siegeteam1/2 (Siege, else deathmatch) and info_player_intermission (spectators). A player appears 9 units above a random free point (in FFA and duels, among the furthest from where they died) facing its angle, and its target fires. A point with someone on it or a wall in the player's box is skipped. One added inside a wall is refused, the map's own and its fixes' points (info_player_* and the team_CTF_* spawns) cannot be removed (added ones can), and with none left players spawn where the map's first one was.",
 		"1|INITIAL|info_player_deathmatch and info_player_start only: the first spawn of a listen-server host goes there. Nothing on a dedicated server.",
 		"angle|0|The direction (yaw, degrees) players face on spawning.\n"
 		"target||Fired each time a player spawns on the point, the player as activator.\n"
@@ -1857,7 +1859,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common target" },
 	{ "target_give", 0, NULL,
-		"Gives the activator the items named by its target, as if they had walked over them (the usual pickup rules apply), then takes those items off the map for good. Caveat: in MP an item with a targetname spawns hidden and a hidden item cannot be picked up, so nothing is given unless the item was first shown by using its name. Each item is given at most once.",
+		"Gives the activator the items named by its target, as if they had walked over them (the usual pickup rules apply: a player at full health gets no medpak), then keeps those items off the map. Each use gives them again, so the items work as its stock: place them anywhere, they spawn hidden because they have a targetname. Using an item's own name still shows it on the map, and the next give takes it off again. A weapon or powerup someone picked up off the map is not given until it respawns.",
 		NULL,
 		"target||The targetname of the item entities to give (all with that name). Entities that are not items are skipped.\n"
 		"targetname||Using it gives the items to the activator.",
@@ -1876,7 +1878,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"target_kill targetname pit",
 		"common target" },
 	{ "target_laser", 0, NULL,
-		"A damaging beam reaching up to 2048 units, toward its target or along its angle, that hurts the first thing it hits 10 times a second. Using it switches it on or off, and the one who switched it on is credited with the damage. Stock quirk: the player in client slot 0 is never hurt by it.",
+		"A damaging beam reaching up to 2048 units, toward its target or along its angle, that hurts the first thing it hits 10 times a second. Using it switches it on or off, and the one who switched it on is credited with the damage.",
 		"1|START_ON|On from the start, without being used.",
 		"target||Name of an entity to aim at: the beam points at its middle and follows it as it moves. Without one, the angle sets the direction.\n"
 		"angle||Direction of the beam when there is no target (-1 up, -2 down).\n"
@@ -2026,14 +2028,14 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"team_CTF_blueflag",
 		"items common team_CTF_redflag" },
 	{ "team_CTF_blueplayer", 0, NULL,
-		"CTF and Capture the Ysalamiri only: blue players spawn here on their first spawn after joining the game or the team, later spawns use team_CTF_bluespawn. A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. Place it with /entadd where you stand: /entaddaim sets its origin on the floor, where a player would be inside it, so it is refused.",
+		"CTF and Capture the Ysalamiri only: blue players spawn here on their first spawn after joining the game or the team, later spawns use team_CTF_bluespawn. A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. /entaddaim stands it on the surface aimed at, as a player would stand there. The map's own and the per-map fixes' ones cannot be removed (added ones can).",
 		NULL,
 		"angle|0|The direction (yaw, degrees) players face when they spawn here.\n"
 		"target||Fired each time a player spawns here, with the player as activator.",
 		"team_CTF_blueplayer angle 180",
 		"common spawnpoint team_CTF_bluespawn" },
 	{ "team_CTF_bluespawn", 0, NULL,
-		"CTF and Capture the Ysalamiri only: blue players respawn here after their first spawn (that one uses team_CTF_blueplayer). A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. Place it with /entadd where you stand: /entaddaim sets its origin on the floor, where a player would be inside it, so it is refused.",
+		"CTF and Capture the Ysalamiri only: blue players respawn here after their first spawn (that one uses team_CTF_blueplayer). A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. /entaddaim stands it on the surface aimed at, as a player would stand there. The map's own and the per-map fixes' ones cannot be removed (added ones can).",
 		NULL,
 		"angle|0|The direction (yaw, degrees) players face when they spawn here.\n"
 		"target||Fired each time a player spawns here, with the player as activator.",
@@ -2055,14 +2057,14 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"team_CTF_redflag",
 		"items common team_CTF_blueflag" },
 	{ "team_CTF_redplayer", 0, NULL,
-		"CTF and Capture the Ysalamiri only: red players spawn here on their first spawn after joining the game or the team, later spawns use team_CTF_redspawn. A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. Place it with /entadd where you stand: /entaddaim sets its origin on the floor, where a player would be inside it, so it is refused.",
+		"CTF and Capture the Ysalamiri only: red players spawn here on their first spawn after joining the game or the team, later spawns use team_CTF_redspawn. A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. /entaddaim stands it on the surface aimed at, as a player would stand there. The map's own and the per-map fixes' ones cannot be removed (added ones can).",
 		NULL,
 		"angle|0|The direction (yaw, degrees) players face when they spawn here.\n"
 		"target||Fired each time a player spawns here, with the player as activator.",
 		"team_CTF_redplayer angle 0",
 		"common spawnpoint team_CTF_redspawn" },
 	{ "team_CTF_redspawn", 0, NULL,
-		"CTF and Capture the Ysalamiri only: red players respawn here after their first spawn (that one uses team_CTF_redplayer). A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. Place it with /entadd where you stand: /entaddaim sets its origin on the floor, where a player would be inside it, so it is refused.",
+		"CTF and Capture the Ysalamiri only: red players respawn here after their first spawn (that one uses team_CTF_redplayer). A random free one is used (all taken: the first one), and with none on the map an info_player_deathmatch. /entaddaim stands it on the surface aimed at, as a player would stand there. The map's own and the per-map fixes' ones cannot be removed (added ones can).",
 		NULL,
 		"angle|0|The direction (yaw, degrees) players face when they spawn here.\n"
 		"target||Fired each time a player spawns here, with the player as activator.",
@@ -2189,14 +2191,18 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"trigger_once model *1 target mydoor",
 		"common trigger trigger_multiple" },
 	{ "trigger_push", 0, NULL,
-		"A jump pad. By default it throws the players and NPCs touching it in an arc whose top is its target, worked out from g_gravity when it spawns. LINEAR pushes in a straight line instead, always at 1000 units per second (the speed key is overwritten). If the target is missing, or an arc target is not above the trigger's centre, the trigger removes itself (logged).",
-		"2|NO_TOUCH|Never pushes: nothing in MP switches it on. Do not set.\n"
-		"4|LINEAR|Pushes in a straight line toward the target, in the direction from the trigger's centre.\n"
-		"16|RELATIVE|With LINEAR: pushes each toucher from where it is toward the target. Without LINEAR the throw is wrong, so always set 4 with it.\n"
+		"A jump pad. By default it throws the players and NPCs touching it in an arc whose top is its target, worked out from g_gravity when it spawns. LINEAR and RELATIVE push in a straight line instead (a conveyor belt with CONVEYOR). Those are worked out by the server alone, so on a lagging player's screen they act a little later than an arc throw. If the target is missing, or an arc target is not above the trigger's centre, the trigger removes itself (logged).",
+		"1|PLAYERONLY|Pushes players only, not NPCs or objects.\n"
+		"2|NO_TOUCH|Never pushes: nothing switches it on (single player is the same). Do not set.\n"
+		"4|LINEAR|Pushes in a straight line toward the target, in the direction from the trigger's centre, always at 1000 units per second (the speed key is overwritten, as in single player).\n"
+		"8|NPCONLY|Pushes NPCs only (PLAYERONLY wins when both are set).\n"
+		"16|RELATIVE|Pushes each toucher from where it is toward the target, at speed.\n"
+		"32|CONVEYOR|Pushes only what stands on it, nothing in the air.\n"
 		"128|INACTIVE|Starts off: target_activate switches it on.\n"
-		"2048|MULTIPLE|With LINEAR: several entities can be pushed in the same frame.",
-		"target||Required: the entity at the top of the arc (a target_position), or the one LINEAR pushes toward.\n"
-		"wait|0|LINEAR only, in milliseconds here: time between pushes. -1 pushes once only.",
+		"2048|MULTIPLE|LINEAR or RELATIVE: several entities can be pushed in the same frame.",
+		"target||Required: the entity at the top of the arc (a target_position), or the one a straight push goes toward.\n"
+		"speed|0|RELATIVE: units per second toward the target. 0: as fast as the toucher is far from it. LINEAR sets it to 1000.\n"
+		"wait|0|LINEAR or RELATIVE, in milliseconds here: time between pushes. -1 pushes once only.",
 		"trigger_push model *1 target jumptop",
 		"common trigger target_position target_push" },
 	{ "trigger_shipboundary", 0, NULL,

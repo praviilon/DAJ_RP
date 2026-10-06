@@ -993,11 +993,63 @@ trigger_push
 ==============================================================================
 */
 //trigger_push
+#define PUSH_PLAYERONLY	1	// GalaxyRP: [SP Maps] single player's flags 1, 8 and 32, see trigger_push_touch()
+#define PUSH_NO_TOUCH	2
 #define PUSH_LINEAR		4
+#define PUSH_NPCONLY	8
 #define PUSH_RELATIVE	16
+#define PUSH_CONVEYOR	32
 #define PUSH_MULTIPLE	2048
 //target_push
 #define PUSH_CONSTANT	2
+
+/*
+==================
+RP_PushTriggerNetSync
+
+GalaxyRP fix: [SP Maps] the client predicts every trigger_push it is sent as an arc jump pad: on touching
+it, the player's velocity becomes origin2. That is right only for an arc push that pushes now. A LINEAR
+push's origin2 is a unit direction (the server multiplies it by speed), a RELATIVE one's is the target's
+position, and an inactive one, one without its touch (spawnflag 2), an NPCONLY or a CONVEYOR one does not
+throw the player at all -- in every such case the player's own screen launched him and the server pulled
+him back. Those are now not sent to clients (SVF_NOCLIENT); the server pushes as it always did, and the
+entity type stays ET_PUSH_TRIGGER so ClientThink's sweep for fast players (g_active.c) still finds them.
+
+Called on spawn, once its push is aimed (AimAtTarget), whenever target_activate, target_deactivate or a
+script switches it, and every frame from its think while it is one that can be switched.
+==================
+*/
+void trigger_push_touch (gentity_t *self, gentity_t *other, trace_t *trace );
+
+void RP_PushTriggerNetSync( gentity_t *self )
+{
+	qboolean predicted;
+
+	if ( !self || !self->inuse || !self->classname || Q_stricmp( self->classname, "trigger_push" ) )
+	{
+		return;
+	}
+
+	predicted = ( self->touch == trigger_push_touch
+		&& !( self->flags & FL_INACTIVE )
+		&& !( self->spawnflags & ( PUSH_LINEAR | PUSH_RELATIVE | PUSH_NPCONLY | PUSH_CONVEYOR ) ) ) ? qtrue : qfalse;
+
+	if ( predicted )
+	{
+		self->r.svFlags &= ~SVF_NOCLIENT;
+	}
+	else
+	{
+		self->r.svFlags |= SVF_NOCLIENT;
+	}
+}
+
+// GalaxyRP: [SP Maps] keeps a switchable push's SVF_NOCLIENT in step with it, see RP_PushTriggerNetSync()
+static void RP_PushTriggerThink( gentity_t *self )
+{
+	RP_PushTriggerNetSync( self );
+	self->nextthink = level.time + 1;
+}
 
 void trigger_push_touch (gentity_t *self, gentity_t *other, trace_t *trace ) {
 	if ( self->flags & FL_INACTIVE )
@@ -1005,7 +1057,40 @@ void trigger_push_touch (gentity_t *self, gentity_t *other, trace_t *trace ) {
 		return;
 	}
 
-	if ( !(self->spawnflags&PUSH_LINEAR) )
+	// GalaxyRP fix: [SP Maps] single player's PLAYERONLY (1), NPCONLY (8) and CONVEYOR (32), which MP had
+	// commented out: the SP maps' conveyor belts (taspir2, t3_stamp, cairn_bay, ns_hideout) pushed anyone
+	// in the air over them too, and their players-only and NPC-only pushes everyone. Players are client
+	// slots here, not only slot 0.
+	if ( self->spawnflags & PUSH_PLAYERONLY )
+	{
+		if ( other->s.number >= MAX_CLIENTS )
+		{
+			return;
+		}
+	}
+	else if ( self->spawnflags & PUSH_NPCONLY )
+	{
+		if ( !other->NPC )
+		{
+			return;
+		}
+	}
+
+	if ( self->spawnflags & PUSH_CONVEYOR )
+	{// only pushes what stands on it
+		const int groundEntityNum = other->client ? other->client->ps.groundEntityNum : other->s.groundEntityNum;
+
+		if ( groundEntityNum == ENTITYNUM_NONE )
+		{
+			return;
+		}
+	}
+
+	// GalaxyRP fix: [SP Maps] a RELATIVE push without LINEAR came here too, and was thrown as a jump pad
+	// whose velocity is origin2 -- for RELATIVE the target's position, so a player was flung at
+	// "the target's coordinates" units per second. It now takes the RELATIVE branch below, as in single
+	// player (the SP maps' conveyors are mostly RELATIVE alone).
+	if ( !(self->spawnflags&(PUSH_LINEAR|PUSH_RELATIVE)) )
 	{//normal throw
 		if ( !other->client ) {
 			return;
@@ -1154,6 +1239,20 @@ void AimAtTarget( gentity_t *self ) {
 
 	if ( self->classname && !Q_stricmp( "trigger_push", self->classname ) )
 	{
+		// GalaxyRP: [SP Maps] from here on a trigger_push is aimed: its think keeps whether clients may
+		// predict it in step (RP_PushTriggerNetSync) when it can be switched on or off, and stops otherwise
+		if ( self->targetname || self->script_targetname || ( self->spawnflags & 128 ) )
+		{
+			self->think = RP_PushTriggerThink;
+			self->nextthink = level.time + 1;
+		}
+		else
+		{
+			self->think = NULL;
+			self->nextthink = 0;
+		}
+		RP_PushTriggerNetSync( self );
+
 		if ( (self->spawnflags&PUSH_RELATIVE) )
 		{//relative, not an arc or linear
 			VectorCopy( ent->r.currentOrigin, self->s.origin2 );
@@ -1229,7 +1328,7 @@ void SP_trigger_push( gentity_t *self ) {
 
 	self->s.eType = ET_PUSH_TRIGGER;
 
-	if ( !(self->spawnflags&2) )
+	if ( !(self->spawnflags&PUSH_NO_TOUCH) )
 	{//start on
 		self->touch = trigger_push_touch;
 	}
@@ -1241,6 +1340,7 @@ void SP_trigger_push( gentity_t *self ) {
 
 	self->think = AimAtTarget;
 	self->nextthink = level.time + FRAMETIME;
+	RP_PushTriggerNetSync( self );	// GalaxyRP: [SP Maps] not sent to clients unless they may predict it
 	trap->LinkEntity ((sharedEntity_t *)self);
 }
 

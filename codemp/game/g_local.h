@@ -2590,7 +2590,9 @@ qboolean	RP_MusicFileExists( const char *music );
 // the entity commands -- g_spawn.c
 qboolean RP_EntityHasSpawnKeys( const gentity_t *ent );
 const char *RP_EntityRefusalReason( const gentity_t *ent );
+qboolean RP_ClassIsSpawnPoint( const char *classname );	// GalaxyRP: [Entity System] info_player_* and the four CTF spawn classes
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent );
+void RP_PushTriggerNetSync( gentity_t *self );	// GalaxyRP: [SP Maps] g_trigger.c
 qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent );
 qboolean RP_SpawnPointProtected( const gentity_t *ent );
 void RP_SkyPortalRelease( gentity_t *ent );

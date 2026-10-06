@@ -1787,11 +1787,11 @@ const char *RP_EntityRefusalReason( const gentity_t *ent )
 
 /*
 =================
-RP_EntityIsSpawnPoint / RP_EntityIsCodeMadeSpawnPoint / RP_SpawnPointProtected
+RP_ClassIsSpawnPoint / RP_EntityIsSpawnPoint / RP_EntityIsCodeMadeSpawnPoint / RP_SpawnPointProtected
 
 GalaxyRP fix: [Entity System] every info_player_* class counts as a spawn point: deathmatch (which
 info_player_start becomes when it spawns), start_red/blue, duel, duel1/2, intermission and its red/blue
-variants, and siegeteam1/2. /entremove never removes the map's own (rpMapEntity) or a code-made one;
+variants, and siegeteam1/2 -- and so do team_CTF_redspawn/bluespawn/redplayer/blueplayer. /entremove never removes the map's own (rpMapEntity) or a code-made one;
 one an admin added, or a map's that was edited, it removes, since a bad one is better gone than moved --
 RP_SpawnPointProtected() is that test. (A sub-BSP's spawn point goes with its misc_bsp, as its other
 entities do: that rule is /entremove's own.)
@@ -1803,12 +1803,27 @@ clearing pass of /entload and of the default entity file keeps them, or the firs
 those maps would delete them for good and leave every spawn on the fallback spot.
 =================
 */
+qboolean RP_ClassIsSpawnPoint( const char *classname )
+{
+	if ( !classname )
+		return qfalse;
+
+	// GalaxyRP fix: [Entity System] and the four CTF player spawn classes (not the flags). They were left
+	// out, and the per-map fixes' code-made ones (t1_fatal, t1_rail, t1_surprise, t2_trip, t2_dpred,
+	// t3_bounty: no key/value record) were deleted for good by the clearing pass of /entload and of the
+	// default entity file. (The map's own were already kept from /entremove as map entities, M.)
+	// RP_EntGrabPlaceBox() places them by a player's box too.
+	return ( Q_stricmpn( classname, "info_player_", 12 ) == 0 ||
+		!Q_stricmp( classname, "team_CTF_redspawn" ) || !Q_stricmp( classname, "team_CTF_bluespawn" ) ||
+		!Q_stricmp( classname, "team_CTF_redplayer" ) || !Q_stricmp( classname, "team_CTF_blueplayer" ) ) ? qtrue : qfalse;
+}
+
 qboolean RP_EntityIsSpawnPoint( const gentity_t *ent )
 {
 	if ( !ent || !ent->inuse || !ent->classname )
 		return qfalse;
 
-	return ( Q_stricmpn( ent->classname, "info_player_", 12 ) == 0 ) ? qtrue : qfalse;
+	return RP_ClassIsSpawnPoint( ent->classname );
 }
 
 qboolean RP_EntityIsCodeMadeSpawnPoint( const gentity_t *ent )

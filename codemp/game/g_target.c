@@ -28,11 +28,44 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 /*QUAKED target_give (1 0 0) (-8 -8 -8) (8 8 8)
 Gives the activator all the items pointed to.
 */
+/*
+==================
+RP_TargetGiveUnlink
+
+GalaxyRP: [SP Maps] the end of a given item's short stay in the snapshots, see Use_Target_Give()
+==================
+*/
+static void RP_TargetGiveUnlink( gentity_t *item )
+{
+	item->r.svFlags &= ~SVF_BROADCAST;
+	item->think = NULL;
+	item->nextthink = 0;
+	trap->UnlinkEntity( (sharedEntity_t *)item );
+}
+
+/*
+==================
+Use_Target_Give
+
+GalaxyRP fix: [SP Maps] it gave nothing. Items with a targetname spawn hidden (EF_NODRAW) in MP, and MP's
+Touch_Item() -- unlike single player's -- ignores a hidden item, so the pickup never happened. A hidden
+item is now shown to Touch_Item() for the pickup and hidden again after it, and, as in single player,
+each use gives the items again: they are the stock it gives from, kept off the map (a use of an item's
+own name still shows it there, and the next give takes it off again). The usual pickup rules apply --
+a player at full health gets no medpak. A weapon or powerup someone picked up off the map, waiting to
+respawn (EF_ITEMPLACEHOLDER), is not given.
+
+The pickup event the player gets names the item's entity, and the client reads the item from that
+entity's last state it received -- one never sent to it gives the pickup sound and name of whatever
+last held the slot. So a given item stays in every snapshot, invisible and not touchable, until the event
+is over (EVENT_VALID_MSEC), and is then unlinked. A dropped item keeps Touch_Item()'s own removal.
+==================
+*/
 void Use_Target_Give( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 	gentity_t	*t;
 	trace_t		trace;
 
-	if ( !activator->client ) {
+	if ( !activator || !activator->client ) {
 		return;
 	}
 
@@ -40,17 +73,47 @@ void Use_Target_Give( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 		return;
 	}
 
+	G_ActivateBehavior( ent, BSET_USE );
+
 	memset( &trace, 0, sizeof( trace ) );
 	t = NULL;
 	while ( (t = G_Find (t, FOFS(targetname), ent->target)) != NULL ) {
+		qboolean hidden;
+
 		if ( !t->item ) {
 			continue;
 		}
+
+		if ( t->s.eFlags & EF_ITEMPLACEHOLDER ) {
+			continue;
+		}
+
+		hidden = ( t->s.eFlags & EF_NODRAW ) ? qtrue : qfalse;
+		t->s.eFlags &= ~EF_NODRAW;
 		Touch_Item( t, activator, &trace );
 
-		// make sure it isn't going to respawn or show any events
-		t->nextthink = 0;
-		trap->UnlinkEntity( (sharedEntity_t *)t );
+		if ( !t->inuse ) {
+			continue;
+		}
+
+		if ( t->genericValue9 || ( t->flags & FL_DROPPED_ITEM ) ) {
+			// a dropped item: removed by Touch_Item()'s own means once picked up, left as it was if not
+			if ( hidden ) {
+				t->s.eFlags |= EF_NODRAW;
+			}
+			continue;
+		}
+
+		// off the map, without respawning; sent to everyone, unseen, for the pickup event
+		t->s.eFlags |= EF_NODRAW;
+		t->s.eFlags &= ~EF_ITEMPLACEHOLDER;
+		t->r.contents = 0;
+		t->r.svFlags &= ~SVF_NOCLIENT;
+		t->r.svFlags |= SVF_BROADCAST;
+		t->unlinkAfterEvent = qfalse;
+		t->think = RP_TargetGiveUnlink;
+		t->nextthink = level.time + EVENT_VALID_MSEC;
+		trap->LinkEntity( (sharedEntity_t *)t );
 	}
 }
 
@@ -437,7 +500,10 @@ void target_laser_think (gentity_t *self) {
 
 	trap->Trace( &tr, self->s.origin, NULL, NULL, end, self->s.number, CONTENTS_SOLID|CONTENTS_BODY|CONTENTS_CORPSE, qfalse, 0, 0);
 
-	if ( tr.entityNum ) {
+	// GalaxyRP fix: [SP Maps] this tested "tr.entityNum" alone, Quake 3's code: the player in client slot 0
+	// (entity 0) was never hurt, while everyone else was, and a beam that hit nothing (ENTITYNUM_NONE)
+	// still damaged entity 1023. It hurts whatever it hits now, the world aside.
+	if ( tr.fraction < 1.0f && tr.entityNum < ENTITYNUM_WORLD ) {
 		// hurt it if we can
 		G_Damage ( &g_entities[tr.entityNum], self, self->activator, self->movedir,
 			tr.endpos, self->damage, DAMAGE_NO_KNOCKBACK, MOD_TARGET_LASER);
@@ -975,6 +1041,7 @@ void G_SetActiveState(char *targetstring, qboolean actState)
 	while( NULL != (target = G_Find(target, FOFS(targetname), targetstring)) )
 	{
 		target->flags = actState ? (target->flags&~FL_INACTIVE) : (target->flags|FL_INACTIVE);
+		RP_PushTriggerNetSync( target );	// GalaxyRP: [SP Maps] a trigger_push's prediction follows it
 	}
 }
 

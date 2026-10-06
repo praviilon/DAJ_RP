@@ -4962,6 +4962,7 @@ static void Q3_SetInactive(int entID, qboolean add)
 	{
 		ent->flags &= ~FL_INACTIVE;
 	}
+	RP_PushTriggerNetSync( ent );	// GalaxyRP: [SP Maps] a trigger_push's prediction follows it
 }
 
 /*

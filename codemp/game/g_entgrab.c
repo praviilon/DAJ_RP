@@ -581,7 +581,7 @@ qboolean RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
 ==================
 RP_EntGrabPlaceBox
 
-The box the entity is placed by. A spawn point, an NPC spawner and a teleport destination put a player
+The box the entity is placed by. A spawn point (info_player_*, team_CTF_* spawns), an NPC spawner and a teleport destination put a player
 or an NPC where they are, so they are placed by a player's box -- standing on the floor rather than
 buried in it. Anything else by its own collision box; a point entity, and anything not in the world,
 has none and is placed by its origin. So is an entity whose box collides with nothing -- neither solid
@@ -591,7 +591,9 @@ a floor by that box its effect would play 33 units above it; a non-solid model i
 */
 void RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs )
 {
-	if ( classname && ( Q_stricmpn( classname, "info_player_", 12 ) == 0 || Q_stricmpn( classname, "NPC_", 4 ) == 0 ||
+	// GalaxyRP fix: [Entity System] RP_ClassIsSpawnPoint() takes in the four CTF spawn classes, which got no box
+	// and were set 1 unit above the floor -- a player there would be in it, so the spawn point was refused
+	if ( classname && ( RP_ClassIsSpawnPoint( classname ) || Q_stricmpn( classname, "NPC_", 4 ) == 0 ||
 		Q_stricmp( classname, "misc_teleporter_dest" ) == 0 ) )
 	{
 		VectorSet( mins, -16, -16, DEFAULT_MINS_2 );

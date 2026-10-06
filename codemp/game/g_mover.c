@@ -2259,11 +2259,76 @@ ROTATING
 ===============================================================================
 */
 
+/*
+================
+RP_MoverHoldAngles / RP_MoverHoldOrigin
+
+GalaxyRP fix: [SP Maps] stopping a mover in place. Its trajectory base becomes where the server has it
+now -- r.currentAngles / r.currentOrigin, what it collides as -- not where its trajectory would put it at
+level.time: a stationary mover is not run by G_RunMover(), so a base the collision never reached would
+leave players walking into a blade the screen shows elsewhere. A rotator's angles are folded into
+0..360 on both sides (fold), so the drawn and the colliding angles stay equal and its numbers do not
+grow with every turn; a pendulum's are not, since it restarts from its own angles.
+================
+*/
+static void RP_MoverHoldAngles( gentity_t *ent, qboolean fold )
+{
+	int i;
+
+	for ( i = 0; fold && i < 3; i++ )
+	{
+		ent->r.currentAngles[i] = AngleNormalize360( ent->r.currentAngles[i] );
+	}
+	VectorCopy( ent->r.currentAngles, ent->s.apos.trBase );
+	ent->s.apos.trType = TR_STATIONARY;
+	ent->s.apos.trTime = level.time;
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
+static void RP_MoverHoldOrigin( gentity_t *ent )
+{
+	VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
+	ent->s.pos.trType = TR_STATIONARY;
+	ent->s.pos.trTime = level.time;
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
+// GalaxyRP: [SP Maps] where a sine mover (TR_SINE: bobbing, pendulum) is in its cycle at level.time, 0..1
+static float RP_MoverSinePhase( const trajectory_t *tr )
+{
+	float phase;
+
+	if ( tr->trDuration <= 0 )
+	{
+		return 0.0f;
+	}
+
+	phase = fmodf( (float)( level.time - tr->trTime ) / (float)tr->trDuration, 1.0f );
+	if ( phase < 0.0f )
+	{
+		phase += 1.0f;
+	}
+	return phase;
+}
+
+/*
+================
+func_rotating_use
+
+GalaxyRP fix: [SP Maps] this existed but nothing assigned it: InitMover() left every func_rotating with
+Use_BinaryMover(), and a use sent it to pos1 -- the world origin 0 0 0 -- in the middle of the map. Now
+SP_func_rotating() gives it to every rotator without health (single player gives it to the named ones;
+here the Stun Baton and PLAYER_USE reach unnamed ones too). It stops the spin where it is
+(RP_MoverHoldAngles) and starts it again from there.
+================
+*/
 void func_rotating_use( gentity_t *self, gentity_t *other, gentity_t *activator )
 {
+	G_ActivateBehavior( self, BSET_USE );
+
 	if(	self->s.apos.trType == TR_LINEAR )
 	{
-		self->s.apos.trType = TR_STATIONARY;
+		RP_MoverHoldAngles( self, qtrue );
 		// stop the sound if it stops moving
 		self->s.loopSound = 0;
 		self->s.loopIsSoundset = qfalse;
@@ -2283,6 +2348,9 @@ void func_rotating_use( gentity_t *self, gentity_t *other, gentity_t *activator 
 			self->s.loopSound = BMS_MID;
 			self->s.loopIsSoundset = qtrue;
 		}
+		// from the angles it stopped at, starting now
+		VectorCopy( self->r.currentAngles, self->s.apos.trBase );
+		self->s.apos.trTime = level.time;
 		self->s.apos.trType = TR_LINEAR;
 	}
 }
@@ -2354,7 +2422,8 @@ teamnodmg - if 1, team 1 can't damage this. If 2, team 2 can't damage this.
 void SP_func_breakable( gentity_t *self );
 void SP_func_rotating (gentity_t *ent) {
 	vec3_t spinangles;
-	if ( ent->health )
+	const qboolean breakable = ent->health ? qtrue : qfalse;	// GalaxyRP: [SP Maps] see the use below
+	if ( breakable )
 	{
 		int sav_spawnflags = ent->spawnflags;
 		ent->spawnflags = 0;
@@ -2414,6 +2483,25 @@ void SP_func_rotating (gentity_t *ent) {
 	}
 	ent->s.apos.trType = TR_LINEAR;
 
+	// GalaxyRP fix: [SP Maps] using a func_rotating ran Use_BinaryMover() (InitMover's), which sent it to
+	// the world origin 0 0 0; one with health keeps func_breakable's use (it breaks). Every other one now
+	// starts and stops with a use. As in single player, a named one starts still unless START_ON (1) --
+	// MP used to ignore the flag and spin them all from spawn. An unnamed one has nothing that could
+	// start it, so it spins from spawn as before.
+	if ( !breakable )
+	{
+		ent->use = func_rotating_use;
+
+		if ( ent->targetname && ent->targetname[0] && !( ent->spawnflags & 1 ) )
+		{
+			ent->s.apos.trType = TR_STATIONARY;
+		}
+		else
+		{
+			G_PlayDoorLoopSound( ent );	// a spinning one hums its soundSet's loop from the start
+		}
+	}
+
 	if (!ent->damage) {
 		if ( (ent->spawnflags&16) )//IMPACT
 		{
@@ -2441,7 +2529,34 @@ BOBBING
 */
 
 
-/*QUAKED func_bobbing (0 .5 .8) ? X_AXIS Y_AXIS x x x x PLAYER_USE INACTIVE
+/*
+================
+func_bobbing_use
+
+GalaxyRP fix: [SP Maps] single player's toggle. Without it a func_bobbing kept InitMover()'s
+Use_BinaryMover(), and any use -- a target, PLAYER_USE, the Stun Baton -- sent it to the world origin
+0 0 0, where it sat still. It now stops where it is, keeping its place in the cycle (radius, as single
+player keeps it), and the next use carries on from that place.
+================
+*/
+void func_bobbing_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	G_ActivateBehavior( self, BSET_USE );
+
+	if ( self->s.pos.trType == TR_SINE )
+	{
+		self->radius = RP_MoverSinePhase( &self->s.pos );
+		RP_MoverHoldOrigin( self );
+	}
+	else
+	{
+		VectorCopy( self->s.origin, self->s.pos.trBase );
+		self->s.pos.trTime = level.time - (int)floorf( 0.5f + self->s.pos.trDuration * self->radius );
+		self->s.pos.trType = TR_SINE;
+	}
+}
+
+/*QUAKED func_bobbing (0 .5 .8) ? X_AXIS Y_AXIS START_OFF x x x PLAYER_USE INACTIVE
 Normally bobs on the Z axis
 "model2"	.md3 model to also draw
 "height"	amplitude of bob (32 default)
@@ -2479,6 +2594,18 @@ void SP_func_bobbing (gentity_t *ent) {
 	} else {
 		ent->s.pos.trDelta[2] = height;
 	}
+
+	// GalaxyRP fix: [SP Maps] using it starts and stops it (func_bobbing_use), and START_OFF (4) holds it
+	// still from spawn at the place in the cycle its phase gives -- both as single player has them
+	ent->use = func_bobbing_use;
+	if ( ent->spawnflags & 4 )
+	{
+		ent->radius = phase;
+		VectorMA( ent->s.pos.trBase, sin( phase * M_PI * 2 ), ent->s.pos.trDelta, ent->s.pos.trBase );
+		VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
+		ent->s.pos.trType = TR_STATIONARY;
+		trap->LinkEntity( (sharedEntity_t *)ent );
+	}
 }
 
 /*
@@ -2490,7 +2617,33 @@ PENDULUM
 */
 
 
-/*QUAKED func_pendulum (0 .5 .8) ? x x x x x x PLAYER_USE INACTIVE
+/*
+================
+func_pendulum_use
+
+GalaxyRP fix: [SP Maps] the swing's counterpart of func_bobbing_use. Single player gives a pendulum no use
+at all, so it kept InitMover()'s Use_BinaryMover() -- a use sent it to the world origin 0 0 0. It now
+stops mid-swing where it is and carries on from the same place in its swing on the next use.
+================
+*/
+void func_pendulum_use( gentity_t *self, gentity_t *other, gentity_t *activator )
+{
+	G_ActivateBehavior( self, BSET_USE );
+
+	if ( self->s.apos.trType == TR_SINE )
+	{
+		self->radius = RP_MoverSinePhase( &self->s.apos );
+		RP_MoverHoldAngles( self, qfalse );
+	}
+	else
+	{
+		VectorCopy( self->s.angles, self->s.apos.trBase );
+		self->s.apos.trTime = level.time - (int)floorf( 0.5f + self->s.apos.trDuration * self->radius );
+		self->s.apos.trType = TR_SINE;
+	}
+}
+
+/*QUAKED func_pendulum (0 .5 .8) ? x x START_OFF x x x PLAYER_USE INACTIVE
 You need to have an origin brush as part of this entity.
 Pendulums always swing north / south on unrotated models.  Add an angles field to the model to allow rotation in other directions.
 Pendulum frequency is a physical constant based on the length of the beam and gravity.
@@ -2534,6 +2687,18 @@ void SP_func_pendulum(gentity_t *ent) {
 	ent->s.apos.trTime = ent->s.apos.trDuration * phase;
 	ent->s.apos.trType = TR_SINE;
 	ent->s.apos.trDelta[2] = speed;
+
+	// GalaxyRP fix: [SP Maps] using it stops and restarts the swing (func_pendulum_use); START_OFF (4)
+	// holds it still from spawn at the point of the swing its phase gives
+	ent->use = func_pendulum_use;
+	if ( ent->spawnflags & 4 )
+	{
+		ent->radius = phase;
+		VectorMA( ent->s.apos.trBase, sin( phase * M_PI * 2 ), ent->s.apos.trDelta, ent->s.apos.trBase );
+		VectorCopy( ent->s.apos.trBase, ent->r.currentAngles );
+		ent->s.apos.trType = TR_STATIONARY;
+		trap->LinkEntity( (sharedEntity_t *)ent );
+	}
 }
 
 /*
