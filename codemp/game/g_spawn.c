@@ -344,6 +344,7 @@ void SP_target_play_music( gentity_t *self );
 void SP_target_push (gentity_t *ent);
 
 void SP_light (gentity_t *self);
+void SP_func_group (gentity_t *self);	// GalaxyRP fix: [Entity Help] g_misc.c
 void SP_info_null (gentity_t *self);
 void SP_info_notnull (gentity_t *self);
 void SP_info_camp (gentity_t *self);
@@ -597,7 +598,7 @@ spawn_t	spawns[] = {
 	{ "func_door",							SP_func_door },
 	{ "func_glass",							SP_func_glass },
 	{ "func_goodie_panel",					SP_func_goodie_panel },
-	{ "func_group",							SP_info_null },
+	{ "func_group",							SP_func_group },	// GalaxyRP fix: [Entity Help] its own -- see g_misc.c
 	{ "func_pendulum",						SP_func_pendulum },
 	{ "func_plat",							SP_func_plat },
 	{ "func_rotating",						SP_func_rotating },

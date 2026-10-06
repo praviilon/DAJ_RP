@@ -14,7 +14,9 @@ The text is compiled in (g_enthelp_data.h): one entry per spawn-table class, per
 npc, items, ...), and, where an item has something of its own to say, per item classname -- any other
 item gets the item table's facts and the "items" topic. The heading of every class says what the code
 knows by itself: networked or logical (the spawn table), whether the Entity System can place it, and
-what a map's own is tagged in /entlist. For the Entity System's admins only, as the other /ent commands.
+what a map's own is tagged in /entlist -- or, for a class flagged RP_EH_REMOVED, that it removes itself as it
+spawns, so it holds no slot and /entlist never shows it (those are listed in a group of their own, "Map
+file only"). For the Entity System's admins only, as the other /ent commands.
 
 Every string of the data goes out inside a print command, so none of it may hold a double quote; the
 lines are packed into prints of at most RP_EH_PRINT_MAX characters, a long one split at a space.
@@ -28,6 +30,8 @@ extern qboolean check_admin_command( gentity_t *ent, int admin_command, qboolean
 #define RP_EH_TOPIC		1	// not a class: shared text the classes point to ("Also")
 #define RP_EH_MAPONLY	2	// not for the Entity System: it cannot place it, or it does nothing placed (note says why)
 #define RP_EH_GAMETYPE	4	// it only stays in some gametypes (note says which): it removes itself in the others
+#define RP_EH_REMOVED	8	// it removes itself as it spawns, in every gametype DAJ_RP runs and whatever its keys: it
+							// is only ever in a map file (the compiler's, the clients', or data read at load)
 
 typedef struct {
 	const char	*name;			// the classname, as the spawn table or the item table spells it, or a topic
@@ -350,7 +354,11 @@ static void RP_EhShowClass( rpEhOut_t *o, const char *name )
 	// what the code knows by itself
 	if ( isClass || isItem )
 	{
-		if ( logical )
+		// GalaxyRP fix: [Entity Help] a class that removes itself as it spawns holds no slot of either kind,
+		// and is never in /entlist: the spawn table's region and the /entlist tags below do not apply to it
+		if ( h && ( h->flags & RP_EH_REMOVED ) )
+			RP_EhLine( o, "^1Removed at spawn:^7 it never stays in the world, so it holds no entity slot and /entlist never shows it." );
+		else if ( logical )
 			RP_EhLine( o, "Logical: not networked, it takes no entity slot -- unless it has a script_targetname or a script key, or nological 1 (/enthelp common)." );
 		else
 			RP_EhLine( o, "Networked: it takes one of the map's entity slots." );
@@ -360,7 +368,11 @@ static void RP_EhShowClass( rpEhOut_t *o, const char *name )
 		if ( h && ( h->flags & RP_EH_GAMETYPE ) )
 			RP_EhLine( o, va( "^3Only in some gametypes:^7 %s", h->note ? h->note : "it removes itself in the others." ) );
 
-		if ( RP_MapExemptClass( spelled ) )
+		if ( h && ( h->flags & RP_EH_REMOVED ) )
+		{
+			// (nothing for /entlist: see above)
+		}
+		else if ( RP_MapExemptClass( spelled ) )
 			RP_EhLine( o, "A map's own is tagged E in /entlist, and can be edited, when nothing in the map links to it; M when something does." );
 		else if ( !logical )
 			RP_EhLine( o, "A map's own is tagged M in /entlist: left as the map made it (copy it with /entcopy)." );
@@ -478,6 +490,7 @@ typedef struct {
 	const char	*title;
 	const char	*prefixes;	// space-separated; "" is the group of what no other group takes
 	int			page;
+	int			flag;		// RP_EH_*: the group of the classes with this flag, before any prefix group
 } rpEhGroup_t;
 
 static const rpEhGroup_t rp_eh_groups[] = {
@@ -491,6 +504,7 @@ static const rpEhGroup_t rp_eh_groups[] = {
 	{ "Triggers",						"trigger_",						2 },
 	{ "Team gametypes",					"team_",						2 },
 	{ "Bot and NPC navigation",			"waypoint path_ point_",		2 },
+	{ "Map file only: removed at spawn",	"",							2,	RP_EH_REMOVED },
 	{ "Other",							"",								2 },
 };
 
@@ -520,11 +534,19 @@ static qboolean RP_EhPrefixed( const char *name, const char *prefixes )
 
 static int RP_EhGroupOf( const char *name )
 {
+	const rpEntHelp_t *h = RP_EhEntry( name );
 	int g;
+
+	// GalaxyRP: [Entity Help] a flag's group first: the "Map file only" classes leave their prefix's group
+	for ( g = 0; g < (int)ARRAY_LEN( rp_eh_groups ); g++ )
+	{
+		if ( rp_eh_groups[g].flag && h && ( h->flags & rp_eh_groups[g].flag ) )
+			return g;
+	}
 
 	for ( g = 0; g < (int)ARRAY_LEN( rp_eh_groups ); g++ )
 	{
-		if ( rp_eh_groups[g].prefixes[0] && RP_EhPrefixed( name, rp_eh_groups[g].prefixes ) )
+		if ( !rp_eh_groups[g].flag && rp_eh_groups[g].prefixes[0] && RP_EhPrefixed( name, rp_eh_groups[g].prefixes ) )
 			return g;
 	}
 

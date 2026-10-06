@@ -37,6 +37,14 @@ void HolocronThink(gentity_t *ent);
 /*QUAKED func_group (0 0 0) ?
 Used to group brushes together just for editor convenience.  They are turned into normal brushes by the utilities.
 */
+// GalaxyRP fix: [Entity Help] its own spawn function: it shared SP_info_null(), which keeps an info_null
+// that has a targetname, so a func_group with one -- from an entity file, a preset, a sub-BSP or /entadd
+// (the map compiler merges a map's own into the world) -- stayed as an invisible point in a networked slot.
+// It is nothing in the game: it always removes itself, whatever its keys (/enthelp's "Map file only" group).
+void SP_func_group( gentity_t *self ) {
+	RP_SpawnSaysWhy( self, "func_group is a map-editor grouping, nothing in the game" );
+	G_FreeEntity( self );
+}
 
 
 /*QUAKED info_camp (0 0.5 0) (-4 -4 -4) (4 4 4)
@@ -60,13 +68,12 @@ void SP_info_null( gentity_t *self ) {
 	// (an entity freed at spawn is never written to the preset). An info_null nothing can
 	// target (no targetname) is still freed at once, as is every one once its region runs
 	// low: a single-player map carries hundreds of them and G_SpawnLogical() drops the server
-	// when the logical region is exhausted. func_group shares this spawn function; it never
-	// has a targetname, so it is freed as before.
+	// when the logical region is exhausted.
 	if ( !self->targetname || !self->targetname[0]
 		|| ( self->isLogical ? level.num_logicalents >= MAX_LOGICENTITIES - 256 : level.num_entities >= MAX_GENTITIES - 256 ) )
 	{
 		RP_SpawnSaysWhy( self, ( !self->targetname || !self->targetname[0] )
-			? ( self->classname && !Q_stricmp( self->classname, "func_group" ) ? "func_group is a map-editor grouping, nothing in the game" : "an info_null needs a targetname: it is only an aim target for other entities" )
+			? "an info_null needs a targetname: it is only an aim target for other entities"
 			: "no room left in the entity table for an info_null" );
 		G_FreeEntity( self );
 		return;
@@ -364,7 +371,7 @@ bsp space!
 */
 void SP_misc_model_static(gentity_t *ent)
 {
-	RP_SpawnSaysWhy( ent, "misc_model_static is a map-compile hint, baked into the map: use misc_model_breakable for a model" );
+	RP_SpawnSaysWhy( ent, "a misc_model_static is drawn by each client from its own copy of the map file, so one added on the server is never seen: use misc_model_breakable for a model" );
 	G_FreeEntity( ent );
 }
 
@@ -2168,7 +2175,7 @@ void AddSpawnField(char *field, char *value);
 #define MAX_INSTANCE_TYPES		16
 void SP_terrain(gentity_t *ent)
 {
-	RP_SpawnSaysWhy( ent, "terrain is map-compile only" );
+	RP_SpawnSaysWhy( ent, "terrain is random-map (RMG) terrain, which this engine does not have" );
 	G_FreeEntity (ent);
 }
 
@@ -2224,7 +2231,7 @@ to the regular view position.
 */
 void SP_misc_skyportal_orient (gentity_t *ent)
 {
-	RP_SpawnSaysWhy( ent, "misc_skyportal_orient does nothing in multiplayer" );
+	RP_SpawnSaysWhy( ent, "a misc_skyportal_orient is read by each client from its own copy of the map file, so one added on the server does nothing" );
 	G_FreeEntity(ent);
 }
 
@@ -6413,13 +6420,13 @@ Determines a region to check for weather contents - will significantly reduce lo
 */
 void SP_misc_weather_zone( gentity_t *ent )
 {
-	RP_SpawnSaysWhy( ent, "misc_weather_zone is map-compile only: weather is managed with /admweather" );
+	RP_SpawnSaysWhy( ent, "a misc_weather_zone is read by each client from its own copy of the map file, so one added on the server does nothing: weather is set with /admweather" );
 	G_FreeEntity(ent);
 }
 
 void SP_misc_cubemap( gentity_t *ent )
 {
-	RP_SpawnSaysWhy( ent, "misc_cubemap is map-compile only" );
+	RP_SpawnSaysWhy( ent, "a misc_cubemap is only read by the rend2 renderer, from the map file: nothing for the server" );
 	G_FreeEntity( ent );
 }
 
