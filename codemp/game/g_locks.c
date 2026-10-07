@@ -15,11 +15,13 @@ use it, however they reach it:
 
 Who gets through (RP_LockAllows):
   - a player: logged in, with the account on the lock's list;
-  - a vehicle carrying a player: the pilot's account decides;
-  - an NPC, a vehicle with no player aboard, or nothing at all (timers, scripts, map logic): passes;
-  - while /entuse, /enttrigger or the upgraded Stun Baton is using something: everyone, for that use
-    and for everything it sets off (RP_LockBypass).
-A lock whose name has no list lets nobody through but those.
+  - a vehicle a player drives: the pilot's account decides;
+  - no activator, or one that is not a character (timers, the world, map logic): passes;
+  - an NPC, an empty vehicle, or one an NPC drives: never;
+  - what /entuse, /enttrigger or the upgraded Stun Baton uses: always, and so does everything it sets off,
+    at once (RP_LockBypass) or later, after a delay or when a door arrives (RP_LockMarkPass).
+A lock whose name has no list lets nobody through but those. The classes that hurt or kill whoever
+touches or uses them never carry a lock (RP_LockHarmful): it would only spare the players not on it.
 
 Where the lock comes from (RP_LockNameOf):
   - the "lock" key of an entity the Entity System made -- kept in its record, so /entsave keeps it;
@@ -31,7 +33,8 @@ Where the lock comes from (RP_LockNameOf):
 The file, plain text, one line each:
   lock <name> <account> <account> ...
   model *<N> <name>
-read at map start (RP_LocksLoad, G_InitGame) and written back whole after every change.
+read at map start (RP_LocksLoad, G_InitGame) and written back whole after every change, with what it
+could not use kept as it was written. "none" is never a lock name: it means no lock.
 ===========================================================================
 */
 
@@ -49,11 +52,15 @@ extern qboolean StringIsInteger( const char *s );
 #define RP_LOCK_MAX_MODELS		256		// "model *N" lines one map may have
 #define RP_LOCK_NAME_LENGTH		32		// 31 characters and the terminator
 #define RP_LOCK_ACCOUNT_LENGTH	32		// an account name: as clientSession_t::filename holds it
-#define RP_LOCK_LINE_LENGTH		4096	// one "lock" line with 64 accounts fits with room to spare
+#define RP_LOCK_LINE_LENGTH		8192	// one "lock" line with 64 accounts fits with room to spare; longer is skipped
+#define RP_LOCK_KEPT_SIZE		16384	// lines of the file the loader could not use, written back as they were
+#define RP_LOCK_PRINT_MAX		900		// one print of a list: the engine drops a server command over 1022
+#define RP_LOCK_LIST_SIZE		( RP_LOCK_MAX_ACCOUNTS * 2 * RP_LOCK_ACCOUNT_LENGTH )	// the names one command lists back
 #define RP_LOCK_MESSAGE_MSEC	15000	// "Locked." at most this often for one player, whatever it was refused: one
 										// standing in a locked trigger is not told every moment, and other centre
 										// prints (/clientprint) are not covered over
 #define RP_LOCK_INVALID_NAME	"(invalid)"	// a "lock" key that is no lock name (RP_LockNameOf)
+#define RP_LOCK_NONE			"none"		// no lock: never a lock name
 
 typedef struct {
 	char	name[RP_LOCK_NAME_LENGTH];
@@ -82,12 +89,13 @@ NAMES, THE LISTS, THE FILE
 =============================================================================
 */
 
-// DAJ_RP: [Locks] a lock name: 1 to 31 letters, digits, '_' or '-'
+// DAJ_RP: [Locks] a lock name: 1 to 31 letters, digits, '_' or '-', and not "none", which means no lock
+// (/entlockset <id> none, a "lock" key of none)
 static qboolean RP_LockNameValid( const char *name )
 {
 	int i;
 
-	if ( !name || !name[0] || strlen( name ) >= RP_LOCK_NAME_LENGTH )
+	if ( !name || !name[0] || strlen( name ) >= RP_LOCK_NAME_LENGTH || !Q_stricmp( name, RP_LOCK_NONE ) )
 		return qfalse;
 
 	for ( i = 0; name[i]; i++ )
@@ -199,22 +207,79 @@ static void RP_LockMapName( char *out, int size )
 
 /*
 ==================
-RP_LocksLoad
+RP_LocksLoad / RP_LocksSave
 
-DAJ_RP: [Locks] the map's lock file, read at map start. A line that does not make sense is skipped and
-logged; so is a lock, an account or a model line past the limits. Nothing in the file is checked against
-the account database: the file is the server owner's, and /entlockadd checked what it added.
+DAJ_RP: [Locks] the map's lock file, read at map start and written back whole after every change.
+
+Nothing in it is checked against the account database: the file is the server owner's, and /entlockadd
+checked what it added. What the loader cannot use is kept, word for word, and written back after the
+locks and model lines under RP_LOCK_KEPT_MARK, so a hand edit is never lost to the next /entlock command:
+the owner's comments, a line it does not understand, a "lock" or "model" line past the limits, and the
+account names of a "lock" line it could not take (past the limit, or not a name an account can have) --
+those as a commented "lock" line, so they do not come back on their own once there is room. The file's
+own header (RP_LOCK_HEADER) is not kept: it is written again. A UTF-8 byte order mark is skipped. A line
+too long to read whole (over RP_LOCK_LINE_LENGTH) is skipped and logged rather than read in pieces,
+which could have cut an account name short and let a different account in.
 ==================
 */
+#define RP_LOCK_KEPT_MARK	"# Lines the server did not use (kept as written):"
+
+static const char *rp_lockHeader[] = {
+	"# Account locks for this map: \"lock <name> <account> ...\" lists who may use what carries the lock,",
+	"# \"model *<N> <name>\" puts a lock on the map's own entity with that brush model. /entlockadd and the",
+	"# other /entlock commands write this file.",
+	RP_LOCK_KEPT_MARK,
+	NULL
+};
+
+static char	rp_lockKept[RP_LOCK_KEPT_SIZE];
+static int	rp_lockKeptLen;
+
+// DAJ_RP: [Locks] one line for the kept part of the file; logged when there is no room left for it
+static void RP_LockKeep( const char *text, int lineNumber )
+{
+	int len = (int)strlen( text );
+
+	if ( rp_lockKeptLen + len + 2 > (int)sizeof( rp_lockKept ) )
+	{
+		G_LogPrintf( "locks.txt line %d: no room left to keep it, so it will not be written back\n", lineNumber );
+		return;
+	}
+
+	memcpy( rp_lockKept + rp_lockKeptLen, text, len );
+	rp_lockKeptLen += len;
+	rp_lockKept[rp_lockKeptLen++] = '\n';
+	rp_lockKept[rp_lockKeptLen] = '\0';
+}
+
+static qboolean RP_LockHeaderLine( const char *text )
+{
+	int i;
+
+	if ( !Q_strncmp( text, "# Account locks for ", 20 ) )
+		return qtrue;	// the first header line names the map; an older file's copy too
+
+	for ( i = 1; rp_lockHeader[i]; i++ )
+	{
+		if ( !strcmp( text, rp_lockHeader[i] ) )
+			return qtrue;
+	}
+
+	return qfalse;
+}
+
 void RP_LocksLoad( void )
 {
-	char line[RP_LOCK_LINE_LENGTH];
+	static char line[RP_LOCK_LINE_LENGTH];
+	char raw[RP_LOCK_LINE_LENGTH];
 	FILE *f;
 	int lineNumber = 0;
 
 	rp_numLocks = 0;
 	rp_numLockModels = 0;
 	rp_lockBypass = 0;
+	rp_lockKept[0] = '\0';
+	rp_lockKeptLen = 0;
 	memset( rp_lockMessageTime, 0, sizeof( rp_lockMessageTime ) );
 	RP_LockMapName( rp_lockMap, sizeof( rp_lockMap ) );
 
@@ -224,11 +289,31 @@ void RP_LocksLoad( void )
 
 	while ( fgets( line, sizeof( line ), f ) )
 	{
-		char *words[2 + RP_LOCK_MAX_ACCOUNTS + 1];
-		char *p = line;
-		int n = 0;
+		char *words[2 + RP_LOCK_MAX_ACCOUNTS * 2];
+		char *p = line, *rest;
+		int n = 0, len;
 
 		lineNumber++;
+
+		len = (int)strlen( line );
+		if ( len == (int)sizeof( line ) - 1 && line[len - 1] != '\n' && !feof( f ) )
+		{	// too long to read whole: skip the rest of it too
+			int c;
+
+			while ( ( c = fgetc( f ) ) != EOF && c != '\n' )
+				;
+			G_LogPrintf( "locks.txt line %d: longer than %d characters, ignored, and it will not be written back\n", lineNumber, RP_LOCK_LINE_LENGTH - 1 );
+			continue;
+		}
+
+		if ( lineNumber == 1 && (unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF )
+			p += 3;	// a UTF-8 byte order mark (Notepad)
+
+		// the line as written, without its line break, for keeping
+		Q_strncpyz( raw, p, sizeof( raw ) );
+		len = (int)strlen( raw );
+		while ( len > 0 && ( raw[len - 1] == '\n' || raw[len - 1] == '\r' ) )
+			raw[--len] = '\0';
 
 		while ( *p && n < (int)ARRAY_LEN( words ) )
 		{
@@ -241,11 +326,27 @@ void RP_LocksLoad( void )
 				p++;
 		}
 
-		if ( n == 0 || words[0][0] == '#' )
+		// more words than fit: the rest of the line, as it is (a "lock" line with that many accounts)
+		rest = p;
+		while ( *rest && (unsigned char)*rest <= ' ' )
+			rest++;
+		len = (int)strlen( rest );
+		while ( len > 0 && (unsigned char)rest[len - 1] <= ' ' )
+			rest[--len] = '\0';
+
+		if ( n == 0 )
 			continue;
+
+		if ( words[0][0] == '#' )
+		{	// a comment: the owner's is kept, the file's own header is written again
+			if ( !RP_LockHeaderLine( raw ) )
+				RP_LockKeep( raw, lineNumber );
+			continue;
+		}
 
 		if ( !Q_stricmp( words[0], "lock" ) && n >= 2 && RP_LockNameValid( words[1] ) )
 		{
+			char left[RP_LOCK_LINE_LENGTH];
 			rpLock_t *lock = RP_LockFind( words[1] );
 			int i;
 
@@ -253,7 +354,8 @@ void RP_LocksLoad( void )
 			{
 				if ( rp_numLocks >= RP_LOCK_MAX )
 				{
-					G_LogPrintf( "locks.txt line %d: more than %d locks, lock %s left out\n", lineNumber, RP_LOCK_MAX, words[1] );
+					G_LogPrintf( "locks.txt line %d: more than %d locks, lock %s not loaded (kept in the file)\n", lineNumber, RP_LOCK_MAX, words[1] );
+					RP_LockKeep( raw, lineNumber );
 					continue;
 				}
 				lock = &rp_locks[rp_numLocks++];
@@ -261,16 +363,25 @@ void RP_LocksLoad( void )
 				Q_strncpyz( lock->name, words[1], sizeof( lock->name ) );
 			}
 
+			left[0] = '\0';
 			for ( i = 2; i < n; i++ )
 			{
-				if ( !RP_LockAccountNameValid( words[i] ) || RP_LockAccountIndex( lock, words[i] ) >= 0 )
-					continue;
-				if ( lock->numAccounts >= RP_LOCK_MAX_ACCOUNTS )
+				if ( RP_LockAccountNameValid( words[i] ) && RP_LockAccountIndex( lock, words[i] ) >= 0 )
+					continue;	// listed twice
+				if ( !RP_LockAccountNameValid( words[i] ) || lock->numAccounts >= RP_LOCK_MAX_ACCOUNTS )
 				{
-					G_LogPrintf( "locks.txt line %d: lock %s has more than %d accounts, the rest left out\n", lineNumber, lock->name, RP_LOCK_MAX_ACCOUNTS );
-					break;
+					Q_strcat( left, sizeof( left ), va( " %s", words[i] ) );
+					continue;
 				}
 				Q_strncpyz( lock->accounts[lock->numAccounts++], words[i], RP_LOCK_ACCOUNT_LENGTH );
+			}
+			if ( rest[0] )
+				Q_strcat( left, sizeof( left ), va( " %s", rest ) );
+
+			if ( left[0] )
+			{
+				G_LogPrintf( "locks.txt line %d: lock %s, accounts not loaded (past %d, or not an account name; kept in the file):%s\n", lineNumber, lock->name, RP_LOCK_MAX_ACCOUNTS, left );
+				RP_LockKeep( va( "# not loaded: lock %s%s", lock->name, left ), lineNumber );
 			}
 		}
 		else if ( !Q_stricmp( words[0], "model" ) && n == 3 && RP_LockBrushModel( words[1] ) >= 0 && RP_LockNameValid( words[2] ) )
@@ -282,7 +393,8 @@ void RP_LocksLoad( void )
 			{
 				if ( rp_numLockModels >= RP_LOCK_MAX_MODELS )
 				{
-					G_LogPrintf( "locks.txt line %d: more than %d model lines, *%d left out\n", lineNumber, RP_LOCK_MAX_MODELS, model );
+					G_LogPrintf( "locks.txt line %d: more than %d model lines, *%d not loaded (kept in the file)\n", lineNumber, RP_LOCK_MAX_MODELS, model );
+					RP_LockKeep( raw, lineNumber );
 					continue;
 				}
 				line_ = &rp_lockModels[rp_numLockModels++];
@@ -292,7 +404,8 @@ void RP_LocksLoad( void )
 		}
 		else
 		{
-			G_LogPrintf( "locks.txt line %d: not understood, skipped (lines are \"lock <name> <account> ...\" and \"model *<N> <name>\")\n", lineNumber );
+			G_LogPrintf( "locks.txt line %d: not understood, kept as written (lines are \"lock <name> <account> ...\" and \"model *<N> <name>\")\n", lineNumber );
+			RP_LockKeep( raw, lineNumber );
 		}
 	}
 
@@ -312,8 +425,7 @@ static qboolean RP_LocksSave( void )
 		return qfalse;
 
 	fprintf( f, "# Account locks for %s: \"lock <name> <account> ...\" lists who may use what carries the lock,\n", rp_lockMap );
-	fprintf( f, "# \"model *<N> <name>\" puts a lock on the map's own entity with that brush model. /entlockadd and the\n" );
-	fprintf( f, "# other /entlock commands write this file.\n" );
+	fprintf( f, "%s\n%s\n", rp_lockHeader[1], rp_lockHeader[2] );
 
 	for ( i = 0; i < rp_numLocks; i++ )
 	{
@@ -325,6 +437,9 @@ static qboolean RP_LocksSave( void )
 
 	for ( i = 0; i < rp_numLockModels; i++ )
 		fprintf( f, "model *%d %s\n", rp_lockModels[i].model, rp_lockModels[i].lock );
+
+	if ( rp_lockKeptLen > 0 )
+		fprintf( f, "%s\n%s", RP_LOCK_KEPT_MARK, rp_lockKept );
 
 	fclose( f );
 	return qtrue;
@@ -386,18 +501,45 @@ THE CHECK
 =============================================================================
 */
 
+// DAJ_RP: [Locks] the classes that hurt or kill whoever touches them (the triggers) or uses them
+// (target_kill): a lock would only spare the players not on its list, so they never carry one. /entlockset
+// refuses them, and a "lock" key or a model line on one is ignored (RP_LockSpawnNote says so).
+static const char *rp_lockHarmfulClasses[] = {
+	"trigger_hurt", "trigger_space", "trigger_shipboundary", "trigger_hyperspace", "target_kill", NULL
+};
+
+static qboolean RP_LockHarmful( const gentity_t *ent )
+{
+	int i;
+
+	if ( !ent || !ent->classname )
+		return qfalse;
+
+	for ( i = 0; rp_lockHarmfulClasses[i]; i++ )
+	{
+		if ( !Q_stricmp( ent->classname, rp_lockHarmfulClasses[i] ) )
+			return qtrue;
+	}
+
+	return qfalse;
+}
+
 // DAJ_RP: [Locks] the entity's own lock: its key, or for the map's own a model line of the lock file. The
 // key counts only on an entity that is not the map's own (a map that happened to use a "lock" key of its
-// own must not lock its doors). A key that is no lock name -- set by hand in an entity file, say -- still
-// locks, as a lock with no list does, and goes by RP_LOCK_INVALID_NAME, which no list can have, so it is
-// never shown as it was typed.
+// own must not lock its doors). A key of none is no lock. A key that is no lock name -- set by hand in an
+// entity file, say -- still locks, as a lock with no list does, and goes by RP_LOCK_INVALID_NAME, which no
+// list can have, so it is never shown as it was typed. A harmful class has none (RP_LockHarmful).
 const char *RP_LockNameOf( const gentity_t *ent )
 {
-	if ( !ent || !ent->inuse )
+	if ( !ent || !ent->inuse || RP_LockHarmful( ent ) )
 		return NULL;
 
 	if ( ent->rpLock && ent->rpLock[0] && !ent->rpMapEntity )
+	{
+		if ( !Q_stricmp( ent->rpLock, RP_LOCK_NONE ) )
+			return NULL;
 		return RP_LockNameValid( ent->rpLock ) ? ent->rpLock : RP_LOCK_INVALID_NAME;
+	}
 
 	if ( ent->rpMapEntity && ent->rpSubBSPOf <= 0 )
 	{	// not one from a misc_bsp: its "*N" counts in its own BSP's models, not the map's
@@ -461,19 +603,91 @@ static void RP_LockTell( gentity_t *player, const char *name )
 
 /*
 ==================
-RP_LockAllows
+RP_LockMarkPass / RP_LockPassMatches
 
-DAJ_RP: [Locks] whether activator may use ent (see the top of this file). A player who may not is told.
+DAJ_RP: [Locks] /entuse, /enttrigger and the upgraded Stun Baton pass every lock, and so does what they
+set off. RP_LockBypass covers what happens during the use itself; what happens later -- a door or button
+with a delay, a door's opentarget, closetarget and target2 when it arrives, a trigger_multiple with a
+delay, a target_delay -- runs from a think, after the bypass is over. Every one of those keeps the
+activator it was used with (ent->activator) and fires with it. So an entity used during the bypass is
+marked with who that activator was, and a later use by a marked entity with that same activator passes,
+and marks what it uses in turn, however many delays the chain goes through.
+
+The mark is the activator's number and, for a client, its pers.enterTime: a player who later gets the
+same client slot is someone else. A mark only ever lets its own activator through, and only for what the
+marked entity sets off: another player using the same button later is judged as always. The one who
+holds it may use the marked entity again the ordinary way and have its chain pass -- but the baton or
+/enttrigger would have let them do that anyway, and only movers the baton can hit, or what an admin used,
+are ever marked. A door team is marked whole, since any member may be the one that fires its targets.
 ==================
 */
-qboolean RP_LockAllows( gentity_t *ent, gentity_t *activator )
+static int RP_LockStampOf( const gentity_t *activator )
+{
+	return ( activator && activator->client ) ? activator->client->pers.enterTime : 0;
+}
+
+static qboolean RP_LockPassMatches( const gentity_t *marked, const gentity_t *activator )
+{
+	return ( marked && activator && marked->rpLockPassBy && marked->rpLockPassBy == activator->s.number + 1 &&
+		marked->rpLockPassStamp == RP_LockStampOf( activator ) ) ? qtrue : qfalse;
+}
+
+static void RP_LockMarkOne( gentity_t *ent, gentity_t *activator )
+{
+	ent->rpLockPassBy = activator->s.number + 1;
+	ent->rpLockPassStamp = RP_LockStampOf( activator );
+}
+
+void RP_LockMarkPass( gentity_t *ent, gentity_t *activator )
+{
+	gentity_t *member;
+	int guard = 0;
+
+	if ( !ent || !ent->inuse || !activator || !activator->inuse )
+		return;
+
+	RP_LockMarkOne( ent, activator );
+
+	if ( ent->s.eType != ET_MOVER || !ent->teammaster || !ent->teammaster->inuse )
+		return;
+
+	for ( member = ent->teammaster; member && guard < 64; member = member->teamchain, guard++ )
+	{
+		if ( !member->inuse )
+			break;
+		RP_LockMarkOne( member, activator );
+	}
+}
+
+/*
+==================
+RP_LockAllows
+
+DAJ_RP: [Locks] whether activator may use ent, which other (the entity doing the using: a trigger, a
+button, a door's own trigger, the toucher itself) set off. Who passes:
+  - anything, during /entuse, /enttrigger or the upgraded Stun Baton (RP_LockBypass), or set off later by
+    an entity they set off, with the same activator (RP_LockMarkPass) -- ent is marked in turn;
+  - with no lock on ent or its door team: anything;
+  - nothing at all as the activator, or one that is not a character -- a timer, the world, map logic;
+  - a player: logged in, with the account on the lock's list; a vehicle a player drives: by the pilot.
+An NPC does not -- one following a player into a locked door's trigger would open it for them -- nor a
+vehicle that is empty or that an NPC drives. A player who may not is told (RP_LockTell).
+==================
+*/
+qboolean RP_LockAllows( gentity_t *ent, gentity_t *other, gentity_t *activator )
 {
 	const char *name;
 	rpLock_t *lock;
 	gentity_t *player = activator;
 
-	if ( rp_lockBypass > 0 || !ent || !ent->inuse )
+	if ( !ent || !ent->inuse )
 		return qtrue;
+
+	if ( rp_lockBypass > 0 || ( other && other != ent && RP_LockPassMatches( other, activator ) ) )
+	{
+		RP_LockMarkPass( ent, activator );
+		return qtrue;
+	}
 
 	name = RP_LockNameOfTeam( ent );
 	if ( !name )
@@ -483,14 +697,14 @@ qboolean RP_LockAllows( gentity_t *ent, gentity_t *activator )
 		return qtrue;	// map logic, a timer, a script
 
 	if ( player->s.number >= MAX_CLIENTS )
-	{	// an NPC passes; a vehicle passes unless a player is driving it
+	{	// an NPC or a vehicle: only a vehicle a player drives, and then by the pilot's account
 		gentity_t *pilot = NULL;
 
 		if ( player->s.eType == ET_NPC && player->m_pVehicle && player->m_pVehicle->m_pPilot )
 			pilot = (gentity_t *)player->m_pVehicle->m_pPilot;
 
 		if ( !pilot || pilot < g_entities || pilot >= &g_entities[MAX_CLIENTS] || !pilot->inuse || !pilot->client )
-			return qtrue;
+			return qfalse;
 
 		player = pilot;
 	}
@@ -507,12 +721,83 @@ qboolean RP_LockAllows( gentity_t *ent, gentity_t *activator )
 }
 
 /*
+==================
+RP_LockSpawnNote
+
+DAJ_RP: [Locks] after the Entity System spawns an entity (zyk_main_spawn_entity): a "lock" key on a class
+that cannot carry one is kept in its record but does nothing -- say so to the admin (/entadd, /entedit).
+==================
+*/
+void RP_LockSpawnNote( gentity_t *ent )
+{
+	if ( !ent || !ent->inuse || !ent->rpLock || !ent->rpLock[0] || !Q_stricmp( ent->rpLock, RP_LOCK_NONE ) ||
+		!RP_LockHarmful( ent ) || level.rp_spawn_note[0] )
+	{
+		return;
+	}
+
+	Q_strncpyz( level.rp_spawn_note, va( "A %s hurts whoever touches or uses it: a lock would only spare the players not on its list, so its lock key does nothing.", ent->classname ),
+		sizeof( level.rp_spawn_note ) );
+}
+
+/*
 =============================================================================
 
 COMMANDS
 
 =============================================================================
 */
+
+/*
+==================
+RP_LockPrintList
+
+DAJ_RP: [Locks] "<head><word><sep><word>...<tail>" for a list of space-separated words, in as many prints
+as it takes: the engine drops a server command over 1022 characters whole (SV_SendServerCommand), so a
+lock's 64 long account names would otherwise not show at all. Each further print starts indented.
+==================
+*/
+static void RP_LockPrintList( gentity_t *ent, const char *head, const char *words, const char *sep, const char *tail )
+{
+	char msg[RP_LOCK_PRINT_MAX + 128];
+	const char *p = words;
+	qboolean first = qtrue;
+
+	Q_strncpyz( msg, head, sizeof( msg ) );
+
+	while ( p && *p )
+	{
+		char word[RP_LOCK_LINE_LENGTH];
+		int n = 0;
+
+		while ( *p == ' ' )
+			p++;
+		if ( !*p )
+			break;
+		while ( *p && *p != ' ' )
+		{
+			if ( n < (int)sizeof( word ) - 1 )
+				word[n++] = *p;
+			p++;
+		}
+		word[n] = '\0';
+		if ( n > 64 )
+			Q_strncpyz( word + 60, "...", sizeof( word ) - 60 );	// no list word is this long; never let one fill a print
+
+		if ( !first && (int)( strlen( msg ) + strlen( sep ) + strlen( word ) + strlen( tail ) ) > RP_LOCK_PRINT_MAX )
+		{
+			trap->SendServerCommand( ent - g_entities, va( "print \"%s\n\"", msg ) );
+			Q_strncpyz( msg, "  ", sizeof( msg ) );
+			first = qtrue;
+		}
+
+		Q_strcat( msg, sizeof( msg ), first ? word : va( "%s%s", sep, word ) );
+		first = qfalse;
+	}
+
+	Q_strcat( msg, sizeof( msg ), tail );
+	trap->SendServerCommand( ent - g_entities, va( "print \"%s\n\"", msg ) );
+}
 
 static int RP_LockEntityCount( const char *name, char *ids, int idsSize )
 {
@@ -550,7 +835,7 @@ when it is new. Each must be an account that exists; it is stored as the account
 void Cmd_EntLockAdd_f( gentity_t *ent )
 {
 	char name[MAX_STRING_CHARS], account[MAX_STRING_CHARS], canonical[RP_LOCK_ACCOUNT_LENGTH];
-	char added[MAX_STRING_CHARS], already[MAX_STRING_CHARS], missing[MAX_STRING_CHARS], refused[MAX_STRING_CHARS];
+	char added[RP_LOCK_LIST_SIZE], already[RP_LOCK_LIST_SIZE], missing[RP_LOCK_LIST_SIZE], refused[RP_LOCK_LIST_SIZE];
 	rpLock_t *lock;
 	qboolean created = qfalse, changed = qfalse;
 	int i, before;
@@ -567,7 +852,7 @@ void Cmd_EntLockAdd_f( gentity_t *ent )
 	trap->Argv( 1, name, sizeof( name ) );
 	if ( !RP_LockNameValid( name ) )
 	{
-		trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -.\n\"" );
+		trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -, and not none (that means no lock).\n\"" );
 		return;
 	}
 
@@ -640,13 +925,13 @@ void Cmd_EntLockAdd_f( gentity_t *ent )
 		trap->SendServerCommand( ent - g_entities, "print \"^1The lock file could not be written: the change lasts until the map changes.\n\"" );
 
 	if ( added[0] )
-		trap->SendServerCommand( ent - g_entities, va( "print \"Lock ^3%s^7%s: added%s.\n\"", name, created ? " (new)" : "", added ) );
+		RP_LockPrintList( ent, va( "Lock ^3%s^7%s: added ", name, created ? " (new)" : "" ), added, " ", "." );
 	if ( already[0] )
-		trap->SendServerCommand( ent - g_entities, va( "print \"Already on lock ^3%s^7:%s.\n\"", name, already ) );
+		RP_LockPrintList( ent, va( "Already on lock ^3%s^7: ", name ), already, " ", "." );
 	if ( missing[0] )
-		trap->SendServerCommand( ent - g_entities, va( "print \"^3No such account:^7%s.\n\"", missing ) );
+		RP_LockPrintList( ent, "^3No such account:^7 ", missing, " ", "." );
 	if ( refused[0] )
-		trap->SendServerCommand( ent - g_entities, va( "print \"^3Lock %s has %d accounts, the most it can have; not added:^7%s.\n\"", name, RP_LOCK_MAX_ACCOUNTS, refused ) );
+		RP_LockPrintList( ent, va( "^3Lock %s has %d accounts, the most it can have; not added:^7 ", name, RP_LOCK_MAX_ACCOUNTS ), refused, " ", "." );
 
 	if ( changed )
 		G_LogPrintf( "/entlockadd %s by %s:%s\n", name, ent->client->pers.netname, added );
@@ -662,7 +947,7 @@ lock's list, or the whole list. A list left empty goes; what carries the lock th
 */
 void Cmd_EntLockRemove_f( gentity_t *ent )
 {
-	char name[MAX_STRING_CHARS], account[MAX_STRING_CHARS], removed[MAX_STRING_CHARS], absent[MAX_STRING_CHARS];
+	char name[MAX_STRING_CHARS], account[MAX_STRING_CHARS], removed[RP_LOCK_LIST_SIZE], absent[RP_LOCK_LIST_SIZE];
 	rpLock_t *lock;
 	int i, entities;
 
@@ -714,7 +999,7 @@ void Cmd_EntLockRemove_f( gentity_t *ent )
 	}
 
 	if ( absent[0] )
-		trap->SendServerCommand( ent - g_entities, va( "print \"Not on lock ^3%s^7:%s.\n\"", name, absent ) );
+		RP_LockPrintList( ent, va( "Not on lock ^3%s^7: ", name ), absent, " ", "." );
 
 	if ( !removed[0] )
 		return;
@@ -729,11 +1014,15 @@ void Cmd_EntLockRemove_f( gentity_t *ent )
 
 	entities = RP_LockEntityCount( name, NULL, 0 );
 	if ( RP_LockFind( name ) )
-		trap->SendServerCommand( ent - g_entities, va( "print \"Lock ^3%s^7: removed%s.\n\"", name, removed ) );
+		RP_LockPrintList( ent, va( "Lock ^3%s^7: removed ", name ), removed, " ", "." );
 	else
-		trap->SendServerCommand( ent - g_entities, va( "print \"Lock ^3%s^7: removed%s; its list is gone.%s\n\"", name, removed,
-			entities ? va( " ^3%d entit%s still carr%s it and now let%s nobody through^7 (only /entuse and /enttrigger).", entities,
-				entities == 1 ? "y" : "ies", entities == 1 ? "ies" : "y", entities == 1 ? "s" : "" ) : "" ) );
+	{
+		char tail[256];
+
+		Com_sprintf( tail, sizeof( tail ), "; its list is gone.%s", entities ? va( " ^3%d entit%s still carr%s it and now let%s nobody through^7 (only /entuse and /enttrigger).", entities,
+			entities == 1 ? "y" : "ies", entities == 1 ? "ies" : "y", entities == 1 ? "s" : "" ) : "" );
+		RP_LockPrintList( ent, va( "Lock ^3%s^7: removed ", name ), removed, " ", tail );
+	}
 }
 
 /*
@@ -746,7 +1035,7 @@ entities carry that have no list. /entlocklist <lock>: its accounts and the enti
 */
 void Cmd_EntLockList_f( gentity_t *ent )
 {
-	char name[MAX_STRING_CHARS], ids[512], line[MAX_STRING_CHARS];
+	char name[MAX_STRING_CHARS], ids[512];
 	gentity_t *e;
 	int i;
 
@@ -761,7 +1050,7 @@ void Cmd_EntLockList_f( gentity_t *ent )
 		trap->Argv( 1, name, sizeof( name ) );
 		if ( !RP_LockNameValid( name ) )
 		{
-			trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -.\n\"" );
+			trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -, and not none (that means no lock).\n\"" );
 			return;
 		}
 
@@ -776,10 +1065,12 @@ void Cmd_EntLockList_f( gentity_t *ent )
 
 		if ( lock )
 		{
-			line[0] = '\0';
+			char accounts[RP_LOCK_MAX_ACCOUNTS * ( RP_LOCK_ACCOUNT_LENGTH + 1 ) + 1];
+
+			accounts[0] = '\0';
 			for ( i = 0; i < lock->numAccounts; i++ )
-				Q_strcat( line, sizeof( line ), va( "%s%s", i ? ", " : "", lock->accounts[i] ) );
-			trap->SendServerCommand( ent - g_entities, va( "print \"\n^3Lock %s^7: %d account(s): %s\n\"", lock->name, lock->numAccounts, line ) );
+				Q_strcat( accounts, sizeof( accounts ), va( "%s%s", i ? " " : "", lock->accounts[i] ) );
+			RP_LockPrintList( ent, va( "\n^3Lock %s^7: %d account(s): ", lock->name, lock->numAccounts ), accounts, ", ", "" );
 		}
 		else
 		{
@@ -803,21 +1094,23 @@ void Cmd_EntLockList_f( gentity_t *ent )
 			rp_locks[i].numAccounts, count, count == 1 ? "y" : "ies" ) );
 	}
 
-	// zyk: locks something carries but no list has
-	line[0] = '\0';
-	RP_FOR_EACH_ENTITY( e )
+	// zyk: locks something carries but no list has -- each once (a name is at most 31 characters, and a
+	// map cannot carry more different ones than the buffer holds before entities run out)
 	{
-		const char *own = RP_LockNameOf( e );
+		static char carried[RP_LOCK_KEPT_SIZE];
 
-		if ( !own || RP_LockFind( own ) || strstr( line, va( " %s,", own ) ) )
-			continue;
-		if ( strlen( line ) + strlen( own ) + 4 < sizeof( line ) - 64 )
-			Q_strcat( line, sizeof( line ), va( " %s,", own ) );
-	}
-	if ( line[0] )
-	{
-		line[strlen( line ) - 1] = '\0';
-		trap->SendServerCommand( ent - g_entities, va( "print \"^1Carried, with no list^7 (they let nobody through):%s\n\"", line ) );
+		carried[0] = '\0';
+		RP_FOR_EACH_ENTITY( e )
+		{
+			const char *own = RP_LockNameOf( e );
+
+			if ( !own || RP_LockFind( own ) || strstr( va( " %s ", carried ), va( " %s ", own ) ) )
+				continue;
+			if ( strlen( carried ) + strlen( own ) + 2 < sizeof( carried ) )
+				Q_strcat( carried, sizeof( carried ), va( "%s%s", carried[0] ? " " : "", own ) );
+		}
+		if ( carried[0] )
+			RP_LockPrintList( ent, "^1Carried, with no list^7 (they let nobody through): ", carried, ", ", "" );
 	}
 
 	trap->SendServerCommand( ent - g_entities, "print \"^3/entlocklist <lock>^7 shows one lock's accounts and entities.\n\n\"" );
@@ -903,13 +1196,19 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 	none = !Q_stricmp( name, "none" ) ? qtrue : qfalse;
 	if ( !none && !RP_LockNameValid( name ) )
 	{
-		trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -.\n\"" );
+		trap->SendServerCommand( ent - g_entities, "print \"A lock name is 1 to 31 letters, digits, _ or -, and not none (that means no lock).\n\"" );
 		return;
 	}
 
 	if ( target->client )
 	{
 		trap->SendServerCommand( ent - g_entities, va( "print \"Entity %d is a player, an NPC or a vehicle: it cannot carry a lock.\n\"", id ) );
+		return;
+	}
+
+	if ( RP_LockHarmful( target ) && !none )
+	{
+		trap->SendServerCommand( ent - g_entities, va( "print \"Entity %d (%s) hurts whoever touches or uses it: a lock would only spare the players not on its list, so it cannot carry one.\n\"", id, target->classname ) );
 		return;
 	}
 
@@ -984,7 +1283,7 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 				trap->SendServerCommand( ent - g_entities, va( "print \"Entity %d holds the most keys an entity can: there is no room for the lock key.\n\"", id ) );
 				return;
 			}
-			target->rpLock = G_NewString( name );
+			target->rpLock = (char *)stored;	// the record's own copy: no new one for every /entlockset
 		}
 	}
 	else
@@ -1062,7 +1361,10 @@ void Cmd_EntTrigger_f( gentity_t *ent )
 	if ( target->s.eType == ET_MOVER )
 		RP_StunBatonUseMover( target, ent );
 	else
+	{
+		RP_LockMarkPass( target, ent );	// what it sets off later passes too
 		target->use( target, ent, ent );
+	}
 	RP_LockBypass( qfalse );
 
 	G_LogPrintf( "/enttrigger %d by %s\n", id, ent->client->pers.netname );

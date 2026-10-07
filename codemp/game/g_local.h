@@ -471,6 +471,12 @@ struct gentity_s {
 	// entity (g_locks.c). Only the Entity System's entities have one; the map's own are locked by brush
 	// model in the file instead. NULL when it has none.
 	char		*rpLock;
+	// DAJ_RP: [Locks] who set this entity off through /entuse, /enttrigger or the upgraded Stun Baton (or
+	// through something they set off): 1 + that activator's number, and the client's pers.enterTime, so a
+	// later player in the same slot is not taken for them. What this entity uses later -- after a delay,
+	// when a door arrives -- with that same activator passes every lock, as the use itself did. 0: none.
+	int			rpLockPassBy;
+	int			rpLockPassStamp;
 
 	// GalaxyRP: [Logical Entities] the slot number this entity would have been given had every
 	// map entity been networked -- what its number WAS before this feature. Assigned only to
@@ -2661,7 +2667,9 @@ void	RP_StunBatonUseMover( gentity_t *mover, gentity_t *user );
 // DAJ_RP: [Locks] account-locked entities -- see g_locks.c.
 void		RP_LocksLoad( void );
 void		Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );	// g_trigger.c: checks the lock of a use or fire trigger itself
-qboolean	RP_LockAllows( gentity_t *ent, gentity_t *activator );
+qboolean	RP_LockAllows( gentity_t *ent, gentity_t *other, gentity_t *activator );
+void		RP_LockMarkPass( gentity_t *ent, gentity_t *activator );
+void		RP_LockSpawnNote( gentity_t *ent );
 const char	*RP_LockNameOf( const gentity_t *ent );
 void		RP_LockBypass( qboolean on );
 void		Cmd_EntLockAdd_f( gentity_t *ent );

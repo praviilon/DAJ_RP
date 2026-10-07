@@ -15429,7 +15429,9 @@ void Cmd_EntUse_f( gentity_t *ent ) {
 			continue;
 		}
 		// DAJ_RP: [Locks] an admin's use: account locks do not stop it, nor what it sets off (g_locks.c)
+		// and what it sets off later, with the admin as activator, passes too (RP_LockMarkPass)
 		RP_LockBypass(qtrue);
+		RP_LockMarkPass(e, ent);
 		e->use(e, ent, ent);
 		RP_LockBypass(qfalse);
 		used++;
@@ -20136,7 +20138,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entlockremove <lock> <account> [more accounts] ^7or ^3/entlockremove <lock> all: ^7Takes accounts off the lock, or all of them. What carries a lock with nobody on it lets nobody through.\n";
 	lines[n++] = "^3/entlockset <entity id (optional)> <lock | none>: ^7Puts a lock on the door, lift, button, trigger or any entity you aim at, or that id, or takes it off. The map's own get it by their brush model, kept in the map's lock file. A locked door team is locked whole.\n";
 	lines[n++] = "^3/entlocklist <lock (optional)>: ^7Lists this map's locks, or one lock's accounts and the entities carrying it.\n";
-	lines[n++] = "^7A locked entity lets through only logged-in players whose account is on its lock (a vehicle: its pilot's). NPCs, the map's own logic and the upgraded Stun Baton always pass.\n";
+	lines[n++] = "^7A locked entity lets through only logged-in players whose account is on its lock (a vehicle: its pilot's). NPCs never do. Timers and map logic with no player behind them pass, and so do /entuse, /enttrigger and the upgraded Stun Baton, with what they set off, later too. Harmful triggers and target_kill cannot be locked.\n";
 
 	lines[n++] = "^5Other\n";
 	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";

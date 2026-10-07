@@ -3132,6 +3132,9 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	// at map load -- see RP_TeamLinkEntity() in g_main.c
 	if ( ent->inuse )
 	{
+		// DAJ_RP: [Locks] a lock key on a class that cannot carry one: say it does nothing (g_locks.c)
+		RP_LockSpawnNote( ent );
+
 		RP_TeamLinkEntity( ent );
 
 		// GalaxyRP fix: [Entity System] a leader spawned again in place answers its followers' name again

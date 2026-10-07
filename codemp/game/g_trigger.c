@@ -467,7 +467,7 @@ void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace )
 		// DAJ_RP: [Locks] a locked use trigger refuses when Use is pressed -- not on walking in, which
 		// G_TouchTriggers() leaves to this check -- and before a hold-to-use hack starts, so nobody waits
 		// through the bar to be refused. A hack under way when the lock started refusing is called off.
-		if ( !RP_LockAllows( self, other ) )
+		if ( !RP_LockAllows( self, other, other ) )
 		{
 			if ( other->s.number < MAX_CLIENTS && other->client->isHacking == self->s.number )
 			{
@@ -533,7 +533,7 @@ void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace )
 		}
 
 		// DAJ_RP: [Locks] a locked fire trigger refuses when fire is pressed, as a use trigger does above
-		if ( !( self->spawnflags & 4 ) && !RP_LockAllows( self, other ) )
+		if ( !( self->spawnflags & 4 ) && !RP_LockAllows( self, other, other ) )
 		{
 			return;
 		}

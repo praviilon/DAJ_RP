@@ -971,7 +971,7 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator )
 	// DAJ_RP: [Locks] a player whose account is not on the lock's list cannot use it, by any route: its
 	// own trigger, a button, the use key, a chain, a shot (g_locks.c). Not when the door uses itself --
 	// Blocked_Door() reversing it off whatever is in the way, which is passed as the activator.
-	if ( other != ent && !RP_LockAllows( ent, activator ) )
+	if ( other != ent && !RP_LockAllows( ent, other, activator ) )
 	{
 		return;
 	}
@@ -1097,6 +1097,7 @@ static void RP_StunBatonUseMoverUnlocked( gentity_t *mover, gentity_t *user )
 				}
 			}
 			master->activator = user;
+			RP_LockMarkPass( master, user );	// DAJ_RP: [Locks] what it fires on the way passes too (g_locks.c)
 			ReturnToPos1( master );
 		}
 		else if ( master->moverState == MOVER_1TO2 && master->use )

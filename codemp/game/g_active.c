@@ -644,7 +644,7 @@ void	G_TouchTriggers( gentity_t *ent ) {
 		// (spawnflags 4, 8) is walked into freely, its use icon and all: Touch_Multi() refuses when the
 		// button is pressed.
 		if ( hit->touch && ent->client->sess.sessionTeam != TEAM_SPECTATOR &&
-			!( hit->touch == Touch_Multi && ( hit->spawnflags & ( 4 | 8 ) ) ) && !RP_LockAllows( hit, ent ) ) {
+			!( hit->touch == Touch_Multi && ( hit->spawnflags & ( 4 | 8 ) ) ) && !RP_LockAllows( hit, ent, ent ) ) {
 			continue;
 		}
 
