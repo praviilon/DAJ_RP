@@ -8345,7 +8345,8 @@ static void CG_Draw2D( void ) {
 	// Tr!Force: [CGameGeneral] Server mod check
 	if (!cgs.modCheck)
 	{
-		CG_CenterPrint("^1ALERT\nIncomplete mod detected\nDownload the full mod at:\n^5https://www.galaxyrp.uk", SCREEN_HEIGHT * .30, 0); // WIP
+		// DAJ_RP: the address is JK_URL (rp_version.h), the one the server's plugin messages give too
+		CG_CenterPrint("^1ALERT\nIncomplete mod detected\nDownload the full mod at:\n^5" JK_URL, SCREEN_HEIGHT * .30, 0); // WIP
 	}
 
 	if (cgs.clientinfo[cg.snap->ps.clientNum].team == TEAM_SPECTATOR)

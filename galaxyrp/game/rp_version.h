@@ -31,7 +31,7 @@ Project based on OpenJK and Zyk Mod. Work copyrighted (C) 2020 - 2022
 // Set mod version definitions
 #define	JK_VERSION                  VER("GalaxyRP Mod v" VERSION_STRING_DOTTED)
 #define JK_VERSION_OLD              VER("JAmp: v" VERSION_STRING_DOTTED)
-#define JK_URL                      "https://www.galaxyrp.uk"
+#define JK_URL                      "https://github.com/praviilon/DAJ_RP/releases"
 
 // Public version
 #define GAMEVERSION			        JK_VERSION

@@ -14,6 +14,6 @@ CONFIG              "W:\bin\stringed.cfg"
 FILENOTES           "In-game text for various events"
 
 REFERENCE           MOD_ALERT
-LANG_FRENCH 		"^1ALERTE\nMod incomplet détecté\nTéléchargez le mod complet à:\n^5https://www.galaxyrp.uk"
+LANG_FRENCH 		"^1ALERTE\nMod incomplet détecté\nTéléchargez le mod complet à:\n^5https://github.com/praviilon/DAJ_RP/releases"
 
 ENDMARKER
