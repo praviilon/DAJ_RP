@@ -2728,6 +2728,31 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 			va( "soundSet %s is not one the map already uses (the server cannot read sound/sound.txt to check it)", shown ) );
 	}
 
+	// DAJ_RP: [Weather] an effect key holding a weather command. Whatever these keys name is registered as an
+	// effect, and a name starting with * is not one: every player's game runs it as a weather command, the
+	// same as zyk_weather's message, with none of its checks -- "*clear" in a func_breakable's playfx wiped
+	// the map's weather the moment it spawned.
+	{
+		static const struct { const char *classname; const char *key; } weatherKeys[] = {
+			{ "func_breakable",				"playfx" },
+			{ "misc_siege_item",			"deathfx" },
+			{ "misc_siege_item",			"respawnfx" },
+			{ "trigger_lightningstrike",	"lightningfx" }
+		};
+		int k;
+
+		for ( k = 0; k < (int)ARRAY_LEN( weatherKeys ); k++ )
+		{
+			char *value = NULL;
+
+			if ( Q_stricmp( ent->classname, weatherKeys[k].classname ) != 0 )
+				continue;
+			if ( G_SpawnString( weatherKeys[k].key, "", &value ) && value && value[0] == '*' )
+				return RP_SpawnRefuse( ent, va( "%s names a weather command (it starts with *), not an effect; weather is added with zyk_weather",
+					weatherKeys[k].key ) );
+		}
+	}
+
 	// DAJ_RP: [SP Maps] a misc_model_ghoul: its .glm model on the server, frames and radius in range
 	// (RP_GhoulSpawnProblem() in g_misc.c), and a slot for the model and for the skin entry it will
 	// register -- a "skin" whose file is not there is not refused: the default skin is shown instead
@@ -2869,6 +2894,12 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 
 		G_SpawnString( "fxFile", "", &fxFile );
 		if ( !fxFile || !fxFile[0] )
+			return qfalse;
+
+		// DAJ_RP: [Weather] a weather command, not a file: SP_fx_runner() checks it as zyk_weather's message
+		// is checked, and finds its slot (RP_WeatherAdd, g_misc.c). It used to be refused here as "effect
+		// *rain is not on the server".
+		if ( fxFile[0] == '*' )
 			return qfalse;
 
 		// zyk: the path the effect system itself opens (CFxScheduler::RegisterEffect): ".efx" added

@@ -198,6 +198,16 @@ extern vec3_t gPainPoint;
 #define ZYK_WEATHER_WIND_LIMIT		10000	// per-axis cap on a constant wind velocity
 #define ZYK_WEATHER_DUST_MIN		1
 #define ZYK_WEATHER_DUST_MAX		10000	// the renderer allocates this many particles unchecked
+#define ZYK_WEATHER_DUST_DEFAULT	1000	// DAJ_RP: [Weather] spacedust without a density, from an entity
+
+// DAJ_RP: [Weather] the weather entities (zyk_weather, fx_rain, fx_snow, fx_spacedust, fx_wind, and an
+// fx_runner whose fxFile starts with *): what kind of weather a command is, and the command an entity's
+// text names, built and checked as /admweather builds its own (g_cmds.c)
+#define RP_WEATHER_NONE		0	// not one of the weather effects
+#define RP_WEATHER_CLOUD	1	// a particle effect: the renderer draws at most ZYK_WEATHER_MAX_CLOUDS
+#define RP_WEATHER_WIND		2	// a wind: at most ZYK_WEATHER_MAX_WINDS
+int			RP_WeatherCommandKind( const char *command );
+qboolean	RP_WeatherCommandFromText( const char *text, char *out, int outSize, char *why, int whySize );
 
 
 #define RP_MAX_FORCE_POWER		250
@@ -451,6 +461,11 @@ struct gentity_s {
 	// was never told those slots exist and SV_SvEntityForGentity() fatal-errors on a number that
 	// high. See MAX_LOGICENTITIES in q_shared.h and G_SpawnLogical() in g_utils.c.
 	qboolean	isLogical;
+
+	// DAJ_RP: [Weather] the effect slots of the weather commands this weather entity added (zyk_weather,
+	// fx_rain, fx_snow, fx_spacedust, fx_wind, an fx_runner whose fxFile starts with *), one bit each: what
+	// another one asking for the same weather is told it would add nothing by -- RP_WeatherAdd, g_misc.c
+	uint64_t	rpWeatherSlots;
 
 	// GalaxyRP: [Logical Entities] the slot number this entity would have been given had every
 	// map entity been networked -- what its number WAS before this feature. Assigned only to

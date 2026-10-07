@@ -20396,7 +20396,8 @@ typedef struct zyk_weather_effect_s {
 //       so a rebuild would flip it every time; nothing resets it, not even clear or die; and it
 //       would therefore end up in a different state on a late joiner than on everyone else, which is
 //       the exact problem the rest of this design exists to avoid.
-// /entadd zyk_weather still reaches all nineteen for anyone who wants them.
+// DAJ_RP: [Weather] the weather entities are held to this same list now (RP_WeatherCommandFromText below):
+// /entadd zyk_weather used to reach all nineteen.
 static const zyk_weather_effect_t zyk_weather_effects[] = {
 	{ "lightrain",		0,	ZYK_WFX_CLOUD	},
 	{ "rain",			0,	ZYK_WFX_CLOUD	},
@@ -20891,6 +20892,259 @@ static qboolean zyk_weather_build_command( gentity_t *ent, const zyk_weather_eff
 	// plain numbers
 	Com_sprintf(out, out_size, "*%s ( %d %d %d )", effect->name, values[0], values[1], values[2]);
 
+	return qtrue;
+}
+
+/*
+==================
+RP_WeatherCommandKind / RP_WeatherCommandFromText
+
+DAJ_RP: [Weather] the weather entities' side of this table. zyk_weather's message, and an fx_runner's
+fxFile starting with *, used to go to the players exactly as typed: anything at all reached the renderer's
+command stream, where an unknown word prints its whole help list on every player's console (each time they
+join, too), "clear" wipes the weather the entity cannot give back, "freeze" is a switch each player's game
+flips on its own, "die" deletes the map's weather zones, and "spacedust -5" crashes them. Now the text has
+to name one of the effects above -- the ones /admweather offers -- and the command is built from that name
+and the numbers, re-printed from ints, as zyk_weather_build_command() builds /admweather's:
+  spacedust [density]          1 to 10000, ZYK_WEATHER_DUST_DEFAULT without one, clamped
+  constantwind <x> <y> <z>     each -10000 to 10000, clamped; "( x y z )", brackets and all, works too
+Anything else is refused, and why says why. A leading * is skipped (an fx_runner's fxFile has one).
+==================
+*/
+int RP_WeatherCommandKind( const char *command )
+{
+	switch ( zyk_weather_command_kind( command ) )
+	{
+	case ZYK_WFX_CLOUD:
+		return RP_WEATHER_CLOUD;
+	case ZYK_WFX_WIND:
+		return RP_WEATHER_WIND;
+	default:
+		return RP_WEATHER_NONE;
+	}
+}
+
+// DAJ_RP: [Weather] a whole number, as zyk_weather_is_number() takes it; one too long for an int is kept
+// past every limit, so the clamp after it gives the limit rather than whatever the overflow made of it
+static qboolean RP_WeatherNumber( const char *s, int *value )
+{
+	int i = 0;
+	int v = 0;
+	qboolean negative = qfalse;
+
+	if (zyk_weather_is_number(s) == qfalse)
+		return qfalse;
+
+	if (s[0] == '-')
+	{
+		negative = qtrue;
+		i = 1;
+	}
+
+	for (; s[i] != '\0'; i++)
+	{
+		if (v < 1000000)
+			v = (v * 10) + (s[i] - '0');
+	}
+
+	*value = negative ? -v : v;
+	return qtrue;
+}
+
+// DAJ_RP: [Weather] the words of the text, split at white space; a bracket is a word of its own, so
+// "(100" and "( 100" read alike. Past RP_WEATHER_TOKENS words the rest is left unread and overflow set.
+// A word longer than a token holds is cut short.
+#define RP_WEATHER_TOKENS		8
+#define RP_WEATHER_TOKEN_LENGTH	32
+static int RP_WeatherTokens( const char *text, char tokens[RP_WEATHER_TOKENS][RP_WEATHER_TOKEN_LENGTH], qboolean *overflow )
+{
+	int n = 0;
+
+	*overflow = qfalse;
+
+	while (text && *text)
+	{
+		int len = 0;
+
+		while (*text && (unsigned char)*text <= ' ')
+			text++;
+
+		if (!*text)
+			break;
+
+		if (n >= RP_WEATHER_TOKENS)
+		{
+			*overflow = qtrue;
+			break;
+		}
+
+		if (*text == '(' || *text == ')')
+		{
+			tokens[n][0] = *text;
+			tokens[n][1] = '\0';
+			text++;
+			n++;
+			continue;
+		}
+
+		while (*text && (unsigned char)*text > ' ' && *text != '(' && *text != ')')
+		{
+			// zyk: what an admin typed goes back to him in the reason, inside a print command
+			char c = (*text == '"' || *text == ';' || *text == '\\') ? '?' : *text;
+
+			if (len < RP_WEATHER_TOKEN_LENGTH - 1)
+				tokens[n][len++] = c;
+			text++;
+		}
+
+		tokens[n][len] = '\0';
+		n++;
+	}
+
+	return n;
+}
+
+qboolean RP_WeatherCommandFromText( const char *text, char *out, int outSize, char *why, int whySize )
+{
+	char tokens[RP_WEATHER_TOKENS][RP_WEATHER_TOKEN_LENGTH];
+	const zyk_weather_effect_t *effect = NULL;
+	qboolean overflow = qfalse;
+	int values[3];
+	int n = 0;
+	int first = 1;
+	int given = 0;
+	int i = 0;
+
+	if (outSize > 0)
+		out[0] = '\0';
+	if (whySize > 0)
+		why[0] = '\0';
+
+	if (text && text[0] == '*')
+		text++;
+
+	n = RP_WeatherTokens(text, tokens, &overflow);
+
+	if (n == 0)
+	{
+		Q_strncpyz(why, "it names no weather", whySize);
+		return qfalse;
+	}
+
+	if (Q_stricmp(tokens[0], "clear") == 0)
+	{
+		Q_strncpyz(why, "clear wipes all the weather, the map's own included, and nothing could bring it back; use /admweather clear", whySize);
+		return qfalse;
+	}
+
+	if (Q_stricmp(tokens[0], "freeze") == 0)
+	{
+		Q_strncpyz(why, "freeze is a switch each player's game flips on its own, so players would see different things and nothing could switch it back", whySize);
+		return qfalse;
+	}
+
+	if (Q_stricmp(tokens[0], "die") == 0)
+	{
+		Q_strncpyz(why, "die deletes the map's indoor and outdoor zones until the map reloads, so later weather would fall indoors too", whySize);
+		return qfalse;
+	}
+
+	if (Q_stricmp(tokens[0], "zone") == 0)
+	{
+		Q_strncpyz(why, "zone is not weather, and a zone added once players have loaded the map does nothing", whySize);
+		return qfalse;
+	}
+
+	if (Q_stricmp(tokens[0], "outsidepain") == 0 || Q_stricmp(tokens[0], "outsideshake") == 0)
+	{
+		Com_sprintf(why, whySize, "%s does nothing in multiplayer", tokens[0]);
+		return qfalse;
+	}
+
+	effect = zyk_weather_find_effect(tokens[0]);
+
+	if (!effect)
+	{
+		char list[256];
+
+		list[0] = '\0';
+
+		for (i = 0; i < ZYK_WEATHER_NUM_EFFECTS; i++)
+		{
+			const char *args = "";
+
+			if (zyk_weather_effects[i].args == 1)
+				args = " [density]";
+			else if (zyk_weather_effects[i].args == 3)
+				args = " <x> <y> <z>";
+
+			Q_strcat(list, sizeof(list), va("%s%s%s", i ? ", " : "", zyk_weather_effects[i].name, args));
+		}
+
+		Com_sprintf(why, whySize, "%s is not a weather effect; use one of: %s", tokens[0], list);
+		return qfalse;
+	}
+
+	if (overflow)
+	{
+		Com_sprintf(why, whySize, "too many values for %s", effect->name);
+		return qfalse;
+	}
+
+	given = n - 1;
+
+	// zyk: "( x y z )" -- the brackets the engine's own form has -- reads as the three numbers
+	if (effect->args == 3 && given == 5 && strcmp(tokens[1], "(") == 0 && strcmp(tokens[5], ")") == 0)
+	{
+		first = 2;
+		given = 3;
+	}
+
+	if (effect->args == 0)
+	{
+		if (given != 0)
+		{
+			Com_sprintf(why, whySize, "%s takes no values", effect->name);
+			return qfalse;
+		}
+
+		Com_sprintf(out, outSize, "*%s", effect->name);
+		return qtrue;
+	}
+
+	if (effect->args == 1)
+	{
+		values[0] = ZYK_WEATHER_DUST_DEFAULT;
+
+		if (given > 1 || (given == 1 && RP_WeatherNumber(tokens[1], &values[0]) == qfalse))
+		{
+			Com_sprintf(why, whySize, "%s takes one whole number, its density from %d to %d: %s [density]",
+				effect->name, ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX, effect->name);
+			return qfalse;
+		}
+
+		values[0] = Com_Clampi(ZYK_WEATHER_DUST_MIN, ZYK_WEATHER_DUST_MAX, values[0]);
+		Com_sprintf(out, outSize, "*%s %d", effect->name, values[0]);
+		return qtrue;
+	}
+
+	for (i = 0; i < 3 && given == 3; i++)
+	{
+		if (RP_WeatherNumber(tokens[first + i], &values[i]) == qfalse)
+			break;
+	}
+
+	if (given != 3 || i < 3)
+	{
+		Com_sprintf(why, whySize, "%s takes three whole numbers, the wind velocity, each from %d to %d: %s <x> <y> <z>",
+			effect->name, -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, effect->name);
+		return qfalse;
+	}
+
+	for (i = 0; i < 3; i++)
+		values[i] = Com_Clampi(-ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, values[i]);
+
+	Com_sprintf(out, outSize, "*%s ( %d %d %d )", effect->name, values[0], values[1], values[2]);
 	return qtrue;
 }
 

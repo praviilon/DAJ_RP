@@ -1485,8 +1485,67 @@ int G_SoundSetIndex(const char *name)
 	return G_FindConfigstringIndex (name, CS_AMBIENT_SET, MAX_AMBIENT_SETS, qtrue);
 }
 
+/*
+=================
+RP_WeatherSafeName
+
+DAJ_RP: [Weather] a spacedust command whose density the renderer would take as it is, and crash on. The
+renderer reads the number after "spacedust" with atoi() and allocates that many particles with no bound of
+its own, and a negative count reaches a new[] of an enormous size -- every connected player crashes, and so
+does every player joining later, since the command lives in a configstring. /admweather and the Entity
+System's weather entities clamp their own (1 to 10000); this catches the rest -- a map's own fx_spacedust
+with a negative count, a map's own zyk_weather or fx_runner with "spacedust -5" -- and holds the number to
+0 to 10000. 0 stays 0: no particles, which is what such a map shows today. Read the way the renderer reads
+it (the first word, then atoi() of the second) and rebuilt only when the number is outside that range;
+any other name is returned as it is.
+=================
+*/
+static const char *RP_WeatherSafeName( const char *name, char *buf, int bufSize )
+{
+	const char *p;
+	int value = 0;
+	qboolean negative = qfalse;
+
+	if ( !VALIDSTRING( name ) || name[0] != '*' )
+		return name;
+
+	p = name + 1;
+	while ( *p && (unsigned char)*p <= ' ' )
+		p++;
+	if ( Q_stricmpn( p, "spacedust", 9 ) != 0 || ( p[9] && (unsigned char)p[9] > ' ' ) )
+		return name;
+
+	p += 9;
+	while ( *p && (unsigned char)*p <= ' ' )
+		p++;
+	if ( *p == '-' || *p == '+' )
+	{
+		negative = ( *p == '-' ) ? qtrue : qfalse;
+		p++;
+	}
+	while ( *p >= '0' && *p <= '9' )
+	{
+		if ( value <= ZYK_WEATHER_DUST_MAX )
+			value = ( value * 10 ) + ( *p - '0' );
+		p++;
+	}
+	if ( negative )
+		value = -value;
+
+	if ( value >= 0 && value <= ZYK_WEATHER_DUST_MAX )
+		return name;
+
+	Com_sprintf( buf, bufSize, "*spacedust %d", Com_Clampi( 0, ZYK_WEATHER_DUST_MAX, value ) );
+	G_LogPrintf( "weather command \"%s\" holds a density the game cannot draw; sent as \"%s\"\n", name, buf );
+	return buf;
+}
+
 int G_EffectIndex( const char *name )
 {
+	char safe[ZYK_WEATHER_CMD_LENGTH];
+
+	name = RP_WeatherSafeName( name, safe, sizeof( safe ) );
+
 	// GalaxyRP fix: [Weather] a "*"-prefixed effect is not an effect at all -- it is a command for
 	// the renderer's world-effect parser, which is a command stream shared by everyone on the
 	// server. /admweather owns that stream once it has reserved its block, and the whole design

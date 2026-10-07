@@ -147,7 +147,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"material|0|Chunks: 0 metal, 1 glass, 2 sparks only, 3 metal and sparks, 4 brown stone, 5 tan stone, 6 glass and metal, 7 metal2, 8 none, 9 grey stone, 10 metal3, 11 yellow crate, 12 grate, 13 rope, 14 red crate, 15 white metal, 16 snowy rock. Stone ones also chip when hit.\n"
 		"radius|1|Multiplies the number of chunks. Use this, not numchunks, which it overwrites.\n"
 		"chunksize|1|Multiplies the size of the chunks.\n"
-		"playfx||An effect played where it breaks.\n"
+		"playfx||An effect played where it breaks. One starting with * is a weather command and is refused.\n"
 		"splashDamage|0|Damage of an explosion when it breaks (needs splashRadius too).\n"
 		"splashRadius|0|Radius of that explosion, in units.\n"
 		"delay|0|Whole seconds between being destroyed or used and breaking.\n"
@@ -301,7 +301,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"func_wall model *1 targetname wall1",
 		"common mover func_usable" },
 	{ "fx_rain", 0, NULL,
-		"Rain over the whole map for every player, from the moment it spawns. Only the lowest of the flags 1, 2, 4 and 8 counts. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then.",
+		"Rain over the whole map for every player, from the moment it spawns. Only the lowest of the flags 1, 2, 4 and 8 counts. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then. Refused, and removed, when another weather entity already adds all of its weather (it would add nothing), or when the map's weather would hold more than 6 weather commands, 5 particle effects (rain, snow, sand, fog, dust) or 10 winds, the map's own included.",
 		"1|LIGHT|Light drizzle.\n"
 		"2|MEDIUM|Ordinary rain, also what no spawnflags gives.\n"
 		"4|HEAVY|Downpour with heavy fog.\n"
@@ -311,11 +311,12 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"fx_rain spawnflags 4",
 		"common fx_snow fx_wind" },
 	{ "fx_runner", 0, NULL,
-		"Plays an effect at its spot, over and over every delay ms, along its angles (straight up by default) or toward its target. With a targetname, using it switches it on and off, or plays it once with ONESHOT. Refused if the effect file is not on the server.",
+		"Plays an effect at its spot, over and over every delay ms, along its angles (straight up by default) or toward its target. With a targetname, using it switches it on and off, or plays it once with ONESHOT. Refused if the effect file is not on the server. "
+		"An fxFile starting with * is weather instead (fxFile *rain, or *spacedust 500 typed in quotes): the same as zyk_weather's message, under the same rules, and the fx_runner itself then plays nothing.",
 		"1|STARTOFF|Starts off: using it switches it on.\n"
 		"2|ONESHOT|Plays only when used, once per use.\n"
 		"4|DAMAGE|Each time it plays, does splashDamage within splashRadius (at most every 100 ms).",
-		"fxFile||The effect, under effects/ with .efx optional, for example env/small_fire.\n"
+		"fxFile||The effect, under effects/ with .efx optional, for example env/small_fire. Starting with *: weather (see zyk_weather).\n"
 		"delay|200|Milliseconds between plays.\n"
 		"random|0|Up to this many milliseconds added to each delay.\n"
 		"angles|-90 0 0|Direction it plays in (the default is straight up).\n"
@@ -328,26 +329,26 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"fx_runner fxFile env/small_fire",
 		"common info_notnull" },
 	{ "fx_snow", 0, NULL,
-		"Snow over the whole map, with fog and a steady wind, for every player from the moment it spawns. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then.",
+		"Snow over the whole map, with fog and a steady wind, for every player from the moment it spawns. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then. Refused, and removed, when another weather entity already adds all of its weather (it would add nothing), or when the map's weather would hold more than 6 weather commands, 5 particle effects (rain, snow, sand, fog, dust) or 10 winds, the map's own included.",
 		NULL,
 		NULL,
 		"fx_snow",
 		"common fx_rain fx_wind" },
 	{ "fx_spacedust", 0, NULL,
-		"Floating space dust over the whole map for every player, from the moment it spawns. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then.",
+		"Floating space dust over the whole map for every player, from the moment it spawns. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then. Refused, and removed, when another weather entity already adds all of its weather (it would add nothing), or when the map's weather would hold more than 6 weather commands, 5 particle effects (rain, snow, sand, fog, dust) or 10 winds, the map's own included.",
 		NULL,
-		"count|0|Number of dust particles: give one, such as 1000 (the code sets no default).",
+		"count|1000|Number of dust particles, 1 to 10000.",
 		"fx_spacedust count 1000",
 		"common fx_rain fx_snow" },
 	{ "fx_wind", 0, NULL,
-		"Wind over the whole map for every player from the moment it spawns, and, with the fog flags, drifting fog. With no spawnflags it does nothing. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then.",
+		"Wind over the whole map for every player from the moment it spawns, and, with the fog flags, drifting fog. With none of the flags 1, 2, 4, 32 and 64 it adds nothing and is refused. It lasts until the map changes, even if the entity is removed. Refused once /admweather has taken over this map's weather: use /admweather then. Refused, and removed, when another weather entity already adds all of its weather (it would add nothing), or when the map's weather would hold more than 6 weather commands, 5 particle effects (rain, snow, sand, fog, dust) or 10 winds, the map's own included.",
 		"1|NORMAL|Light random wind.\n"
 		"2|CONSTANT|Steady wind along its angles at speed.\n"
 		"4|GUSTING|Random gusts.\n"
 		"8|SWIRLING|Does nothing (switched off in the code).\n"
 		"32|FOG|Misty fog.\n"
 		"64|LIGHT_FOG|Light fog.",
-		"speed|500|With CONSTANT: the wind speed.\n"
+		"speed|500|With CONSTANT: the wind speed (each part of the wind held to -10000 to 10000).\n"
 		"angles||With CONSTANT: the direction the wind blows.",
 		"fx_wind spawnflags 4",
 		"common fx_rain fx_snow" },
@@ -981,8 +982,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"forcelimit|0|1: its carrier's force powers are crippled.\n"
 		"usephysics|1|It falls and bounces when dropped (mass, gravity, bounce tune it).\n"
 		"pickupsound||Sound played when it is picked up.\n"
-		"deathfx||Effect played when it is destroyed.\n"
-		"respawnfx||Effect played when it goes back to its spot.",
+		"deathfx||Effect played when it is destroyed. One starting with * is a weather command and is refused.\n"
+		"respawnfx||Effect played when it goes back to its spot. One starting with * is a weather command and is refused.",
 		"misc_siege_item model models/map_objects/kejim/cargo_small.md3 goaltarget goal1",
 		"common info_siege_objective" },
 	{ "misc_skyportal", 0, NULL,
@@ -2140,7 +2141,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 	{ "trigger_lightningstrike", 0, NULL,
 		"Lightning strikes a random point of its volume every wait plus up to random milliseconds. The effect plays from just under the top of the volume and the strike runs down to its bottom: the first thing it hits takes dmg, or, with radius, everything near the impact point. Using it switches it on and off. Without lightningfx it is not spawned (logged).",
 		"1|START_OFF|Starts off: using it switches it on.",
-		"lightningfx||Required: the effect, e.g. env/huge_lightning.\n"
+		"lightningfx||Required: the effect, e.g. env/huge_lightning. One starting with * is a weather command and is refused.\n"
 		"wait|1000|Milliseconds between strikes, at least 100.\n"
 		"random|2000|Up to this many milliseconds added at random each time.\n"
 		"dmg|50|Damage per strike.\n"
@@ -2379,9 +2380,18 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"zyk_training_pole spawnflags 1 wait 1000 angle 90",
 		"common" },
 	{ "zyk_weather", 0, NULL,
-		"Adds a weather effect to the whole map, for every player: the message key names it. Once /admweather has been used on this map it is refused (use /admweather add instead). The weather stays until the map changes, even after the entity is removed.",
+		"The map's saved weather: adds the weather its message names to the whole map, for every player, and /entsave keeps it. /admweather is for changes on the go: it can clear the weather, layer more on top, and /admweather default brings this weather back. "
+		"Once /admweather has been used on this map a new one is refused (use /admweather add instead). Refused, and removed: a message that is not one of the weather effects below, weather another weather entity already adds (it would add nothing), and weather past the limits, the map's own included: 6 weather commands, 5 particle effects (rain, snow, sand, fog, dust) and 10 winds. "
+		"The weather stays until the map changes, even after the entity is removed, and an /entedit to it adds the new weather without taking the old away.",
 		NULL,
-		"message||Required: the weather, e.g. rain, lightrain, heavyrain, acidrain, snow, sand, fog, heavyrainfog, light_fog, spacedust, wind, gustingwind. Any other weather command is passed on as given. Without it the entity removes itself.",
+		"message||Required: the weather, one of these. One with numbers is typed in quotes: message rain, or message, then constantwind 0 300 0 in quotes.\n"
+		"rain, lightrain, heavyrain, acidrain||Rain: ordinary, a drizzle, a downpour, acid rain.\n"
+		"snow, sand||Snow, or a sand storm.\n"
+		"fog, heavyrainfog, light_fog||Drifting fog: misty, the heavy rain's, a light blue-grey one.\n"
+		"spacedust [density]||Floating dust, density 1 to 10000 (1000 without one).\n"
+		"wind, gustingwind||A light random wind, or random gusts.\n"
+		"constantwind <x> <y> <z>||A steady wind of that velocity, each value -10000 to 10000.\n"
+		"refused||clear (use /admweather clear), freeze (players would see different things, and nothing could switch it back), die (it deletes the map's indoor and outdoor zones), zone, outsidepain and outsideshake (they do nothing in multiplayer).",
 		"zyk_weather message snow",
 		"common" },
 };
