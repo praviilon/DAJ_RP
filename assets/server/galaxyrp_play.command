@@ -20,7 +20,15 @@ ENGINE_DIR="$(pwd)"
 # back to the *other* arch-specific build: on an arm64 Mac that would mean running the x86_64
 # build under Rosetta instead of the native slice already inside the universal build, and on an
 # x86_64 Mac the arm64 build wouldn't run at all -- so universal is always the better second choice.
-case "$(uname -m)" in
+# GalaxyRP: [TaystJK] the CPU is asked through sysctl hw.optional.arm64 first: it is 1 on an Apple
+# Silicon Mac even when this script runs in a Terminal under Rosetta, where uname -m answers x86_64 --
+# which picked the Intel build there and ran the whole game translated. Intel Macs answer 0, or nothing
+# on older macOS, and uname -m decides as before.
+jk_mac_arch="$(uname -m 2>/dev/null)"
+if [ "$(sysctl -in hw.optional.arm64 2>/dev/null)" = "1" ]; then
+	jk_mac_arch=arm64
+fi
+case "$jk_mac_arch" in
 	arm64)
 		jk_executable_native="$jk_executable_arm64"
 		;;

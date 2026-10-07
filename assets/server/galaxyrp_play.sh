@@ -5,6 +5,7 @@
 # Main settings
 jk_executable_64="taystjk.x86_64"
 jk_executable_32="taystjk.i386"
+jk_executable_arm64="taystjk.arm64"
 
 # GalaxyRP: [TaystJK] this script lives inside the GalaxyRP folder, one level below the engine
 # executables -- switch to that parent folder FIRST, using the script's own location (not whatever
@@ -14,15 +15,51 @@ jk_executable_32="taystjk.i386"
 cd "$(dirname "$0")/.." || exit 1
 ENGINE_DIR="$(pwd)"
 
-# Executable check -- prefer the 64-bit TaystJK client, fall back to 32-bit, and bail out with
-# an error instead of silently trying to launch something that isn't there.
-if [ -f "$jk_executable_64" ]; then
-	jk_executable="$jk_executable_64"
-elif [ -f "$jk_executable_32" ]; then
-	jk_executable="$jk_executable_32"
-else
-	echo "ERROR: Could not find $jk_executable_64 or $jk_executable_32 next to the GalaxyRP folder."
-	echo "Make sure a TaystJK client build is installed alongside GalaxyRP."
+# Executable check -- by this machine's architecture first (uname -m), so a build it cannot run is
+# never picked. A 64-bit x86 system prefers the 64-bit build and falls back to the 32-bit one (it runs
+# 32-bit programs too, given the 32-bit libraries); a 32-bit system looks for the 32-bit build only, as
+# a 64-bit one fails there with "Exec format error"; an ARM system looks for an arm64 build, which
+# TaystJK does not publish but makes when built from source there (GalaxyRP's own Linux arm64 game
+# modules run with it); any other machine is tried as before, 64-bit then 32-bit. Bail out with an
+# error naming what was looked for instead of trying to launch something that isn't there.
+jk_arch="$(uname -m 2>/dev/null)"
+case "$jk_arch" in
+	x86_64|amd64)
+		jk_candidates="$jk_executable_64 $jk_executable_32"
+		;;
+	i386|i486|i586|i686)
+		jk_candidates="$jk_executable_32"
+		;;
+	aarch64|arm64)
+		jk_candidates="$jk_executable_arm64"
+		;;
+	*)
+		jk_candidates="$jk_executable_64 $jk_executable_32"
+		;;
+esac
+
+jk_executable=""
+jk_looked_for=""
+for jk_candidate in $jk_candidates; do
+	if [ -z "$jk_executable" ] && [ -f "$jk_candidate" ]; then
+		jk_executable="$jk_candidate"
+	fi
+	jk_looked_for="${jk_looked_for:+$jk_looked_for or }$jk_candidate"
+done
+
+if [ -z "$jk_executable" ]; then
+	echo "ERROR: Could not find $jk_looked_for next to the GalaxyRP folder (this machine: ${jk_arch:-unknown})."
+	case "$jk_arch" in
+		i386|i486|i586|i686)
+			if [ -f "$jk_executable_64" ]; then
+				echo "$jk_executable_64 is there, but a 64-bit build cannot run on this 32-bit system: install the i386 build."
+			fi
+			;;
+		aarch64|arm64)
+			echo "TaystJK publishes no Linux ARM builds: build TaystJK from source on this machine, which makes $jk_executable_arm64."
+			;;
+	esac
+	echo "Make sure a TaystJK client build for this machine is installed alongside GalaxyRP."
 	printf "Press Enter to exit..."
 	read -r _
 	exit 1

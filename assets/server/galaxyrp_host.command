@@ -10,6 +10,13 @@ jk_executable_x64="taystjkded.x86_64"
 jk_executable_arm64="taystjkded.arm64"
 jk_executable_universal="taystjkded"
 
+# Optional: one of this machine's own IP addresses, to bind the server to it alone. Leave it empty
+# (the default) and the server listens on all of this machine's addresses, which is what nearly every
+# server wants. Set it only on a machine with several network interfaces. An address the machine does
+# not have -- a typo, or the public IP of a server behind a router -- leaves the server unable to bind
+# at all, so nobody can connect.
+jk_net_ip=""
+
 # GalaxyRP: [TaystJK] this script lives inside the GalaxyRP folder, one level below the engine
 # executables -- switch to that parent folder FIRST, using the script's own location (not whatever
 # directory Finder/Terminal happened to start it from). This makes both the executable check below
@@ -23,7 +30,15 @@ ENGINE_DIR="$(pwd)"
 # back to the *other* arch-specific build: on an arm64 Mac that would mean running the x86_64
 # build under Rosetta instead of the native slice already inside the universal build, and on an
 # x86_64 Mac the arm64 build wouldn't run at all -- so universal is always the better second choice.
-case "$(uname -m)" in
+# GalaxyRP: [TaystJK] the CPU is asked through sysctl hw.optional.arm64 first: it is 1 on an Apple
+# Silicon Mac even when this script runs in a Terminal under Rosetta, where uname -m answers x86_64 --
+# which picked the Intel build there and ran the whole game translated. Intel Macs answer 0, or nothing
+# on older macOS, and uname -m decides as before.
+jk_mac_arch="$(uname -m 2>/dev/null)"
+if [ "$(sysctl -in hw.optional.arm64 2>/dev/null)" = "1" ]; then
+	jk_mac_arch=arm64
+fi
+case "$jk_mac_arch" in
 	arm64)
 		jk_executable_native="$jk_executable_arm64"
 		;;
@@ -51,7 +66,14 @@ fi
 xattr -d com.apple.quarantine "$jk_executable" 2>/dev/null
 chmod +x "$jk_executable" 2>/dev/null
 
+# The optional net_ip, as arguments of its own: none at all when it is empty
+if [ -n "$jk_net_ip" ]; then
+	set -- +set net_ip "$jk_net_ip"
+else
+	set --
+fi
+
 # Launch. fs_portable 1 + an absolute fs_homepath keep every file the server writes (config
 # changes, the accounts database, logs) inside this server folder instead of
 # ~/Library/Application Support.
-"./$jk_executable" +set dedicated "$jk_dedicated" +set net_port "$jk_net_port" +set fs_portable 1 +set fs_homepath "$ENGINE_DIR" +set fs_game GalaxyRP +exec "$jk_config"
+"./$jk_executable" +set dedicated "$jk_dedicated" +set net_port "$jk_net_port" "$@" +set fs_portable 1 +set fs_homepath "$ENGINE_DIR" +set fs_game GalaxyRP +exec "$jk_config"
