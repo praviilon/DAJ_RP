@@ -615,10 +615,13 @@ and marks what it uses in turn, however many delays the chain goes through.
 
 The mark is the activator's number and, for a client, its pers.enterTime: a player who later gets the
 same client slot is someone else. A mark only ever lets its own activator through, and only for what the
-marked entity sets off: another player using the same button later is judged as always. The one who
-holds it may use the marked entity again the ordinary way and have its chain pass -- but the baton or
-/enttrigger would have let them do that anyway, and only movers the baton can hit, or what an admin used,
-are ever marked. A door team is marked whole, since any member may be the one that fires its targets.
+marked entity sets off: another player using the same button later is judged as always. And it lasts
+only until its holder sets the entity off again the ordinary way (RP_LockAllows clears it then, before
+the entity fires): what /enttrigger once used must not be a lasting key for the admin who used it --
+logged out, or as anyone -- nor for a baton user who lost the baton. That use is then judged as any other;
+a delayed use of the earlier one still pending loses its pass too, which only the holder can cause.
+Another player's use never clears it. A door team is marked and cleared whole, since any member may be
+the one that fires its targets.
 ==================
 */
 static int RP_LockStampOf( const gentity_t *activator )
@@ -636,6 +639,25 @@ static void RP_LockMarkOne( gentity_t *ent, gentity_t *activator )
 {
 	ent->rpLockPassBy = activator->s.number + 1;
 	ent->rpLockPassStamp = RP_LockStampOf( activator );
+}
+
+// DAJ_RP: [Locks] the mark taken off again, from the entity and its door team, as RP_LockMarkPass put it on
+static void RP_LockClearPass( gentity_t *ent )
+{
+	gentity_t *member;
+	int guard = 0;
+
+	ent->rpLockPassBy = ent->rpLockPassStamp = 0;
+
+	if ( ent->s.eType != ET_MOVER || !ent->teammaster || !ent->teammaster->inuse )
+		return;
+
+	for ( member = ent->teammaster; member && guard < 64; member = member->teamchain, guard++ )
+	{
+		if ( !member->inuse )
+			break;
+		member->rpLockPassBy = member->rpLockPassStamp = 0;
+	}
 }
 
 void RP_LockMarkPass( gentity_t *ent, gentity_t *activator )
@@ -674,11 +696,11 @@ An NPC does not -- one following a player into a locked door's trigger would ope
 vehicle that is empty or that an NPC drives. A player who may not is told (RP_LockTell).
 ==================
 */
+static qboolean RP_LockCheck( gentity_t *ent, gentity_t *activator );
+
 qboolean RP_LockAllows( gentity_t *ent, gentity_t *other, gentity_t *activator )
 {
-	const char *name;
-	rpLock_t *lock;
-	gentity_t *player = activator;
+	qboolean allowed;
 
 	if ( !ent || !ent->inuse )
 		return qtrue;
@@ -688,6 +710,22 @@ qboolean RP_LockAllows( gentity_t *ent, gentity_t *other, gentity_t *activator )
 		RP_LockMarkPass( ent, activator );
 		return qtrue;
 	}
+
+	allowed = RP_LockCheck( ent, activator );
+
+	// an ordinary use by the one who holds this entity's mark, which goes ahead: the mark has had its turn
+	if ( allowed && RP_LockPassMatches( ent, activator ) )
+		RP_LockClearPass( ent );
+
+	return allowed;
+}
+
+// DAJ_RP: [Locks] the check itself, with no bypass or mark involved (RP_LockAllows)
+static qboolean RP_LockCheck( gentity_t *ent, gentity_t *activator )
+{
+	const char *name;
+	rpLock_t *lock;
+	gentity_t *player = activator;
 
 	name = RP_LockNameOfTeam( ent );
 	if ( !name )
