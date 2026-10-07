@@ -189,6 +189,7 @@ field_t fields[] = {
 	{ "health",					FOFS( health ),							F_INT },
 	{ "idealclass",				FOFS( idealclass ),						F_STRING },//for siege spawnpoints
 	{ "linear",					FOFS( alt_fire ),						F_INT },//for movers to use linear movement
+	{ "lock",					FOFS( rpLock ),							F_STRING },//DAJ_RP: [Locks] the account list that may use it (g_locks.c)
 	{ "lostenemyscript",		FOFS( behaviorSet[BSET_LOSTENEMY] ),	F_STRING },//name of script to run
 	{ "mass",					FOFS( mass ),							F_FLOAT }, // zyk: added this field
 	{ "material",				FOFS( material ),						F_INT }, // zyk: added this field

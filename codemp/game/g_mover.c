@@ -968,6 +968,14 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator )
 		return;
 	}
 
+	// DAJ_RP: [Locks] a player whose account is not on the lock's list cannot use it, by any route: its
+	// own trigger, a button, the use key, a chain, a shot (g_locks.c). Not when the door uses itself --
+	// Blocked_Door() reversing it off whatever is in the way, which is passed as the activator.
+	if ( other != ent && !RP_LockAllows( ent, activator ) )
+	{
+		return;
+	}
+
 	if ( ent->spawnflags & MOVER_LOCKED )
 	{//a locked door, unlock it
 		UnLockDoors(ent);
@@ -1042,7 +1050,17 @@ static qboolean RP_IsOneShotClosingDoor( const gentity_t *door )
 	return ( height >= 64.0f && height > thickness ) ? qtrue : qfalse;
 }
 
+static void RP_StunBatonUseMoverUnlocked( gentity_t *mover, gentity_t *user );
+
+// DAJ_RP: [Locks] the baton opens everything: account locks do not stop it, nor what it sets off
 void RP_StunBatonUseMover( gentity_t *mover, gentity_t *user )
+{
+	RP_LockBypass( qtrue );
+	RP_StunBatonUseMoverUnlocked( mover, user );
+	RP_LockBypass( qfalse );
+}
+
+static void RP_StunBatonUseMoverUnlocked( gentity_t *mover, gentity_t *user )
 {
 	gentity_t *master, *member;
 

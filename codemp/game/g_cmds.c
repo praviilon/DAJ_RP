@@ -15428,7 +15428,10 @@ void Cmd_EntUse_f( gentity_t *ent ) {
 			inert++;
 			continue;
 		}
+		// DAJ_RP: [Locks] an admin's use: account locks do not stop it, nor what it sets off (g_locks.c)
+		RP_LockBypass(qtrue);
 		e->use(e, ent, ent);
+		RP_LockBypass(qfalse);
 		used++;
 	}
 
@@ -17581,6 +17584,13 @@ void Cmd_EntNear_f( gentity_t *ent ) {
 static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, int *len, int id, gentity_t *target_ent)
 {
 	char row[RP_LIST_FLUSH_AT];
+	char lock[64];
+	const char *lockName = RP_LockNameOf(target_ent);
+
+	// DAJ_RP: [Locks] the lock it carries, if any (g_locks.c)
+	lock[0] = '\0';
+	if (lockName)
+		Com_sprintf(lock, sizeof(lock), " - ^3lock:%s^7", lockName);
 
 	// GalaxyRP: [Logical Entities] a logical entity's id carries an L so the admin can tell the
 	// two regions apart; the number itself (>= MAX_GENTITIES) is what every other command takes.
@@ -17589,7 +17599,7 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 	// those as "freed") is not tagged: there is nothing there to refuse.
 	// GalaxyRP: [Entity System] M: part of the map, which /entcut and /entrotate leave alone; H: held
 	// with /entcopy or /entcut -- see g_entgrab.c
-	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s - %s - %s", id,
+	Com_sprintf(row, sizeof(row), "\n%d%s%s%s%s - %s - %s - %s%s", id,
 		(target_ent && target_ent->isLogical) ? "L" : "",
 		(target_ent && target_ent->inuse && !RP_EntityHasSpawnKeys(target_ent)) ? "G" : "",
 		(target_ent && target_ent->inuse && RP_MapEntityProtected(target_ent)) ? "M" :
@@ -17597,7 +17607,7 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 		(target_ent && target_ent->inuse && target_ent->rpHeldBy) ? "H" : "",
 		(target_ent && target_ent->classname) ? RP_ShownText(target_ent->classname) : "<none>",
 		(target_ent && target_ent->targetname) ? RP_ShownText(target_ent->targetname) : "<none>",
-		(target_ent && target_ent->target) ? RP_ShownText(target_ent->target) : "<none>");
+		(target_ent && target_ent->target) ? RP_ShownText(target_ent->target) : "<none>", lock);
 
 	if ((*len + (int)strlen(row)) > RP_LIST_FLUSH_AT)
 	{
@@ -18632,7 +18642,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_ENTITYSYSTEM)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitiesandremaps ^7to see the entity and shader remap commands this flag enables. It also lets a player turn on Entity Bounds (^3/settings 6^7)\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitiesandremaps ^7to see the entity and shader remap commands this flag enables, account locks (^3/entlockadd^7, ^3/entlockset^7) and ^3/enttrigger^7 among them. It also lets a player turn on Entity Bounds (^3/settings 6^7) and see the name of a lock that stops them\n\n\"" );
 		}
 		else if (command_number == ADM_SILENCE)
 		{
@@ -20080,7 +20090,7 @@ static void zyk_print_lines( gentity_t *ent, const char * const *lines, int coun
 
 void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	static char entlist_line[512];
-	const char *lines[64];	// 40 now
+	const char *lines[64];	// 48 now
 	int n = 0;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
@@ -20120,6 +20130,15 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n";
 	lines[n++] = "^3/entload <filename>: ^7Loads entities from a preset file.\n";
 	lines[n++] = "^3/entdeletefile <filename>: ^7Deletes entity preset file.\n";
+
+	// DAJ_RP: [Locks] g_locks.c
+	lines[n++] = "^5Locks\n";
+	lines[n++] = "^3/entlockadd <lock> <account> [more accounts]: ^7Lets those accounts use whatever carries that lock on this map. Each must be an existing account. Makes the lock when it is new.\n";
+	lines[n++] = "^3/entlockremove <lock> <account> [more accounts] ^7or ^3/entlockremove <lock> all: ^7Takes accounts off the lock, or all of them. What carries a lock with nobody on it lets nobody through.\n";
+	lines[n++] = "^3/entlockset <entity id> <lock | none>: ^7Puts a lock on a door, lift, button, trigger or any entity, or takes it off. The map's own get it by their brush model, kept in the map's lock file. A locked door team is locked whole.\n";
+	lines[n++] = "^3/entlocklist <lock (optional)>: ^7Lists this map's locks, or one lock's accounts and the entities carrying it.\n";
+	lines[n++] = "^3/enttrigger <entity id>: ^7Activates that entity as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Locks do not stop it, nor /entuse.\n";
+	lines[n++] = "^7A locked entity lets through only logged-in players whose account is on its lock (a vehicle: its pilot's). NPCs, the map's own logic and the upgraded Stun Baton always pass.\n";
 
 	lines[n++] = "^5Other\n";
 	lines[n++] = "^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n";
@@ -24617,12 +24636,17 @@ command_t commands[] = {
 	{ "entitiesandremaps",	Cmd_EntitiesAndRemaps_f,	CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entlist",			Cmd_EntList_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entload",			Cmd_EntLoad_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entlockadd",			Cmd_EntLockAdd_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },	// DAJ_RP: [Locks] g_locks.c
+	{ "entlocklist",		Cmd_EntLockList_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entlockremove",		Cmd_EntLockRemove_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entlockset",			Cmd_EntLockSet_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entnear",			Cmd_EntNear_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entorigin",			Cmd_EntOrigin_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entremove",			Cmd_EntRemove_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entrotate",			Cmd_EntRotate_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entsave",			Cmd_EntSave_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entslots",			Cmd_EntSlots_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "enttrigger",			Cmd_EntTrigger_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },	// DAJ_RP: [Locks] g_locks.c
 	{ "entundo",			Cmd_EntUndo_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entuse",				Cmd_EntUse_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "ex",					Cmd_Examine_f,				CMD_LOGGEDIN },

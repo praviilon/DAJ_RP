@@ -638,6 +638,13 @@ void	G_TouchTriggers( gentity_t *ent ) {
 			}
 		}
 
+		// DAJ_RP: [Locks] a trigger, a pickup, a door's trigger with a lock: a player whose account is
+		// not on its list does not set it off (g_locks.c). Spectators only pass through teleporters
+		// and doors, which they may.
+		if ( hit->touch && ent->client->sess.sessionTeam != TEAM_SPECTATOR && !RP_LockAllows( hit, ent ) ) {
+			continue;
+		}
+
 		memset( &trace, 0, sizeof(trace) );
 
 		if ( hit->touch ) {

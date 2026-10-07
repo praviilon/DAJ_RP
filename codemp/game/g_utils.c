@@ -2049,6 +2049,12 @@ void GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator)
 		return;
 	}
 
+	// DAJ_RP: [Locks] a player whose account is not on the lock's list cannot use it (g_locks.c)
+	if (other != self && !RP_LockAllows(self, activator))
+	{
+		return;
+	}
+
 	if (level.rp_use_depth == 0)
 	{
 		level.rp_use_chain = 0;

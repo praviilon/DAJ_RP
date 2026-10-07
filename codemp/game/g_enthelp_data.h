@@ -88,6 +88,10 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"targetname), items show one at a time. Triggers never join. A placed entity joins its team when it spawns.\n"
 		"soundSet||An ambient sound set from sound/sound.txt, for the classes that play one. A name the clients do not have is "
 		"refused, since it would disconnect them.\n"
+		"lock||An account lock: only logged-in players whose account is on that lock's list (/entlockadd) may use, touch or "
+		"trigger it, a vehicle by its pilot. NPCs, map logic, /entuse, /enttrigger and the upgraded Stun Baton always pass. A lock "
+		"name is 1 to 31 letters, digits, _ or -. In a mover team one locked member locks them all. /entlockset sets it without a "
+		"respawn, and also locks the map's own doors.\n"
 		"delay||No common meaning: the classes that read it say what it does.\n"
 		"wait||No common meaning: the classes that read it say what it does (often a reset or respawn time).\n"
 		"random||No common meaning: usually a random amount added to or taken from wait.",

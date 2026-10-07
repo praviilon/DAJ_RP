@@ -467,6 +467,11 @@ struct gentity_s {
 	// another one asking for the same weather is told it would add nothing by -- RP_WeatherAdd, g_misc.c
 	uint64_t	rpWeatherSlots;
 
+	// DAJ_RP: [Locks] the "lock" key: the name of the account list in the map's lock file that may use this
+	// entity (g_locks.c). Only the Entity System's entities have one; the map's own are locked by brush
+	// model in the file instead. NULL when it has none.
+	char		*rpLock;
+
 	// GalaxyRP: [Logical Entities] the slot number this entity would have been given had every
 	// map entity been networked -- what its number WAS before this feature. Assigned only to
 	// entities allocated while the map is spawning (level.spawning), by a small simulation of the
@@ -2653,6 +2658,16 @@ gentity_t *G_PickTarget (char *targetname);
 void	GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator);
 // GalaxyRP: [Shop] the Stun Baton Upgrade's effect on a mover it hits -- see g_mover.c.
 void	RP_StunBatonUseMover( gentity_t *mover, gentity_t *user );
+// DAJ_RP: [Locks] account-locked entities -- see g_locks.c.
+void		RP_LocksLoad( void );
+qboolean	RP_LockAllows( gentity_t *ent, gentity_t *activator );
+const char	*RP_LockNameOf( const gentity_t *ent );
+void		RP_LockBypass( qboolean on );
+void		Cmd_EntLockAdd_f( gentity_t *ent );
+void		Cmd_EntLockRemove_f( gentity_t *ent );
+void		Cmd_EntLockList_f( gentity_t *ent );
+void		Cmd_EntLockSet_f( gentity_t *ent );
+void		Cmd_EntTrigger_f( gentity_t *ent );
 void	G_UseTargets2( gentity_t *ent, gentity_t *activator, const char *string );
 void	G_UseTargets (gentity_t *ent, gentity_t *activator);
 void	G_SetMovedir ( vec3_t angles, vec3_t movedir);

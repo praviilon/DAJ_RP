@@ -3301,6 +3301,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// ones instead of trusting the file.
 	zyk_load_remap_file(va("GalaxyRP/remaps/%s/default.txt", zyk_mapname));
 
+	// DAJ_RP: [Locks] this map's account locks -- see g_locks.c
+	RP_LocksLoad();
+
 	// zyk: loading duel arena, if this map has one
 	zyk_duel_arena_file = fopen(va("GalaxyRP/duelarena/%s/origin.txt", zyk_mapname), "r");
 	if (zyk_duel_arena_file != NULL)
