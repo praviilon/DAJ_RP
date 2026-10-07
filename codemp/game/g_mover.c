@@ -3347,6 +3347,7 @@ void SP_func_breakable( gentity_t *self )
 	char *s = NULL;
 
 	G_SpawnString("playfx", "", &s);
+	s = RP_EffectKeyValue(self, "playfx", s);	// DAJ_RP: [Weather] not a weather command
 
 	if (s && s[0])
 	{ //should we play a special death effect?

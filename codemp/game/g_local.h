@@ -2537,6 +2537,7 @@ qboolean	RP_EntitySystemSpawnRefused( gentity_t *ent );
 // of "did not survive being spawned". g_spawn.c.
 qboolean	RP_RefuseAtRuntime( gentity_t *ent, const char *reason );
 void		RP_SpawnSaysWhy( gentity_t *ent, const char *reason );
+char		*RP_EffectKeyValue( gentity_t *ent, const char *key, char *value );	// DAJ_RP: [Weather] a * effect key: "" for a map's own
 qboolean	RP_FileExists( const char *path );
 qboolean	RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs );
 int			RP_PackConstantLight( float light, const vec3_t color );

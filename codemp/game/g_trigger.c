@@ -894,6 +894,7 @@ void SP_trigger_lightningstrike( gentity_t *ent )
 	ent->nextthink = level.time + 500;
 
 	G_SpawnString("lightningfx", "", &s);
+	s = RP_EffectKeyValue(ent, "lightningfx", s);	// DAJ_RP: [Weather] a weather command counts as none
 	if (!s || !s[0])
 	{
 		// GalaxyRP fix: [Entity System] was Com_Error(ERR_DROP) -- a fatal error and process exit

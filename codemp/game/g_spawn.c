@@ -2542,6 +2542,30 @@ void RP_SpawnSaysWhy( gentity_t *ent, const char *reason )
 	Q_strncpyz( level.rp_spawn_refusal, reason, sizeof( level.rp_spawn_refusal ) );
 }
 
+/*
+=================
+RP_EffectKeyValue
+
+DAJ_RP: [Weather] an effect key's value (func_breakable's playfx, misc_siege_item's deathfx and respawnfx,
+trigger_lightningstrike's lightningfx) as its spawn function should use it. One starting with * is not an
+effect but a weather command, which every player's game would run with none of the weather entities'
+checks. For one the Entity System made RP_EntitySystemSpawnRefused() has refused the entity already; a
+map's own keeps the entity -- a breakable or a siege item is part of the map -- and loses the key: ""
+comes back, as if the key were not there, and the server log says why.
+=================
+*/
+char *RP_EffectKeyValue( gentity_t *ent, const char *key, char *value )
+{
+	static char none[1] = "";
+
+	if ( !value || value[0] != '*' )
+		return value;
+
+	G_LogPrintf( "%s at %s: %s %s is a weather command, not an effect; it is left out\n",
+		( ent && ent->classname ) ? ent->classname : "noclass", ent ? vtos( ent->s.origin ) : "?", key, value );
+	return none;
+}
+
 qboolean RP_RefuseAtRuntime( gentity_t *ent, const char *reason )
 {
 	if ( !ent || !RP_EntitySystemMade( ent ) )

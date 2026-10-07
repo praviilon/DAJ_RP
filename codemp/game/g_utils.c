@@ -1562,6 +1562,10 @@ int G_EffectIndex( const char *name )
 	// "weather that works" but "weather that splits the server". /admweather add does the same job
 	// and keeps everyone on one sky.
 	//
+	// DAJ_RP: [Weather] the weather entities refuse themselves before asking now, with the reason
+	// (RP_WeatherRefusedAtRuntime, g_misc.c), and read the index they get back (RP_WeatherAdd); this
+	// stays for anything else that registers a weather command.
+	//
 	// The block's own reservation is not caught by this: it runs while zyk_weather_slot is still 0.
 	//
 	// This refuses even a command already in the table, rather than handing back the index it would

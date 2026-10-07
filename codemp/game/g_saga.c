@@ -1837,6 +1837,7 @@ void SP_misc_siege_item (gentity_t *ent)
 	}
 
 	G_SpawnString( "deathfx", "", &s );
+	s = RP_EffectKeyValue( ent, "deathfx", s );	// DAJ_RP: [Weather] not a weather command
 
 	if (s && s[0])
 	{ //We have a death effect, so index it now.
@@ -1844,6 +1845,7 @@ void SP_misc_siege_item (gentity_t *ent)
 	}
 
 	G_SpawnString( "respawnfx", "", &s );
+	s = RP_EffectKeyValue( ent, "respawnfx", s );	// DAJ_RP: [Weather] not a weather command
 
 	if (s && s[0])
 	{ //We have a respawn effect, so index it now.

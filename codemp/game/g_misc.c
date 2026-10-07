@@ -4247,7 +4247,6 @@ void fx_runner_link( gentity_t *ent )
 
 static qboolean RP_WeatherRefusedAtRuntime( gentity_t *ent );
 static qboolean RP_WeatherEntityText( gentity_t *ent, const char *text, int *index );
-static void RP_WeatherNoteSlot( gentity_t *ent, int slot );
 
 //----------------------------------------------------------
 void SP_fx_runner( gentity_t *ent )
@@ -4281,13 +4280,13 @@ void SP_fx_runner( gentity_t *ent )
 	*/
 
 	// DAJ_RP: [Weather] an fxFile starting with * is not an effect: it is a weather command, sent to every
-	// player as zyk_weather's is. From one the Entity System made it is held to zyk_weather's rules
-	// (RP_WeatherEntityText): one of the weather effects, built from its name and numbers, and within the
-	// map's limits -- or refused. Kept, it is weather and nothing else: switched off for good, with nothing
-	// to think or be used for. Left on, every player's game would try to load "effects/*rain.efx" as an
-	// effect file every delay ms while it is in sight, and print that it failed each time. Its slot is a
-	// plain one, never the Entity System's to reuse (see RP_WeatherAdd). A map's own is left as it was.
-	if ( fxFile && fxFile[0] == '*' && RP_EntitySystemMade( ent ) )
+	// player as zyk_weather's is, and held to zyk_weather's rules (RP_WeatherEntityText) -- the map's own
+	// too: one of the weather effects, built from its name and numbers, and within the map's limits, or
+	// refused. Kept, it is weather and nothing else: switched off for good, with nothing to think or be
+	// used for. Left on, every player's game tried to load "effects/*rain.efx" as an effect file every delay
+	// ms while it was in sight, and printed that it failed each time -- and switching it on or off never
+	// touched the weather. Its slot is a plain one, never the Entity System's to reuse (see RP_WeatherAdd).
+	if ( fxFile && fxFile[0] == '*' )
 	{
 		int index = 0;
 
@@ -4319,9 +4318,6 @@ void SP_fx_runner( gentity_t *ent )
 		ent->s.modelindex = RP_EntityEffectIndex( ent, fxFile );
 		ent->message = G_NewString(fxFile); // zyk: used by Entity System to save the effect fxFile, so the effect is loaded properly by entload command
 
-		// DAJ_RP: [Weather] a map's own fx_runner with a weather command: noted as weather (RP_WeatherAdd)
-		if ( fxFile[0] == '*' )
-			RP_WeatherNoteSlot( ent, ent->s.modelindex );
 	}
 
 	// important info transmitted
@@ -4373,23 +4369,46 @@ SWIRLING  causes random swirls of wind
 // GalaxyRP fix: [Entity System] a weather entity added after map load registers a global *weather
 // command, which G_EffectIndex() refuses (and logs once) while /admweather holds the map's weather
 // slots -- the admin read "Entity N spawned" for an entity that did nothing. Say so, and free it.
+// DAJ_RP: [Weather] a map's own too -- one tagged E, edited and so spawned again, the only way a map's own
+// spawns that late -- through RP_WeatherRefuse below
+static void RP_WeatherRefuse( gentity_t *ent, const char *reason );
 static qboolean RP_WeatherRefusedAtRuntime( gentity_t *ent )
 {
 	if ( level.zyk_weather_slot == 0 )
 		return qfalse;
-	return RP_RefuseAtRuntime( ent, "weather is managed with /admweather on this map (/admweather add); a weather entity added now would show a different sky to players who join later" );
+	RP_WeatherRefuse( ent, "weather is managed with /admweather on this map (/admweather add); a weather entity added now would show a different sky to players who join later" );
+	return qtrue;
+}
+
+/*
+==================
+RP_WeatherRefuse
+
+DAJ_RP: [Weather] a weather entity refused: one the Entity System made is freed and the admin told why
+(RP_RefuseAtRuntime); a map's own -- its entity string or the per-map fixes -- is left out of the map the
+same way, with no weather sent, and the reason goes to the server log.
+==================
+*/
+static void RP_WeatherRefuse( gentity_t *ent, const char *reason )
+{
+	if ( RP_RefuseAtRuntime( ent, reason ) )
+		return;
+
+	G_LogPrintf( "%s at %s left out of the map's weather: %s\n", ent->classname ? ent->classname : "noclass", vtos( ent->s.origin ), reason );
+	G_FreeEntity( ent );
 }
 
 /*
 ==================
 RP_WeatherAdd
 
-DAJ_RP: [Weather] the weather an entity the Entity System made (/entadd, /entedit, a copy, a line of an
-entity file) adds to the map: names, in the order its spawn function registers them -- a plain effect
-among them (fx_rain's acid fizz) is registered along with them and is not weather. The map's weather is
-every weather command in the effect table, the map's own included, counted the way /admweather counts
-what it keeps as the map's own for /admweather default (zyk_weather_claim_block). The entity is refused --
-and freed, with the reason for the admin -- when
+DAJ_RP: [Weather] the weather a weather entity adds to the map -- one the Entity System made (/entadd,
+/entedit, a copy, a line of an entity file) or the map's own, which are held to the same rules: names,
+in the order its spawn function registers them -- a plain effect among them (fx_rain's acid fizz) is
+registered along with them and is not weather. The map's weather is every weather command in the effect table, the map's own included, counted the way /admweather counts
+what it keeps as the map's own for /admweather default (zyk_weather_claim_block); the map's own, spawning
+in order, are counted in the order every player's game runs them. The entity is refused -- freed, with
+the reason for the admin or, for a map's own, the server log (RP_WeatherRefuse) -- when
   - none of its names is weather;
   - every one of its weather commands is another weather entity's, still in the world: the engine hands
     back the slot it gave out before and sends nothing, so it would add nothing. A command in the table
@@ -4444,8 +4463,8 @@ static gentity_t *RP_WeatherHolder( int slot, const gentity_t *ent )
 	return NULL;
 }
 
-// DAJ_RP: [Weather] what the map's own weather entities register is noted too, so one the Entity System
-// adds later is told when it asks for the same weather
+// DAJ_RP: [Weather] the slots of what a weather entity added, so another asking for the same weather is
+// told it would add nothing (RP_WeatherHolder)
 static void RP_WeatherNoteSlot( gentity_t *ent, int slot )
 {
 	if ( slot > 0 && slot < 64 )
@@ -4520,13 +4539,13 @@ static qboolean RP_WeatherAdd( gentity_t *ent, const char **names, int count, in
 
 	if ( weather == 0 )
 	{
-		RP_RefuseAtRuntime( ent, "it adds no weather with these spawnflags" );
+		RP_WeatherRefuse( ent, "it adds no weather with these spawnflags" );
 		return qfalse;
 	}
 
 	if ( held == weather )
 	{
-		RP_RefuseAtRuntime( ent, ( weather == 1 ) ?
+		RP_WeatherRefuse( ent, ( weather == 1 ) ?
 			va( "%s is already added by entity %d, so this would add nothing", last + 1, holder->s.number ) :
 			va( "all of its weather is already added by other entities (entity %d), so this would add nothing", holder->s.number ) );
 		return qfalse;
@@ -4534,28 +4553,28 @@ static qboolean RP_WeatherAdd( gentity_t *ent, const char **names, int count, in
 
 	if ( total + fresh > ZYK_WEATHER_MAX_BASE )
 	{
-		RP_RefuseAtRuntime( ent, va( "this map's weather already has %d weather command(s) and this would add %d; %d is the most /admweather default can bring back",
+		RP_WeatherRefuse( ent, va( "this map's weather already has %d weather command(s) and this would add %d; %d is the most /admweather default can bring back",
 			total, fresh, ZYK_WEATHER_MAX_BASE ) );
 		return qfalse;
 	}
 
 	if ( clouds + freshClouds > ZYK_WEATHER_MAX_CLOUDS )
 	{
-		RP_RefuseAtRuntime( ent, va( "players' games draw at most %d particle effects (rain, snow, sand, fog, dust), and this map's weather already has %d",
+		RP_WeatherRefuse( ent, va( "players' games draw at most %d particle effects (rain, snow, sand, fog, dust), and this map's weather already has %d",
 			ZYK_WEATHER_MAX_CLOUDS, clouds ) );
 		return qfalse;
 	}
 
 	if ( winds + freshWinds > ZYK_WEATHER_MAX_WINDS )
 	{
-		RP_RefuseAtRuntime( ent, va( "players' games keep at most %d winds, and this map's weather already has %d",
+		RP_WeatherRefuse( ent, va( "players' games keep at most %d winds, and this map's weather already has %d",
 			ZYK_WEATHER_MAX_WINDS, winds ) );
 		return qfalse;
 	}
 
 	if ( !RP_SlotRoomFor( CS_EFFECTS, names, count, 0, reason, sizeof( reason ) ) )
 	{
-		RP_RefuseAtRuntime( ent, reason );
+		RP_WeatherRefuse( ent, reason );
 		return qfalse;
 	}
 
@@ -4571,7 +4590,7 @@ static qboolean RP_WeatherAdd( gentity_t *ent, const char **names, int count, in
 		if ( !slot )
 		{
 			// zyk: RP_SlotRoomFor() found the room, so something took it in between; what went in stays
-			RP_RefuseAtRuntime( ent, "the effect table had no room left for its weather" );
+			RP_WeatherRefuse( ent, "the effect table had no room left for its weather" );
 			return qfalse;
 		}
 
@@ -4600,26 +4619,12 @@ static qboolean RP_WeatherEntityText( gentity_t *ent, const char *text, int *ind
 
 	if ( !RP_WeatherCommandFromText( text, command, sizeof( command ), why, sizeof( why ) ) )
 	{
-		RP_RefuseAtRuntime( ent, why );
+		RP_WeatherRefuse( ent, why );
 		return qfalse;
 	}
 
 	names[0] = command;
 	return RP_WeatherAdd( ent, names, 1, index );
-}
-
-// DAJ_RP: [Weather] the map's own weather entities register what they always did, in the same order
-static void RP_WeatherRegisterAll( gentity_t *ent, const char **names, int count )
-{
-	int i;
-
-	for ( i = 0; i < count; i++ )
-	{
-		int slot = G_EffectIndex( names[i] );
-
-		if ( RP_WeatherCommandKind( names[i] ) != RP_WEATHER_NONE )
-			RP_WeatherNoteSlot( ent, slot );
-	}
 }
 
 void SP_CreateWind( gentity_t *ent )
@@ -4649,19 +4654,12 @@ void SP_CreateWind( gentity_t *ent )
 		G_SpawnFloat( "speed", "500", &ent->speed );
 		VectorScale( windDir, ent->speed, windDir );
 
-		// DAJ_RP: [Weather] one the Entity System made gets /admweather's wind: whole numbers, each held
-		// to ZYK_WEATHER_WIND_LIMIT
-		if ( RP_EntitySystemMade( ent ) )
-		{
-			Com_sprintf( temp, sizeof(temp), "*constantwind ( %d %d %d )",
-				Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[0] + 0.5f ) ),
-				Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[1] + 0.5f ) ),
-				Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[2] + 0.5f ) ) );
-		}
-		else
-		{
-			Com_sprintf( temp, sizeof(temp), "*constantwind ( %f %f %f )", windDir[0], windDir[1], windDir[2] );
-		}
+		// DAJ_RP: [Weather] /admweather's wind: whole numbers, each held to ZYK_WEATHER_WIND_LIMIT (it was
+		// sent with six decimals each, which the renderer reads the same, give or take half a unit)
+		Com_sprintf( temp, sizeof(temp), "*constantwind ( %d %d %d )",
+			Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[0] + 0.5f ) ),
+			Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[1] + 0.5f ) ),
+			Com_Clampi( -ZYK_WEATHER_WIND_LIMIT, ZYK_WEATHER_WIND_LIMIT, (int)floor( windDir[2] + 0.5f ) ) );
 		names[count++] = temp;
 	}
 
@@ -4694,13 +4692,7 @@ void SP_CreateWind( gentity_t *ent )
 		names[count++] = "*light_fog";
 	}
 
-	if ( RP_EntitySystemMade( ent ) )
-	{
-		RP_WeatherAdd( ent, names, count, NULL );
-		return;
-	}
-
-	RP_WeatherRegisterAll( ent, names, count );
+	RP_WeatherAdd( ent, names, count, NULL );
 }
 
 /*QUAKED fx_spacedust (1 0 0) (-16 -16 -16) (16 16 16)
@@ -4717,10 +4709,8 @@ void SP_CreateSpaceDust( gentity_t *ent )
 	}
 
 	// DAJ_RP: [Weather] the 1000 the comment above promises, which the code never gave: without a count it
-	// sent "*spacedust 0" and showed nothing. One the Entity System made gets it, and its count is held to
-	// ZYK_WEATHER_DUST_MIN..MAX; a map's own is left as it was (G_EffectIndex() only stops a count that
-	// would crash the players -- RP_WeatherSafeName, g_utils.c).
-	if ( RP_EntitySystemMade( ent ) )
+	// sent "*spacedust 0" and showed nothing. Given one, it is held to ZYK_WEATHER_DUST_MIN..MAX -- a
+	// negative one crashed every player (see RP_WeatherSafeName, g_utils.c).
 	{
 		char *given = NULL;
 		char dust[ZYK_WEATHER_CMD_LENGTH];
@@ -4732,10 +4722,7 @@ void SP_CreateSpaceDust( gentity_t *ent )
 		Com_sprintf( dust, sizeof( dust ), "*spacedust %i", ent->count );
 		names[0] = dust;
 		RP_WeatherAdd( ent, names, 1, NULL );
-		return;
 	}
-
-	RP_WeatherNoteSlot( ent, G_EffectIndex(va("*spacedust %i", ent->count)) );
 	//G_EffectIndex("*constantwind ( 10 -10 0 )");
 }
 
@@ -4755,13 +4742,7 @@ void SP_CreateSnow( gentity_t *ent )
 		return;
 	}
 
-	if ( RP_EntitySystemMade( ent ) )
-	{
-		RP_WeatherAdd( ent, names, 3, NULL );
-		return;
-	}
-
-	RP_WeatherRegisterAll( ent, names, 3 );
+	RP_WeatherAdd( ent, names, 3, NULL );
 }
 
 /*QUAKED fx_rain (1 0 0) (-16 -16 -16) (16 16 16) LIGHT MEDIUM HEAVY ACID x MISTY_FOG
@@ -4823,13 +4804,7 @@ void SP_CreateRain( gentity_t *ent )
 		}
 	}
 
-	if ( RP_EntitySystemMade( ent ) )
-	{
-		RP_WeatherAdd( ent, names, count, NULL );
-		return;
-	}
-
-	RP_WeatherRegisterAll( ent, names, count );
+	RP_WeatherAdd( ent, names, count, NULL );
 }
 
 /*QUAKED zyk_weather (1 0 0) (-16 -16 -16) (16 16 16)
@@ -4845,46 +4820,23 @@ void SP_CreateWeather( gentity_t *ent )
 		return;
 	}
 
-	// DAJ_RP: [Weather] one the Entity System made is the map's saved weather: its message has to name
-	// one of the weather effects, which is then built and added under the map's limits (RP_WeatherAdd).
-	// It used to go to the players as typed -- see RP_WeatherCommandFromText in g_cmds.c for what that did.
-	// (The "mins" and "maxs" keys the comment above used to list were never read.)
-	if ( RP_EntitySystemMade( ent ) )
+	// DAJ_RP: [Weather] the map's saved weather: its message has to name one of the weather effects, which
+	// is then built and added under the map's limits (RP_WeatherEntityText, RP_WeatherAdd) -- for a map's
+	// own as for one the Entity System made. It used to go to the players as typed; see
+	// RP_WeatherCommandFromText in g_cmds.c for what that did. ("rain" was sent as "*rain init 500", which
+	// the renderer reads as plain rain.) (The "mins" and "maxs" keys the comment above used to list were
+	// never read.)
+	//
+	// GalaxyRP fix: [Entity System] "message" is what names the weather effect, and nothing required it --
+	// the fallback formatted a NULL message through va("*%s") and registered "*(null)". No weather type,
+	// no entity.
+	if ( !VALIDSTRING( ent->message ) )
 	{
-		if ( !VALIDSTRING( ent->message ) )
-		{
-			RP_RefuseAtRuntime( ent, "it needs a message key, the weather it adds (see /enthelp zyk_weather)" );
-			return;
-		}
-
-		RP_WeatherEntityText( ent, ent->message, NULL );
+		RP_WeatherRefuse( ent, "it needs a message key, the weather it adds (see /enthelp zyk_weather)" );
 		return;
 	}
 
-	// GalaxyRP fix: [Entity System] "message" is what names the weather effect, and nothing required
-	// it. Q_stricmp() tolerates NULL, so the two tests below were safe, but the fallback formatted
-	// ent->message through va("*%s") -- passing NULL to a %s conversion, undefined even where a
-	// libc happens to print "(null)" -- and then registered "*(null)" as an effect.
-	// G_FindConfigstringIndex() does de-duplicate, so repeating one name costs nothing; it is a
-	// series of DIFFERENT names that fills the effect table and reaches its "overflow" ERR_DROP.
-	// Requiring the key closes both: no weather type, no entity.
-	if (!VALIDSTRING(ent->message))
-	{
-		Com_Printf(S_COLOR_RED"ERROR: zyk_weather at %s has no message (weather type) specified\n", vtos(ent->s.origin));
-
-		ent->think = G_FreeEntity;
-		ent->nextthink = level.time + FRAMETIME;
-
-		return;
-	}
-
-	// DAJ_RP: [Weather] a map's own zyk_weather (its entity string, or the per-map fixes) is left as it was
-	if (Q_stricmp(ent->message, "rain") == 0)
-		RP_WeatherNoteSlot(ent, G_EffectIndex(va("*rain init 500")));
-	else if (Q_stricmp(ent->message, "spacedust") == 0)
-		RP_WeatherNoteSlot(ent, G_EffectIndex(va("*spacedust 1000")));
-	else
-		RP_WeatherNoteSlot(ent, G_EffectIndex(va("*%s", ent->message)));
+	RP_WeatherEntityText( ent, ent->message, NULL );
 }
 
 /* zyk: zyk_regen_unit regens many things
