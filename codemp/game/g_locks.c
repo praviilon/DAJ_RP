@@ -215,8 +215,9 @@ Nothing in it is checked against the account database: the file is the server ow
 checked what it added. What the loader cannot use is kept, word for word, and written back after the
 locks and model lines under RP_LOCK_KEPT_MARK, so a hand edit is never lost to the next /entlock command:
 the owner's comments, a line it does not understand, a "lock" or "model" line past the limits, and the
-account names of a "lock" line it could not take (past the limit, or not a name an account can have) --
-those as a commented "lock" line, so they do not come back on their own once there is room. The file's
+account names of a "lock" line it could not take (past the limit, or not a name an account can have):
+those as a commented "lock" line, and a "lock" or "model" line past the limits commented out whole, so
+they do not come back on their own once there is room. The file's
 own header (RP_LOCK_HEADER) is not kept: it is written again. A UTF-8 byte order mark is skipped. A line
 too long to read whole (over RP_LOCK_LINE_LENGTH) is skipped and logged rather than read in pieces,
 which could have cut an account name short and let a different account in.
@@ -326,7 +327,10 @@ void RP_LocksLoad( void )
 				p++;
 		}
 
-		// more words than fit: the rest of the line, as it is (a "lock" line with that many accounts)
+		// more words than fit: the rest of the line, as it is (a "lock" line with that many accounts). The
+		// last word taken ends where the rest begins: the loop stopped before it cut it off.
+		if ( *p && (unsigned char)*p <= ' ' )
+			*p++ = '\0';
 		rest = p;
 		while ( *rest && (unsigned char)*rest <= ' ' )
 			rest++;
@@ -354,8 +358,8 @@ void RP_LocksLoad( void )
 			{
 				if ( rp_numLocks >= RP_LOCK_MAX )
 				{
-					G_LogPrintf( "locks.txt line %d: more than %d locks, lock %s not loaded (kept in the file)\n", lineNumber, RP_LOCK_MAX, words[1] );
-					RP_LockKeep( raw, lineNumber );
+					G_LogPrintf( "locks.txt line %d: more than %d locks, lock %s not loaded (kept in the file, commented out)\n", lineNumber, RP_LOCK_MAX, words[1] );
+					RP_LockKeep( va( "# not loaded (more than %d locks): %s", RP_LOCK_MAX, raw ), lineNumber );
 					continue;
 				}
 				lock = &rp_locks[rp_numLocks++];
@@ -393,8 +397,8 @@ void RP_LocksLoad( void )
 			{
 				if ( rp_numLockModels >= RP_LOCK_MAX_MODELS )
 				{
-					G_LogPrintf( "locks.txt line %d: more than %d model lines, *%d not loaded (kept in the file)\n", lineNumber, RP_LOCK_MAX_MODELS, model );
-					RP_LockKeep( raw, lineNumber );
+					G_LogPrintf( "locks.txt line %d: more than %d model lines, *%d not loaded (kept in the file, commented out)\n", lineNumber, RP_LOCK_MAX_MODELS, model );
+					RP_LockKeep( va( "# not loaded (more than %d model lines): %s", RP_LOCK_MAX_MODELS, raw ), lineNumber );
 					continue;
 				}
 				line_ = &rp_lockModels[rp_numLockModels++];
@@ -698,12 +702,33 @@ vehicle that is empty or that an NPC drives. A player who may not is told (RP_Lo
 */
 static qboolean RP_LockCheck( gentity_t *ent, gentity_t *activator );
 
+// DAJ_RP: [Locks] a door team's member other than its master stands for the team's activator. Every member
+// fires its own opentarget and closetarget when it arrives, with its own activator -- and only the master's
+// is ever set (Use_BinaryMover), so a member's is none, or the door itself, and its targets passed as map
+// logic: an unlisted player opening an unlocked team opened the locked door its second half targets. Only
+// the lock judges by the master's: the targets are still used with the activator they always were.
+static gentity_t *RP_LockActivatorOf( gentity_t *activator )
+{
+	gentity_t *master;
+
+	if ( !activator || !activator->inuse || activator->s.eType != ET_MOVER || !( activator->flags & FL_TEAMSLAVE ) )
+		return activator;
+
+	master = activator->teammaster;
+	if ( !master || master == activator || !master->inuse || ( master->flags & FL_TEAMSLAVE ) || master->s.eType != ET_MOVER )
+		return activator;
+
+	return master->activator ? master->activator : master;
+}
+
 qboolean RP_LockAllows( gentity_t *ent, gentity_t *other, gentity_t *activator )
 {
 	qboolean allowed;
 
 	if ( !ent || !ent->inuse )
 		return qtrue;
+
+	activator = RP_LockActivatorOf( activator );
 
 	if ( rp_lockBypass > 0 || ( other && other != ent && RP_LockPassMatches( other, activator ) ) )
 	{

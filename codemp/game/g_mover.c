@@ -1256,7 +1256,11 @@ void Blocked_Door( gentity_t *ent, gentity_t *other )
 	}
 
 	// reverse direction
-	Use_BinaryMover( ent, ent, other );
+	// DAJ_RP: [Locks] as the same use going on: the one who set the door moving stays its activator, rather
+	// than whoever is in the way becoming it. A player who blocked a door took over what it fires next -- with
+	// a pass mark of his own on it (g_locks.c), past the locks of its opentarget, however long ago he got it --
+	// and anyone blocking a door an admin had just opened with /entuse took the admin's pass away from it.
+	Use_BinaryMover( ent, ent, ent->activator ? ent->activator : other );
 	if(relock)
 	{//door was locked before reverse move, relock door.
 		LockDoors(ent);

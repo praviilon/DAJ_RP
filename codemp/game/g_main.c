@@ -1209,6 +1209,16 @@ static void RP_LiftCallUse( gentity_t *self, gentity_t *other, gentity_t *activa
 	}
 	else if ( lift->moverState == MOVER_POS2 && lift->think == ReturnToPos1 && lift->nextthink > level.time )
 	{
+		// DAJ_RP: [Locks] sending it back early is a use of the lift too: only for whom its lock lets through,
+		// and the one who sent it is who its closetarget answers to (the way up goes through Use_BinaryMover)
+		if ( !RP_LockAllows( lift, self, activator ) )
+		{
+			return;
+		}
+		if ( activator )
+		{
+			lift->activator = activator;
+		}
 		lift->nextthink = level.time;
 	}
 }
