@@ -2660,6 +2660,7 @@ void	GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator);
 void	RP_StunBatonUseMover( gentity_t *mover, gentity_t *user );
 // DAJ_RP: [Locks] account-locked entities -- see g_locks.c.
 void		RP_LocksLoad( void );
+void		Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace );	// g_trigger.c: checks the lock of a use or fire trigger itself
 qboolean	RP_LockAllows( gentity_t *ent, gentity_t *activator );
 const char	*RP_LockNameOf( const gentity_t *ent );
 void		RP_LockBypass( qboolean on );

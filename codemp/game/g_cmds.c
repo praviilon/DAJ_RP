@@ -20108,7 +20108,6 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n";
 	lines[n++] = "^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n";
 	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
-	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
 	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7; ^3npcteam player^7, ^3enemy^7, ^3neutral^7 or ^3free^7 sets their side, as ^3/npc team^7 does.\n";
 	lines[n++] = "^7NPC kill rewards: on an ^3npc_spawner^7, ^3npccredits <0-100000>^7 and ^3npcxp <0-100>^7 are paid to the logged-in player who kills one of its NPCs. Vehicles pay nothing.\n";
 
@@ -20135,12 +20134,13 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^5Locks\n";
 	lines[n++] = "^3/entlockadd <lock> <account> [more accounts]: ^7Lets those accounts use whatever carries that lock on this map. Each must be an existing account. Makes the lock when it is new.\n";
 	lines[n++] = "^3/entlockremove <lock> <account> [more accounts] ^7or ^3/entlockremove <lock> all: ^7Takes accounts off the lock, or all of them. What carries a lock with nobody on it lets nobody through.\n";
-	lines[n++] = "^3/entlockset <entity id> <lock | none>: ^7Puts a lock on a door, lift, button, trigger or any entity, or takes it off. The map's own get it by their brush model, kept in the map's lock file. A locked door team is locked whole.\n";
+	lines[n++] = "^3/entlockset <entity id (optional)> <lock | none>: ^7Puts a lock on the door, lift, button, trigger or any entity you aim at, or that id, or takes it off. The map's own get it by their brush model, kept in the map's lock file. A locked door team is locked whole.\n";
 	lines[n++] = "^3/entlocklist <lock (optional)>: ^7Lists this map's locks, or one lock's accounts and the entities carrying it.\n";
-	lines[n++] = "^3/enttrigger <entity id>: ^7Activates that entity as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Locks do not stop it, nor /entuse.\n";
 	lines[n++] = "^7A locked entity lets through only logged-in players whose account is on its lock (a vehicle: its pilot's). NPCs, the map's own logic and the upgraded Stun Baton always pass.\n";
 
 	lines[n++] = "^5Other\n";
+	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
+	lines[n++] = "^3/enttrigger <entity id>: ^7Activates that entity as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Account locks do not stop it.\n";
 	lines[n++] = "^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n";
 	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
 	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";

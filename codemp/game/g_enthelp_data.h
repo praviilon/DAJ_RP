@@ -90,8 +90,9 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"refused, since it would disconnect them.\n"
 		"lock||An account lock: only logged-in players whose account is on that lock's list (/entlockadd) may use, touch or "
 		"trigger it, a vehicle by its pilot. NPCs, map logic, /entuse, /enttrigger and the upgraded Stun Baton always pass. A lock "
-		"name is 1 to 31 letters, digits, _ or -. In a mover team one locked member locks them all. /entlockset sets it without a "
-		"respawn, and also locks the map's own doors.\n"
+		"name is 1 to 31 letters, digits, _ or -. In a mover team one locked member locks them all. A trigger fired with the Use or "
+		"fire button refuses when the button is pressed, not when walked into. /entlockset, on the entity aimed at or an id, sets it "
+		"without a respawn, and also locks the map's own doors.\n"
 		"delay||No common meaning: the classes that read it say what it does.\n"
 		"wait||No common meaning: the classes that read it say what it does (often a reset or respawn time).\n"
 		"random||No common meaning: usually a random amount added to or taken from wait.",

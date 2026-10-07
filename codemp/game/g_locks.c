@@ -10,6 +10,8 @@ use it, however they reach it:
                       from another entity, a door shot open, a script (g_mover.c)
   GlobalUse()         everything used through a chain or with the use key (g_utils.c)
   G_TouchTriggers()   triggers walked into: teleporters, jump pads, trigger_multiple (g_active.c)
+  Touch_Multi()       a trigger_multiple or trigger_once fired with the Use or fire button: refused when
+                      the button is pressed, not when walked into (g_trigger.c)
 
 Who gets through (RP_LockAllows):
   - a player: logged in, with the account on the lock's list;
@@ -48,7 +50,9 @@ extern qboolean StringIsInteger( const char *s );
 #define RP_LOCK_NAME_LENGTH		32		// 31 characters and the terminator
 #define RP_LOCK_ACCOUNT_LENGTH	32		// an account name: as clientSession_t::filename holds it
 #define RP_LOCK_LINE_LENGTH		4096	// one "lock" line with 64 accounts fits with room to spare
-#define RP_LOCK_MESSAGE_MSEC	2000	// "Locked." at most this often for one player
+#define RP_LOCK_MESSAGE_MSEC	15000	// "Locked." at most this often for one player, whatever it was refused: one
+										// standing in a locked trigger is not told every moment, and other centre
+										// prints (/clientprint) are not covered over
 #define RP_LOCK_INVALID_NAME	"(invalid)"	// a "lock" key that is no lock name (RP_LockNameOf)
 
 typedef struct {
@@ -840,7 +844,8 @@ static const char *RP_LockRecordValue( const gentity_t *ent )
 ==================
 Cmd_EntLockSet_f
 
-DAJ_RP: [Locks] /entlockset <entity id> <lock | none>: puts a lock on an entity or takes it off. One the
+DAJ_RP: [Locks] /entlockset [entity id] <lock | none>: puts a lock on an entity -- that id, or the one
+aimed at -- or takes it off. One the
 Entity System made gets the "lock" key, in its record too, without being spawned again. The map's own --
 whose linked doors /entedit does not touch -- gets a "model *N" line of the lock file, so it needs a brush
 model; one without is refused.
@@ -856,22 +861,44 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 	if ( !check_admin_command( ent, ADM_ENTITYSYSTEM, qtrue ) )
 		return;
 
-	if ( trap->Argc() != 3 )
+	if ( trap->Argc() != 2 && trap->Argc() != 3 )
 	{
-		trap->SendServerCommand( ent - g_entities, "print \"Usage: ^3/entlockset <entity id> <lock>^7 puts a lock on that entity, ^3/entlockset <entity id> none^7 takes it off.\n\"" );
+		trap->SendServerCommand( ent - g_entities, "print \"Usage: ^3/entlockset <lock>^7 puts a lock on the entity you aim at, ^3/entlockset <entity id> <lock>^7 on that entity. ^3none^7 instead of the lock takes it off.\n\"" );
 		return;
 	}
 
-	trap->Argv( 1, arg, sizeof( arg ) );
-	trap->Argv( 2, name, sizeof( name ) );
-	id = atoi( arg );
+	if ( trap->Argc() == 2 )
+	{	// DAJ_RP: [Locks] the entity aimed at, as /entedit and /entremove pick theirs (RP_EntAimTarget): a
+		// door's own trigger means the door. The one argument is the lock, whatever it looks like.
+		trap->Argv( 1, name, sizeof( name ) );
 
-	if ( !StringIsInteger( arg ) || id < 0 || id >= MAX_ENTITIESTOTAL || !g_entities[id].inuse )
-	{
-		trap->SendServerCommand( ent - g_entities, va( "print \"There is no entity %s.\n\"", RP_ShownText( arg ) ) );
-		return;
+		if ( RP_EntAimFollowing( ent ) )
+		{
+			trap->SendServerCommand( ent - g_entities, "print \"You are following another player. Stop following first, or give the entity id.\n\"" );
+			return;
+		}
+
+		target = RP_EntAimTarget( ent );
+		if ( !target || !target->inuse )
+		{
+			trap->SendServerCommand( ent - g_entities, "print \"You are not aiming at an entity. Aim at one, or give its id: ^3/entlockset <entity id> <lock>^7.\n\"" );
+			return;
+		}
+		id = target->s.number;
 	}
-	target = &g_entities[id];
+	else
+	{
+		trap->Argv( 1, arg, sizeof( arg ) );
+		trap->Argv( 2, name, sizeof( name ) );
+		id = atoi( arg );
+
+		if ( !StringIsInteger( arg ) || id < 0 || id >= MAX_ENTITIESTOTAL || !g_entities[id].inuse )
+		{
+			trap->SendServerCommand( ent - g_entities, va( "print \"There is no entity %s.\n\"", RP_ShownText( arg ) ) );
+			return;
+		}
+		target = &g_entities[id];
+	}
 
 	none = !Q_stricmp( name, "none" ) ? qtrue : qfalse;
 	if ( !none && !RP_LockNameValid( name ) )

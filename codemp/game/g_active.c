@@ -640,8 +640,11 @@ void	G_TouchTriggers( gentity_t *ent ) {
 
 		// DAJ_RP: [Locks] a trigger, a pickup, a door's trigger with a lock: a player whose account is
 		// not on its list does not set it off (g_locks.c). Spectators only pass through teleporters
-		// and doors, which they may.
-		if ( hit->touch && ent->client->sess.sessionTeam != TEAM_SPECTATOR && !RP_LockAllows( hit, ent ) ) {
+		// and doors, which they may. A trigger_multiple or trigger_once fired with the Use or fire button
+		// (spawnflags 4, 8) is walked into freely, its use icon and all: Touch_Multi() refuses when the
+		// button is pressed.
+		if ( hit->touch && ent->client->sess.sessionTeam != TEAM_SPECTATOR &&
+			!( hit->touch == Touch_Multi && ( hit->spawnflags & ( 4 | 8 ) ) ) && !RP_LockAllows( hit, ent ) ) {
 			continue;
 		}
 
