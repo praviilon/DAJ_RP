@@ -536,9 +536,11 @@ normal of the surface there. qfalse, with the point 256 units ahead and no norma
 /entcopy and /entcut drop within 2048 units, on anything a shot would hit (RP_EntGrabAimPoint).
 GalaxyRP: [Entity System] /entaddaim reaches across any map and sees only solid world, solid entities
 and terrain, so a player or NPC in the way is aimed through rather than built on (RP_EntAddAimPoint).
+DAJ_RP: [Admin] /teleportaim aims the same way, and is also told the surface flags of what it hit (0 when
+nothing was), so a hit on the sky can be refused (RP_TeleAimPoint).
 ==================
 */
-static qboolean RP_AimPoint( gentity_t *ent, float range, int mask, vec3_t point, vec3_t normal )
+static qboolean RP_AimPoint( gentity_t *ent, float range, int mask, vec3_t point, vec3_t normal, int *surfaceFlags )
 {
 	vec3_t eye, dir, end;
 	trace_t tr;
@@ -550,8 +552,13 @@ static qboolean RP_AimPoint( gentity_t *ent, float range, int mask, vec3_t point
 
 	trap->Trace( &tr, eye, vec3_origin, vec3_origin, end, ent->s.number, mask, qfalse, 0, 0 );
 
+	if ( surfaceFlags )
+		*surfaceFlags = 0;
+
 	if ( !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f )
 	{
+		if ( surfaceFlags )
+			*surfaceFlags = tr.surfaceFlags;
 		VectorCopy( tr.endpos, point );
 		VectorCopy( tr.plane.normal, normal );
 
@@ -569,12 +576,17 @@ static qboolean RP_AimPoint( gentity_t *ent, float range, int mask, vec3_t point
 
 qboolean RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
 {
-	return RP_AimPoint( ent, RP_GRAB_RANGE, MASK_SHOT, point, normal );
+	return RP_AimPoint( ent, RP_GRAB_RANGE, MASK_SHOT, point, normal, NULL );
 }
 
 qboolean RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal )
 {
-	return RP_AimPoint( ent, RP_ADDAIM_RANGE, RP_ADDAIM_MASK, point, normal );
+	return RP_AimPoint( ent, RP_ADDAIM_RANGE, RP_ADDAIM_MASK, point, normal, NULL );
+}
+
+qboolean RP_TeleAimPoint( gentity_t *ent, vec3_t point, vec3_t normal, int *surfaceFlags )
+{
+	return RP_AimPoint( ent, RP_ADDAIM_RANGE, RP_ADDAIM_MASK, point, normal, surfaceFlags );
 }
 
 /*

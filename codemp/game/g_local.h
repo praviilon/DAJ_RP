@@ -2530,6 +2530,7 @@ void		RP_EntGrabFrame( gentity_t *ent );
 void		RP_EntGrabCancel( gentity_t *ent, qboolean tell );
 qboolean	RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
 qboolean	RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
+qboolean	RP_TeleAimPoint( gentity_t *ent, vec3_t point, vec3_t normal, int *surfaceFlags );	// DAJ_RP: [Admin] /teleportaim
 #define RP_AIMOFFSET_MAX	512.0f	// /entaddaim's "aimoffset": the furthest out from the surface aimed at
 qboolean	RP_EntitySolidAroundSomeone( const gentity_t *e );
 void		RP_EntGrabPlaceBox( const char *classname, const gentity_t *e, vec3_t mins, vec3_t maxs );

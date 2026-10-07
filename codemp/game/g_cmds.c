@@ -12616,7 +12616,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/players <player name(optional)> <force/weapons/protect/ammo/items (optional)>: ^7Checks the player's abilities and stats. Use without argument to see info about all players.\n\
 ^3/telemark: ^7Sets a marker you can teleport to later.\n\
 ^3/teleport ^7or /^3tele <player name (optional)> <player name (optional)>: ^7Teleports first player to the second player. Using one argument teleports current player to another player. Use with no arguments to teleport to your telemark.\n\"");
-				trap->SendServerCommand(ent - g_entities, "print \"^3/silence <player name>: ^7Silences the player.\n\
+				trap->SendServerCommand(ent - g_entities, "print \"^3/teleportaim ^7or ^3/teleaim <player name or ID (optional)>: ^7Teleports you, or the player, to where you aim: onto the floor, or just off a wall or ceiling.\n\
+^3/silence <player name>: ^7Silences the player.\n\
 ^3/paralyze <player name> <seconds (optional, 30-900, default 30)>: ^7Paralyzes the player.\n\
 ^3/unparalyze <player name>: ^7Releases a player paralyzed by an admin.\n\
 ^3/admkick <player name>: ^7Kicks player from the server.\n\
@@ -13529,6 +13530,221 @@ void Cmd_Telemark_f(gentity_t* ent)
 	trap->SendServerCommand(ent - g_entities, va("print \"Marked point %s with angles %s\n\"", vtos(ent->client->pers.saved_origin), vtos(ent->client->pers.saved_view_angles)));
 
 	return;
+}
+
+/*
+==================
+Cmd_TeleportAim_f
+
+DAJ_RP: [Admin] /teleportaim or /teleaim <player name or ID (optional)>: teleports the admin, or the
+player, to where the admin aims. Same power as /teleport and /telemark (ADM_TELE), same Admin Protect rule.
+
+The aim is /entaddaim's (RP_TeleAimPoint, g_entgrab.c): across any map, through players, NPCs and player
+clips. The sky is refused -- the player would be left at the top of the map. A standing player's box is
+set 1 unit off the surface aimed at, along the surface's normal: on a floor the feet are 1 unit above it,
+off a wall the player stands 1 unit from it, under a ceiling the head is 1 unit below it and the player
+drops from there. On a slope or a slanted wall the box touches the surface with its nearest corner or edge,
+1 unit off; RP_EntGrabPlace() pushes a box out along one axis only, which would bury a corner of it in such
+a surface and leave the player stuck.
+
+The spot needs room for the box among the world, solid entities and player clips (RP_TELEAIM_MASK). Bodies
+do not count: whoever stands there is telefragged -- or walked out of, when the damage is turned away --
+by G_KillBox() in zyk_TeleportPlayer(), as with /teleport. Without room, a place nearby is looked for by
+sweeping the box to the spot from up to 48 units above (a wall aimed at low down puts the box into the
+floor), from 48 below (a wall near a ceiling, or a ceiling over a low gap) and from 64 back towards the
+admin (a corner). The first sweep that starts in the open, ends with room and ends in sight of the point
+aimed at is taken -- in sight, so that one starting beyond a thin floor or wall does not put the player on
+its far side. None: refused.
+
+The player keeps the view angles they had. Refused: a dead player; one riding a vehicle (the vehicle would
+carry them straight back); a spectator following someone (their view is the followed player's, copied every
+frame); and an admin following someone himself, whose aim would be the followed player's.
+==================
+*/
+#define RP_TELEAIM_GAP		1.0f	// how far off the surface aimed at the player's box is set
+#define RP_TELEAIM_LIFT		48.0f	// the sweeps from above and below when the spot has no room
+#define RP_TELEAIM_BACK		64.0f	// the sweep from back towards the admin
+#define RP_TELEAIM_MASK		( MASK_PLAYERSOLID & ~CONTENTS_BODY )	// what the player could be stuck in
+
+// DAJ_RP: [Admin] room for the box at origin
+static qboolean RP_TeleAimRoom( const vec3_t origin, const vec3_t mins, const vec3_t maxs, int passent )
+{
+	trace_t tr;
+
+	trap->Trace( &tr, origin, mins, maxs, origin, passent, RP_TELEAIM_MASK, qfalse, 0, 0 );
+
+	return ( !tr.startsolid && !tr.allsolid ) ? qtrue : qfalse;
+}
+
+// DAJ_RP: [Admin] the box swept from start to the spot: where it stops, if it started in the open, has
+// room there and its centre is in sight of seen, the point just off the surface aimed at
+static qboolean RP_TeleAimSweep( const vec3_t start, const vec3_t spot, const vec3_t mins, const vec3_t maxs, int passent, const vec3_t seen, vec3_t result )
+{
+	trace_t tr;
+	vec3_t end, centre;
+
+	trap->Trace( &tr, start, mins, maxs, spot, passent, RP_TELEAIM_MASK, qfalse, 0, 0 );
+	if ( tr.startsolid || tr.allsolid )
+		return qfalse;
+
+	VectorCopy( tr.endpos, end );
+	if ( !RP_TeleAimRoom( end, mins, maxs, passent ) )
+		return qfalse;
+
+	centre[0] = end[0] + ( mins[0] + maxs[0] ) * 0.5f;
+	centre[1] = end[1] + ( mins[1] + maxs[1] ) * 0.5f;
+	centre[2] = end[2] + ( mins[2] + maxs[2] ) * 0.5f;
+
+	trap->Trace( &tr, seen, vec3_origin, vec3_origin, centre, passent, RP_TELEAIM_MASK, qfalse, 0, 0 );
+	if ( tr.startsolid || tr.allsolid || tr.fraction < 1.0f )
+		return qfalse;
+
+	VectorCopy( end, result );
+	return qtrue;
+}
+
+void Cmd_TeleportAim_f( gentity_t *ent )
+{
+	const vec3_t mins = { -15, -15, DEFAULT_MINS_2 };	// a standing player's box (g_client.c's playerMins/playerMaxs)
+	const vec3_t maxs = { 15, 15, DEFAULT_MAXS_2 };
+	gentity_t *target = ent;
+	vec3_t point, normal, dir, spot, seen, start, angles;
+	float reach = 0.0f;
+	int surfaceFlags = 0;
+	int k;
+
+	if (!check_admin_command(ent, ADM_TELE, qtrue))
+	{
+		return;
+	}
+
+	if (trap->Argc() > 2)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Usage: ^3/teleportaim ^7or ^3/teleaim <player name or ID (optional)>^7. Teleports you, or the player, to where you aim.\n\"" );
+		return;
+	}
+
+	if (trap->Argc() == 2)
+	{
+		char arg1[MAX_STRING_CHARS];
+		int client_id;
+
+		trap->Argv( 1, arg1, sizeof( arg1 ) );
+
+		client_id = ClientNumberFromString( ent, arg1, qfalse );
+		if (client_id == -1)
+		{
+			return;
+		}
+
+		target = &g_entities[client_id];
+
+		// same Admin Protect rule as /teleport
+		if (ent != target && target->client->sess.amrpgmode > 0 && target->client->pers.bitvalue & (1 << ADM_ADMPROTECT) && !(target->client->pers.player_settings & (1 << 13)))
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Target player is adminprotected\n\"") );
+			return;
+		}
+	}
+
+	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR && ent->client->sess.spectatorState == SPECTATOR_FOLLOW)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"Stop following someone to aim.\n\"" );
+		return;
+	}
+
+	if (target->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		if (target->client->sess.spectatorState == SPECTATOR_FOLLOW)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"%s ^7is spectating another player.\n\"", target->client->pers.netname) );
+			return;
+		}
+	}
+	else if (target->health <= 0)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s ^7is dead.\n\"", target->client->pers.netname) );
+		return;
+	}
+	else if (target->client->ps.m_iVehicleNum)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"%s ^7is riding a vehicle.\n\"", target->client->pers.netname) );
+		return;
+	}
+
+	if (RP_TeleAimPoint(ent, point, normal, &surfaceFlags) == qfalse)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"You are not aiming at anything.\n\"" );
+		return;
+	}
+
+	if (surfaceFlags & SURF_SKY)
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"You are aiming at the sky.\n\"" );
+		return;
+	}
+
+	// the box set 1 unit off the surface: its centre that far out along the normal beyond the box's own
+	// reach along it
+	VectorNormalize( normal );
+	for (k = 0; k < 3; k++)
+	{
+		reach += fabs( normal[k] ) * ( maxs[k] - mins[k] ) * 0.5f;
+	}
+	for (k = 0; k < 3; k++)
+	{
+		spot[k] = point[k] + normal[k] * ( reach + RP_TELEAIM_GAP ) - ( mins[k] + maxs[k] ) * 0.5f;
+	}
+
+	if (!RP_TeleAimRoom(spot, mins, maxs, target->s.number))
+	{
+		vec3_t found;
+		qboolean ok = qfalse;
+
+		VectorMA( point, RP_TELEAIM_GAP, normal, seen );
+		AngleVectors( ent->client->ps.viewangles, dir, NULL, NULL );
+
+		VectorCopy( spot, start );
+		start[2] += RP_TELEAIM_LIFT;
+		ok = RP_TeleAimSweep( start, spot, mins, maxs, target->s.number, seen, found );
+
+		if (!ok)
+		{
+			VectorCopy( spot, start );
+			start[2] -= RP_TELEAIM_LIFT;
+			ok = RP_TeleAimSweep( start, spot, mins, maxs, target->s.number, seen, found );
+		}
+
+		if (!ok)
+		{
+			VectorMA( spot, -RP_TELEAIM_BACK, dir, start );
+			ok = RP_TeleAimSweep( start, spot, mins, maxs, target->s.number, seen, found );
+		}
+
+		if (!ok)
+		{
+			trap->SendServerCommand( ent-g_entities, "print \"There is no room for a player where you aim.\n\"" );
+			return;
+		}
+
+		VectorCopy( found, spot );
+	}
+
+	// zyk_TeleportPlayer() lifts the player 1 unit: the spot checked is where they end up
+	{
+		vec3_t dest;
+
+		VectorCopy( spot, dest );
+		dest[2] -= 1.0f;
+		VectorCopy( target->client->ps.viewangles, angles );
+		zyk_TeleportPlayer( target, dest, angles );
+	}
+
+	if (target != ent)
+	{
+		trap->SendServerCommand( ent-g_entities, va("print \"Teleported %s ^7to (%d %d %d).\n\"", target->client->pers.netname,
+			(int)floor(spot[0] + 0.5f), (int)floor(spot[1] + 0.5f), (int)floor(spot[2] + 0.5f)) );
+	}
 }
 
 /*
@@ -18408,7 +18624,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_TELE)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nThis command can be ^3/teleport^7 or ^3/tele^7. Use ^3/telemark ^7to mark a spot in map, then use ^3/teleport ^7to go there. Use ^3/teleport <player name or ID> ^7to teleport to a player. \nUse ^3/teleport <player name or ID> <player name or ID> ^7to teleport a player to another. Use ^3/teleport <x> <y> <z> ^7to teleport to coordinates. Use ^3/teleport <player name or ID> <x> <y> <z> ^7to teleport a player to coordinates\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nThis command can be ^3/teleport^7 or ^3/tele^7. Use ^3/telemark ^7to mark a spot in map, then use ^3/teleport ^7to go there. Use ^3/teleport <player name or ID> ^7to teleport to a player. \nUse ^3/teleport <player name or ID> <player name or ID> ^7to teleport a player to another. Use ^3/teleport <x> <y> <z> ^7to teleport to coordinates. Use ^3/teleport <player name or ID> <x> <y> <z> ^7to teleport a player to coordinates. Use ^3/teleportaim ^7or ^3/teleaim <player name or ID (optional)> ^7to teleport yourself, or the player, to where you aim\n\n\"" );
 		}
 		else if (command_number == ADM_ADMPROTECT)
 		{
@@ -24233,8 +24449,10 @@ command_t commands[] = {
 	{ "spendcredits",		Cmd_CreditSpend_f,			CMD_RPG | CMD_NOINTERMISSION },
 	{ "stuff",				Cmd_Stuff_f,				CMD_RPG | CMD_NOINTERMISSION },
 	{ "tele",				Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "teleaim",			Cmd_TeleportAim_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },	// DAJ_RP: [Admin] /teleportaim's short name
 	{ "telemark",			Cmd_Telemark_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "teleport",			Cmd_Teleport_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "teleportaim",		Cmd_TeleportAim_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "training",			Cmd_TrainingMode_f,			CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "trashitem",			Cmd_TrashItem_f,			CMD_LOGGEDIN },
 	// GalaxyRP fix: [Cloak Item] replaces the old GENCMD_USE_CLOAK_VEHICLE generic-command mechanism
