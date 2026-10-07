@@ -323,7 +323,12 @@ void NPC_SetMiscDefaultData( gentity_t *ent )
 	{
 	case NPCTEAM_PLAYER:
 		//ent->flags |= FL_NO_KNOCKBACK;
-		if ( ent->client->NPC_class == CLASS_JEDI || ent->client->NPC_class == CLASS_LUKE )
+		// DAJ_RP: [NPC] CLASS_KYLE is a good Jedi too, as single player has it (code/game/NPC_spawn.cpp): its
+		// side's enemy is NPCTEAM_ENEMY, and spawnflag 16 makes a ceiling ambusher. The base game's kyle.npc
+		// sets no enemyTeam (GalaxyRP's rp_npc_fix.npc copies of its Kyles do), and with none (NPCTEAM_FREE)
+		// NPC_ValidEnemy() takes anyone not of its class and side for an enemy -- bartenders, droids and wild
+		// creatures included.
+		if ( ent->client->NPC_class == CLASS_JEDI || ent->client->NPC_class == CLASS_LUKE || ent->client->NPC_class == CLASS_KYLE )
 		{//good jedi
 			ent->client->enemyTeam = NPCTEAM_ENEMY;
 			if ( ent->spawnflags & JSF_AMBUSH )
@@ -366,7 +371,14 @@ void NPC_SetMiscDefaultData( gentity_t *ent )
 				break;
 			}
 		}
-		if ( ent->client->NPC_class == CLASS_KYLE || ent->client->NPC_class == CLASS_VEHICLE || (ent->spawnflags & SFB_CINEMATIC) )
+		// DAJ_RP: [NPC] CLASS_KYLE used to be first here, a leftover from when Kyle was the player and a Kyle
+		// NPC only ever stood in cutscenes. So every Kyle on the player's side spawned with no AI
+		// (BS_CINEMATIC) -- stood still, never took an enemy, never fought back -- and /npc team or "npcteam"
+		// could not wake him, since neither touches defaultBehavior. Single player had already moved the line
+		// to CLASS_PLAYER, a class multiplayer does not have (ClassTable in NPC_stats.c leaves it out, so the
+		// "player" and "KylePlayer" NPCs of rp_npc_fix.npc that name it get no class, and keep their AI). The
+		// CINEMATIC spawnflag still makes any NPC, Kyle included, a no-AI one.
+		if ( ent->client->NPC_class == CLASS_VEHICLE || (ent->spawnflags & SFB_CINEMATIC) )
 		{
 			ent->NPC->defaultBehavior = BS_CINEMATIC;
 		}

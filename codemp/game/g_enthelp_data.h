@@ -1157,7 +1157,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"common" },
 	{ "npc", RP_EH_TOPIC, NULL,
 		"Shared behaviour of every npc_* spawner (npc_spawner, npc_vehicle and the named classes such as npc_stormtrooper). /entadd needs a targetname: firing that name spawns one NPC, after delay. Each spawn uses one of count, and when the last is used the spawner fires its target and removes itself. spawnnow and respawn work only on a named spawner. A spawn is skipped (count kept) when 256 NPCs are alive or entity slots run short. Its NPCs get npc_targetname, npc_target, health, scripts and spawnflags from it.",
-		"16|DROPTOFLOOR|Traces the spawner down to the floor, but the NPC is still made at the spawner's own origin, so it has no visible effect (single player is the same). For Jedi or Luke allies and Tavion, Reborn, Desann or Shadowtrooper enemies it is CEILING: the NPC clings where placed and drops on seeing an enemy or being hurt.\n"
+		"16|DROPTOFLOOR|Traces the spawner down to the floor, but the NPC is still made at the spawner's own origin, so it has no visible effect (single player is the same). For Jedi, Luke or Kyle allies and Tavion, Reborn, Desann or Shadowtrooper enemies it is CEILING: the NPC clings where placed and drops on seeing an enemy or being hurt.\n"
 		"32|CINEMATIC|The NPC starts with no AI (cinematic behaviour state) and stands until a script moves it.\n"
 		"64|NOTSOLID|The NPC is not solid at all and is not checked for a blocked spawn spot. Wins over npceffect.\n"
 		"128|STARTINSOLID|Does not try to free an NPC that spawns inside something solid.\n"
@@ -1454,7 +1454,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"npc common" },
 	{ "npc_kyle", 0, NULL,
 		"Each time it is fired by its targetname (trigger, button, /entuse) it spawns Kyle Katarn (NPC type kyle). An npc_type key is ignored. Removed at once on single-player maps when the server has rp_sp_npc_fix 1.",
-		NULL,
+		"16|CEILING|Starts clinging where placed (ceiling ambush, ignoring alerts) and drops when it sees an enemy or is hurt.",
 		NULL,
 		"npc_kyle targetname kyle1 spawnnow 1",
 		"npc common" },
