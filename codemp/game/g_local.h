@@ -2317,6 +2317,8 @@ void		RP_MarkChild( gentity_t *maker, gentity_t *child );
 #define RP_MODEL_GUN_RACK			"models/map_objects/kejim/weaponsrack.md3"
 #define RP_MODEL_AMMO_RACK			"models/map_objects/kejim/weaponsrung.md3"
 #define RP_MODEL_CARGO_SMALL		"models/map_objects/kejim/cargo_small.md3"
+// GalaxyRP: [Entity System] and the saber training dummy's (zyk_training_pole), the same way
+#define RP_MODEL_TRAINING_POLE		"models/map_objects/rift/statue.md3"
 // DAJ_RP: [Dispensers] the model one of those shows: its "model" key's .md3 if the server has it, else the
 // default (logged for a key that is not there); sets ent->model. g_spawn.c.
 const char	*RP_DispenserModel( gentity_t *ent, const char *defaultModel );

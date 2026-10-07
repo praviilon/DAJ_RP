@@ -4669,17 +4669,32 @@ void zyk_training_pole_damage(gentity_t *ent)
 	{ // zyk: shows damage, stored in count, done to the training pole
 		VectorSet(plum_origin, ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] + DEFAULT_MAXS_2);
 
+		// GalaxyRP fix: [Entity System] a client draws a score plum only when it is addressed to it, so it
+		// takes one per player -- and it was made for every connected player, wherever they were: a whole
+		// table's worth of temporary entities (each holding an entity slot for its 300 ms) for every series of
+		// hits on every dummy, most of them to players too far away to be sent them at all. Now one only for a
+		// player who can see the spot (in its PVS, from the eye), and sent to that player alone
+		// (SVF_SINGLECLIENT) rather than to everyone in range, who threw the others away.
 		for (i = 0; i < level.maxclients; i++)
 		{
+			vec3_t eye;
+
 			player = &g_entities[i];
 
-			if (player && player->client && player->client->pers.connected == CON_CONNECTED)
-			{
-				plum = G_TempEntity(plum_origin, EV_SCOREPLUM);
+			if (!player->inuse || !player->client || player->client->pers.connected != CON_CONNECTED)
+				continue;
 
-				plum->s.otherEntityNum = player->s.number;
-				plum->s.time = ent->count;
-			}
+			VectorCopy(player->client->ps.origin, eye);
+			eye[2] += player->client->ps.viewheight;
+			if (!trap->InPVS(plum_origin, eye))
+				continue;
+
+			plum = G_TempEntity(plum_origin, EV_SCOREPLUM);
+
+			plum->s.otherEntityNum = player->s.number;
+			plum->s.time = ent->count;
+			plum->r.svFlags |= SVF_SINGLECLIENT;
+			plum->r.singleClient = player->s.number;
 		}
 
 		ent->count = 0;
@@ -4700,14 +4715,12 @@ void SP_ZykTrainingPole(gentity_t *ent)
 	G_SetOrigin(ent, ent->s.origin);
 	G_SetAngles(ent, ent->s.angles);
 
-	if (ent->model)
-	{
-		ent->s.modelindex = G_ModelIndex(ent->model);
-	}
-	else
-	{
-		ent->s.modelindex = G_ModelIndex("models/map_objects/rift/statue.md3");
-	}
+	// GalaxyRP fix: [Entity System] its "model" key's .md3 if the server has it, else the Rift statue (logged
+	// for a map's own whose key is not there; the Entity System refuses one before it spawns --
+	// RP_ModelKeyClass() in g_spawn.c). It took any name: a typo took a model slot for good and left an
+	// invisible but solid dummy. RP_EntityModelIndex(): an Entity System dummy's slot can be reused once it
+	// is gone.
+	ent->s.modelindex = RP_EntityModelIndex( ent, RP_DispenserModel( ent, RP_MODEL_TRAINING_POLE ) );
 
 	ent->r.contents = CONTENTS_SOLID | CONTENTS_OPAQUE | CONTENTS_BODY | CONTENTS_MONSTERCLIP | CONTENTS_BOTCLIP;//Was CONTENTS_SOLID, but only architecture should be this
 	ent->health = 1;

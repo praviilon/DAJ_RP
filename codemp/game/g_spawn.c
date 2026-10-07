@@ -2565,6 +2565,9 @@ a typo used to take a model slot for good and leave an invisible station, and a 
 one. Any other one (the map's own) is not refused: its spawn function shows its own model instead and logs
 why -- RP_DispenserModel(). NULL for any other class.
 
+GalaxyRP: [Entity System] the saber training dummy (zyk_training_pole) is one of them too: its "model" key,
+when given, replaces the Rift statue.
+
 GalaxyRP: [Slot Reuse] and the sounds its spawn function registers after the model -- a dispenser's three --
 get a slot and their bytes too: with the gamestate nearly full, the model fitted and the sounds did not, and
 the station was silent, its "done" sound index 0 an empty name every client tried to load on every use.
@@ -2596,6 +2599,9 @@ static const rpModelKeyClass_t rp_model_key_classes[] = {
 	{ "misc_model_gun_rack",				RP_MODEL_GUN_RACK,			qfalse,	qtrue,	RP_SOUNDS_NONE },
 	{ "misc_model_ammo_rack",				RP_MODEL_AMMO_RACK,			qfalse,	qtrue,	RP_SOUNDS_NONE },
 	{ "misc_model_cargo_small",				RP_MODEL_CARGO_SMALL,		qtrue,	qfalse,	RP_SOUNDS_NONE },
+	// GalaxyRP: [Entity System] the saber training dummy: its "model" key checked as these are (a typo used
+	// to take a model slot for good and leave an invisible but solid dummy) -- SP_ZykTrainingPole()
+	{ "zyk_training_pole",					RP_MODEL_TRAINING_POLE,		qfalse,	qfalse,	RP_SOUNDS_NONE },
 };
 
 static const rpModelKeyClass_t *RP_ModelKeyClass( const char *classname )
@@ -2918,8 +2924,8 @@ static const char *RP_EntitySystemSpawnedEmpty( gentity_t *ent )
 	if ( Q_stricmp( ent->classname, "misc_model_ghoul" ) == 0 )
 		return "model";
 
-	// GalaxyRP: [Slot Reuse] a dispenser, rack or cargo crate (RP_ModelKeyClass()) -- each sets its model in
-	// its spawn function, the ammo rack too since it registers it there (SP_misc_model_ammo_rack())
+	// GalaxyRP: [Slot Reuse] a dispenser, rack, cargo crate or training dummy (RP_ModelKeyClass()) -- each sets
+	// its model in its spawn function, the ammo rack too since it registers it there (SP_misc_model_ammo_rack())
 	if ( RP_ModelKeyClass( ent->classname ) )
 		return "model";
 

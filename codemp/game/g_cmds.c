@@ -17978,9 +17978,31 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 
 }
 
+/*
+==================
+Cmd_SpawnDummy_f
+
+GalaxyRP fix: [Entity System] /spawndummy: a saber training dummy (zyk_training_pole, spawnflag 1: it shows
+the damage each series of hits does) on the floor 64 units in front of the admin, facing him. It used to be
+placed at the admin's own origin, and its box is a player's: it spawned exactly around him, solid, and he was
+stuck in it. In front means: the dummy's box can be carried there from the admin's position (18 units up, so
+a step is not a wall) and comes down on a floor within 64 units below. When it cannot -- a wall, a player or
+a ledge in the way -- it goes where the admin stands, as before, and he is told to step out of it.
+==================
+*/
+#define RP_DUMMY_DISTANCE	64	// from the admin's origin to the dummy's: 34 units between the two boxes
+#define RP_DUMMY_STEP		18	// a step up this high in front is climbed, not taken for a wall
+#define RP_DUMMY_DROP		64	// how far below the spot a floor may be
+
 void Cmd_SpawnDummy_f(gentity_t* ent)
 {
 	gentity_t* new_ent = NULL;
+	const vec3_t dummyMins = { -15, -15, DEFAULT_MINS_2 };	// SP_ZykTrainingPole()'s default box
+	const vec3_t dummyMaxs = { 15, 15, DEFAULT_MAXS_2 };
+	vec3_t spot, start, end, forward;
+	float yaw, facing;
+	qboolean inFront = qfalse;
+	trace_t tr;
 
 	// GalaxyRP fix: [Entity System] this was the one Entity System command still testing the admin
 	// bit by hand instead of going through check_admin_command(). The two are equivalent in what
@@ -18003,25 +18025,68 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 		return;
 	}
 
+	// where it goes: in front of the admin, on the floor, if its box can get there
+	yaw = ent->client->ps.viewangles[YAW];
+	VectorSet( forward, cos( DEG2RAD( yaw ) ), sin( DEG2RAD( yaw ) ), 0 );
+	VectorCopy( ent->client->ps.origin, spot );
+
+	VectorCopy( ent->client->ps.origin, start );
+	start[2] += RP_DUMMY_STEP;
+	VectorMA( start, RP_DUMMY_DISTANCE, forward, end );
+	trap->Trace( &tr, start, dummyMins, dummyMaxs, end, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0 );
+	if ( !tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f )
+	{
+		VectorCopy( end, start );
+		end[2] -= RP_DUMMY_STEP + RP_DUMMY_DROP;
+		trap->Trace( &tr, start, dummyMins, dummyMaxs, end, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0 );
+		if ( !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f )
+		{
+			VectorCopy( tr.endpos, spot );
+			inFront = qtrue;
+		}
+	}
+
+	// facing the admin
+	facing = AngleNormalize360( yaw + 180.0f );
+
 	new_ent = G_Spawn();
 
 	if (new_ent)
 	{
 		zyk_main_set_entity_field(new_ent, "classname", "zyk_training_pole");
-		// GalaxyRP fix: [Entity System] a va() string: zyk_main_set_entity_field() copies it into the record, and
-		// the G_NewString() copy made here was never used and stayed in the level's memory pool
-		zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", ent->client->ps.origin[0], ent->client->ps.origin[1], ent->client->ps.origin[2]));
-		zyk_main_set_entity_field(new_ent, "angles", "0 0 0");
+		// GalaxyRP fix: [Entity System] va() strings: zyk_main_set_entity_field() copies them into the record,
+		// and the G_NewString() copy of the origin made here was never used and stayed in the level's memory pool
+		zyk_main_set_entity_field(new_ent, "origin", va("%f %f %f", spot[0], spot[1], spot[2]));
+		zyk_main_set_entity_field(new_ent, "angles", va("0 %f 0", facing));
 		zyk_main_set_entity_field(new_ent, "spawnflags", "1");
 
 		zyk_main_spawn_entity(new_ent);
+
+		// GalaxyRP: [Entity System] refused -- its model must be on the server and have a slot
+		// (RP_EntitySystemSpawnRefused) -- or gone in its spawn: say so, as /spawnplatform does
+		if (!new_ent->inuse)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"The dummy was refused%s%s.\n\"",
+				level.rp_spawn_refusal[0] ? ": " : "", level.rp_spawn_refusal) );
+			return;
+		}
 
 		if (new_ent->s.number != 0)
 		{
 			level.last_spawned_entity = new_ent;
 		}
-	}
 
+		if (inFront)
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Dummy %d spawned at (%i %i %i), in front of you.\n\"",
+				new_ent->s.number, (int)spot[0], (int)spot[1], (int)spot[2]) );
+		}
+		else
+		{
+			trap->SendServerCommand( ent-g_entities, va("print \"Dummy %d spawned where you stand (%i %i %i): there was no room in front of you. Step out of it.\n\"",
+				new_ent->s.number, (int)spot[0], (int)spot[1], (int)spot[2]) );
+		}
+	}
 }
 
 // GalaxyRP fix: [Entity System] this dereferenced ent->classname three times with no NULL check
@@ -19846,7 +19911,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";
 	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
 	lines[n++] = "^3/spawnplatform <height (optional)>: ^7Spawns a lift platform under your feet that rises 128 units, or that height (0: it stays put), when someone steps onto it; lowered to fit under a ceiling.\n";
-	lines[n++] = "^3/spawndummy: ^7Spawns a dummy where the player is.\n";
+	lines[n++] = "^3/spawndummy: ^7Spawns a saber training dummy in front of you, facing you (where you stand when there is no room), showing the damage each series of hits does.\n";
 	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3misc_model_ghoul^7 (a .glm model), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server. See ^3/enthelp^7.\n";
 
 	lines[n++] = "\n^3--------Shader Remaps--------\n";

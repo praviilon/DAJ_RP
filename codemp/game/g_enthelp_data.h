@@ -2369,9 +2369,9 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"zyk_regen_unit spawnflags 3 count 5 wait 1000",
 		"common" },
 	{ "zyk_training_pole", 0, NULL,
-		"A solid saber training dummy: a model (the Rift statue by default) that can be hit but never destroyed. With spawnflag 1 it shows the damage it took as a number above it, wait ms after the last hit of a series. /spawndummy places one with spawnflag 1 where you stand.",
-		"1|SHOW_DAMAGE|Shows the total damage of each series of hits as a number above it, to every player.",
-		"model|models/map_objects/rift/statue.md3|The .md3 model shown.\n"
+		"A solid saber training dummy: a model (the Rift statue by default) that can be hit but never destroyed. With spawnflag 1 it shows the damage it took as a number above it, wait ms after the last hit of a series. /spawndummy places one with spawnflag 1 on the floor in front of you, facing you (where you stand when there is no room).",
+		"1|SHOW_DAMAGE|Shows the total damage of each series of hits as a number above it, to every player who can see it.",
+		"model|models/map_objects/rift/statue.md3|The .md3 model shown: one the server has. The Entity System refuses any other, and a map's own shows the statue instead.\n"
 		"angle|0|The direction (yaw, degrees) the model faces.\n"
 		"wait|100|Ms after the last hit before the damage is shown (at least 100).\n"
 		"mins|-15 -15 -24|Box corner relative to the origin.\n"
