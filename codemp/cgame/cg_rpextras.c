@@ -779,7 +779,9 @@ server sent and the names as the ui checked them (RPX_SpawnerNamesProblem()), in
 Shy is an NPC spawner's only: a vehicle spawner spawns when fired, never waiting to be unseen. The
 health bar (showhealth) is both kinds'. The effect (npceffect) is an NPC spawner's only: vehicles cannot
 have one. The team (npcteam) is both kinds', as /npc team is. The kill rewards (npccredits, npcxp) are an NPC
-spawner's only: a vehicle pays nothing, and the server refuses them on one.
+spawner's only: a vehicle pays nothing, and the server refuses them on one. So is Frozen (npcfreeze): /npc freeze
+refuses vehicles, and the server refuses the key on a vehicle spawner. With No AI as well both are sent: the NPC
+stays frozen until unfrozen, then stands as a no-AI one.
 ==================
 */
 static void RPX_SpawnSpawner( void ) {
@@ -880,6 +882,10 @@ static void RPX_SpawnSpawner( void ) {
 		}
 		if ( RPX_CvarInt( "ui_rpx_sp_noai" ) ) {
 			flags |= 32;	// CINEMATIC
+		}
+		// DAJ_RP: [NPC System] spawned frozen, as /npc freeze leaves an NPC (SP_NPC_spawner()'s npcfreeze)
+		if ( RPX_CvarInt( "ui_rpx_sp_frozen" ) ) {
+			Q_strcat( cmd, sizeof( cmd ), " npcfreeze \"1\"" );
 		}
 		if ( !RPX_CvarInt( "ui_rpx_sp_solid" ) ) {
 			flags |= 64;	// NOTSOLID

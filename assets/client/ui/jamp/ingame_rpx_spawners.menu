@@ -689,7 +689,7 @@
 			type                ITEM_TYPE_YESNO
 			text                "No AI:"
 			cvar                "ui_rpx_sp_noai"
-			rect                432 162 180 18
+			rect                432 162 88 18
 			textalign           ITEM_ALIGN_LEFT
 			textalignx          0
 			textaligny          -2
@@ -703,6 +703,31 @@
 				"0"
 			}
 			descText            "It stands still and does nothing"
+			action
+			{
+				play "sound/interface/button1.wav"
+			}
+		}
+		itemDef
+		{
+			name                rpx_spfrozen
+			type                ITEM_TYPE_YESNO
+			text                "Frozen:"
+			cvar                "ui_rpx_sp_frozen"
+			rect                524 162 88 18
+			textalign           ITEM_ALIGN_LEFT
+			textalignx          0
+			textaligny          -2
+			font                2
+			textscale           0.7
+			forecolor           1 1 1 1
+			visible             1
+			cvarTest            "ui_rpx_npcmode"
+			showCvar
+			{
+				"0"
+			}
+			descText            "Starts frozen, as /npc freeze leaves it: no moving or fighting until unfrozen"
 			action
 			{
 				play "sound/interface/button1.wav"
