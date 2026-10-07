@@ -2113,8 +2113,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"Keeps moving asteroids in its volume: copies of a random entity named by target (usually func_rotating templates: model, health, scale, material...), each flying from one face of the volume to the opposite one, spinning, and removed on arrival. It needs a brush model (mins/maxs alone are refused) and the asteroids fly through that inline model's own place in the map: the origin is not added. Not solid or touchable itself.",
 		NULL,
 		"model||Required: *N, the inline model whose bounds are the field.\n"
-		"target||Targetname of the asteroid templates to copy. With none found it logs once and looks again every 10 seconds.\n"
-		"count|1|Most asteroids at one time, at most 64.\n"
+		"target||Targetname of the asteroid templates to copy (one is enough, with several each asteroid copies one at random). With none found it logs once and looks again every 10 seconds.\n"
+		"count|1|Most asteroids at one time, 1 to 64 (none, 0 or less: 1).\n"
 		"speed|10000|Average speed in units per second: each asteroid moves at 0.25 to 2 times this.",
 		"trigger_asteroid_field model *1 target asteroid count 5 speed 400",
 		"common trigger func_rotating" },

@@ -2260,12 +2260,14 @@ gentity_t *asteroid_pick_random_asteroid( gentity_t *self )
 {
 	int			t_count = 0, pick;
 	gentity_t	*t = NULL;
+	gentity_t	*only = NULL;	// DAJ_RP: [Entities] the match, for when there is just the one
 
 	while ( (t = G_Find (t, FOFS(targetname), self->target)) != NULL )
 	{
 		if (t != self)
 		{
 			t_count++;
+			only = t;
 		}
 	}
 
@@ -2274,9 +2276,13 @@ gentity_t *asteroid_pick_random_asteroid( gentity_t *self )
 		return NULL;
 	}
 
+	// DAJ_RP fix: [Entities] this returned t, which the loop above has already run to NULL -- so a field
+	// with exactly one template (the usual way to set one up) never spawned an asteroid, and logged that
+	// nothing had its target's name. Raven's code, unchanged in OpenJK and TaystJK. With several the pick
+	// below walks the list again and returns inside the loop, which was always right.
 	if(t_count == 1)
 	{
-		return t;
+		return only;
 	}
 
 	//FIXME: need a seed
@@ -2490,8 +2496,17 @@ void SP_trigger_asteroid_field(gentity_t *self)
 	// that revival can be -- and it is a live cycle, not a static entity, since each asteroid is
 	// lerped across the volume and then frees itself on arrival, so the field holds one drifting
 	// rock at a time rather than accumulating.
-	if ( !self->count )
+	//
+	// DAJ_RP fix: [Entities] a negative count passed this test and left the field spawning nothing, saying
+	// nothing (asteroid_field_think spawns while numAsteroids < count): it means 1 as well now, with a
+	// warning, as the clamp below warns.
+	if ( self->count <= 0 )
 	{
+		if ( self->count < 0 )
+		{
+			Com_Printf( S_COLOR_YELLOW"WARNING: trigger_asteroid_field at %s asked for %d asteroids, using 1\n",
+				vtos(self->s.origin), self->count );
+		}
 		self->count = 1;
 	}
 
