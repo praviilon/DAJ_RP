@@ -12675,8 +12675,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 				// ADM_NPC, while /order is not gated at all. Stating it once beats repeating an (Admin only)
 				// tag on every row.
 				//
-				// This message is 960 bytes (with /npc effect and /npc killaim, without the removed /npc
-				// score), 62 short of the 1022 limit: a longer addition goes in a SendServerCommand of its own.
+				// This message was 958 bytes (with /npc effect and /npc killaim, without the removed /npc
+				// score), too close to the 1022 limit for /npc freeze: DAJ_RP moved the /order row into a
+				// SendServerCommand of its own, just below, which leaves this one at about 840.
 				trap->SendServerCommand(ent - g_entities, "print \"^3--------NPC System--------\n\
 ^7The ^3/npc ^7commands require the ^3NPC ^7admin command. See ^3/adminlist^7.\n\
 ^3/npc spawn <type> <targetname (optional)>: ^7Spawns an npc.\n\
@@ -12687,7 +12688,8 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^3/npc killaim: ^7Kills the npc or vehicle in your crosshair.\n\
 ^3/npc team <player/enemy/neutral/free>: ^7Sets the team of the npc in your crosshair.\n\
 ^3/npc effect <holo/ghost/nonsolid/clear>: ^7Hologram, Force ghost or walk-through npc in your crosshair; ^3clear ^7undoes it.\n\
-^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
+^3/npc freeze: ^7Freezes the npc in your crosshair in place, or unfreezes it.\n\" ");
+				trap->SendServerCommand(ent - g_entities, "print \"^3/order <follow/guard/cover>: ^7Orders your NPCs to follow you, stand and fight, or follow and fight. Press ^3Use ^7on a friendly NPC to make it follow commands and press again to dismiss it.\n\n\" ");
 				// GalaxyRP: [Mini-Games] /duelmode and /meleemode were documented nowhere at all -- not
 				// here, not in /list help, not in /adminlist. The only tournament entries this page
 				// carried were the three ADMIN ones (/duelarena, /meleearena, /duelpause) up in the Admin
@@ -15534,6 +15536,32 @@ static const char *zyk_spawner_team_problem( const char *value )
 	return NULL;
 }
 
+// DAJ_RP: [NPC System] what is wrong with an "npcfreeze" value on an NPC or vehicle spawner, or NULL: 1 or 0 on an
+// npc_spawner, none on a vehicle spawner (/npc freeze refuses vehicles too). An empty value is none and always
+// fine. Used by /entadd and /entedit.
+static const char *zyk_spawner_freeze_problem( qboolean vehicle, const char *value )
+{
+	static char problem[256];
+
+	if ( !value || !value[0] )
+	{
+		return NULL;
+	}
+
+	if ( vehicle )
+	{
+		return "Vehicles cannot be frozen: ^3npcfreeze^7 is for an ^3npc_spawner^7.";
+	}
+
+	if ( RP_NpcFreezeFromValue( value ) < 0 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "^3npcfreeze %s^7: use ^31^7 to spawn its NPCs frozen, or ^30^7.", zyk_shown_name( value ) );
+		return problem;
+	}
+
+	return NULL;
+}
+
 // DAJ_RP: [NPC Rewards] what is wrong with an "npccredits" or "npcxp" value on an NPC or vehicle spawner, or NULL:
 // a whole number from 0 to RP_REWARD_MAX_CREDITS or RP_REWARD_MAX_XP, and none on a vehicle spawner -- a vehicle
 // pays nothing (RP_PayNpcKillReward()). An empty value is none and always fine. Used by /entadd and /entedit.
@@ -15590,12 +15618,12 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 	static char problem[256];
 	char key[MAX_STRING_CHARS], value[MAX_STRING_CHARS];
 	char targetname[MAX_STRING_CHARS], npc_type[MAX_STRING_CHARS], effect[MAX_STRING_CHARS], team[MAX_STRING_CHARS];
-	char reward_credits[MAX_STRING_CHARS], reward_xp[MAX_STRING_CHARS];
+	char reward_credits[MAX_STRING_CHARS], reward_xp[MAX_STRING_CHARS], freeze[MAX_STRING_CHARS];
 	qboolean has_type = qfalse;
 	qboolean vehicle = !Q_stricmp( classname, "npc_vehicle" ) ? qtrue : qfalse;
 	int i;
 
-	targetname[0] = npc_type[0] = effect[0] = team[0] = reward_credits[0] = reward_xp[0] = '\0';
+	targetname[0] = npc_type[0] = effect[0] = team[0] = reward_credits[0] = reward_xp[0] = freeze[0] = '\0';
 	for ( i = 2; i + 1 < number_of_args; i += 2 )
 	{
 		trap->Argv( i, key, sizeof( key ) );
@@ -15624,6 +15652,10 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		else if ( !Q_stricmp( key, "npcxp" ) )
 		{
 			Q_strncpyz( reward_xp, value, sizeof( reward_xp ) );
+		}
+		else if ( !Q_stricmp( key, "npcfreeze" ) )
+		{
+			Q_strncpyz( freeze, value, sizeof( freeze ) );
 		}
 	}
 
@@ -15662,6 +15694,17 @@ static const char *zyk_entadd_spawner_problem( const char *classname, int number
 		if ( problem_reward )
 		{
 			return problem_reward;
+		}
+	}
+
+	// DAJ_RP: [NPC System] "npcfreeze" -- see RP_NpcFreezeFromValue() (NPC_spawn.c)
+	if ( freeze[0] )
+	{
+		const char *problem_freeze = zyk_spawner_freeze_problem( vehicle, freeze );
+
+		if ( problem_freeze )
+		{
+			return problem_freeze;
 		}
 	}
 
@@ -16438,6 +16481,17 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 						return;
 					}
 				}
+				// DAJ_RP: [NPC System] "npcfreeze" -- removing it is always fine
+				if (Q_stricmp(key, "npcfreeze") == 0 && Q_stricmp(arg2, "zykremovekey") != 0)
+				{
+					const char *problem_freeze = zyk_spawner_freeze_problem(!Q_stricmp(this_ent->classname, "npc_vehicle") ? qtrue : qfalse, arg2);
+
+					if (problem_freeze)
+					{
+						trap->SendServerCommand( ent-g_entities, va("print \"%s\n\"", problem_freeze) );
+						return;
+					}
+				}
 			}
 		}
 
@@ -16771,6 +16825,8 @@ static const char *zyk_entsave_effect_word(int mode)
 //    internal 65536, or zyk's old custom-credits 32768, which nothing honours any more.
 //  - npccredits, npcxp: what its killer is paid (gentity_t::rpRewardCredits/rpRewardXP), when it pays anything.
 //  - npceffect: its /npc effect mode now; a release in progress is no mode.
+//  - npcfreeze: 1 while it is under /npc freeze (RP_NpcFreeze(), NPC_spawn.c), so it comes back frozen. A map
+//    script's own freeze is not ours to save.
 //  - npcteam, NPC_targetname, NPC_target, showhealth: see zyk_entsave_add_common().
 //  - noBasicSounds, noCombatSounds, noExtraSounds: the sounds it was told not to load. Any value means yes to
 //    SP_NPC_spawner(), so 1.
@@ -16797,6 +16853,8 @@ static const char *zyk_entsave_npc_line(gentity_t *ent, const char *escaped_type
 	if (ent->rpRewardXP > 0 && !zyk_entsave_add("npcxp", va("%d", ent->rpRewardXP)))
 		return NULL;
 	if (effect && !zyk_entsave_add("npceffect", effect))
+		return NULL;
+	if (RP_NpcIsFrozen(ent) && !zyk_entsave_add("npcfreeze", "1"))
 		return NULL;
 	if ((ent->r.svFlags & SVF_NO_BASIC_SOUNDS) && !zyk_entsave_add("noBasicSounds", "1"))
 		return NULL;
@@ -18624,7 +18682,8 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 ^3/npc kill team <player/enemy/neutral/free or nonally>^7: kills a whole team, or ^3nonally ^7for every npc but your allies.\n\
 ^3/npc killaim^7: kills the npc or vehicle in your crosshair (not one with a player aboard).\n\
 ^3/npc team <player/enemy/neutral/free>^7: sets the team of the npc in your crosshair.\n\
-^3/npc effect <holo/ghost/nonsolid/clear>^7: gives the npc in your crosshair a hologram or Force ghost look (both walk-through) or makes it walk-through only; ^3clear ^7restores it, and makes an npc that spawned non-solid solid.\n\n\"" );
+^3/npc effect <holo/ghost/nonsolid/clear>^7: gives the npc in your crosshair a hologram or Force ghost look (both walk-through) or makes it walk-through only; ^3clear ^7restores it, and makes an npc that spawned non-solid solid.\n\
+^3/npc freeze^7: freezes the npc in your crosshair in place (no moving, attacking or defending; it can still be hurt), or unfreezes it.\n\n\"" );
 		}
 		else if (command_number == ADM_NOCLIP)
 		{
@@ -20110,7 +20169,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entaddaim <classname> <key> <value>...: ^7Like /entadd, but puts the entity on the surface you aim at (through players and NPCs); ^3aimoffset <units>^7 puts it that far out from the surface.\n";
 	lines[n++] = "^3/entorigin: ^7Sets your position as origin for new entities. Use again to unset.\n";
 	lines[n++] = "^3/entundo: ^7Removes last added entity; a spawner takes the NPCs it made with it. Only works once.\n";
-	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7; ^3npcteam player^7, ^3enemy^7, ^3neutral^7 or ^3free^7 sets their side, as ^3/npc team^7 does.\n";
+	lines[n++] = "^7NPC spawners: ^3npc_spawner^7 and ^3NPC_Vehicle^7 (npc_type) need a ^3targetname^7, the name they are fired by; ^3spawnnow 1^7 also spawns one at once, ^3respawn 1^7 fires it again when one it made dies, ^3count -1^7 is no limit; ^3npceffect holo^7, ^3ghost^7 or ^3nonsolid^7 spawns NPCs with that ^3/npc effect^7; ^3npcteam player^7, ^3enemy^7, ^3neutral^7 or ^3free^7 sets their side, as ^3/npc team^7 does; ^3npcfreeze 1^7 spawns them frozen, as ^3/npc freeze^7 leaves them.\n";
 	lines[n++] = "^7NPC kill rewards: on an ^3npc_spawner^7, ^3npccredits <0-100000>^7 and ^3npcxp <0-100>^7 are paid to the logged-in player who kills one of its NPCs. Vehicles pay nothing.\n";
 
 	lines[n++] = "^5Finding and changing\n";

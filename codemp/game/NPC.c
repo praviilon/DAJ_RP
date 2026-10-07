@@ -1956,6 +1956,10 @@ void NPC_Think ( gentity_t *self)//, int msec )
 	//FIXME: this breaks deathscripts
 	if ( self->health <= 0 )
 	{
+		// DAJ_RP: [NPC System] player_die() lets a frozen NPC go (RP_NpcUnfreeze(), g_combat.c); this is the
+		// net under it for a death that returns early there (intermission, no attacker), so the deathscript
+		// is not held paused by the freeze. See RP_NpcFreeze() in NPC_spawn.c.
+		RP_NpcUnfreeze( self );
 		DeadThink();
 		if ( NPCS.NPCInfo->nextBStateThink <= level.time )
 		{
@@ -1965,8 +1969,20 @@ void NPC_Think ( gentity_t *self)//, int msec )
 		return;
 	}
 
+	// DAJ_RP: [NPC System] an NPC under /npc freeze (or the spawner key "npcfreeze") keeps the engine's
+	// own freeze on: no AI below, and its ICARUS scripts paused -- the engine's task manager skips an
+	// entity with SVF_ICARUS_FREEZE (TaskManager.cpp), and G_RunThink() maintains it after this think.
+	// Put back every think, because a map script's set_icarus_freeze false or the friendly-fire turn
+	// in NPC_Pain (NPC_reactions.c) clears the flag; once put back by us, it is ours to clear again.
+	// See RP_NpcFreeze() in NPC_spawn.c.
+	if ( NPCS.NPCInfo->rpFrozen && !(NPCS.NPC->r.svFlags & SVF_ICARUS_FREEZE) )
+	{
+		NPCS.NPC->r.svFlags |= SVF_ICARUS_FREEZE;
+		NPCS.NPCInfo->rpFreezeOwnsIcarus = qtrue;
+	}
+
 	// see if NPC ai is frozen
-	if ( d_npcfreeze.value || (NPCS.NPC->r.svFlags&SVF_ICARUS_FREEZE) )
+	if ( d_npcfreeze.value || (NPCS.NPC->r.svFlags&SVF_ICARUS_FREEZE) || NPCS.NPCInfo->rpFrozen )
 	{
 		NPC_UpdateAngles( qtrue, qtrue );
 		ClientThink(self->s.number, &NPCS.ucmd);

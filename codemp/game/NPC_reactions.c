@@ -1064,6 +1064,14 @@ void NPC_Use( gentity_t *self, gentity_t *other, gentity_t *activator )
 		return;
 	}
 
+	// DAJ_RP: [NPC System] a frozen NPC ignores being used, by a player's Use key or a map trigger alike: no
+	// ambush drop, no spoken response, and its usescript is not run (not kept for later either). Vehicles are
+	// never frozen. See RP_NpcFreeze() (NPC_spawn.c).
+	if ( RP_NpcIsFrozen( self ) )
+	{
+		return;
+	}
+
 	SaveNPCGlobals();
 	SetNPCGlobals( self );
 

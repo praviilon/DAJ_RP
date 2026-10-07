@@ -1850,6 +1850,14 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		RP_PhaseTrackNpc( newent );
 	}
 
+	// DAJ_RP: [NPC System] an npc_spawner's "npcfreeze": the NPC starts under /npc freeze. Set here for the
+	// same reason as npceffect above, and before NPC_Begin() starts its spawnscript, so the script waits for
+	// the NPC to be unfrozen like any other. A vehicle spawner never has one (SP_NPC_Vehicle() does not read it).
+	if ( ent->rpSpawnerFreeze && newent->NPC && newent->client->NPC_class != CLASS_VEHICLE )
+	{
+		RP_NpcFreeze( newent );
+	}
+
 	// GalaxyRP: [Entity System] an npc_spawner's or NPC_Vehicle's "npcteam": carried on the new NPC or
 	// vehicle, since the spawner may be gone by the time NPC_Begin() applies it after its type's defaults.
 	newent->rpSpawnerTeam = ent->rpSpawnerTeam;
@@ -2422,6 +2430,24 @@ int RP_NpcEffectFromName( const char *name )
 	return -1;
 }
 
+/*
+==================
+RP_NpcFreezeFromValue
+
+DAJ_RP: [NPC System] an npc_spawner's "npcfreeze" key: 1 starts every NPC it makes under /npc freeze
+(NPC_Spawn_Do(), RP_NpcFreeze()), 0 or no key does not. Returns 1 or 0, 0 for an empty value, and -1 for
+anything else, which /entadd and /entedit refuse (g_cmds.c) and a map's spawner treats as 0.
+==================
+*/
+int RP_NpcFreezeFromValue( const char *value )
+{
+	if ( !value || !value[0] || !strcmp( value, "0" ) )
+		return 0;
+	if ( !strcmp( value, "1" ) )
+		return 1;
+	return -1;
+}
+
 static int zyk_team_from_string( const char *name );
 
 /*
@@ -2717,6 +2743,14 @@ void SP_NPC_spawner( gentity_t *self)
 
 	// DAJ_RP: [NPC Rewards] "npccredits" and "npcxp" -- see RP_SpawnerRewardKeys()
 	RP_SpawnerRewardKeys( self );
+
+	// DAJ_RP: [NPC System] "npcfreeze" -- see RP_NpcFreezeFromValue(). Read every time, like npceffect.
+	{
+		char *freezeValue = NULL;
+
+		G_SpawnString( "npcfreeze", "", &freezeValue );
+		self->rpSpawnerFreeze = ( RP_NpcFreezeFromValue( freezeValue ) == 1 ) ? qtrue : qfalse;
+	}
 	/*
 	if ( self->delay > 0 )
 	{
@@ -5816,6 +5850,172 @@ static void RP_NpcEffect_f( gentity_t *ent )
 		( mode == RP_PHASE_NONE ) ? "normal" : RP_PhaseModeName( mode ) );
 }
 
+/*
+==================
+RP_NpcIsFrozen / RP_NpcFreeze / RP_NpcUnfreeze
+
+DAJ_RP: [NPC System] /npc freeze and the spawner key "npcfreeze". A frozen NPC is a statue that still has its
+physics: it falls, is pushed, pulled, gripped and dragged, rides lifts, is hurt and can be killed -- what the
+engine's own NPC freeze does (SVF_ICARUS_FREEZE, set by a map script's set_icarus_freeze, or d_npcfreeze). That
+flag is the base: NPC_Think() (NPC.c) runs only the NPC's physics while it is set, and the engine pauses the
+NPC's ICARUS scripts, which carry on when it is lifted. gNPC_t::rpFrozen is ours on top of it, so that neither
+a map script's set_icarus_freeze false nor the friendly-fire turn in NPC_Pain() (both clear the flag) can let
+the NPC go: NPC_Think() puts the flag back each think while rpFrozen is set.
+
+What the AI being off does not cover, and is closed separately so the statue does not defend itself:
+  - WP_SaberStartMissileBlockCheck() (w_saber.c) runs for every NPC each frame, outside its AI: it takes a
+    shot's owner as its enemy, lights the saber to block it, drops a ceiling-ambush Jedi, and Force-pushes or
+    jumps away from a thermal detonator. Skipped while frozen.
+  - WP_SaberCanBlock() (w_saber.c): blocking a saber hit or a missile with the body. Refused while frozen.
+  - A shot striking the lit blade itself (G_MissileImpact(), g_missile.c) dies on it: no block move, no
+    deflect or reflect, whatever the NPC's Saber Defense.
+  - A saber striking the lit blade (CheckSaberDamage(), w_saber.c) is stopped by it, with the clash spark, but
+    the NPC does not answer: no parry, knockaway or broken parry, and no saber lock (WP_SabersCheckLock()).
+  - Jedi_DodgeEvasion() (w_force.c): dodging a disruptor or other instant hit. Refused while frozen.
+  - CanCounterThrow() (w_force.c): pushing or pulling back against a Force push or pull. Refused while
+    frozen, so it is thrown like anyone who cannot resist.
+  - NPC_Use() (NPC_reactions.c) and the follower claim in TryUse() (g_utils.c): being used does nothing; a
+    leader can still dismiss a frozen follower.
+Its saber is left as it was, lit or not, and a lit one still does touch damage where the server allows it.
+
+RP_NpcFreeze() also ends what the NPC had under way: a Force power (a gripped player goes free), a rancor's
+held victim (as player_die() drops it), and a weapon charge, which PM_Weapon() would otherwise fire as soon as
+the attack button is seen up -- one last shot. rpFreezeOwnsIcarus remembers whether the flag was ours to set:
+when a map script had the NPC frozen already, RP_NpcUnfreeze() leaves its freeze in place.
+
+The freeze ends with RP_NpcUnfreeze(): /npc freeze again, the NPC's death (player_die(), g_combat.c, so its
+deathscript runs), or the NPC going away; the next NPC in the slot starts with a zeroed gNPC_t.
+==================
+*/
+qboolean RP_NpcIsFrozen( const gentity_t *ent )
+{
+	return ( ent && ent->NPC && ent->NPC->rpFrozen ) ? qtrue : qfalse;
+}
+
+void RP_NpcFreeze( gentity_t *npc )
+{
+	int i;
+
+	if ( !npc || !npc->NPC || !npc->client || npc->NPC->rpFrozen )
+	{
+		return;
+	}
+
+	npc->NPC->rpFrozen = qtrue;
+
+	if ( npc->r.svFlags & SVF_ICARUS_FREEZE )
+	{ // a map script froze it first: that freeze is the script's to lift
+		npc->NPC->rpFreezeOwnsIcarus = qfalse;
+	}
+	else
+	{
+		npc->r.svFlags |= SVF_ICARUS_FREEZE;
+		npc->NPC->rpFreezeOwnsIcarus = qtrue;
+	}
+
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ )
+	{
+		if ( npc->client->ps.fd.forcePowersActive & ( 1 << i ) )
+		{
+			WP_ForcePowerStop( npc, (forcePowers_t)i );
+		}
+	}
+
+	if ( npc->s.NPC_class == CLASS_RANCOR && npc->activator && npc->activator->client
+		&& ( npc->activator->client->ps.eFlags2 & EF2_HELD_BY_MONSTER ) )
+	{
+		Rancor_DropVictim( npc );
+	}
+
+	if ( npc->client->ps.weaponstate == WEAPON_CHARGING || npc->client->ps.weaponstate == WEAPON_CHARGING_ALT )
+	{
+		npc->client->ps.weaponstate = WEAPON_READY;
+	}
+}
+
+void RP_NpcUnfreeze( gentity_t *npc )
+{
+	if ( !npc || !npc->NPC || !npc->NPC->rpFrozen )
+	{
+		return;
+	}
+
+	npc->NPC->rpFrozen = qfalse;
+
+	if ( npc->NPC->rpFreezeOwnsIcarus )
+	{
+		npc->r.svFlags &= ~SVF_ICARUS_FREEZE;
+	}
+
+	npc->NPC->rpFreezeOwnsIcarus = qfalse;
+}
+
+/*
+==================
+RP_NpcFreeze_f
+
+DAJ_RP: [NPC System] /npc freeze: freezes the NPC in the crosshair (RP_NpcInCrosshair()), or unfreezes it when
+it is frozen already -- see RP_NpcFreeze() above for what that means. Vehicles are refused, and an NPC riding
+one, as /npc effect refuses them. Freezing also stops the NPC turning: it would otherwise finish turning to
+where its AI last meant to face (NPC_UpdateAngles() still runs). Done here rather than in RP_NpcFreeze(): its
+other caller, NPC_Spawn_Do(), runs before the NPC has an AI to have meant anything, and NPC_Begin() then takes
+the NPC's starting angles from the desiredYaw NPC_Spawn_Do() gave it.
+==================
+*/
+static void RP_NpcFreeze_f( gentity_t *ent )
+{
+	char label[MAX_STRING_CHARS];
+	gentity_t *npc;
+	qboolean frozen;
+
+	if ( trap->Argc() != 2 )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1Command Usage: ^3/npc freeze\n^7Aim at the NPC. Use again to unfreeze it.\n\"" );
+		return;
+	}
+
+	npc = RP_NpcInCrosshair( ent );
+
+	if ( !npc )
+	{
+		trap->SendServerCommand( ent-g_entities, "print \"^1No NPC in your crosshair.\n\"" );
+		return;
+	}
+
+	RP_NpcLabel( npc, label, sizeof( label ) );
+
+	if ( npc->client->NPC_class == CLASS_VEHICLE || npc->s.NPC_class == CLASS_VEHICLE )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"^1Vehicles cannot be frozen (%s^1).\n\"", label ) );
+		return;
+	}
+
+	if ( npc->client->ps.m_iVehicleNum )
+	{
+		trap->SendServerCommand( ent-g_entities, va( "print \"^1%s ^1is riding a vehicle.\n\"", label ) );
+		return;
+	}
+
+	if ( npc->NPC->rpFrozen )
+	{
+		RP_NpcUnfreeze( npc );
+		frozen = qfalse;
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is no longer frozen%s.\n\"", label,
+			( npc->r.svFlags & SVF_ICARUS_FREEZE ) ? " ^7(a map script still holds it frozen)" : "" ) );
+	}
+	else
+	{
+		RP_NpcFreeze( npc );
+		npc->NPC->desiredYaw = npc->NPC->lockedDesiredYaw = npc->client->ps.viewangles[YAW];
+		npc->NPC->desiredPitch = npc->NPC->lockedDesiredPitch = npc->client->ps.viewangles[PITCH];
+		frozen = qtrue;
+		trap->SendServerCommand( ent-g_entities, va( "print \"%s ^7is now frozen.\n\"", label ) );
+	}
+
+	G_LogPrintf( "npc freeze: %s ^7%s NPC %s (%d)\n", ent->client->pers.netname, frozen ? "froze" : "unfroze",
+		( npc->NPC_type && npc->NPC_type[0] ) ? npc->NPC_type : "npc", npc->s.number );
+}
+
 // GalaxyRP fix: [NPC] "qboolean showBBoxes = qfalse;" used to live here, the flag behind
 // "/npc showbounds". The subcommand, its help line and everything that read the flag are gone --
 // see the comment where the subcommand was, in Cmd_NPC_f() below.
@@ -5931,6 +6131,10 @@ void Cmd_NPC_f( gentity_t *ent )
 	{
 		RP_NpcEffect_f( ent );
 	}
+	else if ( Q_stricmp( cmd, "freeze" ) == 0 )
+	{ // DAJ_RP: [NPC System] see RP_NpcFreeze_f()
+		RP_NpcFreeze_f( ent );
+	}
 	else
 	{ // GalaxyRP fix: [NPC System] no subcommand, or one that does not exist: the listing. It used to go
 	  // to the server console (Com_Printf), so the admin who typed /npc saw nothing at all, and an
@@ -5940,6 +6144,7 @@ void Cmd_NPC_f( gentity_t *ent )
  kill [NPC targetname] or [all(kills all NPCs)] or 'team [teamname]'\n\
  killaim (kills the NPC or vehicle in your crosshair)\n\
  team [team (player or enemy or neutral or free)] (the NPC in your crosshair)\n\
- effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\"" );
+ effect [holo or ghost or nonsolid or clear] (the NPC in your crosshair)\n\
+ freeze (freezes the NPC in your crosshair, or unfreezes it)\n\"" );
 	}
 }

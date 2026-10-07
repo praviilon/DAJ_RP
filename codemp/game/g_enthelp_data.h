@@ -1176,6 +1176,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"npc_target||Fired by each NPC when it dies.\n"
 		"npcteam||player, enemy, neutral or free: the side of each NPC, as /npc team sets it.\n"
 		"npceffect||holo, ghost or nonsolid: each NPC starts in that /npc effect mode (nonsolid: walked through but still hit). Not on npc_vehicle.\n"
+		"npcfreeze|0|1: each NPC starts frozen, as /npc freeze leaves it, and its spawnscript waits until it is unfrozen. Not on npc_vehicle.\n"
 		"npccredits|0|Credits paid to the logged-in player who kills one of its NPCs, 0 to 100000. Not on npc_vehicle.\n"
 		"npcxp|0|XP paid to that player, 0 to 100. Not on npc_vehicle.\n"
 		"showhealth|0|1: a health bar shows when a crosshair is on the NPC.\n"
@@ -1745,7 +1746,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"npc_ugnaught targetname ugnaught1 spawnnow 1",
 		"npc common" },
 	{ "npc_vehicle", 0, NULL,
-		"Vehicle spawner: spawns the vehicle named in npc_type (see /list vehicles, default swoop) each time it is fired by its targetname. Fighters, speeders and walkers start empty and idle until ridden. Takes count, delay, wait, health, spawnnow, respawn, npcteam, showhealth and the npc_target keys like any spawner, but not npceffect, npccredits, npcxp, the no*Sounds keys or SHY.",
+		"Vehicle spawner: spawns the vehicle named in npc_type (see /list vehicles, default swoop) each time it is fired by its targetname. Fighters, speeders and walkers start empty and idle until ridden. Takes count, delay, wait, health, spawnnow, respawn, npcteam, showhealth and the npc_target keys like any spawner, but not npceffect, npcfreeze, npccredits, npcxp, the no*Sounds keys or SHY.",
 		"1|NO_PILOT_DIE|Once ridden, it explodes when its pilot has been out of it and farther than speed for dmg milliseconds.\n"
 		"2|SUSPENDED|Fighters: hang in the air until someone gets in. With dropTime they first drop for that long.",
 		"npc_type|swoop|The vehicle to spawn. /entadd refuses one the server does not know.\n"

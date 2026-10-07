@@ -760,7 +760,8 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 
 			//in this case, deflect it even if we can't actually block it because it hit our saber
 			//WP_SaberCanBlock(otherOwner, NULL, ent->r.currentOrigin, 0, 0, qtrue, 0);
-			if (otherOwner->client && otherOwner->client->ps.weaponTime <= 0)
+			// DAJ_RP: [NPC System] not a frozen NPC: it does not move to block (see RP_NpcFreeze(), NPC_spawn.c)
+			if (otherOwner->client && otherOwner->client->ps.weaponTime <= 0 && !RP_NpcIsFrozen(otherOwner))
 			{
 				WP_SaberBlockNonRandom(otherOwner, ent->r.currentOrigin, qtrue);
 			}
@@ -783,6 +784,13 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 				{
 					otherDefLevel = 0;
 				}
+			}
+
+			// DAJ_RP: [NPC System] a frozen NPC's lit blade is still solid, but it deflects and reflects
+			// nothing: the shot dies on it, as at level 0 (see RP_NpcFreeze(), NPC_spawn.c)
+			if (RP_NpcIsFrozen(otherOwner))
+			{
+				otherDefLevel = 0;
 			}
 
 			AngleVectors(otherOwner->client->ps.viewangles, fwd, NULL, NULL);

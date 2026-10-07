@@ -1473,6 +1473,12 @@ qboolean WP_SabersCheckLock( gentity_t *ent1, gentity_t *ent2 )
 	qboolean	ent1BlockingPlayer = qfalse;
 	qboolean	ent2BlockingPlayer = qfalse;
 
+	// DAJ_RP: [NPC System] a frozen NPC is never drawn into a saber lock -- see RP_NpcFreeze() (NPC_spawn.c)
+	if ( RP_NpcIsFrozen( ent1 ) || RP_NpcIsFrozen( ent2 ) )
+	{
+		return qfalse;
+	}
+
 	if ( g_debugSaberLocks.integer )
 	{
 		WP_SabersCheckLock2( ent1, ent2, LOCK_RANDOM );
@@ -4915,6 +4921,15 @@ blockStuff:
 			return qfalse;
 		}
 
+		// DAJ_RP: [NPC System] a frozen NPC's lit blade still stops the blow -- the clash above has happened --
+		// but the NPC itself does not answer it: no saber lock, parry, knockaway or broken parry, and the
+		// attacker is not bounced off it either. See RP_NpcFreeze() (NPC_spawn.c).
+		if (RP_NpcIsFrozen(otherOwner))
+		{
+			self->client->ps.saberAttackWound = level.time + g_saberDmgDelay_Wound.integer;	// as at the end of this block
+			return didHit;
+		}
+
 		otherSaberLevel = G_SaberAttackPower(otherOwner, SaberAttacking(otherOwner));
 
 		if (dmg > SABER_NONATTACK_DAMAGE && !unblockable && !otherUnblockable)
@@ -5548,6 +5563,15 @@ void WP_SaberStartMissileBlockCheck( gentity_t *self, usercmd_t *ucmd  )
 	if ( !(self->client->ps.eFlags2&EF2_HELD_BY_MONSTER) )
 	{//lookTarget is set by and to the monster that's holding you, no other operations can change that
 		self->client->ps.hasLookTarget = qfalse;
+	}
+
+	// DAJ_RP: [NPC System] a frozen NPC does none of this: it does not take a shot's owner as its enemy, light
+	// its saber to block an incoming missile, drop from a ceiling ambush, or Force-push or jump away from a
+	// thermal detonator -- see RP_NpcFreeze() (NPC_spawn.c). (A player's head-turn look target is only ever
+	// set further down for a player, so nothing is lost there.)
+	if ( RP_NpcIsFrozen( self ) )
+	{
+		return;
 	}
 
 	if ( self->client->ps.weapon != WP_SABER && self->client->NPC_class != CLASS_BOBAFETT )
@@ -9500,6 +9524,12 @@ int WP_SaberCanBlock(gentity_t *self, gentity_t *attacker, vec3_t point, int dfl
 	float blockFactor = 0;
 
 	if (!self || !self->client || !point)
+	{
+		return 0;
+	}
+
+	// DAJ_RP: [NPC System] a frozen NPC blocks nothing, saber or missile -- see RP_NpcFreeze() (NPC_spawn.c)
+	if (RP_NpcIsFrozen(self))
 	{
 		return 0;
 	}

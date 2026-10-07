@@ -3678,6 +3678,13 @@ qboolean CanCounterThrow(gentity_t *self, gentity_t *thrower, qboolean pull)
 {
 	int powerUse = 0;
 
+	// DAJ_RP: [NPC System] a frozen NPC does not push or pull back: it is thrown like anyone who cannot
+	// resist -- see RP_NpcFreeze() (NPC_spawn.c)
+	if (RP_NpcIsFrozen(self))
+	{
+		return 0;
+	}
+
 	if (self->client->ps.forceHandExtend != HANDEXTEND_NONE)
 	{
 		return 0;
@@ -7046,6 +7053,12 @@ qboolean Jedi_DodgeEvasion( gentity_t *self, gentity_t *shooter, trace_t *tr, in
 	int	dodgeAnim = -1;
 
 	if ( !self || !self->client || self->health <= 0 )
+	{
+		return qfalse;
+	}
+
+	// DAJ_RP: [NPC System] a frozen NPC does not dodge -- see RP_NpcFreeze() (NPC_spawn.c)
+	if ( RP_NpcIsFrozen( self ) )
 	{
 		return qfalse;
 	}

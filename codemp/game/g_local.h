@@ -708,6 +708,10 @@ struct gentity_s {
 	// new NPC by NPC_Spawn_Do(), where NPC_Begin() applies it and sets it back to 0.
 	int			rpSpawnerTeam;
 
+	// DAJ_RP: [NPC System] on an npc_spawner: its "npcfreeze" key -- every NPC it makes starts under /npc freeze.
+	// Applied by NPC_Spawn_Do() to the new NPC there and then (RP_NpcFreeze()), never on a vehicle.
+	qboolean	rpSpawnerFreeze;
+
 	// GalaxyRP: [Entity System] on an NPC or vehicle: the team it had at the end of its start-up, after its type's
 	// defaults and before any "npcteam" -- RP_TEAM_RECORD() of its playerTeam and enemyTeam, 0 until NPC_Begin()
 	// has run. /entsave writes "npcteam" on a one-time line only when its team differs from this, so an NPC whose
@@ -3111,6 +3115,13 @@ int RP_NpcEffectFromName( const char *name );
 // GalaxyRP: [Entity System] an npc_spawner's or NPC_Vehicle's "npcteam" value, the words /npc team takes:
 // the npcteam_t, -1 for an empty one, -2 for anything else -- see NPC_spawn.c
 int RP_NpcTeamFromName( const char *name );
+// DAJ_RP: [NPC System] /npc freeze and the spawner key "npcfreeze" -- see NPC_spawn.c.
+// RP_NpcIsFrozen: ent is an NPC under the freeze. RP_NpcFreeze / RP_NpcUnfreeze: put it on / take it off.
+qboolean RP_NpcIsFrozen( const gentity_t *ent );
+void RP_NpcFreeze( gentity_t *npc );
+void RP_NpcUnfreeze( gentity_t *npc );
+// DAJ_RP: [NPC System] an npc_spawner's "npcfreeze" value: 1 or 0, 0 for an empty one, -1 for anything else
+int RP_NpcFreezeFromValue( const char *value );
 // GalaxyRP: [Entity System] gentity_t::rpBaseTeam's value for a playerTeam and enemyTeam; never 0
 #define RP_TEAM_RECORD( playerTeam, enemyTeam ) ( 0x10000 | ( ( (playerTeam) & 0xff ) << 8 ) | ( (enemyTeam) & 0xff ) )
 void RP_StartOverlapRelease( gentity_t *ent );

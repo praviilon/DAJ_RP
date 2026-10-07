@@ -2638,6 +2638,9 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			Boba_FlyStop( self );
 		if ( self->s.NPC_class == CLASS_RANCOR )
 			Rancor_DropVictim( self );
+		// DAJ_RP: [NPC System] a frozen NPC that dies is let go, so its deathscript runs (the freeze keeps
+		// its ICARUS scripts paused) -- see RP_NpcFreeze() in NPC_spawn.c
+		RP_NpcUnfreeze( self );
 	}
 	if ( attacker && attacker->NPC && attacker->NPC->group && attacker->NPC->group->enemy == self )
 	{

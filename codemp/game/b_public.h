@@ -287,6 +287,12 @@ typedef struct
 	// while the body waits to be removed, so this keeps the moment itself: a body no longer waits for
 	// players to look away once RP_CORPSE_WATCH_LIMIT has passed since it (NPC_RemoveBody, NPC.c).
 	int			rpDeathTime;
+
+	// DAJ_RP: [NPC System] /npc freeze and the spawner key "npcfreeze" -- see RP_NpcFreeze() (NPC_spawn.c).
+	// rpFrozen: the NPC is frozen, NPC_Think() runs only its physics. rpFreezeOwnsIcarus: the freeze set
+	// SVF_ICARUS_FREEZE itself, so letting go clears it; when a map script had already set it, it stays.
+	qboolean	rpFrozen;
+	qboolean	rpFreezeOwnsIcarus;
 } gNPC_t;
 
 void G_SquadPathsInit(void);

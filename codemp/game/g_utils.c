@@ -3899,7 +3899,9 @@ void TryUse( gentity_t *ent )
 	// predates that change.
 	if (target->NPC && target->client && target->health > 0 && target->s.NPC_class != CLASS_VEHICLE && OnSameTeam(ent,target))
 	{
-		if (!target->client->leader)
+		// DAJ_RP: [NPC System] a frozen NPC is not claimed (see RP_NpcFreeze(), NPC_spawn.c); its leader can
+		// still dismiss it below
+		if (!target->client->leader && !RP_NpcIsFrozen(target))
 		{ // zyk: setting the npc leader so he follows the player
 			target->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_GUARD);
 			target->client->pers.player_statuses &= ~(1 << PLAYER_STATUS_NPC_ORDER_COVER);
