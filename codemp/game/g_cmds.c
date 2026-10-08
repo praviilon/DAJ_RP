@@ -12487,7 +12487,30 @@ char *add_spacing_for_columns(skill_t skill, char* message, int skill_id) {
 // but each of those branches also requires value_internal != 0 (the FP_/WP_/HI_ id), so moving a
 // skill whose value_internal is 0 is display-only. Every skill moved in this pass has 0. Moving one
 // that does not would change what the player is granted.
-void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
+//
+// DAJ_RP fix: [Skills] /list <category> and /players <player> <category> name the category as typed, and both
+// used to hand the skill listing G_NewString() of it: a copy in the game's memory pool (G_Alloc, g_mem.c) on
+// every call, which is never freed until the map changes -- and /list needs no login, so anyone could spend it
+// down a little at a time towards G_Alloc's ERR_DROP. The listing only reads the name, so it is given this
+// table's own spelling instead, which also makes the category case-insensitive, as both commands' checks always
+// were: "/list Force" used to pass the check and then list nothing, because the listing compared it exactly.
+static const char *zyk_skill_category_name( const char *typed )
+{
+	static const char *categories[] = { "force", "weapons", "protect", "ammo", "items" };
+	int i;
+
+	for ( i = 0; i < (int)ARRAY_LEN( categories ); i++ )
+	{
+		if ( typed && Q_stricmp( typed, categories[i] ) == 0 )
+		{
+			return categories[i];
+		}
+	}
+
+	return NULL;
+}
+
+void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, const char *arg1)
 {
 	char message[1024];
 	int i = 0;
@@ -12533,7 +12556,10 @@ void zyk_list_player_skills(gentity_t *ent, gentity_t *target_ent, char *arg1)
 
 void list_rpg_info(gentity_t *ent, gentity_t *target_ent)
 { // zyk: lists general RPG info of this player
-	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, rp_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints));
+	// DAJ_RP fix: [Admin] the two tips at the end are for a player reading their own info (/list); an admin
+	// looking at someone else's (/players <player>) used to get them too, worded as if to that player
+	trap->SendServerCommand(target_ent->s.number, va("print \"\n^2Account: ^7%s\n^2Character: ^7%s\n\n^3Level: ^7%d/%d\n^3XP: ^7%d/%d\n^3Skill Points: ^7%d\n\n%s\"", ent->client->sess.filename, ent->client->sess.rpgchar, ent->client->pers.level, rp_rpg_max_level.integer, ent->client->pers.xp, check_xp(ent->client->pers.level), ent->client->pers.skillpoints,
+		(ent == target_ent) ? "^7Use ^2/list help ^7to see console commands\n^7Use ^2/list <skill number> ^7to see information about a specific skill\n\n" : ""));
 }
 
 // GalaxyRP: [Admin] /clientprint's limit and its one help line -- the usage message, /list commands and
@@ -12577,10 +12603,9 @@ void Cmd_ListAccount_f( gentity_t *ent ) {
 ^2/list vehicles <text> <page>: ^7lists the vehicle types, or those with that text in their name\n\
 ^7The folder, text and page are all optional.\n\n\"");
 			}
-			else if (Q_stricmp( arg1, "force" ) == 0 || Q_stricmp( arg1, "weapons" ) == 0 || Q_stricmp( arg1, "protect" ) == 0 || 
-					 Q_stricmp( arg1, "ammo" ) == 0 || Q_stricmp( arg1, "items" ) == 0)
-			{
-				zyk_list_player_skills(ent, ent, G_NewString(arg1));
+			else if (zyk_skill_category_name(arg1))
+			{ // DAJ_RP fix: [Skills] no pool copy of the typed name -- see zyk_skill_category_name()
+				zyk_list_player_skills(ent, ent, zyk_skill_category_name(arg1));
 			}
 			else if (Q_stricmp( arg1, "commands" ) == 0)
 			{
@@ -17700,6 +17725,33 @@ static void zyk_entlist_append(gentity_t *ent, char *message, int message_size, 
 	*len = (int)strlen(message);
 }
 
+// DAJ_RP fix: [Entity System] G_NewString()'s text translation (g_spawn.c) without its allocation: a backslash
+// followed by n becomes a linefeed, any other backslash stays. Writes at most size - 1 characters to dst and
+// always terminates it. For a command that only reads what was typed (/entlist <text>): G_NewString() puts the
+// copy in the game's memory pool, which is never freed until the map changes.
+static void zyk_copy_translated( char *dst, int size, const char *src )
+{
+	int i = 0, o = 0;
+
+	if ( !dst || size <= 0 )
+		return;
+
+	for ( i = 0; src && src[i] && o < size - 1; i++ )
+	{
+		if ( src[i] == '\\' && src[i + 1] == 'n' )
+		{
+			dst[o++] = '\n';
+			i++;
+		}
+		else
+		{
+			dst[o++] = src[i];
+		}
+	}
+
+	dst[o] = '\0';
+}
+
 /*
 ==================
 Cmd_EntList_f
@@ -17757,7 +17809,12 @@ void Cmd_EntList_f( gentity_t *ent ) {
 		// strstr only reads its needle, so one copy outside the loop does the same job. The copy is
 		// kept rather than dropped because G_NewString also turns a typed backslash-n into a real
 		// linefeed, and that is what the search term has always meant.
-		char *search_term = G_NewString(arg1);
+		//
+		// DAJ_RP fix: [Entity System] and that one copy still went into the pool, up to a kilobyte of it per
+		// /entlist search, for the rest of the map. Translated into a buffer of its own now -- the same text.
+		char search_term[MAX_STRING_CHARS];
+
+		zyk_copy_translated(search_term, sizeof(search_term), arg1);
 
 		// GalaxyRP: [Logical Entities] both regions.
 		RP_FOR_EACH_ENTITY( target_ent )
@@ -18723,7 +18780,7 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_ENTITYSYSTEM)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitiesandremaps ^7to see the entity and shader remap commands this flag enables, account locks (^3/entlockadd^7, ^3/entlockset^7) and ^3/enttrigger^7 among them. It also lets a player turn on Entity Bounds (^3/settings 6^7) and see the name of a lock that stops them\n\n\"" );
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/entitiesandremaps ^7to see the entity and shader remap commands this flag enables, including the account lock commands. It also lets a player turn on Entity Bounds (^3/settings 6^7) and see the name of a lock that stops them.\n\n\"" );
 		}
 		else if (command_number == ADM_SILENCE)
 		{
@@ -18757,7 +18814,8 @@ void Cmd_AdminList_f( gentity_t *ent ) {
 		}
 		else if (command_number == ADM_PLAYERS)
 		{
-			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/players ^7to see info about the players. Use ^3/players <player name or ID> ^7to see RPG info of a player. Use ^3/players <player name or ID> ^7and a third argument (^3force,weapons,other,ammo,items^7) to see skill levels of the player\n\n\"" );
+			// DAJ_RP fix: [Admin] the categories said "other", which was renamed "protect" (see zyk_list_player_skills())
+			trap->SendServerCommand( ent-g_entities, "print \"\nUse ^3/players ^7to list the connected players: ID, name, IP, and whether they are logged in or an admin. Use ^3/players <player name or ID> ^7to see a logged-in player's account, character, level, XP and skill points. Add ^3force^7, ^3weapons^7, ^3protect^7, ^3ammo ^7or ^3items ^7to see their skill levels in that category.\n\n\"" );
 		}
 		else if (command_number == ADM_DUELARENA)
 		{
@@ -21914,10 +21972,10 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 			trap->Argv( 2, arg2, sizeof( arg2 ) );
 
-			if (Q_stricmp(arg2, "force") == 0 || Q_stricmp(arg2, "weapons") == 0 || Q_stricmp(arg2, "protect") == 0 || 
-				Q_stricmp(arg2, "ammo") == 0 || Q_stricmp(arg2, "items") == 0)
+			if (zyk_skill_category_name(arg2))
 			{ // zyk: show skills of the player
-				zyk_list_player_skills(player_ent, ent, G_NewString(arg2));
+			  // DAJ_RP fix: [Skills] no pool copy of the typed name -- see zyk_skill_category_name()
+				zyk_list_player_skills(player_ent, ent, zyk_skill_category_name(arg2));
 			}
 			else
 			{
