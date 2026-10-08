@@ -605,14 +605,14 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"item_jetpack",
 		"items common" },
 	{ "item_medpac", 0, NULL,
-		"Bacta canister, used up when used: heals 25 health (75 for an RPG character with the Holdable Items Upgrade), never above "
+		"Bacta canister, used up when used: heals 25 health (75 for a logged-in character with the Holdable Items Upgrade), never above "
 		"the maximum. Not when downed. Not spawned in duel or power duel.",
 		NULL,
 		NULL,
 		"item_medpac",
 		"items common item_medpac_big" },
 	{ "item_medpac_big", 0, NULL,
-		"Big bacta canister, used up when used: heals 50 health (150 for an RPG character with the Holdable Items Upgrade), never "
+		"Big bacta canister, used up when used: heals 50 health (150 for a logged-in character with the Holdable Items Upgrade), never "
 		"above the maximum. Not when downed. Not spawned in duel or power duel.",
 		NULL,
 		NULL,
@@ -2356,7 +2356,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"items common misc_turret misc_sentry_turret" },
 	{ "zyk_mini_game_joiner", 0, NULL,
-		"A zone that signs players up for a mini-game: a living player in its box is run through /meleemode (Melee Battle) or /duelmode (Duel Tournament). Those are toggles, so a second pass signs the player out again: without spawnflag 64 this repeats every wait ms while they stand there, so use 64 or a long wait. The mode must be allowed (rp_allow_melee_battle, rp_allow_duel_tournament) and its arena set on this map (/meleearena, /duelarena), and RPG-mode characters are refused.",
+		"A zone that signs players up for a mini-game: a living player in its box is run through /meleemode (Melee Battle) or /duelmode (Duel Tournament). Those are toggles, so a second pass signs the player out again: without spawnflag 64 this repeats every wait ms while they stand there, so use 64 or a long wait. The mode must be allowed (rp_allow_melee_battle, rp_allow_duel_tournament) and its arena set on this map (/meleearena, /duelarena), and logged-in players are refused.",
 		"4|MELEE|Melee Battle (/meleemode).\n"
 		"8|DUEL|Duel Tournament (/duelmode).\n"
 		"64|USE_KEY|The player must press Use in the box: checked every 100 ms, and after a press not again for 1 second.",
@@ -2368,7 +2368,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 	{ "zyk_regen_unit", 0, NULL,
 		"An invisible zone that restores every living player in its box by count points every wait ms, up to their maximum: health, shield and/or force, chosen by spawnflags. Nothing shows where it is and it blocks nothing.",
 		"1|HEALTH|Restores health, up to max health.\n"
-		"2|SHIELD|Restores shield, up to max health (an RPG-mode character's own shield maximum).\n"
+		"2|SHIELD|Restores shield, up to max health (a logged-in character's own shield maximum).\n"
 		"4|FORCE|Restores force power, up to its maximum.\n"
 		"8|MAGIC|Does nothing (the magic system is gone).",
 		"count|0|Points restored each time. A negative count counts as 0.\n"

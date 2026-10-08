@@ -13898,7 +13898,7 @@ void Cmd_CreditCreate_f(gentity_t *ent) {
 	// Same check, same message, as Cmd_CreditGive_f below.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -13968,7 +13968,7 @@ void Cmd_CreditGive_f( gentity_t *ent ) {
 
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand( ent - g_entities, "print \"The player is not in RPG Mode\n\"" );
+		trap->SendServerCommand( ent - g_entities, "print \"The player is not logged in\n\"" );
 		return;
 	}
 
@@ -19494,7 +19494,7 @@ void Cmd_RpModeUp_f( gentity_t *ent ) {
 	// use this exact string. The check itself was already in the right place.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -19571,7 +19571,7 @@ void Cmd_RpModeDown_f( gentity_t *ent ) {
 	// use this exact string. The check itself was already in the right place.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -19707,7 +19707,7 @@ void Cmd_LevelGive_f( gentity_t *ent ) {
 	// credit commands, which all use this exact string.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -19874,7 +19874,7 @@ void Cmd_LevelTake_f(gentity_t* ent) {
 	// logged in. Wording unified with the rest of the admin commands.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -20080,7 +20080,7 @@ void Cmd_GiveXp_f(gentity_t* ent) {
 	// message, as Cmd_CreditCreate_f and Cmd_LevelGive_f already carry.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -20167,7 +20167,7 @@ void Cmd_RemoveXp_f(gentity_t* ent) {
 	// message, as Cmd_CreditCreate_f and Cmd_LevelGive_f already carry.
 	if (g_entities[client_id].client->sess.amrpgmode < 2)
 	{
-		trap->SendServerCommand(ent - g_entities, "print \"The player is not in RPG Mode\n\"");
+		trap->SendServerCommand(ent - g_entities, "print \"The player is not logged in\n\"");
 		return;
 	}
 
@@ -21914,17 +21914,18 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 				Com_sprintf(entry, sizeof(entry), "%d - %s ^7- %s - ", player->s.number, player->client->pers.netname, player->client->sess.IP);
 
+				// DAJ_RP: [Admin] every login is "RPG mode" (amrpgmode 2) and has been since 2022, so the old
+				// "(rpg)" tag after (admin) or (logged) said nothing; a player who is not logged in had no tag
 				if (player->client->sess.amrpgmode > 0)
 				{
 					if (player->client->pers.bitvalue != 0)
 						Q_strcat(entry, sizeof(entry), "^3(admin)");
 					else
-						Q_strcat(entry, sizeof(entry), "^3(logged)");
+						Q_strcat(entry, sizeof(entry), "^3(logged in)");
 				}
-
-				if (player->client->sess.amrpgmode == 2)
+				else
 				{
-					Q_strcat(entry, sizeof(entry), " ^3(rpg)");
+					Q_strcat(entry, sizeof(entry), "^7(not logged in)");
 				}
 
 				Q_strcat(entry, sizeof(entry), "^7\n");
@@ -21958,7 +21959,7 @@ void Cmd_Players_f( gentity_t *ent ) {
 
 		if (player_ent->client->sess.amrpgmode != 2)
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Player %s ^7is not in RPG Mode.\n\"", player_ent->client->pers.netname) );
+			trap->SendServerCommand( ent-g_entities, va("print \"Player %s ^7is not logged in.\n\"", player_ent->client->pers.netname) );
 			return;
 		}
 
@@ -22850,7 +22851,7 @@ void Cmd_DuelMode_f(gentity_t *ent) {
 	// toggle during signup, and refusing unconditionally would strand anyone already in it.
 	if (ent->client->sess.amrpgmode == 2 && level.duel_players[ent->s.number] == -1)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"This tournament is for non-rpg players\n\"");
+		trap->SendServerCommand(ent->s.number, "print \"The Duel Tournament is only for players who are not logged in. Use ^3/logout ^7to join.\n\"");
 		return;
 	}
 
@@ -23515,7 +23516,7 @@ void Cmd_MeleeMode_f(gentity_t *ent) {
 	// ClientBegin, and every other RPG gate in this file reads amrpgmode.
 	if (ent->client->sess.amrpgmode == 2 && level.melee_players[ent->s.number] == -1)
 	{
-		trap->SendServerCommand(ent->s.number, "print \"You cannot be in RPG Mode to play the Melee Battle.\n\"");
+		trap->SendServerCommand(ent->s.number, "print \"The Melee Battle is only for players who are not logged in. Use ^3/logout ^7to join.\n\"");
 		return;
 	}
 
@@ -24958,7 +24959,7 @@ void ClientCommand( int clientNum ) {
 	else if ( (command->flags & CMD_RPG)
 		&& ent->client->sess.amrpgmode < 2 )
 	{ // zyk: new condition
-		trap->SendServerCommand( clientNum, "print \"You must be in RPG Mode\n\"" );
+		trap->SendServerCommand( clientNum, "print \"You must be logged in\n\"" );
 		return;
 	}
 
