@@ -18209,7 +18209,7 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 Cmd_SpawnPlatform_f
 
 GalaxyRP fix: [Entity System] /spawnplatform [height]: a func_plat lift, the catwalk model, its resting
-top at the admin's feet, rising height units (128 by default; 0: it stays put, a floor tile) when someone
+top at the admin's feet, rising height units (0 by default: it stays put, a floor tile) when someone
 steps onto it -- it rises at once with the admin on it. It used to be placed at the admin's origin, the
 middle of the body, with the 8 units of travel func_plat works out from its 16-unit box: it rested inside
 the admin's legs, and the admin standing in its trigger set it trying to rise, blocked, hurting him and
@@ -18218,7 +18218,8 @@ whatever is above, or the lift would crush its rider against the ceiling the sam
 ordinary record (/entedit, /entsave): "height" is the travel.
 ==================
 */
-#define RP_PLATFORM_HEIGHT_DEFAULT	128
+// DAJ_RP: [Entity System] 0 by default (it was 128): with no height given the platform stays put
+#define RP_PLATFORM_HEIGHT_DEFAULT	0
 #define RP_PLATFORM_HEIGHT_MAX		4096
 #define RP_PLATFORM_HALF_THICKNESS	8	// its mins/maxs below: the top surface is this far above its origin
 
@@ -18248,7 +18249,7 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		}
 		if (!arg[0] || arg[i] || atoi(arg) > RP_PLATFORM_HEIGHT_MAX)
 		{
-			trap->SendServerCommand( ent-g_entities, va("print \"Usage: /spawnplatform <height (optional)>: how far it rises, 0 to %d units (default %d; 0: it stays put).\n\"",
+			trap->SendServerCommand( ent-g_entities, va("print \"Usage: /spawnplatform <height (optional)>: how far it rises when someone steps onto it, 0 to %d units (default %d: it stays put).\n\"",
 				RP_PLATFORM_HEIGHT_MAX, RP_PLATFORM_HEIGHT_DEFAULT) );
 			return;
 		}
@@ -20284,7 +20285,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
 	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";
 	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
-	lines[n++] = "^3/spawnplatform <height (optional)>: ^7Spawns a lift platform under your feet that rises 128 units, or that height (0: it stays put), when someone steps onto it; lowered to fit under a ceiling.\n";
+	lines[n++] = "^3/spawnplatform <height (optional)>: ^7Spawns a platform under your feet. Without a height it stays put; with one it is a lift that rises that many units when someone steps onto it, lowered to fit under a ceiling.\n";
 	lines[n++] = "^3/spawndummy: ^7Spawns a saber training dummy in front of you, facing you (where you stand when there is no room), showing the damage each series of hits does.\n";
 	lines[n++] = "^7Props: ^3misc_model_breakable^7 (model, modelscale, light, color; spawnflags 1 solid, 2 animated), ^3misc_model_ghoul^7 (a .glm model), ^3rp_light^7 (light, color), ^3fx_runner^7 (fxFile). Model and effect files must be on the server. See ^3/enthelp^7.\n";
 

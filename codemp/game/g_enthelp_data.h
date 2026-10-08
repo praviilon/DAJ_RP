@@ -226,7 +226,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"func_pendulum model *1 speed 45",
 		"common mover" },
 	{ "func_plat", 0, NULL,
-		"A brush or .md3 lift. It spawns lowered, height units below where it is placed, and rises to its placed position when a player steps onto it at the bottom (with a targetname, only when used). At the top it waits 1 second, longer while a live player stands on it, then goes back down. Blocked, it hurts the blocker by dmg and reverses. /spawnplatform makes one under your feet with a catwalk model, rising 128 units or the height it is given, lowered to fit under a ceiling.",
+		"A brush or .md3 lift. It spawns lowered, height units below where it is placed, and rises to its placed position when a player steps onto it at the bottom (with a targetname, only when used). At the top it waits 1 second, longer while a live player stands on it, then goes back down. Blocked, it hurts the blocker by dmg and reverses. /spawnplatform makes one under your feet with a catwalk model: it stays put, or with a height given it rises that far, lowered to fit under a ceiling.",
 		"4096|NO_RIDER_WAIT|Goes down after its 1 second even with a live player standing on it.",
 		"height||How far it travels, in units. Default: its model height minus lip.\n"
 		"lip|8|Taken off the model height for the default height.\n"
