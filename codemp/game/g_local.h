@@ -2369,6 +2369,8 @@ int			RP_EntityRecordBytes( const gentity_t *e );
 int			RP_PairsBytes( char **pairs, int count );
 gentity_t	*RP_MiscBspForInstance( int instance );
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name );
+// DAJ_RP: [Entity System] the reason a brush model ("*N", "#name") is not one of this map's, or NULL -- g_spawn.c
+const char *RP_BrushModelProblem( const char *name );
 void zyk_set_brush_model( gentity_t *ent );
 void Jetpack_Off(gentity_t *ent);
 void Jetpack_On(gentity_t *ent);

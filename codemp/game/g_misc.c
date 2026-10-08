@@ -1997,6 +1997,27 @@ void SP_misc_bsp(gentity_t *ent)
 		{
 			G_LogPrintf( "misc_bsp at %s: bspmodel \"%s\" is not a sub-BSP this map loaded; not spawned.\n",
 				vtos( ent->s.origin ), out );
+
+			// DAJ_RP: [Entity System] and the reason for the command to print, as for the other refusals
+			// (level.rp_spawn_refusal -- see RP_EntitySystemSpawnRefused() in g_spawn.c), so /entadd says why
+			// rather than that it "did not survive being spawned"
+			if ( out[0] )
+			{
+				char shown[48];
+				int i;
+
+				Q_strncpyz( shown, RP_ShownText( out ), sizeof( shown ) );
+				for ( i = 0; shown[i]; i++ )
+				{
+					if ( shown[i] == '"' || shown[i] == '\n' || shown[i] == '\r' || shown[i] == ';' )
+						shown[i] = '?';
+				}
+				Q_strncpyz( level.rp_spawn_refusal, va( "bspmodel %s is not a sub-BSP this map loaded", shown ), sizeof( level.rp_spawn_refusal ) );
+			}
+			else
+			{
+				Q_strncpyz( level.rp_spawn_refusal, "it needs a bspmodel, a sub-BSP this map loaded", sizeof( level.rp_spawn_refusal ) );
+			}
 			G_FreeEntity( ent );
 			return;
 		}

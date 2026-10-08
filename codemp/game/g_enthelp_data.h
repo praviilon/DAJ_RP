@@ -1133,7 +1133,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		NULL,
 		"common misc_model_breakable misc_model_ghoul" },
 	{ "mover", RP_EH_TOPIC, NULL,
-		"What the func_ mover classes share. Each takes a model: *N, one of the current map's inline brush models (a bad number leaves it without one), or an .md3 file, refused if the server lacks it. A *N model is drawn shifted by the origin from where the map built it unless it was built around an origin brush, so origin 0 0 0 puts a plain one back in place. An .md3 one has no size or collision of its own: give mins and maxs, and spawnflag 1024.",
+		"What the func_ mover classes share. Each takes a model: *N, one of the current map's inline brush models (a number this map does not have is refused), or an .md3 file, refused if the server lacks it. A *N model is drawn shifted by the origin from where the map built it unless it was built around an origin brush, so origin 0 0 0 puts a plain one back in place. An .md3 one has no size or collision of its own: give mins and maxs, and spawnflag 1024.",
 		"32|CRUSH_THROUGH|With dmg set, a player in its way takes dmg and it keeps moving (on func_breakable 32 is HEAVY_WEAP).\n"
 		"64|PLAYER_USE|Players can use it with the use key (an .md3 one must be SOLID to be aimed at).\n"
 		"128|INACTIVE|Ignores every use until a target_activate activates it.\n"
@@ -2099,7 +2099,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"Triggers are invisible volumes that react to what is inside them. The volume is a brush model (model *N) or, with no model, the box mins/maxs around the origin. Living players and NPCs touch triggers (not while in noclip), spectators only teleporters. The activator handed to the targets is whoever touched it, or whoever used it. target_deactivate switches most triggers off and target_activate on, and an off trigger also ignores being used. /entedit switches a deactivated trigger back on unless it has INACTIVE.",
 		"128|INACTIVE|Starts off until target_activate (or a script) switches it on. Honoured by trigger_once, trigger_multiple, trigger_hurt, trigger_push, trigger_teleport and trigger_visible.\n"
 		"2048|MULTIPLE|trigger_once, trigger_multiple and a LINEAR trigger_push: several entities can set it off in the same frame.",
-		"model||*N, one of this map's inline models (a number the map does not use is ignored). Its shape is the model's own moved by the origin, so with /entadd it is offset by where you stand. /entaddaim sets it on the surface aimed at.\n"
+		"model||*N, one of this map's inline models (a number this map does not have is refused). Its shape is the model's own moved by the origin, so with /entadd it is offset by where you stand. /entaddaim sets it on the surface aimed at.\n"
 		"mins|0 0 0|With no model: lower corner of the box relative to the origin, e.g. -64 -64 0. The console logs a missing brush model but the box works.\n"
 		"maxs|0 0 0|With no model: upper corner of the box relative to the origin, e.g. 64 64 128.\n"
 		"wait|0|trigger_multiple: seconds before it can fire again. -1 fires once only, 0 fires again every frame while touched.\n"

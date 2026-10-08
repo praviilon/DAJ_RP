@@ -2194,6 +2194,69 @@ qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 	return qtrue;
 }
 
+/*
+==================
+RP_BrushModelProblem
+
+DAJ_RP: [Entity System] what is wrong with a "model" key naming a brush model, for an entity the Entity System
+makes -- or NULL: when it is fine, and when it names no brush model at all (an .md3, nothing), which is not
+this check's business. A "*N" must be within the map's own inline models (level.zyk_max_inline_model, learned
+from the map's brush entities -- see zyk_learn_inline_model()), a "#name" a sub-BSP the map loaded: the same
+bounds zyk_brush_model_allowed() holds a model to after map load, with the reason worded for the admin. Used
+by /entedit before an edit is applied (g_cmds.c) and by RP_EntitySystemSpawnRefused() for every other way such
+an entity spawns, so one is refused with the reason given instead of spawning with no model.
+==================
+*/
+const char *RP_BrushModelProblem( const char *name )
+{
+	static char problem[192];
+	char shown[48];
+	int i;
+
+	if ( !name || ( name[0] != '*' && name[0] != '#' ) )
+	{
+		return NULL;
+	}
+
+	if ( name[0] == '#' )
+	{
+		if ( zyk_subbsp_name_known( name ) )
+		{
+			return NULL;
+		}
+	}
+	else
+	{
+		const int index = atoi( name + 1 );	// what the engine's SV_SetBrushModel() reads it as
+
+		if ( index >= 0 && index <= level.zyk_max_inline_model )
+		{
+			return NULL;
+		}
+	}
+
+	// shown in a print "..." line: no quote, line break or ; from the value
+	Q_strncpyz( shown, RP_ShownText( name ), sizeof( shown ) );
+	for ( i = 0; shown[i]; i++ )
+	{
+		if ( shown[i] == '"' || shown[i] == '\n' || shown[i] == '\r' || shown[i] == ';' )
+		{
+			shown[i] = '?';
+		}
+	}
+
+	if ( name[0] == '#' )
+	{
+		Com_sprintf( problem, sizeof( problem ), "model %s is not a sub-BSP this map loaded", shown );
+	}
+	else
+	{
+		Com_sprintf( problem, sizeof( problem ), "model %s is not one of this map's brush models (it has up to *%d)", shown, level.zyk_max_inline_model );
+	}
+
+	return problem;
+}
+
 void zyk_set_brush_model( gentity_t *ent )
 {
 	if (!ent || !ent->model)
@@ -2202,7 +2265,15 @@ void zyk_set_brush_model( gentity_t *ent )
 	if (ent->model[0] == '*' || ent->model[0] == '#')
 	{ // zyk: a brush model or a sub-BSP -- the engine resolves both of these
 		if (zyk_brush_model_allowed(ent, ent->model) == qfalse)
+		{
+			// DAJ_RP fix: [Entity System] no brush model left behind either. An entity spawned again in
+			// place keeps its struct, and one that had a brush model kept r.bmodel: the server then sent it
+			// as SOLID_BMODEL with modelindex 0, which is the whole map's world model -- every client's
+			// prediction collided with an invisible copy of the map, moved by the entity's origin.
+			ent->r.bmodel = qfalse;
+			ent->s.modelindex = 0;
 			return;
+		}
 
 		trap->SetBrushModel( (sharedEntity_t *)ent, ent->model );
 
@@ -2753,6 +2824,17 @@ qboolean RP_EntitySystemSpawnRefused( gentity_t *ent )
 			va( "soundSet %s is not one the map already uses (the server cannot read sound/sound.txt to check it)", shown ) );
 	}
 
+	// DAJ_RP: [Entity System] a brush model ("*N", "#name") the map does not have -- see RP_BrushModelProblem().
+	// Refused whatever the class, a trigger included: it used to spawn with no model at all (a door invisible,
+	// a trigger only its mins/maxs box) and be written back by /entsave just the same, with nothing said but a
+	// line in the server log.
+	{
+		const char *problem = RP_BrushModelProblem( ent->model );
+
+		if ( problem )
+			return RP_SpawnRefuse( ent, problem );
+	}
+
 	// DAJ_RP: [Weather] an effect key holding a weather command. Whatever these keys name is registered as an
 	// effect, and a name starting with * is not one: every player's game runs it as a weather command, the
 	// same as zyk_weather's message, with none of its checks -- "*clear" in a func_breakable's playfx wiped
@@ -3092,6 +3174,12 @@ void zyk_main_spawn_entity(gentity_t *ent) {
 	if (RP_EntitySystemMade(ent)) {
 		ent->s.modelindex = 0;
 		ent->s.modelindex2 = 0;
+		// DAJ_RP fix: [Entity System] and no brush model either: its spawn function sets one again
+		// (trap->SetBrushModel), and one that sets none -- the model key removed, or a class that has
+		// no brush model -- kept r.bmodel with modelindex 0 here, which the server sends as the whole
+		// map's world model: every client's prediction collided with an invisible copy of the map,
+		// moved by the entity's origin. See zyk_set_brush_model().
+		ent->r.bmodel = qfalse;
 		if (ent->classname && Q_stricmp(ent->classname, "misc_model_breakable") == 0) {
 			ent->sound1to2 = 0;
 			ent->sound2to1 = 0;

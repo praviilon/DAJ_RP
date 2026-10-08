@@ -16495,6 +16495,26 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 			}
 		}
 
+		// DAJ_RP: [Entity System] a brush model ("*N", "#name") the map does not have is refused here, before
+		// anything changes, so the entity stays as it was for another try. Spawned again with it, it would be
+		// refused and gone (RP_EntitySystemSpawnRefused() -- see RP_BrushModelProblem() in g_spawn.c).
+		// Removing the key is always fine.
+		for (i = first_pair; i + 1 < number_of_args; i += 2)
+		{
+			trap->Argv(i, key, sizeof(key));
+			trap->Argv(i + 1, arg2, sizeof(arg2));
+			if (Q_stricmp(key, "model") == 0 && Q_stricmp(arg2, "zykremovekey") != 0)
+			{
+				const char *problem_model = RP_BrushModelProblem(arg2);
+
+				if (problem_model)
+				{
+					trap->SendServerCommand( ent-g_entities, va("print \"Entity %d was not edited: %s.\n\"", entity_id, problem_model) );
+					return;
+				}
+			}
+		}
+
 		// GalaxyRP fix: [Entity System] see zyk_main_set_entity_field(): a row that is already full
 		// silently dropped the pair rather than reporting it. Every key given here is worst case a
 		// new one, so refuse if they could not all fit. Keys that turn out to already exist are

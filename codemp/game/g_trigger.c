@@ -36,6 +36,13 @@ void InitTrigger( gentity_t *self ) {
 		// Com_Error(ERR_DROP)s the server -- see zyk_brush_model_allowed() in g_spawn.c.
 		if (zyk_brush_model_allowed(self, self->model) == qtrue)
 			trap->SetBrushModel( (sharedEntity_t *)self, self->model );
+		else
+		{ // DAJ_RP fix: [Entity System] and no brush model left from before it was spawned again in place:
+		  // with r.bmodel still set, touching it was tested against modelindex 0, the whole world model --
+		  // see zyk_set_brush_model() in g_spawn.c
+			self->r.bmodel = qfalse;
+			self->s.modelindex = 0;
+		}
 	}
 	else // zyk: if no model is set, show message in server console
 		Com_Printf( S_COLOR_RED"ERROR: trigger %s at %s has no brush model specified\n", self->targetname, vtos(self->s.origin) );
