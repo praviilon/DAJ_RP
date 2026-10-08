@@ -2119,12 +2119,36 @@ int RP_FreeSubBSPEntities( int instance )
 // caller does that straight afterwards when this says yes, and SV_SetBrushModel() Com_Error(ERR_DROP)s
 // on anything it cannot resolve, so this has to be exact about all three shapes it can be given:
 //
-//   "*N"    an inline model of the map's own BSP -- bounded by what the map used (see above).
+//   "*N"    an inline model of the map's own BSP -- bounded by what the map used (see above), and after
+//           map load a plain number of 1 or more (see the end of the function).
 //   "#name" a sub-BSP -- only one the map itself loaded (see zyk_learn_subbsp_name()).
 //   anything else, including NULL and "" -- never. SV_SetBrushModel() answers "isn't a brush model"
 //           with ERR_DROP. zyk_set_brush_model() sends md3 names down its own path and never asks,
 //           but InitTrigger() and SP_trigger_asteroid_field() ask about whatever the "model" key
 //           holds, so "/entadd trigger_multiple model foo" used to reach that ERR_DROP.
+// DAJ_RP fix: [Entity System] the number a "*N" model names, read strictly: -1 when what follows the "*" is
+// not all digits ("*", "*abc", "* 5", "*3abc", "*-0", "*+3"), INT_MAX when it is too long to be a model
+// number (more than 9 digits), otherwise N ("*03" is 3). The engine reads the same text with atoi(), so
+// anything that is not a plain number became *0 there -- the map's own world model, see below.
+static int zyk_inline_model_number( const char *name )
+{
+	int i;
+
+	if ( !name || name[0] != '*' || !name[1] )
+		return -1;
+
+	for ( i = 1; name[i]; i++ )
+	{
+		if ( name[i] < '0' || name[i] > '9' )
+			return -1;
+	}
+
+	if ( i - 1 > 9 )
+		return INT_MAX;
+
+	return atoi( name + 1 );
+}
+
 qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 {
 	int index = 0;
@@ -2183,6 +2207,28 @@ qboolean zyk_brush_model_allowed( gentity_t *ent, const char *name )
 		return qtrue;
 	}
 
+	// DAJ_RP fix: [Entity System] and after map load a "*N" of the map's own must be a plain number of 1 or
+	// more. *0 is the map's world model (CM_InlineModel(0)), and anything that is not a plain number reached
+	// the engine as *0 too: an entity with it was never drawn, but every client predicted collisions with an
+	// invisible copy of the whole map moved by the entity's origin, a trigger fired wherever a player touched
+	// that copy, and a door's walk-up trigger covered the whole map. No map entity uses *0 (the map's own
+	// spawn pass above is not held to this). The sub-BSP branch above is left as it was: a sub-BSP's first
+	// model can be real architecture.
+	{
+		const int number = zyk_inline_model_number(name);
+
+		if (number < 1)
+		{
+			G_LogPrintf("brush model %s refused on entity %d: %s\n", name, ent ? ent->s.number : -1,
+				(number == 0) ? "*0 is the map's world model, not one of its brush models" : "not a brush model number");
+
+			return qfalse;
+		}
+
+		// (the number read strictly: atoi() of more digits than an int holds is undefined)
+		index = number;
+	}
+
 	if (index < 0 || index > level.zyk_max_inline_model)
 	{
 		G_LogPrintf("brush model %s refused on entity %d: this map only has inline models up to *%d\n",
@@ -2200,9 +2246,10 @@ RP_BrushModelProblem
 
 DAJ_RP: [Entity System] what is wrong with a "model" key naming a brush model, for an entity the Entity System
 makes -- or NULL: when it is fine, and when it names no brush model at all (an .md3, nothing), which is not
-this check's business. A "*N" must be within the map's own inline models (level.zyk_max_inline_model, learned
-from the map's brush entities -- see zyk_learn_inline_model()), a "#name" a sub-BSP the map loaded: the same
-bounds zyk_brush_model_allowed() holds a model to after map load, with the reason worded for the admin. Used
+this check's business. A "*N" must be a plain number from 1 to the last of the map's own inline models
+(level.zyk_max_inline_model, learned from the map's brush entities -- see zyk_learn_inline_model()), a "#name"
+a sub-BSP the map loaded: the same bounds zyk_brush_model_allowed() holds a model to after map load, with the
+reason worded for the admin. Used
 by /entedit before an edit is applied (g_cmds.c) and by RP_EntitySystemSpawnRefused() for every other way such
 an entity spawns, so one is refused with the reason given instead of spawning with no model.
 ==================
@@ -2211,6 +2258,7 @@ const char *RP_BrushModelProblem( const char *name )
 {
 	static char problem[192];
 	char shown[48];
+	int number = 0;
 	int i;
 
 	if ( !name || ( name[0] != '*' && name[0] != '#' ) )
@@ -2227,9 +2275,11 @@ const char *RP_BrushModelProblem( const char *name )
 	}
 	else
 	{
-		const int index = atoi( name + 1 );	// what the engine's SV_SetBrushModel() reads it as
+		// DAJ_RP fix: [Entity System] a plain number from *1 up -- see zyk_inline_model_number() and the end of
+		// zyk_brush_model_allowed(): *0 and anything the engine reads as *0 are the map's world model
+		number = zyk_inline_model_number( name );
 
-		if ( index >= 0 && index <= level.zyk_max_inline_model )
+		if ( number >= 1 && number <= level.zyk_max_inline_model )
 		{
 			return NULL;
 		}
@@ -2249,9 +2299,21 @@ const char *RP_BrushModelProblem( const char *name )
 	{
 		Com_sprintf( problem, sizeof( problem ), "model %s is not a sub-BSP this map loaded", shown );
 	}
+	else if ( level.zyk_max_inline_model < 1 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "model %s cannot be used: this map has no brush models of its own", shown );
+	}
+	else if ( number < 0 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "model %s is not a brush model number (*1 to *%d)", shown, level.zyk_max_inline_model );
+	}
+	else if ( number == 0 )
+	{
+		Com_sprintf( problem, sizeof( problem ), "model %s is the map itself, not one of its brush models (*1 to *%d)", shown, level.zyk_max_inline_model );
+	}
 	else
 	{
-		Com_sprintf( problem, sizeof( problem ), "model %s is not one of this map's brush models (it has up to *%d)", shown, level.zyk_max_inline_model );
+		Com_sprintf( problem, sizeof( problem ), "model %s is not one of this map's brush models (*1 to *%d)", shown, level.zyk_max_inline_model );
 	}
 
 	return problem;
