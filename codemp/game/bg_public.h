@@ -533,6 +533,10 @@ typedef struct pmove_s {
 	//rww - bg entitystate access method
 	bgEntity_t	*baseEnt; //base address of the entity array (g_entities or cg_entities)
 	int			entSize; //size of the struct (gentity_t or centity_t) so things can be dynamic
+
+	// DAJ_RP: [Weapons] (out) a fire button was pressed that the weapon could not fire for want of ammo --
+	// see PM_DryFire() in bg_pmove.c. The client's prediction plays the dry-fire click from it.
+	qboolean	rpDryFire;
 } pmove_t;
 
 

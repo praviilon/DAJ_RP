@@ -950,8 +950,47 @@ extern	vmCvar_t		cg_showVehBounds;
 pmove_t cg_vehPmove;
 qboolean cg_vehPmoveSet = qfalse;
 
+/*
+=================
+CG_RpDryFireClick
+
+DAJ_RP: [Weapons] the dry-fire click: the local player pressed fire and the weapon had not the ammo for that fire
+mode, so nothing fired -- PM_DryFire() (bg_pmove.c) says so through pmove_t::rpDryFire, read for the newest
+command each frame (CG_PredictPlayerState(), below). Played here only, for this player: it is not sent, so no one
+else hears it, and a client without the plugin plays none. Once when the button goes down, then every
+RP_DRYFIRE_REPEAT ms while it stays down.
+=================
+*/
+#define RP_DRYFIRE_REPEAT 500
+
+static void CG_RpDryFireClick( qboolean dry )
+{
+	static qboolean held = qfalse;
+	static int nextClick = 0;
+
+	if ( !dry )
+	{
+		held = qfalse;
+		return;
+	}
+
+	if ( nextClick - cg.time > RP_DRYFIRE_REPEAT )
+	{ // cg.time went back (a new map)
+		nextClick = 0;
+	}
+
+	if ( !held || cg.time >= nextClick )
+	{
+		trap->S_StartLocalSound( cgs.media.noAmmoSound, CHAN_LOCAL_SOUND );
+		nextClick = cg.time + RP_DRYFIRE_REPEAT;
+	}
+
+	held = qtrue;
+}
+
 void CG_PredictPlayerState( void ) {
 	int			cmdNum, current, i;
+	qboolean	rpDryFire = qfalse;	// DAJ_RP: [Weapons] see CG_RpDryFireClick()
 	playerState_t	oldPlayerState;
 	playerState_t	oldVehicleState;
 	qboolean	moved;
@@ -1315,6 +1354,12 @@ void CG_PredictPlayerState( void ) {
 
 		Pmove (&cg_pmove);
 
+		// DAJ_RP: [Weapons] the newest command's dry fire, if any -- see CG_RpDryFireClick()
+		if ( cmdNum == current )
+		{
+			rpDryFire = cg_pmove.rpDryFire;
+		}
+
 		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum) &&
 			cg.predictedPlayerState.pm_type != PM_INTERMISSION)
 		{ //we're riding a vehicle, let's predict it
@@ -1432,6 +1477,8 @@ void CG_PredictPlayerState( void ) {
 	if ( cg_showMiss.integer > 1 ) {
 		trap->Print( "[%i : %i] ", cg_pmove.cmd.serverTime, cg.time );
 	}
+
+	CG_RpDryFireClick( rpDryFire );
 
 	if ( !moved ) {
 		if ( cg_showMiss.integer ) {

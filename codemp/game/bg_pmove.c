@@ -6440,6 +6440,34 @@ void PM_RocketLock( float lockDist, qboolean vehicleLock )
 }
 
 //---------------------------------------
+// DAJ_RP fix: [Weapons] a fire button pressed when the weapon cannot fire it: the press is dropped for this
+// frame (so the weapon goes back to ready and its animations go on as for an idle weapon) and pm->rpDryFire is
+// set, which the client's prediction turns into the dry-fire click (cg_predict.c). Nothing is sent: the server
+// does not play it, and a client without the plugin never hears it.
+static void PM_DryFire( void )
+{
+	if ( pm->cmd.buttons & (BUTTON_ATTACK|BUTTON_ALT_ATTACK) )
+	{
+		pm->rpDryFire = qtrue;
+	}
+	pm->cmd.buttons &= ~(BUTTON_ATTACK|BUTTON_ALT_ATTACK);
+}
+
+// DAJ_RP fix: [Weapons] whether a player's current weapon has the ammo for one shot of a fire mode -- the same
+// test PM_Weapon() makes before a shot. Always yes for an NPC (no ammo of its own) and for a weapon that does
+// not count ammo (-1), and for one that costs nothing (saber, melee, stun baton, the det pack's detonation).
+static qboolean PM_FireModeAffordable( qboolean altFire )
+{
+	const int ammoIndex = weaponData[pm->ps->weapon].ammoIndex;
+
+	if ( pm->ps->clientNum >= MAX_CLIENTS || pm->ps->ammo[ammoIndex] == -1 )
+	{
+		return qtrue;
+	}
+
+	return ( pm->ps->ammo[ammoIndex] >= ( altFire ? weaponData[pm->ps->weapon].altEnergyPerShot : weaponData[pm->ps->weapon].energyPerShot ) ) ? qtrue : qfalse;
+}
+
 static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh )
 //---------------------------------------
 {
@@ -6484,7 +6512,8 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 			//if ( pm->gametype == GT_SIEGE )
 			if (1)
 			{
-				if ( pm->cmd.buttons & BUTTON_ALT_ATTACK )
+				// DAJ_RP fix: [Weapons] only with the ammo for the shot -- see the note at the end of this switch
+				if ( (pm->cmd.buttons & BUTTON_ALT_ATTACK) && PM_FireModeAffordable( qtrue ) )
 				{
 					charging = qtrue;
 					altFire = qtrue;
@@ -6502,7 +6531,7 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 		case WP_BRYAR_OLD:
 
 			// alt-fire charges the weapon
-			if ( pm->cmd.buttons & BUTTON_ALT_ATTACK )
+			if ( (pm->cmd.buttons & BUTTON_ALT_ATTACK) && PM_FireModeAffordable( qtrue ) )
 			{
 				charging = qtrue;
 				altFire = qtrue;
@@ -6513,7 +6542,7 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 		case WP_BOWCASTER:
 
 			// primary fire charges the weapon
-			if ( pm->cmd.buttons & BUTTON_ATTACK )
+			if ( (pm->cmd.buttons & BUTTON_ATTACK) && PM_FireModeAffordable( qfalse ) )
 			{
 				charging = qtrue;
 			}
@@ -6535,17 +6564,20 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 
 			if ( pm->cmd.buttons & BUTTON_ALT_ATTACK )
 			{
-				altFire = qtrue; // override default of not being an alt-fire
-				charging = qtrue;
+				if ( PM_FireModeAffordable( qtrue ) )
+				{
+					altFire = qtrue; // override default of not being an alt-fire
+					charging = qtrue;
+				}
 			}
-			else if ( pm->cmd.buttons & BUTTON_ATTACK )
+			else if ( (pm->cmd.buttons & BUTTON_ATTACK) && PM_FireModeAffordable( qfalse ) )
 			{
 				charging = qtrue;
 			}
 			break;
 
 		case WP_DEMP2:
-			if ( pm->cmd.buttons & BUTTON_ALT_ATTACK )
+			if ( (pm->cmd.buttons & BUTTON_ALT_ATTACK) && PM_FireModeAffordable( qtrue ) )
 			{
 				altFire = qtrue; // override default of not being an alt-fire
 				charging = qtrue;
@@ -6553,6 +6585,20 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 			break;
 
 		case WP_DISRUPTOR:
+			// DAJ_RP fix: [Weapons] zoomed and still, the primary button charges the alt (sniper) shot, so it
+			// is the alt cost that must be covered. Without it this is a dry fire, not a normal shot: the
+			// press is dropped here (PM_DryFire()), where it used to start a charge that could never fire.
+			if ((pm->cmd.buttons & BUTTON_ATTACK) &&
+				pm->ps->zoomMode == 1 &&
+				pm->ps->zoomLocked &&
+				!pm->cmd.forwardmove &&
+				!pm->cmd.rightmove &&
+				pm->cmd.upmove <= 0 &&
+				!PM_FireModeAffordable( qtrue ))
+			{
+				PM_DryFire();
+			}
+
 			if ((pm->cmd.buttons & BUTTON_ATTACK) &&
 				pm->ps->zoomMode == 1 &&
 				pm->ps->zoomLocked)
@@ -6580,6 +6626,11 @@ static qboolean PM_DoChargedWeapons( qboolean vehicleRocketLock, bgEntity_t *veh
 			}
 
 		} // end switch
+
+		// DAJ_RP fix: [Weapons] a charge is started only with the ammo for the shot it charges (the rocket
+		// launcher's lock-on always asked; the others did not). With too little ammo the charge began again
+		// every frame the button was held -- its start event and sound with it -- and nothing could fire.
+		// Pressed without the ammo, the press goes on to PM_Weapon(), which refuses it (a dry fire).
 	}
 
 	// set up the appropriate weapon state based on the button that's down.
@@ -8079,18 +8130,21 @@ static void PM_Weapon( void )
 					pm->ps->weaponTime += 500;
 				}
 				*/
-				return;
+				// DAJ_RP fix: [Weapons] the player keeps the weapon (zyk, above), but this used to "return" here
+				// every frame the weapon could not fire -- pressing or not -- and everything below that keeps
+				// the weapon's state and the upper body's animation was skipped: the weapon stayed "firing"
+				// with the last shot's animation frozen on its last frame, and an animation played on the
+				// upper body after that (using something, a gesture) froze too. The fire buttons are what
+				// cannot be honoured, so they are dropped instead, and the rest runs as for an idle weapon.
+				PM_DryFire();
 			}
 
+			// DAJ_RP fix: [Weapons] a det pack with none left and none planted: the same. This used to return
+			// here too, with an EV_NOAMMO every half second -- the client switched weapon on it, or with
+			// cg_autoSwitch 0 the player froze as above. It is kept now, like every other weapon.
 			if (pm->ps->weapon == WP_DET_PACK && !pm->ps->hasDetPackPlanted && pm->ps->ammo[weaponData[pm->ps->weapon].ammoIndex] < 1)
 			{
-				PM_AddEventWithParm( EV_NOAMMO, WP_NUM_WEAPONS+pm->ps->weapon );
-
-				if (pm->ps->weaponTime < 500)
-				{
-					pm->ps->weaponTime += 500;
-				}
-				return;
+				PM_DryFire();
 			}
 		}
 	}
@@ -8342,6 +8396,17 @@ static void PM_Weapon( void )
 		return;
 	}
 
+	// DAJ_RP fix: [Weapons] the fire mode pressed must be affordable before anything of the shot starts. The
+	// ammo was checked only after the attack animation had been started and the weapon set "firing", so holding
+	// a mode the ammo did not cover (the repeater's alt with under 15 bolts, say) restarted the shooting
+	// animation every frame with nothing fired. Refused now, as a dry fire: back to ready, no animation.
+	if ( !PM_FireModeAffordable( (pm->cmd.buttons & BUTTON_ALT_ATTACK) ? qtrue : qfalse ) )
+	{
+		PM_DryFire();
+		pm->ps->weaponstate = WEAPON_READY;
+		return;
+	}
+
 	if (pm->ps->weapon == WP_DISRUPTOR && pm->ps->zoomMode == 1)
 	{
 		PM_StartTorsoAnim( BOTH_ATTACK4 );
@@ -8517,18 +8582,10 @@ static void PM_Weapon( void )
 		}
 		else	// Not enough energy
 		{
-			// Switch weapons
-			if (pm->ps->weapon != WP_DET_PACK || !pm->ps->hasDetPackPlanted)
-			{
-				if (pm->ps->weapon == WP_DET_PACK)
-				{ // zyk: now player can continue with the same weapon even if it has no ammo
-					PM_AddEventWithParm( EV_NOAMMO, WP_NUM_WEAPONS+pm->ps->weapon );
-					if (pm->ps->weaponTime < 500)
-					{
-						pm->ps->weaponTime += 500;
-					}
-				}
-			}
+			// DAJ_RP fix: [Weapons] cannot happen any more: a mode the ammo does not cover is refused before
+			// the shot starts (PM_FireModeAffordable(), above). Kept as a safety net, without the weapon left
+			// "firing" -- and without the det pack's EV_NOAMMO, which switched the player's weapon
+			pm->ps->weaponstate = WEAPON_READY;
 			return;
 		}
 	}
@@ -12189,6 +12246,9 @@ Can be called by either the server or the client
 */
 void Pmove (pmove_t *pmove) {
 	int			finalTime;
+
+	// DAJ_RP: [Weapons] set by PM_DryFire() during this call only
+	pmove->rpDryFire = qfalse;
 
 	finalTime = pmove->cmd.serverTime;
 

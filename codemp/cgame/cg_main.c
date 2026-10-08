@@ -826,6 +826,9 @@ static void CG_RegisterSounds( void ) {
 	cg.loadLCARSStage = 1;
 
 	cgs.media.selectSound = trap->S_RegisterSound( "sound/weapons/change.wav" );
+	// DAJ_RP: [Weapons] the dry-fire click (CG_RpDryFireClick(), cg_predict.c); it was registered only with a
+	// vehicle's model, for the vehicles' own out-of-ammo warning
+	cgs.media.noAmmoSound = trap->S_RegisterSound( "sound/weapons/noammo.wav" );
 
 	cgs.media.teleInSound = trap->S_RegisterSound( "sound/player/telein.wav" );
 	cgs.media.teleOutSound = trap->S_RegisterSound( "sound/player/teleout.wav" );
