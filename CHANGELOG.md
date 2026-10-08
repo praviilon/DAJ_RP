@@ -2,7 +2,7 @@
 
 
 
-## [3.8.2]
+## [3.8.5]
 
 All changes below are relative to the last stable GalaxyRP release (3.7.2) this fork started from.
 
@@ -41,6 +41,8 @@ All changes below are relative to the last stable GalaxyRP release (3.7.2) this 
 - TaystJK write folder: the TaystJK client defaults `fs_forcegame` to `taystjk`, which sends everything the client writes -- config, screenshots, demos, downloaded pk3s -- to `taystjk/` instead of the mod folder, and the launchers work around it with `+set fs_forcegame GalaxyRP`. The client modules now do the same for a player who joined without the launcher: when `fs_forcegame` is still the engine default, cgame/ui set it to the mod folder, and the engine uses that from the next map or reconnect. A value the player or a launcher chose is never touched. It lasts for the client session, so a player who then plays another mod on the same TaystJK install writes to this folder instead of `taystjk/`; `rp_taystjk_writefolder 0` (archived) turns it off.
 - `/admghost`, `/admholo` and `/admsolid` admin commands, gated by a new "Ghost/Holo/Non-solid" admin bit: turn yourself or a named player into a Force ghost, a hologram, or just non-solid, so players and NPCs walk through them while they can still be hit and targeted as usual. Ghosts and holograms are hidden from the radar and keep their look on severed limbs and corpses; each command toggles, and the three are mutually exclusive.
 - `/npc effect <holo|ghost|nonsolid|clear>`: gives the NPC in your crosshair the same hologram, Force ghost or non-solid effect, which stays until `/npc effect clear`. `clear` also makes an NPC that the map spawned non-solid solid again.
+- `/npc freeze`: freezes the NPC in your crosshair in place, or unfreezes it. A frozen NPC does not move, attack or defend itself and its scripts pause, but it can still be pushed, hurt and killed. NPC spawners take `npcfreeze 1` to spawn their NPCs frozen, also offered as Frozen in the Extras Spawners menu.
+- **Locks**: doors, lifts, buttons, triggers and other entities can be locked to a list of accounts with `/entlockset`, `/entlockadd`, `/entlockremove` and `/entlocklist`, kept per map. A locked entity lets through only logged-in players on its list; NPCs never pass, while `/entuse`, the new `/enttrigger <id>` and the upgraded Stun Baton always do.
 - **Extras** in the Galaxy RP menu (logged-in players): Props, Effects, NPCs & Vehicles, Music and Sounds menus list what the server has and spawn or play your pick, with a 3D preview for props and an in-menu preview for effects. Lights makes a light a trigger can switch on and off, and Spawners a named NPC or vehicle spawner (count, delay, respawn and more); Props, Effects, Lights and Spawners place it on the surface you aim at, with an Offset slider. The server still decides who may use each command. Requires the updated client files.
 - Single Player map support has been expanded with fixes from OJP and well newly added support to play Jedi Outcast SP Maps in Jedi Academy.
 - `misc_model_ghoul`: single player's Ghoul2 (.glm) prop, ported and extended: any .glm model, a `skin` key, animation frames (`startframe`/`endframe`, looped with spawnflag 2), a light, SOLID, and show/hide by its targetname. The SP maps' props of this class now appear when the server has their model files; custom skins need the updated client files.
