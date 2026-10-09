@@ -13,7 +13,13 @@ ON like every /settings toggle), this draws, for that admin only:
     G mark /entlist uses for an entity the game made;
   - a small white cross on each of the 8 nearest point and logical entities within 384 units -- spawn
     points, targets, NPC spawners, info_ entities -- which have no size or are not in the world at all,
-    so they can never be aimed at.
+    so they can never be aimed at;
+  - DAJ_RP: [Static Models] and the map's misc_model_static, which no client entity stands for: the
+    server notes them as the map loads (g_statics.c). The one aimed at, when it is nearer than any entity
+    the aim finds, gets its box in red -- its model's bounds, scaled and turned as the client draws it --
+    and a centre-print in red, "static model #12 (scale 1.5)", so its number is never read as an
+    entity's; and the 8 nearest others within 384 units a red cross each. /entcopystatic (g_entgrab.c)
+    takes the one aimed at the same way (RP_EntBoundsAimStatic).
 
 Adapted from Lugormod's /bounds, with three differences: it follows the aim rather than being toggled
 per entity, it is sent to the one admin rather than broadcast to every player, and it never borrows the
@@ -43,6 +49,7 @@ every batch asks G_EntitySlotsAvailable() first, and is skipped rather than draw
 
 // colours are the saber colours CG_TestLine() maps (CGDEBUG_SaberColor); 0 is white
 #define RP_ENTBOUNDS_WHITE			0
+#define RP_ENTBOUNDS_STATIC			RP_LINE_RED	// DAJ_RP: [Static Models] used for nothing else here
 
 /*
 ==================
@@ -254,17 +261,16 @@ nearest one entered in front of the viewer, before the solid hit, wins. So are t
 trace passes through (RP_EntBoundsSoftVolume), the same way.
 ==================
 */
-gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
+// DAJ_RP: [Static Models] the same, with how far along the view it is -- or, with none, how far the view
+// reaches (the solid hit, or the range): a static model nearer than that is what is aimed at
+static gentity_t *RP_EntBoundsAimDist( const gentity_t *viewer, const vec3_t eye, const vec3_t dir, float *dist )
 {
-	vec3_t eye, dir, end;
+	vec3_t end;
 	trace_t tr;
 	gentity_t *best = NULL;
 	float bestDist;
 	int i;
 
-	VectorCopy( viewer->client->ps.origin, eye );
-	eye[2] += viewer->client->ps.viewheight;
-	AngleVectors( viewer->client->ps.viewangles, dir, NULL, NULL );
 	VectorMA( eye, RP_ENTBOUNDS_RANGE, dir, end );
 
 	trap->Trace( &tr, eye, vec3_origin, vec3_origin, end, viewer->s.number, MASK_SHOT, qfalse, 0, 0 );
@@ -325,7 +331,56 @@ gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
 		}
 	}
 
+	if ( dist )
+		*dist = bestDist;
+
 	return best;
+}
+
+static void RP_EntBoundsEye( const gentity_t *viewer, vec3_t eye, vec3_t dir )
+{
+	VectorCopy( viewer->client->ps.origin, eye );
+	eye[2] += viewer->client->ps.viewheight;
+	AngleVectors( viewer->client->ps.viewangles, dir, NULL, NULL );
+}
+
+gentity_t *RP_EntBoundsAim( const gentity_t *viewer )
+{
+	vec3_t eye, dir;
+
+	RP_EntBoundsEye( viewer, eye, dir );
+	return RP_EntBoundsAimDist( viewer, eye, dir, NULL );
+}
+
+/*
+==================
+RP_EntBoundsAimStatic
+
+DAJ_RP: [Static Models] the static model at the viewer's crosshair, or -1: the nearest one the view
+enters before the entity RP_EntBoundsAim() would pick, or before what stops the view when it picks none
+-- the one Entity Bounds draws in red, and the one /entcopystatic copies.
+==================
+*/
+static int RP_EntBoundsAimBoth( const gentity_t *viewer, gentity_t **entity )
+{
+	vec3_t eye, dir;
+	float dist = RP_ENTBOUNDS_RANGE;
+	gentity_t *e;
+	int n;
+
+	RP_EntBoundsEye( viewer, eye, dir );
+	e = RP_EntBoundsAimDist( viewer, eye, dir, &dist );
+	n = RP_StaticAim( eye, dir, dist, NULL );
+
+	if ( entity )
+		*entity = ( n >= 0 ) ? NULL : e;
+
+	return n;
+}
+
+int RP_EntBoundsAimStatic( const gentity_t *viewer )
+{
+	return RP_EntBoundsAimBoth( viewer, NULL );
 }
 
 // zyk: the centre-print naming the aimed entity. A value from the entity file can hold a quote, which
@@ -450,6 +505,87 @@ static void RP_EntBoundsMarkers( const gentity_t *viewer, int aimed )
 
 /*
 ==================
+RP_EntBoundsStaticMarkers
+
+DAJ_RP: [Static Models] a red cross, the same as the white ones, on each of the 8 nearest static models
+within the same range -- at the model's origin -- but the one aimed at, which has its box.
+==================
+*/
+static void RP_EntBoundsStaticMarkers( const gentity_t *viewer, int aimedStatic )
+{
+	int pick[RP_ENTBOUNDS_MARKER_COUNT];
+	float pickDist[RP_ENTBOUNDS_MARKER_COUNT];
+	vec3_t eye, origin;
+	int count = 0, total = RP_StaticsCount();
+	int n, i;
+
+	VectorCopy( viewer->client->ps.origin, eye );
+	eye[2] += viewer->client->ps.viewheight;
+
+	for ( n = 0; n < total; n++ )
+	{
+		float dist;
+
+		if ( n == aimedStatic || !RP_StaticGet( n, NULL, origin, NULL, NULL ) )
+			continue;
+
+		dist = Distance( eye, origin );
+		if ( dist > RP_ENTBOUNDS_MARKER_RANGE )
+			continue;
+
+		for ( i = count; i > 0 && pickDist[i - 1] > dist; i-- )
+		{
+			if ( i < RP_ENTBOUNDS_MARKER_COUNT )
+			{
+				pick[i] = pick[i - 1];
+				pickDist[i] = pickDist[i - 1];
+			}
+		}
+		if ( i < RP_ENTBOUNDS_MARKER_COUNT )
+		{
+			pick[i] = n;
+			pickDist[i] = dist;
+			if ( count < RP_ENTBOUNDS_MARKER_COUNT )
+				count++;
+		}
+	}
+
+	if ( count == 0 || G_EntitySlotsAvailable( count * 3 ) == qfalse )
+		return;
+
+	for ( i = 0; i < count; i++ )
+	{
+		int k;
+
+		RP_StaticGet( pick[i], NULL, origin, NULL, NULL );
+
+		for ( k = 0; k < 3; k++ )
+		{
+			vec3_t a, b;
+
+			VectorCopy( origin, a );
+			VectorCopy( origin, b );
+			a[k] -= RP_ENTBOUNDS_MARKER_SIZE;
+			b[k] += RP_ENTBOUNDS_MARKER_SIZE;
+			RP_EntBoundsLine( a, b, RP_ENTBOUNDS_STATIC, RP_ENTBOUNDS_MARKER_LIFE, viewer->s.number );
+		}
+	}
+}
+
+// DAJ_RP: [Static Models] the aimed static model's box: its bounds in its own axes, turned and at its origin
+static void RP_EntBoundsDrawStatic( const gentity_t *viewer, int n, int msec )
+{
+	vec3_t mins, maxs, origin, angles;
+
+	if ( !RP_StaticGet( n, NULL, origin, angles, NULL ) )
+		return;
+
+	RP_StaticBox( n, mins, maxs );
+	RP_EntBoundsDrawBoxAt( viewer->s.number, origin, mins, maxs, angles, RP_ENTBOUNDS_STATIC, msec );
+}
+
+/*
+==================
 RP_EntBoundsFrame
 
 Once per client per server frame, from ClientEndFrame().
@@ -459,7 +595,7 @@ void RP_EntBoundsFrame( gentity_t *ent )
 {
 	gclient_t *client = ent->client;
 	gentity_t *aimed;
-	int aimedNum;
+	int aimedNum, aimedStatic;
 
 	if ( !client )
 		return;
@@ -471,6 +607,7 @@ void RP_EntBoundsFrame( gentity_t *ent )
 			trap->SendServerCommand( ent->s.number, "cp \"\"" );
 
 		client->entBoundsAimed = 0;
+		client->entBoundsAimedStatic = 0;
 		client->entBoundsNextBox = 0;
 		client->entBoundsNextMarkers = 0;
 		client->entBoundsNextPrint = 0;
@@ -484,24 +621,29 @@ void RP_EntBoundsFrame( gentity_t *ent )
 	if ( client->entBoundsNextMarkers > level.time + 10000 ) client->entBoundsNextMarkers = 0;
 	if ( client->entBoundsNextPrint > level.time + 10000 ) client->entBoundsNextPrint = 0;
 
-	aimed = RP_EntBoundsAim( ent );
+	// DAJ_RP: [Static Models] a static model nearer than the entity aimed at is what is aimed at
+	aimedStatic = RP_EntBoundsAimBoth( ent, &aimed );
 	aimedNum = aimed ? aimed->s.number : 0;
 
-	if ( aimedNum != client->entBoundsAimed )
+	if ( aimedNum != client->entBoundsAimed || aimedStatic + 1 != client->entBoundsAimedStatic )
 	{
 		client->entBoundsAimed = aimedNum;
+		client->entBoundsAimedStatic = aimedStatic + 1;
 		client->entBoundsNextBox = 0;	// draw the new one now
 		client->entBoundsPrintPending = qtrue;
 	}
 
-	if ( aimed && level.time >= client->entBoundsNextBox && G_EntitySlotsAvailable( 12 ) )
+	if ( ( aimed || aimedStatic >= 0 ) && level.time >= client->entBoundsNextBox && G_EntitySlotsAvailable( 12 ) )
 	{
-		RP_EntBoundsDrawBox( ent, aimed, RP_EntBoundsColor( aimed ), RP_ENTBOUNDS_BOX_LIFE );
+		if ( aimed )
+			RP_EntBoundsDrawBox( ent, aimed, RP_EntBoundsColor( aimed ), RP_ENTBOUNDS_BOX_LIFE );
+		else
+			RP_EntBoundsDrawStatic( ent, aimedStatic, RP_ENTBOUNDS_BOX_LIFE );
 		client->entBoundsNextBox = level.time + RP_ENTBOUNDS_BOX_MSEC;
 	}
 
 	// zyk: the name, when the aim settles on something new, and again now and then while it stays
-	if ( aimed && !client->entBoundsPrintPending && level.time >= client->entBoundsNextPrint + RP_ENTBOUNDS_REPRINT_MSEC - RP_ENTBOUNDS_PRINT_MSEC )
+	if ( ( aimed || aimedStatic >= 0 ) && !client->entBoundsPrintPending && level.time >= client->entBoundsNextPrint + RP_ENTBOUNDS_REPRINT_MSEC - RP_ENTBOUNDS_PRINT_MSEC )
 		client->entBoundsPrintPending = qtrue;
 
 	if ( client->entBoundsPrintPending && level.time >= client->entBoundsNextPrint )
@@ -509,6 +651,11 @@ void RP_EntBoundsFrame( gentity_t *ent )
 		if ( aimed )
 		{
 			RP_EntBoundsPrint( ent, aimed );
+			client->entBoundsPrinted = qtrue;
+		}
+		else if ( aimedStatic >= 0 )
+		{
+			trap->SendServerCommand( ent->s.number, va( "cp \"%s\n\"", RP_StaticLabel( aimedStatic ) ) );
 			client->entBoundsPrinted = qtrue;
 		}
 		else if ( client->entBoundsPrinted )
@@ -524,6 +671,7 @@ void RP_EntBoundsFrame( gentity_t *ent )
 	if ( level.time >= client->entBoundsNextMarkers )
 	{
 		RP_EntBoundsMarkers( ent, aimedNum );
+		RP_EntBoundsStaticMarkers( ent, aimedStatic );
 		client->entBoundsNextMarkers = level.time + RP_ENTBOUNDS_MARKER_MSEC;
 	}
 }

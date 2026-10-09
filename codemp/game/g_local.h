@@ -1340,12 +1340,13 @@ typedef struct clientPersistant_s {
 	// pers so dying and respawning does not drop it; a map change clears it with the rest of pers (and
 	// frees every entity anyway). The held entity's own rpHeldBy is what is checked every frame.
 	int			entHoldNum;				// entity number held, 0 for none
-	int			entHoldMode;			// RP_HOLD_COPY or RP_HOLD_CUT
+	int			entHoldMode;			// RP_HOLD_COPY, RP_HOLD_CUT or RP_HOLD_STATIC
 	qboolean	entHoldRotated;			// entHoldAngles differs from what the record holds
 	vec3_t		entHoldAngles;			// the orientation it will be dropped with
 	vec3_t		entHoldOrigin;			// where it is now (moved live) or would land (preview only)
 	int			entHoldNextBox;			// level.time the preview is redrawn
 	int			entHoldGhost;			// entity number of the preview model, 0 for none
+	int			entHoldStatic;			// DAJ_RP: [Static Models] RP_HOLD_STATIC: the static model it copies
 
 	// GalaxyRP: [Listings] level.time before which this player's next /list or /maplist listing is
 	// refused -- see RP_ListCooldown() in g_rplist.c
@@ -1687,6 +1688,7 @@ struct gclient_s {
 	// g_entbounds.c). Zeroed with the rest of gclient_s when the client connects or spawns, which is also
 	// what resets the level.time stamps on a map change.
 	int			entBoundsAimed;			// entity number whose box is drawn now, 0 for none
+	int			entBoundsAimedStatic;	// DAJ_RP: [Static Models] static model whose box is drawn now, plus 1; 0 for none
 	int			entBoundsNextBox;		// level.time the aimed box is redrawn
 	int			entBoundsNextMarkers;	// level.time the nearby point-entity markers are redrawn
 	int			entBoundsNextPrint;		// level.time the aimed entity's centre-print may be (re)sent
@@ -2122,6 +2124,12 @@ typedef struct level_locals_s {
 	short rp_model_frames[MAX_MODELS];
 	vec3_t rp_model_mins[MAX_MODELS];
 	vec3_t rp_model_maxs[MAX_MODELS];
+	// DAJ_RP: [Static Models] how many of the map's misc_model_static are noted, different models among
+	// them, bytes of their paths, and how many did not fit -- the lists are in g_statics.c
+	int rp_num_statics;
+	int rp_num_static_models;
+	int rp_static_names_used;
+	int rp_statics_dropped;
 	// GalaxyRP: [Listings] the NPC and vehicle type names have been read for /list npcs and /list
 	// vehicles this map -- see RP_ListTypes() in g_rplist.c
 	qboolean rp_list_npcs_ready;
@@ -2528,6 +2536,11 @@ qboolean	RP_EntAimFollowing( const gentity_t *ent );
 // GalaxyRP: [Entity System] /entcopy, /entcut, /entrotate, /entcancel and /entaddaim -- g_entgrab.c
 #define RP_HOLD_COPY	1
 #define RP_HOLD_CUT		2
+#define RP_HOLD_STATIC	3	// DAJ_RP: [Static Models] /entcopystatic's copy of a static model
+// DAJ_RP: [Static Models] the EV_TESTLINE colour that is drawn red. CG_TestLine() (cg_effects.c, the stock
+// client's too) draws 0 white, and SABER_RED is 0; a value past the saber colours is taken as an RGB of its
+// own (CGDEBUG_SaberColor), red in the low byte. The line's colour travels in entityState weapon, 8 bits.
+#define RP_LINE_RED		0xff
 void		RP_MarkMapEntities( void );
 qboolean	RP_RecordIsMapEntity( int num );
 // GalaxyRP: [Entity System] the map's pickups, dispensers and decor nothing in the map links to (tagged E):
@@ -2557,6 +2570,19 @@ void		RP_SpawnSaysWhy( gentity_t *ent, const char *reason );
 char		*RP_EffectKeyValue( gentity_t *ent, const char *key, char *value );	// DAJ_RP: [Weather] a * effect key: "" for a map's own
 qboolean	RP_FileExists( const char *path );
 qboolean	RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs );
+qboolean	RP_ReadModelBounds( const char *path, vec3_t mins, vec3_t maxs );	// DAJ_RP: [Static Models] by path, not kept
+// DAJ_RP: [Static Models] the map's misc_model_static, as the server knows them -- g_statics.c
+#define RP_MAX_STATICS			4000	// the client's own limit (MAX_STATIC_MODELS, cg_local.h)
+#define RP_MAX_STATIC_MODELS	1024
+void		RP_StaticsRecord( void );
+void		RP_StaticsReport( void );
+int			RP_StaticsCount( void );
+qboolean	RP_StaticGet( int n, const char **model, vec3_t origin, vec3_t angles, vec3_t scale );
+qboolean	RP_StaticBox( int n, vec3_t mins, vec3_t maxs );
+int			RP_StaticAim( const vec3_t eye, const vec3_t dir, float maxDist, float *dist );
+const char	*RP_StaticLabel( int n );
+int			RP_EntBoundsAimStatic( const gentity_t *viewer );	// g_entbounds.c: the static model the display shows
+qboolean	RP_EntHeldAsStaticCopy( const gentity_t *e );	// g_entgrab.c: /entcopystatic's copy, not dropped yet
 int			RP_PackConstantLight( float light, const vec3_t color );
 gentity_t	*RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t normal, int freeBefore );
 void		RP_EntGrabFrame( gentity_t *ent );
@@ -2597,6 +2623,7 @@ qboolean	G_SetMusic( const char *music, const char **reason );
 void		RP_TeamLinkEntity( gentity_t *e );
 void		Cmd_EntCopy_f( gentity_t *ent );
 void		Cmd_EntCut_f( gentity_t *ent );
+void		Cmd_EntCopyStatic_f( gentity_t *ent );	// DAJ_RP: [Static Models] g_entgrab.c
 void		Cmd_EntRotate_f( gentity_t *ent );
 void		Cmd_EntCancel_f( gentity_t *ent );
 // GalaxyRP: [Entity System] NPC and vehicle spawners: spawnnow, respawn, and the NPCs a spawner made --

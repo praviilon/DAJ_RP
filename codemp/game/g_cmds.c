@@ -17137,6 +17137,13 @@ void Cmd_EntSave_f( gentity_t *ent ) {
 			continue;
 		}
 
+		// DAJ_RP: [Static Models] nor the copy /entcopystatic made that an admin still holds: it is not
+		// placed yet, and written it would load as a prop on top of the static model it copies (g_entgrab.c)
+		if (RP_EntHeldAsStaticCopy(this_ent))
+		{
+			continue;
+		}
+
 		if (this_ent && this_ent->inuse)
 		{ // zyk: freed entities will not be saved
 			int line_length = 0;
@@ -20293,7 +20300,7 @@ static void zyk_print_lines( gentity_t *ent, const char * const *lines, int coun
 
 void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	static char entlist_line[512];
-	const char *lines[64];	// 48 now
+	const char *lines[64];	// 49 now
 	int n = 0;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
@@ -20326,7 +20333,8 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n";
 	lines[n++] = "^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n";
 	lines[n++] = "^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n";
-	lines[n++] = "^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was. While you hold one, commands that add, change, use or remove entities are refused.\n";
+	lines[n++] = "^3/entcopystatic <#number (optional)>: ^7Picks up a solid misc_model_breakable copy of the static model you aim at (^1red^7 in Entity Bounds), or of that number; use it again to drop it. The static model stays, and the copy's model takes a model slot until the map changes.\n";
+	lines[n++] = "^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was, a copy of a static model is deleted. While you hold one, commands that add, change, use or remove entities are refused.\n";
 
 	lines[n++] = "^5Saving\n";
 	lines[n++] = "^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n";
@@ -20346,7 +20354,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/enttrigger <entity id (optional)>: ^7Activates the entity you aim at, or that id, as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Account locks do not stop it.\n";
 	lines[n++] = "^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n";
 	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
-	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";
+	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities. The map's static models are drawn and marked in ^1red^7.\n";
 	lines[n++] = "^3/removepickups: ^7Removes all pickups from the current map (ammo, health, shield, and weapons), the map's own (^3M^7) included.\n";
 	lines[n++] = "^3/spawnplatform <height (optional)>: ^7Spawns a platform under your feet. Without a height it stays put; with one it is a lift that rises that many units when someone steps onto it, lowered to fit under a ceiling.\n";
 	lines[n++] = "^3/spawndummy: ^7Spawns a saber training dummy in front of you, facing you (where you stand when there is no room), showing the damage each series of hits does.\n";
@@ -24833,6 +24841,7 @@ command_t commands[] = {
 	{ "entaddaim",			Cmd_EntAddAim_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entcancel",			Cmd_EntCancel_f,			CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entcopy",			Cmd_EntCopy_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
+	{ "entcopystatic",		Cmd_EntCopyStatic_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },	// DAJ_RP: [Static Models] g_entgrab.c
 	{ "entcut",				Cmd_EntCut_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entdeletefile",		Cmd_EntDeleteFile_f,		CMD_LOGGEDIN | CMD_NOINTERMISSION },
 	{ "entedit",			Cmd_EntEdit_f,				CMD_LOGGEDIN | CMD_NOINTERMISSION },

@@ -9,7 +9,11 @@ GalaxyRP: [Entity System] picking entities up, turning them and putting them dow
   /entrotate       turns what is held, or else the entity aimed at: 45 degrees of yaw with no
                    arguments, "/entrotate <yaw>" by that much yaw, "/entrotate <pitch> <yaw> <roll>" to
                    exactly those angles.
-  /entcancel       lets go: a copy is simply not made, a cut entity goes back where it was.
+  /entcancel       lets go: a copy is simply not made, a cut entity goes back where it was, a copy of a
+                   static model is deleted.
+  /entcopystatic [#N]  DAJ_RP: [Static Models] picks up a solid misc_model_breakable copy of the map's
+                   misc_model_static aimed at (or that number -- g_statics.c); /entcopystatic again drops
+                   it where the admin is aiming. The static model itself stays: each client draws it.
   /entaddaim       is /entadd placing the new entity on the surface aimed at (Cmd_EntAddAim_f, g_cmds.c,
                    through RP_EntAddAimPoint() and RP_EntGrabPlace() below).
 
@@ -49,6 +53,7 @@ extern qboolean check_admin_command( gentity_t *ent, int admin_command, qboolean
 extern void zyk_main_set_entity_field( gentity_t *ent, char *key, char *value );
 extern void zyk_main_spawn_entity( gentity_t *ent );
 extern qboolean zyk_spawn_strings_full( gentity_t *ent );
+extern qboolean StringIsInteger( const char *s );	// g_cmds.c
 
 #define RP_GRAB_RANGE			2048.0f	// how far the aim reaches (/entcopy, /entcut)
 #define RP_ADDAIM_RANGE			32768.0f	// how far /entaddaim's aim reaches: across any map
@@ -61,6 +66,7 @@ extern qboolean zyk_spawn_strings_full( gentity_t *ent );
 #define RP_GRAB_ANGLE_LIMIT		100000.0f
 #define RP_GRAB_COLOR_COPY		SABER_BLUE
 #define RP_GRAB_COLOR_CUT		SABER_ORANGE
+#define RP_GRAB_COLOR_STATIC	RP_LINE_RED	// DAJ_RP: [Static Models] as Entity Bounds draws static models
 
 // zyk: the preview entity's classname. Compared by address, so nothing else can pass for one.
 static char rp_hold_ghost_classname[] = "rp_hold_ghost";
@@ -934,6 +940,33 @@ static void RP_GrabClear( gentity_t *ent )
 	VectorClear( pers->entHoldOrigin );
 	pers->entHoldNextBox = 0;
 	pers->entHoldGhost = 0;
+	pers->entHoldStatic = 0;
+}
+
+/*
+==================
+RP_EntHeldAsStaticCopy
+
+DAJ_RP: [Static Models] whether this is the misc_model_breakable /entcopystatic made and an admin still
+holds, hidden where the static model is: not placed yet, so /entsave leaves it out (g_cmds.c) -- written,
+it would load as a prop on top of the static model it copies.
+==================
+*/
+qboolean RP_EntHeldAsStaticCopy( const gentity_t *e )
+{
+	int holder;
+	const gclient_t *client;
+
+	if ( !e || !e->inuse || !e->rpHeldBy )
+		return qfalse;
+
+	holder = e->rpHeldBy - 1;
+	if ( holder < 0 || holder >= MAX_CLIENTS || !g_entities[holder].client )
+		return qfalse;
+
+	client = g_entities[holder].client;
+
+	return ( client->pers.entHoldMode == RP_HOLD_STATIC && client->pers.entHoldNum == e->s.number ) ? qtrue : qfalse;
 }
 
 /*
@@ -1086,7 +1119,7 @@ static void RP_GrabUpdate( gentity_t *ent, gentity_t *held )
 	if ( level.time >= pers->entHoldNextBox )
 	{
 		RP_GrabDrawPreview( ent, origin, mins, maxs, pers->entHoldAngles,
-			pers->entHoldMode == RP_HOLD_CUT ? RP_GRAB_COLOR_CUT : RP_GRAB_COLOR_COPY );
+			pers->entHoldMode == RP_HOLD_CUT ? RP_GRAB_COLOR_CUT : pers->entHoldMode == RP_HOLD_STATIC ? RP_GRAB_COLOR_STATIC : RP_GRAB_COLOR_COPY );
 		pers->entHoldNextBox = level.time + RP_GRAB_PREVIEW_MSEC;
 	}
 }
@@ -1096,14 +1129,15 @@ static void RP_GrabUpdate( gentity_t *ent, gentity_t *held )
 RP_EntGrabCancel
 
 Let go of whatever this client holds: a copy is simply not made, a cut entity is spawned again from its
-record -- where it was, as it was. With tell, the client is told. Called by /entcancel, and when the
+record -- where it was, as it was -- and the copy of a static model (/entcopystatic), which nothing was
+taken from, is deleted. With tell, the client is told. Called by /entcancel, and when the
 holder logs out, disconnects (quietly) or loses the Entity System power.
 ==================
 */
 void RP_EntGrabCancel( gentity_t *ent, qboolean tell )
 {
 	gentity_t *held;
-	int mode, num;
+	int mode, num, staticNum;
 
 	if ( !ent || !ent->client || !ent->client->pers.entHoldNum )
 		return;
@@ -1111,6 +1145,7 @@ void RP_EntGrabCancel( gentity_t *ent, qboolean tell )
 	held = RP_GrabHeld( ent );
 	mode = ent->client->pers.entHoldMode;
 	num = ent->client->pers.entHoldNum;
+	staticNum = ent->client->pers.entHoldStatic;
 
 	RP_GrabClear( ent );
 
@@ -1121,7 +1156,15 @@ void RP_EntGrabCancel( gentity_t *ent, qboolean tell )
 		return;
 	}
 
-	if ( mode == RP_HOLD_CUT )
+	if ( mode == RP_HOLD_STATIC )
+	{
+		RP_FreeEntityChildren( held );
+		G_FreeEntity( held );
+
+		if ( tell )
+			trap->SendServerCommand( ent->s.number, va( "print \"Let go of the copy of %s.\n\"", RP_StaticLabel( staticNum ) ) );
+	}
+	else if ( mode == RP_HOLD_CUT )
 	{
 		RP_EntGrabRespawnInPlace( held );
 
@@ -1153,7 +1196,8 @@ a range): while holding, the aim is where the held entity is to land, so whateve
 what the admin means, and the rest waits for the hold to end too, so nothing is changed in the middle
 of one. qtrue, and said, when refused. A hold whose entity is gone is forgotten here and said, and the
 command goes on. /entcopy, /entcut, /entrotate, /entcancel and /entsave are made for a hold; the
-commands that only show or list are left alone.
+commands that only show or list are left alone. /entcopystatic refuses through this while a copy or a cut
+entity is held, and drops its own copy of a static model.
 ==================
 */
 qboolean RP_EntRefuseWhileHolding( gentity_t *ent )
@@ -1176,6 +1220,8 @@ qboolean RP_EntRefuseWhileHolding( gentity_t *ent )
 
 	if ( pers->entHoldMode == RP_HOLD_CUT )
 		trap->SendServerCommand( ent->s.number, va( "print \"You are holding entity %d (cut): drop it with ^3/entcut^7 or put it back with ^3/entcancel^7 first.\n\"", num ) );
+	else if ( pers->entHoldMode == RP_HOLD_STATIC )
+		trap->SendServerCommand( ent->s.number, va( "print \"You are holding a copy of %s: drop it with ^3/entcopystatic^7 or let go with ^3/entcancel^7 first.\n\"", RP_StaticLabel( pers->entHoldStatic ) ) );
 	else
 		trap->SendServerCommand( ent->s.number, va( "print \"You are holding a copy of entity %d: drop it with ^3/entcopy^7 or let go with ^3/entcancel^7 first.\n\"", num ) );
 
@@ -1214,8 +1260,9 @@ void RP_EntGrabFrame( gentity_t *ent )
 		return;
 	}
 
-	// zyk: a script, or a team of movers, can link an entity again; a held cut one stays out
-	if ( client->pers.entHoldMode == RP_HOLD_CUT && !held->isLogical && held->r.linked )
+	// zyk: a script, or a team of movers, can link an entity again; a held cut one stays out, and so does
+	// DAJ_RP: [Static Models] the copy of a static model, hidden until it is dropped
+	if ( ( client->pers.entHoldMode == RP_HOLD_CUT || client->pers.entHoldMode == RP_HOLD_STATIC ) && !held->isLogical && held->r.linked )
 		trap->UnlinkEntity( (sharedEntity_t *)held );
 
 	if ( RP_GrabFollowing( ent ) || level.intermissiontime )
@@ -1533,7 +1580,10 @@ RP_GrabDrop
 The second /entcopy or /entcut: the held entity lands where the admin is aiming now. A copy is a new
 entity made from the original's record with the new origin (and angles); a cut entity gets them in its
 own record and is spawned again in its own slot. If that spawn removes it, it is rebuilt where it was
-from its old record, so a drop never loses an entity.
+from its old record, so a drop never loses an entity. DAJ_RP: [Static Models] the second /entcopystatic
+drops its copy of a static model the way a cut entity is dropped -- it is already an entity, hidden --
+but one that does not survive there is gone rather than rebuilt: where it was is on top of the static
+model it copies.
 ==================
 */
 static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
@@ -1546,6 +1596,7 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 	qboolean rotated = pers->entHoldRotated;
 	int num = held->s.number;
 	int mode = pers->entHoldMode;
+	int staticNum = pers->entHoldStatic;
 
 	RP_EntGrabAimPoint( ent, point, normal );
 	RP_EntGrabPlaceBox( held->classname, held, mins, maxs );
@@ -1660,7 +1711,8 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 		// has to be settled) -- asked before its record is written, so a refusal changes nothing
 		if ( !G_AllocRoomFor( RP_EntityRecordBytes( held ) * 2 ) )
 		{
-			trap->SendServerCommand( ent->s.number, va( "print \"Cannot drop it: the game's memory pool is nearly full (%d KB free). It is still held: /entcancel puts it back.\n\"", G_AllocRemaining() / 1024 ) );
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot drop it: the game's memory pool is nearly full (%d KB free). It is still held: /entcancel %s.\n\"", G_AllocRemaining() / 1024,
+				mode == RP_HOLD_STATIC ? "lets it go" : "puts it back" ) );
 			return;
 		}
 
@@ -1704,10 +1756,26 @@ static void RP_GrabDrop( gentity_t *ent, gentity_t *held )
 			}
 		}
 
+		if ( held->inuse && mode == RP_HOLD_STATIC )
+		{
+			// DAJ_RP: [Static Models] a new prop now, as one /entadd made: /entundo takes it away
+			level.last_spawned_entity = held;
+			G_LogPrintf( "%s dropped a copy of static model #%d as entity %d at %s\n", pers->netname, staticNum, num, originText );
+			trap->SendServerCommand( ent->s.number, va( "print \"Dropped a copy of %s as entity %d at (%s).\n\"", RP_StaticLabel( staticNum ), num, originText ) );
+			return;
+		}
+
 		if ( held->inuse )
 		{
 			G_LogPrintf( "%s moved entity %d to %s\n", pers->netname, num, originText );
 			trap->SendServerCommand( ent->s.number, va( "print \"Entity %d moved to (%s).\n\"", num, originText ) );
+			return;
+		}
+
+		if ( mode == RP_HOLD_STATIC )
+		{
+			G_LogPrintf( "%s dropped a copy of static model #%d at %s, where it did not survive being spawned\n", pers->netname, staticNum, originText );
+			trap->SendServerCommand( ent->s.number, va( "print \"The copy of %s did not survive being spawned at (%s), so it is gone.\n\"", RP_StaticLabel( staticNum ), originText ) );
 			return;
 		}
 
@@ -1751,6 +1819,13 @@ static void RP_GrabCommand( gentity_t *ent, int mode )
 
 			RP_GrabClear( ent );
 			trap->SendServerCommand( ent->s.number, va( "print \"The entity you were holding (%d) is gone.\n\"", num ) );
+			return;
+		}
+
+		// DAJ_RP: [Static Models] a copy of a static model is /entcopystatic's to drop, in every form
+		if ( pers->entHoldMode == RP_HOLD_STATIC )
+		{
+			RP_EntRefuseWhileHolding( ent );
 			return;
 		}
 
@@ -1824,6 +1899,222 @@ void Cmd_EntCopy_f( gentity_t *ent )
 void Cmd_EntCut_f( gentity_t *ent )
 {
 	RP_GrabCommand( ent, RP_HOLD_CUT );
+}
+
+/*
+==================
+Cmd_EntCopyStatic_f
+
+DAJ_RP: [Static Models] /entcopystatic [#N]: picks up a copy of one of the map's misc_model_static -- the
+one aimed at, as Entity Bounds shows it in red (RP_EntBoundsAimStatic), or that number -- as a solid
+misc_model_breakable with its model, origin, angles and scale (g_statics.c). The copy is made at once,
+through the Entity System's spawn and its checks (the model file, the model and entity slots), and held
+hidden where the static model is, a red preview following the aim; /entcopystatic again drops it there
+(RP_GrabDrop), /entcancel deletes it (RP_EntGrabCancel), and /entcopy and /entcut are refused while it is
+held. The static model itself stays as it is: each client draws it from its own copy of the map file.
+Refused while holding anything else (RP_EntRefuseWhileHolding).
+==================
+*/
+void Cmd_EntCopyStatic_f( gentity_t *ent )
+{
+	clientPersistant_t *pers = &ent->client->pers;
+	int argc = trap->Argc();
+	char arg[MAX_STRING_CHARS];
+	char originText[96], anglesText[96], scaleText[96];
+	const char *model = NULL;
+	char label[128];
+	vec3_t origin, angles, scale;
+	rpSpawnRoute_t route;
+	gentity_t *copy;
+	int n, i, len;
+
+	if ( !check_admin_command( ent, ADM_ENTITYSYSTEM, qtrue ) )
+		return;
+
+	if ( pers->entHoldNum )
+	{
+		gentity_t *held = RP_GrabHeld( ent );
+
+		if ( !held )
+		{
+			int num = pers->entHoldNum;
+
+			RP_GrabClear( ent );
+			trap->SendServerCommand( ent->s.number, va( "print \"The entity you were holding (%d) is gone.\n\"", num ) );
+			return;
+		}
+
+		// zyk: a copy or a cut entity is held: those are dropped by their own commands
+		if ( pers->entHoldMode != RP_HOLD_STATIC )
+		{
+			RP_EntRefuseWhileHolding( ent );
+			return;
+		}
+
+		if ( argc >= 2 )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"You are already holding a copy of %s: drop it with ^3/entcopystatic^7 first, or ^3/entcancel^7.\n\"",
+				RP_StaticLabel( pers->entHoldStatic ) ) );
+			return;
+		}
+
+		if ( RP_GrabFollowing( ent ) )
+		{
+			trap->SendServerCommand( ent->s.number, "print \"You are following another player. Stop following first.\n\"" );
+			return;
+		}
+
+		RP_GrabDrop( ent, held );
+		return;
+	}
+
+	if ( RP_GrabFollowing( ent ) )
+	{
+		trap->SendServerCommand( ent->s.number, "print \"You are following another player. Stop following first.\n\"" );
+		return;
+	}
+
+	if ( argc > 2 )
+	{
+		trap->SendServerCommand( ent->s.number, "print \"Usage: ^3/entcopystatic^7 picks up a copy of the static model you aim at (red in Entity Bounds, ^3/settings 6^7), ^3/entcopystatic #<number>^7 of that one. Use it again to drop the copy, ^3/entcancel^7 to let it go.\n\"" );
+		return;
+	}
+
+	if ( RP_StaticsCount() <= 0 )
+	{
+		trap->SendServerCommand( ent->s.number, "print \"This map has no static models (misc_model_static).\n\"" );
+		return;
+	}
+
+	if ( argc == 2 )
+	{
+		const char *p;
+
+		trap->Argv( 1, arg, sizeof( arg ) );
+		p = ( arg[0] == '#' ) ? arg + 1 : arg;
+
+		if ( strlen( p ) > 6 || !StringIsInteger( p ) || ( n = atoi( p ) ) < 0 || n >= RP_StaticsCount() )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"There is no static model %s (^1#0^7 to ^1#%d^7).\n\"", RP_ShownText( arg ), RP_StaticsCount() - 1 ) );
+			return;
+		}
+	}
+	else
+	{
+		n = RP_EntBoundsAimStatic( ent );
+		if ( n < 0 )
+		{
+			trap->SendServerCommand( ent->s.number, "print \"You are not aiming at a static model. Aim at one (red in Entity Bounds, ^3/settings 6^7), or give its number: ^3/entcopystatic #<number>^7.\n\"" );
+			return;
+		}
+	}
+
+	RP_StaticGet( n, &model, origin, angles, scale );
+	Q_strncpyz( label, RP_StaticLabel( n ), sizeof( label ) );	// va()'s buffers do not last through the spawn
+	len = strlen( model );
+
+	if ( len < 5 || Q_stricmp( model + len - 4, ".md3" ) != 0 )
+	{
+		trap->SendServerCommand( ent->s.number, va( "print \"%s uses a model that is not an md3 (%s): it cannot be copied.\n\"", label, RP_ShownText( model ) ) );
+		return;
+	}
+
+	if ( !RP_FileExists( model ) )
+	{
+		trap->SendServerCommand( ent->s.number, va( "print \"%s's model (%s) is not on the server, so it cannot be copied.\n\"", label, RP_ShownText( model ) ) );
+		return;
+	}
+
+	for ( i = 0; i < 3; i++ )
+	{
+		if ( !( scale[i] > 0.0f ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"%s has a scale of 0 or less: it cannot be copied.\n\"", label ) );
+			return;
+		}
+	}
+
+	Com_sprintf( originText, sizeof( originText ), "%.8g %.8g %.8g", origin[0], origin[1], origin[2] );
+	Com_sprintf( anglesText, sizeof( anglesText ), "%.8g %.8g %.8g", angles[0], angles[1], angles[2] );
+	if ( scale[0] == scale[1] && scale[1] == scale[2] )
+		Com_sprintf( scaleText, sizeof( scaleText ), "%.8g", scale[0] );
+	else
+		Com_sprintf( scaleText, sizeof( scaleText ), "%.8g %.8g %.8g", scale[0], scale[1], scale[2] );
+
+	// zyk: the record it is made from, and so what /entsave writes once it is dropped
+	{
+		const char *pairs[6][2];
+		int count = 0;
+
+		pairs[count][0] = "classname"; pairs[count++][1] = "misc_model_breakable";
+		pairs[count][0] = "model"; pairs[count++][1] = model;
+		pairs[count][0] = "origin"; pairs[count++][1] = originText;
+		pairs[count][0] = "angles"; pairs[count++][1] = anglesText;
+		if ( !( scale[0] == 1.0f && scale[1] == 1.0f && scale[2] == 1.0f ) )
+		{
+			pairs[count][0] = ( scale[0] == scale[1] && scale[1] == scale[2] ) ? "modelscale" : "modelscale_vec";
+			pairs[count++][1] = scaleText;
+		}
+		pairs[count][0] = "spawnflags"; pairs[count++][1] = "1";	// solid, as most props are
+
+		RP_SpawnRouteInit( &route );
+		for ( i = 0; i < count; i++ )
+			RP_SpawnRouteNoteKey( &route, pairs[i][0], pairs[i][1] );
+
+		if ( !RP_SpawnRouteHasRoom( &route ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot copy %s: the server is near its entity limit (%d slots free, %d held in reserve).\n\"",
+				label, G_FreeEntityCount(), ZYK_ENTITY_RESERVE ) );
+			return;
+		}
+
+		if ( !G_AllocRoomFor( 512 + len ) )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot copy %s: the game's memory pool is nearly full (%d KB free). It is freed when the map changes.\n\"",
+				label, G_AllocRemaining() / 1024 ) );
+			return;
+		}
+
+		copy = RP_SpawnForRoute( &route );
+		if ( !copy )
+		{
+			trap->SendServerCommand( ent->s.number, va( "print \"Cannot copy %s: there is no free entity slot for it.\n\"", label ) );
+			return;
+		}
+
+		for ( i = 0; i < count; i++ )
+			zyk_main_set_entity_field( copy, (char *)pairs[i][0], (char *)pairs[i][1] );
+	}
+
+	level.rp_spawn_refusal[0] = '\0';
+	zyk_main_spawn_entity( copy );
+
+	if ( !copy->inuse )
+	{
+		if ( level.rp_spawn_refusal[0] )
+			trap->SendServerCommand( ent->s.number, va( "print \"The copy of %s was refused: %s.\n\"", label, level.rp_spawn_refusal ) );
+		else
+			trap->SendServerCommand( ent->s.number, va( "print \"The copy of %s did not survive being spawned.\n\"", label ) );
+		return;
+	}
+
+	pers->entHoldNum = copy->s.number;
+	pers->entHoldMode = RP_HOLD_STATIC;
+	pers->entHoldStatic = n;
+	pers->entHoldRotated = qfalse;
+	RP_GrabRecordAngles( copy, RP_GrabAnglesKey( copy ), pers->entHoldAngles );
+	for ( i = 0; i < 3; i++ )
+		pers->entHoldAngles[i] = RP_GrabNormalizeAngle( pers->entHoldAngles[i] );
+	pers->entHoldNextBox = 0;
+	pers->entHoldGhost = 0;
+	copy->rpHeldBy = ent->s.number + 1;
+
+	RP_GrabMakeGhost( ent, copy );
+	RP_GrabHide( copy );
+	RP_GrabUpdate( ent, copy );
+
+	G_LogPrintf( "%s picked up a copy of static model #%d (%s) as entity %d\n", pers->netname, n, model, copy->s.number );
+	trap->SendServerCommand( ent->s.number, va( "print \"Holding a copy of %s as a misc_model_breakable. Aim where it should go and use ^3/entcopystatic^7 again to drop it, ^3/entrotate^7 to turn it, ^3/entcancel^7 to let go.\n\"", label ) );
 }
 
 /*
@@ -1914,8 +2205,12 @@ void Cmd_EntRotate_f( gentity_t *ent )
 		pers->entHoldRotated = qtrue;
 		pers->entHoldNextBox = 0;	// redraw the facing line now
 
-		trap->SendServerCommand( ent->s.number, va( "print \"Entity %d will be dropped at angles (%g %g %g).\n\"", held->s.number,
-			pers->entHoldAngles[0], pers->entHoldAngles[1], pers->entHoldAngles[2] ) );
+		if ( pers->entHoldMode == RP_HOLD_STATIC )
+			trap->SendServerCommand( ent->s.number, va( "print \"The copy of %s will be dropped at angles (%g %g %g).\n\"", RP_StaticLabel( pers->entHoldStatic ),
+				pers->entHoldAngles[0], pers->entHoldAngles[1], pers->entHoldAngles[2] ) );
+		else
+			trap->SendServerCommand( ent->s.number, va( "print \"Entity %d will be dropped at angles (%g %g %g).\n\"", held->s.number,
+				pers->entHoldAngles[0], pers->entHoldAngles[1], pers->entHoldAngles[2] ) );
 		return;
 	}
 

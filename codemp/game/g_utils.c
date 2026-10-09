@@ -1277,6 +1277,15 @@ done:
 	return ok;
 }
 
+// DAJ_RP: [Static Models] an md3's frame-0 bounds by its path, for a model no index stands for (a
+// misc_model_static's, which the server never registers -- see g_statics.c); not kept, the caller keeps it
+qboolean RP_ReadModelBounds( const char *path, vec3_t mins, vec3_t maxs )
+{
+	int frames = 0;
+
+	return RP_ReadModelInfo( path, &frames, mins, maxs );
+}
+
 qboolean RP_ModelInfo( int modelIndex, const char *path, int *frames, vec3_t mins, vec3_t maxs )
 {
 	if ( modelIndex <= 0 || modelIndex >= MAX_MODELS )

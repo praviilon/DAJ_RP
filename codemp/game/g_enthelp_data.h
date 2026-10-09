@@ -913,7 +913,8 @@ static const rpEntHelp_t rp_ent_help[] = {
 	{ "misc_model_static", RP_EH_MAPONLY | RP_EH_REMOVED, "Each client reads it from its own copy of the map file, so one added on the server is never seen: use misc_model_breakable for a model.",
 		"A model drawn by each client, not by the server: a client loading the map reads every misc_model_static from its own copy of the map file "
 		"and draws it as a model nothing collides with (scaled by modelscale or modelscale_vec, its culling point moved by zoffset). "
-		"The server has no part in it and removes it at once, so one added with /entadd or a server entity file is never seen by anyone.",
+		"The server has no part in it and removes it at once, so one added with /entadd or a server entity file is never seen by anyone. "
+		"It notes the map's own, though: Entity Bounds (/settings 6) draws them in red, and /entcopystatic picks up a misc_model_breakable copy of one.",
 		NULL,
 		NULL,
 		NULL,

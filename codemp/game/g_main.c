@@ -3244,6 +3244,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// own: /entcut and /entrotate leave those alone. See RP_MarkMapEntities() in g_entgrab.c.
 	RP_MarkMapEntities();
 
+	// DAJ_RP: [Static Models] and say if some of the map's misc_model_static did not fit the list (g_statics.c)
+	RP_StaticsReport();
+
 	// GalaxyRP fix: [Entity System] CS_ITEMS once more, now that the per-map fixes above have spawned
 	// their items: it was written before them (SaveRegisteredItems() with the map's own entities), so an
 	// item class only a fix placed was never precached by the client -- a hologram cone until a restart.

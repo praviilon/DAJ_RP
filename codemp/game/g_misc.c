@@ -371,6 +371,9 @@ bsp space!
 */
 void SP_misc_model_static(gentity_t *ent)
 {
+	// DAJ_RP: [Static Models] the map's own are noted first, for Entity Bounds and /entcopystatic (g_statics.c)
+	RP_StaticsRecord();
+
 	RP_SpawnSaysWhy( ent, "a misc_model_static is drawn by each client from its own copy of the map file, so one added on the server is never seen: use misc_model_breakable for a model" );
 	G_FreeEntity( ent );
 }
