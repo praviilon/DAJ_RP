@@ -919,6 +919,36 @@ qhandle_t CG_ModelEntrySkin( const char *entry )
 	return trap->R_RegisterSkin( entry + 1 );
 }
 
+/*
+==================
+CG_RpVectorScale
+
+DAJ_RP: [Static Models] whether this general entity carries a per-axis scale for its model: the server
+flags a misc_model_breakable with "modelscale_vec" (EF2_RP_VECTOR_SCALE, bg_public.h) and sends the three
+scales in origin2, which a general entity has no other use for here. Each must be a scale a model can be
+drawn at, 0.01 to 64 -- anything else is ignored and the model drawn as it would be without it.
+==================
+*/
+#define RP_VECTOR_SCALE_MIN		0.01f
+#define RP_VECTOR_SCALE_MAX		64.0f
+
+qboolean CG_RpVectorScale( const entityState_t *s )
+{
+	int k;
+
+	if ( s->eType != ET_GENERAL || !( s->eFlags2 & EF2_RP_VECTOR_SCALE ) )
+		return qfalse;
+
+	for ( k = 0; k < 3; k++ )
+	{
+		// zyk: the negated test also refuses a NaN
+		if ( !( s->origin2[k] >= RP_VECTOR_SCALE_MIN && s->origin2[k] <= RP_VECTOR_SCALE_MAX ) )
+			return qfalse;
+	}
+
+	return qtrue;
+}
+
 static void CG_General( centity_t *cent ) {
 	refEntity_t			ent;
 	entityState_t		*s1;
@@ -1523,7 +1553,13 @@ Ghoul2 Insert End
 	// convert angles to axis
 	AnglesToAxis( cent->lerpAngles, ent.axis );
 
-	if (cent->currentState.iModelScale)
+	if (CG_RpVectorScale(&cent->currentState))
+	{ // DAJ_RP: [Static Models] a misc_model_breakable's "modelscale_vec", scaled per axis
+		VectorCopy(cent->currentState.origin2, cent->modelScale);
+		VectorCopy(cent->modelScale, ent.modelScale);
+		ScaleModelAxis(&ent);
+	}
+	else if (cent->currentState.iModelScale)
 	{ //if the server says we have a custom scale then set it now.
 		cent->modelScale[0] = cent->modelScale[1] = cent->modelScale[2] = cent->currentState.iModelScale/100.0f;
 		VectorCopy(cent->modelScale, ent.modelScale);

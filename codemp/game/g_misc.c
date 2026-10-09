@@ -529,8 +529,10 @@ GalaxyRP: [Entity System] additions to misc_model_breakable:
                      without either key; it goes out when the model is destroyed.
   "modelscale"       now scales the model drawn as well as its box, as in single player -- through
                      entityState_t::iModelScale, so 0.01 to 10.23. "zykmodelscale" (a percentage), if
-                     given, still decides the drawn size; "modelscale_vec" still scales the box only,
-                     since the client can only draw a model scaled the same on every axis.
+                     given, still decides the drawn size; "modelscale_vec" scales the box per axis, and
+                     DAJ_RP: [Static Models] the GalaxyRP client draws the model so too (EF2_RP_VECTOR_SCALE,
+                     the scales in entityState_t::origin2); other clients draw it unscaled, since the
+                     protocol's own scale is one number for every axis.
   AUTOANIMATE (2)    a model with several frames plays them over and over (RP_Animate, one frame per
                      server frame), and stops when destroyed.
 
@@ -548,6 +550,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 	int		len;
 	float grav = 0;
 	qboolean bHasScale = qfalse;
+	qboolean vecScale = qfalse;
 	qboolean esMade = RP_EntitySystemMade( ent );
 	qboolean boxGiven = qfalse;
 	qboolean autoBox = qfalse;
@@ -560,6 +563,7 @@ void SP_misc_model_breakable( gentity_t *ent )
 	G_SpawnInt( "material", "8", (int*)&ent->material );
 	G_SpawnFloat( "radius", "1", &ent->radius ); // used to scale chunk code if desired by a designer
 	bHasScale = G_SpawnVector("modelscale_vec", "0 0 0", ent->modelScale);
+	vecScale = bHasScale;	// DAJ_RP: [Static Models] for EF2_RP_VECTOR_SCALE below
 
 	// zyk: now the size is set correctly
 	if (Q_stricmp(ent->targetname,"zyk_ice_boulder") == 0)
@@ -740,8 +744,9 @@ void SP_misc_model_breakable( gentity_t *ent )
 		float light = 100.0f;
 		vec3_t color;
 		qboolean lightSet, colorSet;
+		qboolean percentGiven = G_SpawnInt("zykmodelscale", "0", &percent);
 
-		if (!G_SpawnInt("zykmodelscale", "0", &percent))
+		if (!percentGiven)
 		{
 			if (uniformScale > 0.0f)
 			{
@@ -761,6 +766,21 @@ void SP_misc_model_breakable( gentity_t *ent )
 		lightSet = G_SpawnFloat("light", "100", &light);
 		colorSet = G_SpawnVector("color", "1 1 1", color);
 		ent->s.constantLight = (lightSet || colorSet) ? RP_PackConstantLight(light, color) : 0;
+
+		// DAJ_RP: [Static Models] "modelscale_vec" drawn per axis by the GalaxyRP client: the three scales in
+		// origin2, flagged (EF2_RP_VECTOR_SCALE, bg_public.h); iModelScale stays 0, so every other client
+		// draws the model unscaled as before. "zykmodelscale", when given, decides the drawn size instead.
+		// Undone when the key is gone, as above: /entedit spawns the entity again without clearing it.
+		if (vecScale && !percentGiven && ent->modelScale[0] > 0.0f && ent->modelScale[1] > 0.0f && ent->modelScale[2] > 0.0f)
+		{
+			ent->s.eFlags2 |= EF2_RP_VECTOR_SCALE;
+			VectorCopy(ent->modelScale, ent->s.origin2);
+		}
+		else if (ent->s.eFlags2 & EF2_RP_VECTOR_SCALE)
+		{
+			ent->s.eFlags2 &= ~EF2_RP_VECTOR_SCALE;
+			VectorClear(ent->s.origin2);
+		}
 	}
 
 	// GalaxyRP: [Entity System] AUTOANIMATE: play the model's frames over and over

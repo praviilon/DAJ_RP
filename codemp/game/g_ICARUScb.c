@@ -1017,6 +1017,10 @@ void Q3_Play( int taskID, int entID, const char *type, const char *name )
 			VectorCopy( ent->r.currentOrigin, ent->s.origin2 );
 			VectorCopy( ent->r.currentAngles, ent->s.angles2 );
 
+			// DAJ_RP: [Static Models] origin2 held a breakable's per-axis scale (EF2_RP_VECTOR_SCALE, g_misc.c);
+			// it is the ROFF's now, so the model is drawn unscaled, as every other client draws it
+			ent->s.eFlags2 &= ~EF2_RP_VECTOR_SCALE;
+
 			trap->LinkEntity( (sharedEntity_t *)ent );
 
 			trap->ROFF_Play(ent->s.number, ent->roffid, qtrue);

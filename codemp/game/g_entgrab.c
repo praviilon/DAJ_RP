@@ -1901,6 +1901,28 @@ void Cmd_EntCut_f( gentity_t *ent )
 	RP_GrabCommand( ent, RP_HOLD_CUT );
 }
 
+// DAJ_RP: [Static Models] three numbers as a key's value, each in the fewest digits that read back as the
+// same float -- "0.598291 0.6 0.2", not the "0.59829098 0.60000002 0.2" a fixed precision prints
+static void RP_ShortVectorText( const vec3_t v, char *buf, int size )
+{
+	char part[3][32];
+	int k, digits;
+
+	for ( k = 0; k < 3; k++ )
+	{
+		for ( digits = 6; digits < 9; digits++ )
+		{
+			Com_sprintf( part[k], sizeof( part[k] ), "%.*g", digits, v[k] );
+			if ( (float)atof( part[k] ) == v[k] )
+				break;
+		}
+		if ( digits == 9 )
+			Com_sprintf( part[k], sizeof( part[k] ), "%.9g", v[k] );
+	}
+
+	Com_sprintf( buf, size, "%s %s %s", part[0], part[1], part[2] );
+}
+
 /*
 ==================
 Cmd_EntCopyStatic_f
@@ -2034,12 +2056,16 @@ void Cmd_EntCopyStatic_f( gentity_t *ent )
 		}
 	}
 
-	Com_sprintf( originText, sizeof( originText ), "%.8g %.8g %.8g", origin[0], origin[1], origin[2] );
-	Com_sprintf( anglesText, sizeof( anglesText ), "%.8g %.8g %.8g", angles[0], angles[1], angles[2] );
+	RP_ShortVectorText( origin, originText, sizeof( originText ) );
+	RP_ShortVectorText( angles, anglesText, sizeof( anglesText ) );
+	RP_ShortVectorText( scale, scaleText, sizeof( scaleText ) );
 	if ( scale[0] == scale[1] && scale[1] == scale[2] )
-		Com_sprintf( scaleText, sizeof( scaleText ), "%.8g", scale[0] );
-	else
-		Com_sprintf( scaleText, sizeof( scaleText ), "%.8g %.8g %.8g", scale[0], scale[1], scale[2] );
+	{
+		char *space = strchr( scaleText, ' ' );	// one number for "modelscale"
+
+		if ( space )
+			*space = '\0';
+	}
 
 	// zyk: the record it is made from, and so what /entsave writes once it is dropped
 	{

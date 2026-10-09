@@ -833,7 +833,7 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"mins|-16 -16 -16|Box corner (Entity System default: the model's own bounds).\n"
 		"maxs|16 16 16|Box corner (Entity System default: the model's own bounds).\n"
 		"modelscale||Scales the drawn model and its box, 0.01 to 10.23. The origin is raised to keep the box bottom in place.\n"
-		"modelscale_vec||Scales the box only, per axis (x y z).\n"
+		"modelscale_vec||Scales the box per axis (x y z). The GalaxyRP client draws the model so too, other clients unscaled.\n"
 		"zykmodelscale||Drawn size in percent (1 to 1023), overrides the drawn size modelscale gives.\n"
 		"light||Radius of a light on the model (100 when only color is given). It goes out when the model breaks.\n"
 		"color||Light colour, red green blue from 0 to 1 (default white).\n"
@@ -1129,8 +1129,9 @@ static const rpEntHelp_t rp_ent_help[] = {
 		"10.23 (1 is normal). A breakable is raised so its box keeps its bottom where it was.\n"
 		"zykmodelscale||The drawn size as a percentage (100 is normal, up to 1023), taking over from modelscale. The box is not "
 		"changed.\n"
-		"modelscale_vec||Three scales x y z, typed in quotes, for the box only: the model is drawn unscaled unless zykmodelscale "
-		"is given. modelscale is then not read.",
+		"modelscale_vec||Three scales x y z, typed in quotes, for the box: a misc_model_breakable is drawn so too by the GalaxyRP "
+		"client (other clients draw it unscaled), a misc_model_ghoul unscaled. zykmodelscale, if given, decides the drawn size. "
+		"modelscale is then not read.",
 		NULL,
 		"common misc_model_breakable misc_model_ghoul" },
 	{ "mover", RP_EH_TOPIC, NULL,
