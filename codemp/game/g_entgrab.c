@@ -26,7 +26,9 @@ Adapted from Lugormod's grab and clone tools, with the guards this mod's entity 
   - an entity from a misc_bsp's sub-BSP goes with its misc_bsp, and a permanent (neverFree) entity is
     the game's, so neither is picked up;
   - one hold per admin, and an entity one admin holds is refused to every other entity command
-    (gentity_t::rpHeldBy), so nothing edits, removes or picks up an entity out from under a hold.
+    (gentity_t::rpHeldBy), so nothing edits, removes or picks up an entity out from under a hold;
+  - and while an admin holds one, that admin's commands that add, change, use or remove entities wait
+    until it is dropped or let go of (RP_EntRefuseWhileHolding): the aim is where it is to land then.
 
 Where it lands: the trace from the admin's eye along the view, up to 2048 units, and the entity's box
 set against the surface hit so it rests on it (RP_EntGrabPlace). With nothing within reach it floats
@@ -1142,6 +1144,46 @@ void RP_EntGrabCancel( gentity_t *ent, qboolean tell )
 
 /*
 ==================
+RP_EntRefuseWhileHolding
+
+DAJ_RP: [Entity System] the commands that add, change, use or remove entities -- /enttrigger, /entuse,
+/entedit, /entremove, /entundo, /entlockset, /entadd, /entaddaim, /spawnplatform, /spawndummy,
+/removepickups, /entload -- are refused while this admin holds an entity, in every form (an id, the aim,
+a range): while holding, the aim is where the held entity is to land, so whatever is aimed at is not
+what the admin means, and the rest waits for the hold to end too, so nothing is changed in the middle
+of one. qtrue, and said, when refused. A hold whose entity is gone is forgotten here and said, and the
+command goes on. /entcopy, /entcut, /entrotate, /entcancel and /entsave are made for a hold; the
+commands that only show or list are left alone.
+==================
+*/
+qboolean RP_EntRefuseWhileHolding( gentity_t *ent )
+{
+	clientPersistant_t *pers;
+	int num;
+
+	if ( !ent || !ent->client || !ent->client->pers.entHoldNum )
+		return qfalse;
+
+	pers = &ent->client->pers;
+	num = pers->entHoldNum;
+
+	if ( !RP_GrabHeld( ent ) )
+	{
+		RP_GrabClear( ent );
+		trap->SendServerCommand( ent->s.number, va( "print \"The entity you were holding (%d) is gone.\n\"", num ) );
+		return qfalse;
+	}
+
+	if ( pers->entHoldMode == RP_HOLD_CUT )
+		trap->SendServerCommand( ent->s.number, va( "print \"You are holding entity %d (cut): drop it with ^3/entcut^7 or put it back with ^3/entcancel^7 first.\n\"", num ) );
+	else
+		trap->SendServerCommand( ent->s.number, va( "print \"You are holding a copy of entity %d: drop it with ^3/entcopy^7 or let go with ^3/entcancel^7 first.\n\"", num ) );
+
+	return qtrue;
+}
+
+/*
+==================
 RP_EntGrabFrame
 
 Once per client per server frame, from ClientEndFrame(): lets go if the holder may no longer hold or the
@@ -1260,7 +1302,8 @@ static gentity_t *RP_GrabAim( gentity_t *ent )
 ==================
 RP_EntAimTarget / RP_EntAimFollowing
 
-GalaxyRP: [Entity System] the same pick for /entedit and /entremove with no id (g_cmds.c): the entity
+GalaxyRP: [Entity System] the same pick for /entedit and /entremove with no id (g_cmds.c), and for
+/entlockset and /enttrigger (g_locks.c): the entity
 aimed at as RP_GrabAim() finds it, and whether the admin is following another player, when the view --
 and so the aim -- is that player's.
 ==================

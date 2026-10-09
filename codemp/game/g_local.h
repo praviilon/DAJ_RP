@@ -2523,7 +2523,7 @@ void		RP_EntBoundsFrame( gentity_t *ent );
 void		RP_EntBoundsLine( vec3_t start, vec3_t end, int color, int msec, int clientNum );
 void		RP_EntBoundsDrawBoxAt( int clientNum, const vec3_t origin, const vec3_t mins, const vec3_t maxs, const vec3_t angles, int color, int msec );
 gentity_t	*RP_EntBoundsAim( const gentity_t *viewer );
-gentity_t	*RP_EntAimTarget( gentity_t *ent );				// g_entgrab.c: what /entcopy, /entcut, /entedit and /entremove aim at
+gentity_t	*RP_EntAimTarget( gentity_t *ent );				// g_entgrab.c: what /entcopy, /entcut, /entedit, /entremove, /entlockset and /enttrigger aim at
 qboolean	RP_EntAimFollowing( const gentity_t *ent );
 // GalaxyRP: [Entity System] /entcopy, /entcut, /entrotate, /entcancel and /entaddaim -- g_entgrab.c
 #define RP_HOLD_COPY	1
@@ -2561,6 +2561,7 @@ int			RP_PackConstantLight( float light, const vec3_t color );
 gentity_t	*RP_EntGrabSettle( gentity_t *e, const vec3_t point, const vec3_t normal, int freeBefore );
 void		RP_EntGrabFrame( gentity_t *ent );
 void		RP_EntGrabCancel( gentity_t *ent, qboolean tell );
+qboolean	RP_EntRefuseWhileHolding( gentity_t *ent );	// DAJ_RP: the entity commands that wait for a hold to end
 qboolean	RP_EntGrabAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
 qboolean	RP_EntAddAimPoint( gentity_t *ent, vec3_t point, vec3_t normal );
 qboolean	RP_TeleAimPoint( gentity_t *ent, vec3_t point, vec3_t normal, int *surfaceFlags );	// DAJ_RP: [Admin] /teleportaim

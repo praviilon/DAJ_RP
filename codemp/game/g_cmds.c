@@ -15315,6 +15315,12 @@ void Cmd_EntUndo_f(gentity_t *ent) {
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	// GalaxyRP fix: [Entity System] the comment used to say "spawned by /entadd". Three commands
 	// write this slot -- /entadd, /spawnplatform and /spawndummy -- so this undoes whichever of them
 	// ran most recently. It is one step, not a stack: a second /entundo has nothing left to do.
@@ -15410,6 +15416,12 @@ void Cmd_EntUse_f( gentity_t *ent ) {
 	int num_found = 0, used = 0, npcs = 0, held = 0, inert = 0, i;
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
+		return;
+	}
+
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
 	{
 		return;
 	}
@@ -15845,6 +15857,12 @@ static void zyk_entadd( gentity_t *ent, qboolean aim ) {
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	if ( number_of_args < 2)
 	{
 		if (aim)
@@ -16188,6 +16206,12 @@ void Cmd_EntEdit_f( gentity_t *ent ) {
 	char arg2[MAX_STRING_CHARS];
 
 	if (!check_admin_command(ent, ADM_ENTITYSYSTEM, qtrue))
+	{
+		return;
+	}
+
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
 	{
 		return;
 	}
@@ -17402,6 +17426,12 @@ void Cmd_EntLoad_f( gentity_t *ent ) {
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	if ( number_of_args < 2)
 	{
 		trap->SendServerCommand( ent-g_entities, va("print \"You must specify a file name.\n\"") );
@@ -17898,6 +17928,12 @@ void Cmd_EntRemove_f( gentity_t *ent ) {
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	// GalaxyRP: [Entity System] with no id, the entity aimed at, the way /entcopy and /entcut pick
 	// theirs (RP_EntAimTarget in g_entgrab.c): it goes through the one-entity path below exactly as
 	// its id would. The range form always takes ids.
@@ -18237,6 +18273,12 @@ void Cmd_SpawnPlatform_f(gentity_t* ent)
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	if (trap->Argc() > 1)
 	{
 		int i;
@@ -18377,6 +18419,12 @@ void Cmd_SpawnDummy_f(gentity_t* ent)
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	// GalaxyRP fix: [Entity System] ask before allocating, as /entadd and /spawnplatform do. One
 	// slot here: SP_ZykTrainingPole builds nothing of its own.
 	if ( G_EntitySlotsAvailable( 1 ) == qfalse )
@@ -18497,8 +18545,15 @@ void Cmd_RemovePickups_f(gentity_t* ent) {
 		return;
 	}
 
+	// DAJ_RP: [Entity System] not while this admin holds an entity with /entcopy or /entcut (g_entgrab.c)
+	if (RP_EntRefuseWhileHolding(ent))
+	{
+		return;
+	}
+
 	gentity_t* target_ent;
 	int removed = 0;
+	int held = 0;
 
 	// GalaxyRP fix: [Entity System] this started at 0, so it walked the player and body-queue slots
 	// before reaching any real entity. Start where every other Entity System loop in this file
@@ -18509,11 +18564,19 @@ void Cmd_RemovePickups_f(gentity_t* ent) {
 		target_ent = &g_entities[i];
 
 		if (is_entity_a_pickup(target_ent) == qtrue) {
+			// DAJ_RP: [Entity System] one another admin is holding with /entcopy or /entcut (g_entgrab.c)
+			// is kept, as a ranged /entremove keeps it: freeing it took a cut pickup away for good
+			if (target_ent->rpHeldBy) {
+				held++;
+				continue;
+			}
+
 			G_FreeEntity(target_ent);
 			removed++;
 		}
 	}
-	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed (%d).\n\"", removed));
+	trap->SendServerCommand(ent - g_entities, va("print \"All pickups have been removed (%d).%s\n\"", removed,
+		held ? va(" Kept %d held with /entcopy or /entcut.", held) : ""));
 	
 	return;
 }
@@ -20263,7 +20326,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 	lines[n++] = "^3/entcopy <entity id (optional)>: ^7Picks up a copy of the entity you aim at, or of that id. Aim where it should go and use /entcopy again to drop it there.\n";
 	lines[n++] = "^3/entcut <entity id (optional)>: ^7Picks up the entity itself; it is gone until /entcut again drops it where you aim. Map entities (^3M^7) and brush entities cannot be cut.\n";
 	lines[n++] = "^3/entrotate <yaw> or <pitch> <yaw> <roll> (optional): ^7Turns what you hold, or the entity you aim at: 45 degrees of yaw, that much yaw, or exactly those angles. Not ^3M^7 or brush entities in place.\n";
-	lines[n++] = "^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was.\n";
+	lines[n++] = "^3/entcancel: ^7Lets go of what you hold; a cut entity goes back where it was. While you hold one, commands that add, change, use or remove entities are refused.\n";
 
 	lines[n++] = "^5Saving\n";
 	lines[n++] = "^3/entsave <filename>: ^7Saves current entities into a preset file. Use ^3default ^7name to make it load with the map.\n";
@@ -20280,7 +20343,7 @@ void Cmd_EntitiesAndRemaps_f( gentity_t *ent ) {
 
 	lines[n++] = "^5Other\n";
 	lines[n++] = "^3/entuse <name>: ^7Uses every entity with that targetname, as a trigger or a button would: spawners, lights, effects, doors. NPCs and vehicles are left alone.\n";
-	lines[n++] = "^3/enttrigger <entity id>: ^7Activates that entity as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Account locks do not stop it.\n";
+	lines[n++] = "^3/enttrigger <entity id (optional)>: ^7Activates the entity you aim at, or that id, as the upgraded Stun Baton does: a door, lift or button opens even when locked or inactive, anything else is used. Account locks do not stop it.\n";
 	lines[n++] = "^3/entslots: ^7Shows how full the map's model, effect and sound slots are, and how many can be reused.\n";
 	lines[n++] = "^3/list models ^7and ^3/list effects^7: Show the model and effect files the server has, for props.\n";
 	lines[n++] = "^3/settings 6: ^7Entity Bounds -- draws the box of the entity you aim at, and marks nearby spawn points, targets and other point entities.\n";

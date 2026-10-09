@@ -1204,7 +1204,8 @@ DAJ_RP: [Locks] /entlockset [entity id] <lock | none>: puts a lock on an entity 
 aimed at -- or takes it off. One the
 Entity System made gets the "lock" key, in its record too, without being spawned again. The map's own --
 whose linked doors /entedit does not touch -- gets a "model *N" line of the lock file, so it needs a brush
-model; one without is refused.
+model; one without is refused. Not an entity held with /entcopy or /entcut, and not while the admin holds
+one (RP_EntRefuseWhileHolding).
 ==================
 */
 void Cmd_EntLockSet_f( gentity_t *ent )
@@ -1215,6 +1216,9 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 	int id;
 
 	if ( !check_admin_command( ent, ADM_ENTITYSYSTEM, qtrue ) )
+		return;
+
+	if ( RP_EntRefuseWhileHolding( ent ) )
 		return;
 
 	if ( trap->Argc() != 2 && trap->Argc() != 3 )
@@ -1266,6 +1270,13 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 	if ( target->client )
 	{
 		trap->SendServerCommand( ent - g_entities, va( "print \"Entity %d is a player, an NPC or a vehicle: it cannot carry a lock.\n\"", id ) );
+		return;
+	}
+
+	// DAJ_RP: [Locks] nor one an admin is holding with /entcopy or /entcut (g_entgrab.c), as /entedit refuses it
+	if ( target->rpHeldBy )
+	{
+		trap->SendServerCommand( ent - g_entities, va( "print \"Entity %d is being held with /entcopy or /entcut: drop it or /entcancel first.\n\"", id ) );
 		return;
 	}
 
@@ -1371,12 +1382,14 @@ void Cmd_EntLockSet_f( gentity_t *ent )
 ==================
 Cmd_EntTrigger_f
 
-DAJ_RP: [Locks] /enttrigger <entity id>: activates that entity as the upgraded Stun Baton does
-(RP_StunBatonUseMover): a door, a lift or a button is made active again, the map's own locked ones are
-unlocked until the map reloads, a door that started open and closed for good is opened again, and then the
-mover is used; anything else is used, as /entuse uses it. Account locks do not stop it, nor what it sets off.
-Not a player, an NPC or a vehicle (using a vehicle boards it from anywhere), nor an entity held with /entcopy
-or /entcut, nor one that does nothing when used.
+DAJ_RP: [Locks] /enttrigger [entity id]: activates that entity -- or, with no id, the one aimed at, as
+/entedit and /entremove pick theirs (RP_EntAimTarget: a door's own trigger means the door) -- as the
+upgraded Stun Baton does (RP_StunBatonUseMover): a door, a lift or a button is made active again, the map's
+own locked ones are unlocked until the map reloads, a door that started open and closed for good is opened
+again, and then the mover is used; anything else is used, as /entuse uses it. Account locks do not stop it,
+nor what it sets off. Not a player, an NPC or a vehicle (using a vehicle boards it from anywhere), nor an
+entity held with /entcopy or /entcut, nor one that does nothing when used; and not while the admin holds
+one (RP_EntRefuseWhileHolding).
 ==================
 */
 void Cmd_EntTrigger_f( gentity_t *ent )
@@ -1388,21 +1401,44 @@ void Cmd_EntTrigger_f( gentity_t *ent )
 	if ( !check_admin_command( ent, ADM_ENTITYSYSTEM, qtrue ) )
 		return;
 
-	if ( trap->Argc() != 2 )
+	if ( RP_EntRefuseWhileHolding( ent ) )
+		return;
+
+	if ( trap->Argc() > 2 )
 	{
-		trap->SendServerCommand( ent - g_entities, "print \"Usage: ^3/enttrigger <entity id>^7. Activates that entity as the upgraded Stun Baton would: doors, lifts and buttons open even when locked or inactive; anything else is used. Account locks do not stop it.\n\"" );
+		trap->SendServerCommand( ent - g_entities, "print \"Usage: ^3/enttrigger^7 activates the entity you aim at, ^3/enttrigger <entity id>^7 that entity, as the upgraded Stun Baton would: doors, lifts and buttons open even when locked or inactive; anything else is used. Account locks do not stop it.\n\"" );
 		return;
 	}
 
-	trap->Argv( 1, arg, sizeof( arg ) );
-	id = atoi( arg );
+	if ( trap->Argc() < 2 )
+	{	// DAJ_RP: [Locks] the entity aimed at, as /entedit and /entremove pick theirs (RP_EntAimTarget): a
+		// door's own trigger means the door
+		if ( RP_EntAimFollowing( ent ) )
+		{
+			trap->SendServerCommand( ent - g_entities, "print \"You are following another player. Stop following first, or give the entity id.\n\"" );
+			return;
+		}
 
-	if ( !StringIsInteger( arg ) || id < 0 || id >= MAX_ENTITIESTOTAL || !g_entities[id].inuse )
-	{
-		trap->SendServerCommand( ent - g_entities, va( "print \"There is no entity %s.\n\"", RP_ShownText( arg ) ) );
-		return;
+		target = RP_EntAimTarget( ent );
+		if ( !target || !target->inuse )
+		{
+			trap->SendServerCommand( ent - g_entities, "print \"You are not aiming at an entity. Aim at one, or give its id: ^3/enttrigger <entity id>^7.\n\"" );
+			return;
+		}
+		id = target->s.number;
 	}
-	target = &g_entities[id];
+	else
+	{
+		trap->Argv( 1, arg, sizeof( arg ) );
+		id = atoi( arg );
+
+		if ( !StringIsInteger( arg ) || id < 0 || id >= MAX_ENTITIESTOTAL || !g_entities[id].inuse )
+		{
+			trap->SendServerCommand( ent - g_entities, va( "print \"There is no entity %s.\n\"", RP_ShownText( arg ) ) );
+			return;
+		}
+		target = &g_entities[id];
+	}
 
 	if ( target->client )
 	{
