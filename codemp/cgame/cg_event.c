@@ -1297,6 +1297,91 @@ const char *CG_GetStringForVoiceSound(const char *s)
 }
 
 /*
+==================
+CG_RpPickupEntity / CG_RpPickupItemKey
+
+DAJ_RP fix: [Items] an item pickup event names the item by its entity number (0 to 1023), and the
+network carries that number in full only in the first of the playerState's two event slots: the second
+slot (eventParms[1]), the unpredicted event (externalEventParm) and every other player's event
+(entityState eventParm) are 8 bits wide in the engine's field tables, which no mod can change without
+breaking every vanilla client. An item numbered 300 arrived as 44, and the pickup was shown as whatever
+entity 44 happened to be -- another item, or a model index read as one: the name, icon and sound of the
+wrong item, now and then a weapon auto-switch, after the right item had already been shown (the 500 ms
+guard below keys on the entity, so a different entity got through). Vanilla behaves so still.
+
+A number of 256 or more cannot have lost bits and is taken as it is. A smaller one is one of N, N+256,
+N+512 and N+768: the candidate is the one the client knows as an item (or a holocron), and of those the
+one whose pickup was shown in the last 500 ms -- the same pickup coming back, which the guard then
+swallows -- or else the nearest to the player who picked it up. An item already picked up keeps its last
+state and position here, an item the server has freed (a dropped one) too. With no item among them, -1:
+the event shows nothing rather than a wrong item.
+==================
+*/
+int CG_RpPickupEntity( int parm, const vec3_t pickerOrigin )
+{
+	int k, best = -1, recent = -1;
+	float bestDist = 0.0f, recentDist = 0.0f;
+
+	if ( parm < 0 || parm >= MAX_GENTITIES )
+	{
+		return -1;
+	}
+
+	if ( parm >= 256 )
+	{
+		return parm;
+	}
+
+	for ( k = parm; k < MAX_GENTITIES; k += 256 )
+	{
+		const centity_t *c = &cg_entities[k];
+		float d;
+
+		if ( c->currentState.eType != ET_ITEM && c->currentState.eType != ET_HOLOCRON )
+		{
+			continue;
+		}
+
+		d = DistanceSquared( c->lerpOrigin, pickerOrigin );
+
+		if ( c->weapon >= cg.time && ( recent < 0 || d < recentDist ) )
+		{
+			recent = k;
+			recentDist = d;
+		}
+
+		if ( best < 0 || d < bestDist )
+		{
+			best = k;
+			bestDist = d;
+		}
+	}
+
+	return ( recent >= 0 ) ? recent : best;
+}
+
+// DAJ_RP fix: [Items] what the pickup of this entity gives, as EV_ITEM_PICKUP below reads it: the item
+// index, or for a holocron the Force power it carries (kept apart from the item indexes)
+int CG_RpPickupItemKey( int entityNum )
+{
+	const entityState_t *s;
+
+	if ( entityNum < 0 || entityNum >= MAX_GENTITIES )
+	{
+		return -1;
+	}
+
+	s = &cg_entities[entityNum].currentState;
+
+	if ( s->modelindex < 1 && s->isJediMaster )
+	{
+		return 0x10000 + s->trickedentindex4;
+	}
+
+	return s->modelindex;
+}
+
+/*
 ==============
 CG_EntityEvent
 
@@ -1895,12 +1980,31 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			gitem_t	*item;
 			int		index;
 			qboolean	newindex = qfalse;
+			int		itemEnt;
+			vec3_t	pickerOrigin;
 
-			index = cg_entities[es->eventParm].currentState.modelindex;		// player predicted
+			// DAJ_RP fix: [Items] the item's entity number may have reached us cut to 8 bits: find the
+			// entity it was (CG_RpPickupEntity above), or show nothing
+			if ( es->number == cg.predictedPlayerState.clientNum )
+			{
+				VectorCopy( cg.predictedPlayerState.origin, pickerOrigin );
+			}
+			else
+			{
+				VectorCopy( position, pickerOrigin );
+			}
 
-			if (index < 1 && cg_entities[es->eventParm].currentState.isJediMaster)
+			itemEnt = CG_RpPickupEntity( es->eventParm, pickerOrigin );
+			if ( itemEnt < 0 )
+			{
+				break;
+			}
+
+			index = cg_entities[itemEnt].currentState.modelindex;		// player predicted
+
+			if (index < 1 && cg_entities[itemEnt].currentState.isJediMaster)
 			{ //a holocron most likely
-				index = cg_entities[es->eventParm].currentState.trickedentindex4;
+				index = cg_entities[itemEnt].currentState.trickedentindex4;
 				trap->S_StartSound (NULL, es->number, CHAN_AUTO,	cgs.media.holocronPickup );
 
 				if (es->number == cg.snap->ps.clientNum && showPowersName[index])
@@ -1935,7 +2039,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 				break;
 			}
 
-			if (cg_entities[es->eventParm].weapon >= cg.time)
+			if (cg_entities[itemEnt].weapon >= cg.time)
 			{ //rww - an unfortunately necessary hack to prevent double item pickups
 				break;
 			}
@@ -1944,7 +2048,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			//item, this time will have expired by the time that item needs to be picked up.
 			//Of course, it's quite possible this will fail miserably, so if you've got a better
 			//solution then please do use it.
-			cg_entities[es->eventParm].weapon = cg.time+500;
+			cg_entities[itemEnt].weapon = cg.time+500;
 
 			if ( index < 1 || index >= bg_numItems ) {
 				break;

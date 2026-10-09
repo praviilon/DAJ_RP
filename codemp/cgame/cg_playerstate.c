@@ -217,6 +217,49 @@ void CG_Respawn( void ) {
 }
 
 /*
+==================
+CG_RpPickupChanged
+
+DAJ_RP fix: [Items] whether the event at this point of the sequence is an item pickup in both the new
+and the old playerState but of a different item: the client predicted picking up one item and the
+server gave another there -- two items touched at once and only one taken, or one the server refused.
+Only the event types were ever compared, so the item the client guessed stayed on the screen. The two
+entity numbers are made whole first (CG_RpPickupEntity: the server's may have lost its high bits) and
+the items they give compared, not the entities: the same item from another entity -- two medpacks
+picked up in the other order -- is not a change. Once fired, the next frame's old state holds the same
+event, so it is fired once.
+==================
+*/
+static qboolean CG_RpPickupChanged( const playerState_t *ps, const playerState_t *ops, int slot )
+{
+	int now, before;
+
+	if ( ( ps->events[slot] & ~EV_EVENT_BITS ) != EV_ITEM_PICKUP || ( ops->events[slot] & ~EV_EVENT_BITS ) != EV_ITEM_PICKUP )
+	{
+		return qfalse;
+	}
+
+	if ( ps->eventParms[slot] == ops->eventParms[slot] )
+	{
+		return qfalse;
+	}
+
+	now = CG_RpPickupEntity( ps->eventParms[slot], ps->origin );
+	if ( now < 0 )
+	{
+		return qfalse;	// nothing to show instead
+	}
+
+	before = CG_RpPickupEntity( ops->eventParms[slot], ps->origin );
+	if ( before < 0 )
+	{
+		return qtrue;
+	}
+
+	return ( CG_RpPickupItemKey( now ) != CG_RpPickupItemKey( before ) ) ? qtrue : qfalse;
+}
+
+/*
 ==============
 CG_CheckPlayerstateEvents
 ==============
@@ -240,7 +283,9 @@ void CG_CheckPlayerstateEvents( playerState_t *ps, playerState_t *ops ) {
 		if ( i >= ops->eventSequence
 			// or the server told us to play another event instead of a predicted event we already issued
 			// or something the server told us changed our prediction causing a different event
-			|| (i > ops->eventSequence - MAX_PS_EVENTS && ps->events[i & (MAX_PS_EVENTS-1)] != ops->events[i & (MAX_PS_EVENTS-1)]) ) {
+			|| (i > ops->eventSequence - MAX_PS_EVENTS && ps->events[i & (MAX_PS_EVENTS-1)] != ops->events[i & (MAX_PS_EVENTS-1)])
+			// DAJ_RP fix: [Items] or the same pickup event, of a different item (CG_RpPickupChanged above)
+			|| (i >= ops->eventSequence - MAX_PS_EVENTS && CG_RpPickupChanged( ps, ops, i & (MAX_PS_EVENTS-1) )) ) {
 
 			event = ps->events[ i & (MAX_PS_EVENTS-1) ];
 			cent->currentState.event = event;

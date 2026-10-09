@@ -1982,6 +1982,8 @@ void CG_CheckEvents( centity_t *cent );
 const char	*CG_PlaceString( int rank );
 char		*CG_PlayerCountString( void );	// GalaxyRP: [Scoreboard] cg_scoreboard.c
 void CG_EntityEvent( centity_t *cent, vec3_t position );
+int CG_RpPickupEntity( int parm, const vec3_t pickerOrigin );	// DAJ_RP: [Items] an item pickup's 8-bit entity number, made whole -- cg_event.c
+int CG_RpPickupItemKey( int entityNum );
 void CG_PainEvent( centity_t *cent, int health );
 void CG_ReattachLimb(centity_t *source);
 
